@@ -13,7 +13,7 @@ import {
 } from "../lib/services/ucl/uclTrackingForecastContinuity";
 import { gradePredictionsForSlate } from "../lib/services/predictionGradingService";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
-import type { DailyEdgeResponse } from "../app/lab/lib/labTypes";
+import type { DailyEdgeResponse, MarketEdgeDto } from "../app/lab/lib/labTypes";
 
 type Operation = { table: string; kind: string; payload?: Record<string, unknown>; filters: Record<string, unknown> };
 
@@ -143,6 +143,39 @@ const completeRefreshLock = await verifyUclRefreshAllMarketLocks({
 assert.deepEqual(completeRefreshLock.completeProviderIds, [34], "the refresh verifies the same four-market T60 authority as the targeted lock route");
 assert.equal(completeRefreshLock.lockedResponse.games[0]?.markets.total.currentPriceAmerican, -115, "refresh reconstructs the disappearing quote from the immutable DB tuple");
 const wrongRelease = four.map((row) => row.market === "btts" ? { ...row, model_version: "ucl_wrong_release" } : row);
+const freshExpected = structuredClone(four);
+for (const row of freshExpected) {
+  const captured = row.snapshot_json!.member_market_at_capture as MarketEdgeDto;
+  row.model_probability = captured.modelProb = 0.6123456789;
+  if (row.market_probability !== null) row.market_probability = captured.marketFairProb = 0.52123456789;
+  if (row.edge !== null) row.edge = captured.modelMarketGapPct = 8.123456789;
+  if (row.expected_value !== null) {
+    row.expected_value = 0.123456789;
+    captured.pinnacleEvPct = row.expected_value * 100;
+  }
+}
+const roundedFresh = freshExpected.map(row => ({ ...row,
+  model_probability: row.model_probability == null ? null : Number(row.model_probability.toFixed(6)),
+  market_probability: row.market_probability == null ? null : Number(row.market_probability.toFixed(6)),
+  edge: row.edge == null ? null : Number(row.edge.toFixed(3)),
+  expected_value: row.expected_value == null ? null : Number(row.expected_value.toFixed(4)),
+}));
+const freshInput = { ...lockInput, expectedRows: freshExpected, writerLockedRecordIds: [] };
+const beforeFreshVerification = JSON.stringify(roundedFresh);
+assert.deepEqual((await verifyUclAllMarketLocks(freshInput, lockVerificationClient(roundedFresh))).completeProviderIds, [34],
+  "fresh same-release inserts verify on their first pass despite actual NUMERIC storage rounding and no returned writer IDs");
+assert.equal(JSON.stringify(roundedFresh), beforeFreshVerification, "verification cannot mutate stored locked values or captures");
+for (const [field, delta] of [["model_probability", 0.000001], ["market_probability", 0.000001], ["edge", 0.001], ["expected_value", 0.0001]] as const) {
+  const corrupted = structuredClone(roundedFresh);
+  const row = corrupted.find(row => row.market === "total")!;
+  row[field] = row[field]! + delta;
+  assert.deepEqual((await verifyUclAllMarketLocks(freshInput, lockVerificationClient(corrupted))).incompleteProviderIds, [34],
+    `${field} outside its storage precision still fails fresh-lock verification`);
+}
+const changedCapture = structuredClone(roundedFresh);
+changedCapture[0]!.snapshot_json = { ...changedCapture[0]!.snapshot_json, unexpected_evidence_change: true };
+assert.deepEqual((await verifyUclAllMarketLocks(freshInput, lockVerificationClient(changedCapture))).incompleteProviderIds, [34],
+  "numeric storage tolerance never relaxes exact fresh capture/evidence equality");
 assert.deepEqual((await verifyUclAllMarketLocks(lockInput, lockVerificationClient(wrongRelease))).incompleteProviderIds, [34]);
 const wrongCompetition = four.map((row) => row.market === "btts" ? { ...row, snapshot_json: { ...(row.snapshot_json ?? {}), competition: "english_premier_league" } } : row);
 assert.deepEqual((await verifyUclAllMarketLocks(lockInput, lockVerificationClient(wrongCompetition))).incompleteProviderIds, [34]);
