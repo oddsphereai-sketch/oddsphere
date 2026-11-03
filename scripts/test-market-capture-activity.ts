@@ -60,6 +60,7 @@ async function main() {
   const calls: string[]=[];
   const deps: Record<string,unknown>={
     "@/lib/db/supabase":{supabase:client},
+    "@/lib/providers/draftkings/draftKingsNetworkSplits":{async refreshDraftKingsNetworkSplitSource(sport:Sport){calls.push(`draftkings:${sport}`);return {games:[],fetchedAt:"2026-11-02T12:00:00Z"};}},
     "@/lib/services/dailyEdge/marketCaptureActivity":{readMarketCaptureActivity},
     "@/lib/cron/runCron":{async cronHandlerPerSport(_r:Request,source:string,_sports:Sport[],fn:(x:{sport:Sport})=>Promise<unknown>,options:Record<string,unknown>){
       if(source==="public_splits_observations_refresh") { assert.equal(options.leaseGroup,"prediction_pipeline");assert.equal(options.requireLease,true); }
@@ -92,7 +93,8 @@ async function main() {
   calls.length=0;sports=["mlb","wnba","nba","nhl","nfl","cfb","cbb"];
   const pubResult=await (await pub.GET(request)).json();
   for(const run of pubResult.runs){assert.equal(run.result.records_updated,run.sport==="cbb"?5:6);assert.equal(run.result.api_calls_made,3);assert.equal(run.result.partial,false);}
-  assert.equal(calls.length,20,"scheduled games preserve each existing source; only the CBB pipeline publishes its board");
+  assert.equal(calls.length,21,"scheduled games preserve each existing source and CBB stored fallback; only the CBB pipeline publishes its board");
+  assert.equal(calls.filter(c=>c.startsWith("draftkings:")).join(","),"draftkings:cbb","the existing free fallback runs only for CBB, without an additional paid source");
   assert.equal(calls.includes("snapshot:cbb"),false,"CBB split capture cannot recopy the complete board or renew its freshness clock");
   console.log("PASS empty MLB/WNBA slates spend zero capture calls/writes; real games resume all sources, other sports stay exact, read failures do not suppress capture, ET windows and existing lease/cadence preserved");
 }
