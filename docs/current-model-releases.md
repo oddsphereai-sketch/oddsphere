@@ -1,8 +1,23 @@
 # Current production model releases and qualified research candidates
 
+## CBB remaining exact source-institution repair — November 3
+
+The current institution identity is
+`cbb_provider_identity_2026_11_03_r3_remaining_verified_institution_aliases`, capture
+`market_intelligence_v2_capture_2026_11_03_r25_remaining_cbb_institution_aliases`,
+and sole publisher `cbb_member_pipeline_2026_11_03_r17_complete_verified_institution_inputs`.
+This supersedes the R2/R24/R16 input family below and preserves all five exact
+aliases, numerical score/grade R5, board R9, tracking R6, adapter R7, the existing
+leases/cadence/request ceilings and immutable locked-record precedence. Stored
+Owls discovery metadata independently proves N Arizona–UNLV and Fullerton–San
+Diego State professional-book coverage; the added exact institution aliases fix
+the same source matching defect for those two games. No generic name widening,
+source quote fabrication or numerical policy change. Evidence:
+`docs/model-audits/2026-11-03-cbb-remaining-professional-aliases.md`.
+
 ## CBB exact source-institution repair — November 3
 
-The authoritative source identity is
+The preceding source-only release used institution identity
 `cbb_provider_identity_2026_11_03_r2_verified_owls_institution_aliases`, shared capture
 `market_intelligence_v2_capture_2026_11_03_r24_cbb_verified_institution_aliases`,
 and sole publisher `cbb_member_pipeline_2026_11_03_r16_verified_institution_inputs`.
@@ -26,8 +41,8 @@ This commit's authoritative runtime is score
 `cbb_candidate_2026_11_02_r9_resolved_price_grade`, grade
 `cbb_2026_11_02_r5_resolved_price_not_double_penalized`, receipt
 `cbb_market_behavior_2026_11_02_r2_received_source_path`, publisher
-`cbb_member_pipeline_2026_11_03_r16_verified_institution_inputs` (source-only
-successor of R15 above), tracking
+`cbb_member_pipeline_2026_11_03_r16_verified_institution_inputs` (preceding source-only
+successor of R15; current publisher R17 above), tracking
 `cbb_tracking_writer_2026_11_02_r6_received_market_lineage` and adapter
 `cbb_member_adapter_2026_11_02_r7_received_market_response` repair native
 history/availability/grade binding and remove the rejected static winner copy.
@@ -105,7 +120,7 @@ Predeclaration and evidence:
 ## CBB chart API and retained split display — November 2
 
 The November 2 source repair introduced publisher
-`cbb_member_pipeline_2026_11_02_r13_stored_draftkings_fallback` (superseded by R16
+`cbb_member_pipeline_2026_11_02_r13_stored_draftkings_fallback` (superseded by R17
 above); reader evidence remains `cbb_reader_evidence_2026_11_02_r7_stored_draftkings_fallback`.
 Both reuse the same stored DraftKings Network R4 source as a display fallback;
 the existing CBB-first leased collector refreshes it with at most twelve free
