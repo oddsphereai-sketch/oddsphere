@@ -1,5 +1,5 @@
 export const SOCCER_CLUB_IDENTITY_RELEASE =
-  "soccer_club_identity_2026_10_31_r2_exact_ucl_club_aliases" as const;
+  "soccer_club_identity_2026_11_03_r3_lask_lens_exact_aliases" as const;
 
 const EPL_EQUIVALENCE_GROUPS = [
   ["coventrycity", "coventry"],
@@ -12,6 +12,8 @@ const EPL_EQUIVALENCE_GROUPS = [
 ] as const;
 
 const UCL_EQUIVALENCE_GROUPS = [
+  ["lask", "lasklinz"],
+  ["lens", "rclens", "racingclubdelens"],
   ["feyenoordrotterdam", "feyenoord"],
   ["como", "calciocomo1907"],
   ["sabahfk", "sabah", "sabahmasazir", "fcsabahmasazir", "sabahbakufk"],

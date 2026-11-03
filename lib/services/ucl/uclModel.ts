@@ -11,7 +11,7 @@ import { UCL_PREVIEW_GRADE_RELEASE } from "./uclPreviewGrade";
 import { deriveUclEloConsensusJoint, uclJointExpectedGoals } from "./uclEloConsensus";
 import type { UclEloPair } from "./uclEloStrengthFoundation";
 
-export const UCL_MODEL_RELEASE = "ucl_goals_coherent_2026_11_03_r16_recovery_native_identity" as const;
+export const UCL_MODEL_RELEASE = "ucl_goals_coherent_2026_11_03_r17_native_goals_joint" as const;
 export const UCL_BASELINE_MODEL_RELEASE = "ucl_goals_coherent_2026_10_06_r7_target_excluded_opening_market_score" as const;
 export const UCL_CALIBRATION_RELEASE = UCL_PREVIEW_GRADE_RELEASE;
 export { UCL_COHERENT_MARKET_OUTCOME_RELEASE } from "./uclCoherentMarketOutcome";

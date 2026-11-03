@@ -1,6 +1,8 @@
 import "./test-ucl-current-native-inputs";
+import "./test-ucl-native-goals-market-reader";
 import {testUclPublicSplitSource} from "./test-ucl-public-split-complete-path";
 import {testUclNativeRecoveryBuilder} from "./test-ucl-native-recovery-builder";
+import {testUclNativeLineHistoryDurability} from "./test-ucl-native-line-history-durability";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { BallDontLieUclProvider, BALLDONTLIE_UCL_API_BASE_URL, type BdlUclMatch, type UclHistoryFetchTelemetry } from "../lib/providers/real_api/BallDontLieUclProvider";
@@ -60,6 +62,7 @@ function match(overrides: Partial<BdlUclMatch> & Pick<BdlUclMatch, "id" | "home_
 }
 
 async function main() {
+await testUclNativeLineHistoryDurability();
 await testUclPublicSplitSource();
 await testUclNativeRecoveryBuilder();
 
@@ -109,7 +112,7 @@ const recoveredFixture = applyUclStoredQuoteFallback({
   ],
 });
 const recoveredTotal = recoveredFixture.odds.filter((row) => row.provider_endpoint === UCL_STORED_QUOTE_FALLBACK_ENDPOINT);
-assert.deepEqual(recoveredTotal.map((row) => [row.selection, row.odds_american]), [["over", -150], ["under", 125]], "stored continuity rebuilds the latest complete same-book tuple across verified captures");
+assert.deepEqual(recoveredTotal.map((row) => [row.selection, row.odds_american]), [["over", -145], ["under", 125]], "stored continuity selects the intact complete16:20 capture; a16:30 partial quote cannot borrow its earlier opposite");
 assert.equal(recoveredTotal.every((row) => row.provider_event_id === null && row.persistable === false), true, "stored rows are availability-only and cannot masquerade as current provider evidence");
 assert.match(UCL_STORED_QUOTE_FALLBACK_RELEASE, /complete_same_book/);
 const completeFixture: EplSharpFixtureMarket = {
@@ -414,15 +417,15 @@ const qualifiedGoalsCorrection = deriveUclCoherentMarketOutcome({
   decisionAt: "2025-01-01T12:00:00Z",
   kickoff: "2025-01-02T20:00:00Z",
 });
-assert.equal(qualifiedGoalsCorrection.audit.goalsReader?.bttsCorrectionApplied, true, "thin independent evidence may be corrected only when direct and score-implied BTTS agree");
+assert.equal(qualifiedGoalsCorrection.audit.goalsReader?.bttsCorrectionApplied, true, "an actual target-free BTTS pair constrains the joint law without a three-book or independent-confidence gate");
 assert.equal(qualifiedGoalsCorrection.source, "target_excluded_goals_arbitration");
-assert.deepEqual(qualifiedGoalsCorrection.audit.goalsReader?.bttsEligibleBooks, ["betmgm", "draftkings", "pinnacle"]);
+assert.deepEqual(qualifiedGoalsCorrection.audit.goalsReader?.bttsEligibleBooks, ["pinnacle", "draftkings", "betmgm"]);
 assert.equal(qualifiedGoalsCorrection.markets.btts.no > 0.5, true);
-assert.equal(qualifiedGoalsCorrection.audit.goalsReader?.totalCorrectionApplied, false);
-assert.equal(Math.abs(qualifiedGoalsCorrection.markets.total.over - deriveSoccerMarketProbabilities({
-  joint: bivariatePoissonScoreDistribution(3.4, 1.4, -0.1),
-  totalLine: 2.5,
-}).total.over) < 1e-7, true, "BTTS correction preserves the independent Total");
+assert.equal(qualifiedGoalsCorrection.audit.goalsReader?.totalCorrectionApplied, true);
+assert.ok(Math.abs(qualifiedGoalsCorrection.markets.total.over - .75) < 1e-7,
+  "native Total and BTTS targets apply jointly, without freezing the independent total");
+assert.ok(Math.abs(qualifiedGoalsCorrection.expectedGoals.home + qualifiedGoalsCorrection.expectedGoals.away - 4.8) > .01,
+  "the released score mean follows the new joint score law");
 const movementResistedGoalsCorrection = deriveUclCoherentMarketOutcome({
   matchId: 92,
   independentLambdaHome: 3.4,
@@ -438,8 +441,8 @@ const movementResistedGoalsCorrection = deriveUclCoherentMarketOutcome({
   kickoff: "2025-01-02T20:00:00Z",
 });
 assert.equal(movementResistedGoalsCorrection.audit.goalsReader?.bttsMovement.side, "yes");
-assert.equal(movementResistedGoalsCorrection.audit.goalsReader?.bttsCorrectionApplied, false, "same-book movement toward the independent side vetoes a stale opposing level");
-assert.equal(movementResistedGoalsCorrection.markets.btts.yes > 0.5, true);
+assert.equal(movementResistedGoalsCorrection.audit.goalsReader?.bttsCorrectionApplied, true, "movement is retained as separate path context, not an automatic veto on a fresh native price constraint");
+assert.equal(movementResistedGoalsCorrection.markets.btts.no > 0.5, true);
 const qualifiedTotalCorrection = deriveUclCoherentMarketOutcome({
   matchId: 93,
   independentLambdaHome: 1.3,
@@ -468,7 +471,7 @@ const totalMovementInput = {
 const opposingHistory = movementRows("total", -300, 300);
 const genuineResistance = deriveUclCoherentMarketOutcome({...totalMovementInput, storedPriceHistory: opposingHistory});
 assert.equal(genuineResistance.audit.goalsReader?.totalMovement.side, "under");
-assert.equal(genuineResistance.audit.goalsReader?.totalCorrectionApplied, false, "genuine earlier same-book exact-contract resistance retains its role");
+assert.equal(genuineResistance.audit.goalsReader?.totalCorrectionApplied, true, "genuine earlier same-book movement remains visible while fresh settlement evidence updates the joint law");
 const falseHistoryCases = [
   opposingHistory.map(row => ({...row, line: 3.5})),
   opposingHistory.map(row => ({...row, line: 3.25})),
@@ -493,9 +496,9 @@ const underInput = {...totalMovementInput, independentLambdaHome:1.5,independent
 const falseUnderVeto = movementRows("total",300,-300).map(row=>({...row,line:3.5}));
 assert.equal(deriveUclCoherentMarketOutcome({...underInput,storedPriceHistory:falseUnderVeto}).audit.goalsReader?.totalCorrectionApplied,true,
   "the same exact-contract repair also allows a qualified Under correction; no directional preference");
-assert.equal(deriveUclCoherentMarketOutcome({...underInput,storedPriceHistory:movementRows("total",300,-300)}).audit.goalsReader?.totalCorrectionApplied,false);
+assert.equal(deriveUclCoherentMarketOutcome({...underInput,storedPriceHistory:movementRows("total",300,-300)}).audit.goalsReader?.totalCorrectionApplied,true);
 console.log("PASS UCL movement exact contract, original-quote chronology, two-way pair quality, conflict quarantine and symmetric correction/resistance.");
-assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_03_r14_recovery_native_identity");
+assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_03_r15_native_goals_joint");
 assert.deepEqual(
   { train: UCL_CHRONOLOGICAL_MANIFEST.train, calibration: UCL_CHRONOLOGICAL_MANIFEST.calibration, holdout: UCL_CHRONOLOGICAL_MANIFEST.holdout, cutoff: UCL_CHRONOLOGICAL_MANIFEST.cutoff },
   { train: 185, calibration: 126, holdout: 63, cutoff: "2026-01-28T20:00:00.000Z" },
@@ -539,7 +542,7 @@ assert.equal(uclTeamsMatch("Sabah Masazir", "Sabah Baku FK"), true);
 assert.equal(uclTeamsMatch("FC Sabah Masazir", "Sabah"), true);
 assert.equal(uclTeamsMatch("Bodø/Glimt", "Bodo/Glimt"), true);
 assert.equal(UCL_SHARP_MARKET_IDENTITY_RELEASE, "ucl_sharp_market_identity_2026_10_22_r6_exact_diacritic_club_identity");
-assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_11_03_r7_recovery_native_identity");
+assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_11_03_r8_native_goals_joint");
 const romaExpectedGoalsCard = {
   lockState: "open",
   projected: { away: 1.1, home: 3.3 },
@@ -714,6 +717,13 @@ assert.equal(agreementNegativeEvWatchlist.selectedSide, "home", "a bad exact pri
 assert.equal(agreementNegativeEvWatchlist.grade.verdict.label, "Watchlist", "a negative-EV exact quote cannot remain an actionable UCL Match Result grade");
 const disagreementNoPlay = deriveUclMatchResultDecision({ model: { home: 0.64, draw: 0.22, away: 0.14 }, market: { home: 0.5, draw: 0.28, away: 0.22 }, prices: { home: -155, draw: 260, away: 340 }, promotedProxy: false, marketReader: { consensusLeader: "away", evaluatedLeader: "home" } });
 assert.equal(disagreementNoPlay.grade.verdict.label, "No Play");
+const pluralityInput = {model: {home: 0.42, draw: 0.30, away: 0.28}, market: {home: 0.49, draw: 0.27, away: 0.24}, prices: {home: -101, draw: 280, away: 320}, promotedProxy: false};
+const supportedPlurality = deriveUclMatchResultDecision({...pluralityInput, marketReader: {consensusLeader: "home", evaluatedLeader: "home"}});
+assert.equal(supportedPlurality.grade.verdict.label, "Watchlist", "a supported three-way plurality is monitorable below 50%, without inventing positive EV or a Lean");
+assert.equal(deriveUclMatchResultDecision({...pluralityInput, marketReader: {consensusLeader: "away", evaluatedLeader: "home"}}).grade.verdict.label, "No Play", "plurality alone cannot replace independent market agreement");
+assert.equal(deriveUclMatchResultDecision({...pluralityInput, forecastSide: "away", marketReader: {consensusLeader: "away", evaluatedLeader: "away"}}).grade.verdict.label, "No Play", "an explicitly supplied nonleading side cannot qualify as a supported plurality");
+assert.equal(deriveUclMatchResultDecision({...pluralityInput, marketReader: {consensusLeader: null, evaluatedLeader: "home"}}).grade.verdict.label, "No Play", "missing independent reference cannot become market support");
+assert.equal(deriveUclMatchResultDecision({...pluralityInput, prices: {...pluralityInput.prices,home:-700}, marketReader: {consensusLeader: "home", evaluatedLeader: "home"}}).grade.verdict.label, "No Play", "the existing extreme price boundary remains intact");
 assert.equal(eplPriorRowsBlockWrite([{ model_version: "legacy", locked_at: "2026-09-08T16:45:00Z", held: false, snapshot_json: {} }]), true, "any prior locked row blocks replacement across releases");
 
 // Namespace, official tracking, and release separation.

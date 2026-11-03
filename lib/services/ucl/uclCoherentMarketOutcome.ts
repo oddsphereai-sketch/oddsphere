@@ -9,11 +9,11 @@ import {
   type ScoreDistribution,
 } from "@/lib/services/soccer/dixonColes";
 import { deriveSoccerMarketProbabilities } from "@/lib/services/soccer/soccerMarketProbabilities";
-import { impliedEplGoalsMarketDistribution } from "@/lib/services/epl/eplDerivedMarketForecast";
+import { deriveUclNativeGoalProjection, type UclNativeGoalRead, type UclNativeGoalSource } from "./uclGoalMarketProjection";
 import { logPoolUclResult, reconcileUclMeanPreserving } from "./uclEloConsensus";
 
 export const UCL_COHERENT_MARKET_OUTCOME_RELEASE =
-  "ucl_coherent_market_outcome_2026_11_03_r9_recovery_native_identity" as const;
+  "ucl_coherent_market_outcome_2026_11_03_r10_native_goals_joint" as const;
 
 type Side = "home" | "draw" | "away";
 type ResultVector = Record<Side, number>;
@@ -67,104 +67,12 @@ function vectorResult(vector: EplForwardBookVector): ResultVector | null {
   return normalize(values as ResultVector);
 }
 
-function binaryVector(
-  vector: EplForwardBookVector,
-  market: BinaryMarket,
-): Record<BinarySide, number> | null {
-  const sides: BinarySide[] = market === "total" ? ["over", "under"] : ["yes", "no"];
-  const values = Object.fromEntries(sides.map((side) => [
-    side,
-    vector.outcomes.find((outcome) => outcome.side === side)?.noVigProbability,
-  ])) as Record<BinarySide, number | undefined>;
-  if (sides.some((side) => typeof values[side] !== "number" || !Number.isFinite(values[side])
-    || values[side]! <= 0 || values[side]! >= 1)) return null;
-  const total = sides.reduce((sum, side) => sum + values[side]!, 0);
-  return Object.fromEntries(sides.map((side) => [side, values[side]! / total])) as Record<BinarySide, number>;
-}
-
 function fixtureOwnsVector(vector:EplForwardBookVector,input:{providerEventId:string|null;fixtureEventIdentities?:SoccerFixtureEventIdentity[]}) {
   if (!vector.providerEventId) return false;
   if (input.fixtureEventIdentities !== undefined) return input.fixtureEventIdentities.some(row =>
     row.provider===vector.provider && row.providerEventId===vector.providerEventId &&
     row.sportsbook===vector.canonicalBook && row.market===vector.market);
   return input.providerEventId!==null && vector.providerEventId===input.providerEventId;
-}
-
-function binaryConsensus(input: {
-  vectors: EplForwardBookVector[];
-  market: BinaryMarket;
-  excludedBook: string | null;
-  fixtureEventIdentities?: SoccerFixtureEventIdentity[];
-  providerEventId: string | null;
-  decisionAt: number;
-  kickoff: number;
-  inactiveVectors: Array<{ identity: string; reason: string }>;
-}): BinaryConsensus | null {
-  if (!Number.isFinite(input.decisionAt) || !Number.isFinite(input.kickoff) || input.decisionAt >= input.kickoff) {
-    input.inactiveVectors.push(...input.vectors.map((vector) => ({
-      identity: vector.identity,
-      reason: "decision_or_kickoff_timestamp_invalid",
-    })));
-    return null;
-  }
-  const sides: BinarySide[] = input.market === "total" ? ["over", "under"] : ["yes", "no"];
-  const byBook = new Map<string, { vector: EplForwardBookVector; probabilities: Record<BinarySide, number> }>();
-  for (const vector of input.vectors) {
-    let reason: string | null = null;
-    if (vector.market !== input.market) reason = `not_${input.market}`;
-    else if (!vector.canonicalBook || vector.canonicalBook === input.excludedBook) reason = "evaluated_canonical_book_excluded";
-    else if (EXCLUDED_MARKET_BOOKS.has(vector.canonicalBook)) reason = "prediction_market_excluded";
-    else if (vector.sourceClass !== "named_originator" && vector.sourceClass !== "named_retail" && vector.sourceClass !== "named_other") reason = "source_not_named_book";
-    else if (!fixtureOwnsVector(vector,input)) reason = "provider_event_identity_mismatch";
-    else if (vector.overround < 0.98 || vector.overround > 1.25) reason = "binary_hold_out_of_range";
-    else if (input.market === "total" && vector.line !== 2.5) reason = "total_line_not_2_5";
-    const probabilities = reason ? null : binaryVector(vector, input.market);
-    if (!reason && !probabilities) reason = "complete_binary_probability_missing";
-    const timestamps = vector.outcomes.map((outcome) => Date.parse(outcome.fetchedAt ?? ""));
-    if (!reason && (timestamps.some((timestamp) => !Number.isFinite(timestamp))
-      || Math.max(...timestamps) > input.decisionAt || Math.max(...timestamps) >= input.kickoff)) {
-      reason = "outcome_timestamp_future_or_postdecision";
-    }
-    if (reason || !probabilities) {
-      input.inactiveVectors.push({ identity: vector.identity, reason: reason ?? "binary_vector_invalid" });
-      continue;
-    }
-    const prior = byBook.get(vector.canonicalBook);
-    if (!prior || Date.parse(vector.fetchedAtMax ?? "") > Date.parse(prior.vector.fetchedAtMax ?? "")
-      || vector.fetchedAtMax === prior.vector.fetchedAtMax && vector.identity.localeCompare(prior.vector.identity) < 0) {
-      byBook.set(vector.canonicalBook, { vector, probabilities });
-    }
-  }
-  const eligible = [...byBook.entries()].sort(([left], [right]) => left.localeCompare(right));
-  if (eligible.length < 3) return null;
-  const probabilities = Object.fromEntries(sides.map((side) => [
-    side,
-    median(eligible.map(([, value]) => value.probabilities[side])),
-  ])) as Record<BinarySide, number>;
-  const probabilityTotal = sides.reduce((sum, side) => sum + probabilities[side], 0);
-  for (const side of sides) probabilities[side] /= probabilityTotal;
-  const leader = sides.reduce((best, side) => probabilities[side] > probabilities[best] ? side : best, sides[0]!);
-  const leaveOneOutStable = eligible.every((_, excludedIndex) => {
-    const remainder = eligible.filter((__, index) => index !== excludedIndex);
-    return sides.reduce((best, side) => {
-      const value = median(remainder.map(([, row]) => row.probabilities[side]));
-      const bestValue = median(remainder.map(([, row]) => row.probabilities[best]));
-      return value > bestValue ? side : best;
-    }, sides[0]!) === leader;
-  });
-  const dispersion = eligible.reduce((sum, [, value]) => sum + sides.reduce(
-    (inside, side) => inside + Math.abs(value.probabilities[side] - probabilities[side]), 0,
-  ) / sides.length, 0) / eligible.length;
-  if (!leaveOneOutStable || dispersion > 0.06) return null;
-  return {
-    probabilities,
-    leader,
-    eligibleBooks: eligible.map(([book]) => book),
-    probabilitiesByBook: Object.fromEntries(eligible.map(([book, value]) => [book, value.probabilities])),
-    originalQuoteAtByBook: Object.fromEntries(eligible.map(([book, value]) => [book,
-      Math.min(...value.vector.outcomes.map(outcome => Date.parse(outcome.fetchedAt ?? ""))),
-    ])),
-  };
 }
 
 function canonicalBook(value: string | null): string {
@@ -220,7 +128,7 @@ function binaryMovement(input: {
     })[0];
     if (opening !== undefined) deltas.push(current - opening);
   }
-  const delta = deltas.length >= 2 ? median(deltas) : null;
+  const delta = deltas.length >= 1 ? median(deltas) : null;
   const side = delta === null ? null : delta >= 0.01 ? input.positiveSide : delta <= -0.01 ? input.negativeSide : "stable";
   return { books: deltas.length, delta, side };
 }
@@ -272,6 +180,14 @@ function summarize(joint: ScoreDistribution, markets: ReturnType<typeof deriveSo
   return { expectedGoals: { home: expectedHome, away: expectedAway }, likelyScore, representativeScore };
 }
 
+export type UclCoherentMarketOutcome = EplCoherentMarketOutcome & {
+  audit: EplCoherentMarketOutcome["audit"] & {
+    goalsReader: NonNullable<EplCoherentMarketOutcome["audit"]["goalsReader"]> & {
+      nativeGoalMarketRead: UclNativeGoalRead & { matchResultBefore: ResultVector; matchResultAfter: ResultVector };
+    };
+  };
+};
+
 export function deriveUclCoherentMarketOutcome(input: {
   matchId?: number;
   independentLambdaHome: number;
@@ -290,7 +206,7 @@ export function deriveUclCoherentMarketOutcome(input: {
   providerEventId: string | null;
   decisionAt: string;
   kickoff: string;
-}): EplCoherentMarketOutcome {
+}): UclCoherentMarketOutcome {
   const independentJoint = input.independentJoint
     ?? bivariatePoissonScoreDistribution(input.independentLambdaHome, input.independentLambdaAway, -0.1);
   const independentMarkets = deriveSoccerMarketProbabilities({ joint: independentJoint, totalLine: 2.5 });
@@ -330,81 +246,33 @@ export function deriveUclCoherentMarketOutcome(input: {
   const resultJoint = consensus
     ? reconcileUclMeanPreserving(independentJoint, targetResult, independentMarkets.total.over, independentMarkets.btts.yes)
     : independentJoint;
-  const totalConsensus = binaryConsensus({
-    vectors: input.totalVectors,
-    market: "total",
-    excludedBook: input.evaluatedTotalCanonicalBook,
-    providerEventId: input.providerEventId,
-    fixtureEventIdentities: input.fixtureEventIdentities,
-    decisionAt,
-    kickoff,
-    inactiveVectors,
+  const native = deriveUclNativeGoalProjection(resultJoint, {
+    totalVectors: input.totalVectors, bttsVectors: input.bttsVectors ?? [],
+    evaluatedTotalCanonicalBook: input.evaluatedTotalCanonicalBook,
+    evaluatedBttsCanonicalBook: input.evaluatedBttsCanonicalBook,
+    providerEventId: input.providerEventId, fixtureEventIdentities: input.fixtureEventIdentities,
+    decisionAt, kickoff,
   });
-  const bttsConsensus = binaryConsensus({
-    vectors: input.bttsVectors ?? [],
-    market: "btts",
-    excludedBook: input.evaluatedBttsCanonicalBook,
-    providerEventId: input.providerEventId,
-    fixtureEventIdentities: input.fixtureEventIdentities,
-    decisionAt,
-    kickoff,
-    inactiveVectors,
-  });
-  const totalMovement = binaryMovement({
-    matchId: input.matchId,
-    market: "total",
-    positiveSide: "over",
-    negativeSide: "under",
-    consensus: totalConsensus,
-    vectors: input.totalVectors,
-    history: input.storedPriceHistory ?? [],
-    decisionAt,
-    kickoff,
-  });
-  const bttsMovement = binaryMovement({
-    matchId: input.matchId,
-    market: "btts",
-    positiveSide: "yes",
-    negativeSide: "no",
-    consensus: bttsConsensus,
-    vectors: input.bttsVectors ?? [],
-    history: input.storedPriceHistory ?? [],
-    decisionAt,
-    kickoff,
-  });
-  const crossMarket = consensus && totalConsensus
-    ? impliedEplGoalsMarketDistribution({
-      home: consensus.home,
-      draw: consensus.draw,
-      away: consensus.away,
-      over: totalConsensus.probabilities.over,
-    })
-    : null;
-  const independentTotalSide = independentMarkets.total.over >= 0.5 ? "over" : "under";
-  const totalConsensusSide = totalConsensus?.leader as "over" | "under" | undefined;
-  const totalModelConfidence = Math.max(independentMarkets.total.over, independentMarkets.total.under);
-  const totalMovementResists = totalConsensusSide !== undefined && totalMovement.side !== null
-    && totalMovement.side !== "stable" && totalMovement.side !== totalConsensusSide;
-  const totalCorrectionApplied = totalConsensusSide !== undefined && totalConsensusSide !== independentTotalSide
-    && totalModelConfidence < 0.60 && !totalMovementResists;
-  const independentBttsSide = independentMarkets.btts.yes >= 0.5 ? "yes" : "no";
-  const bttsConsensusSide = bttsConsensus?.leader as "yes" | "no" | undefined;
-  const crossMarketBttsSide = crossMarket ? crossMarket.bttsYes >= 0.5 ? "yes" : "no" : undefined;
-  const bttsModelConfidence = Math.max(independentMarkets.btts.yes, independentMarkets.btts.no);
-  const bttsMovementResists = bttsConsensusSide !== undefined && bttsMovement.side !== null
-    && bttsMovement.side !== "stable" && bttsMovement.side !== bttsConsensusSide;
-  const directDisagreement = bttsConsensus
-    ? Math.abs(independentMarkets.btts.yes - bttsConsensus.probabilities.yes)
-    : 0;
-  const weakOrStructurallyThin = bttsModelConfidence < 0.60
-    || input.modelEvidenceQuality === "thin" && directDisagreement >= 0.20;
-  const bttsCorrectionApplied = bttsConsensusSide !== undefined && bttsConsensusSide !== independentBttsSide
-    && crossMarketBttsSide === bttsConsensusSide && weakOrStructurallyThin && !bttsMovementResists;
-  const targetOver = totalCorrectionApplied ? totalConsensus!.probabilities.over : independentMarkets.total.over;
-  const targetBtts = bttsCorrectionApplied ? bttsConsensus!.probabilities.yes : independentMarkets.btts.yes;
-  const joint = totalCorrectionApplied || bttsCorrectionApplied
-    ? reconcileUclMeanPreserving(resultJoint, targetResult, targetOver, targetBtts)
-    : resultJoint;
+  inactiveVectors.push(...native.receipt.inactive);
+  const totalCorrectionApplied = native.receipt.totalApplied;
+  const bttsCorrectionApplied = native.receipt.bttsApplied;
+  const joint = native.joint;
+  const movementConsensus = (source: UclNativeGoalSource | null): BinaryConsensus | null => {
+    if (!source || source.market === "total" && source.line !== 2.5) return null;
+    const positive = source.market === "total" ? "over" : "yes";
+    const negative = source.market === "total" ? "under" : "no";
+    const probabilities = { over: 0, under: 0, yes: 0, no: 0,
+      [positive]: source.fairPositive, [negative]: 1 - source.fairPositive };
+    return { probabilities, leader: source.fairPositive >= .5 ? positive : negative,
+      eligibleBooks: [source.book], probabilitiesByBook: { [source.book]: probabilities },
+      originalQuoteAtByBook: { [source.book]: Date.parse(source.originalQuoteAtMin) } };
+  };
+  const totalMovement = binaryMovement({ matchId: input.matchId, market: "total", positiveSide: "over", negativeSide: "under",
+    consensus: movementConsensus(native.receipt.total), vectors: input.totalVectors,
+    history: input.storedPriceHistory ?? [], decisionAt, kickoff });
+  const bttsMovement = binaryMovement({ matchId: input.matchId, market: "btts", positiveSide: "yes", negativeSide: "no",
+    consensus: movementConsensus(native.receipt.btts), vectors: input.bttsVectors ?? [],
+    history: input.storedPriceHistory ?? [], decisionAt, kickoff });
   const markets = deriveSoccerMarketProbabilities({ joint, totalLine: 2.5 });
   const summary = summarize(joint, markets);
   const excluded = [input.evaluatedMatchResultCanonicalBook, input.evaluatedTotalCanonicalBook, input.evaluatedBttsCanonicalBook]
@@ -430,8 +298,8 @@ export function deriveUclCoherentMarketOutcome(input: {
       movementRole: "late_consensus_forecast_input",
       evaluatedQuoteRole: "economics_and_grade_only",
       inactiveVectors: inactiveVectors.sort((left, right) => left.identity.localeCompare(right.identity)),
-      targetOverProbability: totalCorrectionApplied ? targetOver : null,
-      totalProbabilityResidual: Math.abs(markets.total.over - targetOver),
+      targetOverProbability: totalCorrectionApplied && native.receipt.total?.line === 2.5 ? native.receipt.total.fairPositive : null,
+      totalProbabilityResidual: native.receipt.residual,
       maximumMatchResultResidual: Math.max(...SIDES.map((side) => Math.abs(markets.match_result[side] - targetResult[side]))),
       gateReasons: consensus ? [] : ["eligible_late_match_result_alternatives_below_2"],
       matchResultReader: {
@@ -443,17 +311,19 @@ export function deriveUclCoherentMarketOutcome(input: {
         authority,
       },
       goalsReader: {
-        totalConsensus: totalConsensus ? {
-          over: totalConsensus.probabilities.over,
-          under: totalConsensus.probabilities.under,
+        // A native3/3.25/3.5 settlement share is not an Over2.5 probability.
+        totalConsensus: native.receipt.total?.line === 2.5 ? {
+          over: native.receipt.total.fairPositive, under: 1 - native.receipt.total.fairPositive,
         } : null,
-        bttsConsensus: bttsConsensus ? {
-          yes: bttsConsensus.probabilities.yes,
-          no: bttsConsensus.probabilities.no,
+        bttsConsensus: native.receipt.btts ? {
+          yes: native.receipt.btts.fairPositive, no: 1 - native.receipt.btts.fairPositive,
         } : null,
-        crossMarketBttsYes: crossMarket?.bttsYes ?? null,
-        totalEligibleBooks: totalConsensus?.eligibleBooks ?? [],
-        bttsEligibleBooks: bttsConsensus?.eligibleBooks ?? [],
+        crossMarketBttsYes: totalCorrectionApplied ? markets.btts.yes : null,
+        totalEligibleBooks: native.receipt.availableTotalBooks,
+        bttsEligibleBooks: native.receipt.availableBttsBooks,
+        nativeGoalMarketRead: { ...native.receipt,
+          matchResultBefore: deriveSoccerMarketProbabilities({ joint: resultJoint, totalLine: 2.5 }).match_result,
+          matchResultAfter: markets.match_result },
         totalMovement: totalMovement as { books: number; delta: number | null; side: "over" | "under" | "stable" | null },
         bttsMovement: bttsMovement as { books: number; delta: number | null; side: "yes" | "no" | "stable" | null },
         totalCorrectionApplied,

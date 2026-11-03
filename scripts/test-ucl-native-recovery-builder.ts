@@ -9,6 +9,8 @@ import type {UclSlate} from "../lib/services/ucl/buildUclSlate";
 import {buildUclDailyEdgePreview} from "../lib/services/ucl/buildUclDailyEdgePreview";
 import {deriveUclCoherentMarketOutcome} from "../lib/services/ucl/uclCoherentMarketOutcome";
 import {UCL_MODEL_RELEASE,UCL_CALIBRATION_RELEASE} from "../lib/services/ucl/uclModel";
+import {deriveUclMatchResultDecision,deriveUclPreviewGrade} from "../lib/services/ucl/uclPreviewGrade";
+import {buildEplDailyEdgePreview,type EplStoredPriceObservation} from "../lib/services/epl/buildEplDailyEdgePreview";
 
 export async function testUclNativeRecoveryBuilder(){
  const receipt=JSON.parse(readFileSync(new URL('./fixtures/ucl-current-native-inputs-20261103.json',import.meta.url),'utf8')) as {
@@ -25,15 +27,54 @@ export async function testUclNativeRecoveryBuilder(){
  })};
  mock.timers.enable({apis:['Date'],now:Date.parse(receipt.capturedAt)});
  try{
-  const board=await buildUclDailyEdgePreview(slate,{cacheNamespace:'test-ucl-native-recovery',cacheIdentity:'actual18-native-recovery',marketProvider:{loadFixture:async f=>{assert.ok(f.providerId);calls.set(f.providerId,(calls.get(f.providerId)??0)+1);return fixtures.get(f.providerId)!;}}});
+  let journal:EplStoredPriceObservation[]=[];
+  const board=await buildUclDailyEdgePreview(slate,{cacheNamespace:'test-ucl-native-recovery',cacheIdentity:'actual18-native-recovery',captureAllBookPrices:rows=>{journal=rows;},marketProvider:{loadFixture:async f=>{assert.ok(f.providerId);calls.set(f.providerId,(calls.get(f.providerId)??0)+1);return fixtures.get(f.providerId)!;}}});
   assert.equal(board.games.length,18);
   for(const id of[4243843,4438978]){
    const g=board.games.find(g=>g.external_id===id)!;
    assert.equal(calls.get(id),id===4438978?2:1,'only actual incomplete fixtures take the normal bounded retry');
    assert.ok((g.soccerModelProvenance?.eligibleAlternativeBooks.length??0)>=2,'native identities must reach the final reader after recovery');
-   assert.equal(g.soccerModelProvenance?.source,'target_excluded_late_match_result_log_pool');
+   assert.equal(g.soccerModelProvenance?.source,'target_excluded_goals_arbitration');
+   assert.ok(Math.abs(g.soccerProjection!.expectedGoals.home+g.soccerProjection!.expectedGoals.away-2.7)>.01,
+    'native total source must reach the final numerical score law after recovery');
   }
   assert.equal(board.games.find(g=>g.external_id===4243843)!.markets.first_inning.priceAmerican,-180,'actual LASK DK BTTS price survives the complete builder');
+  const nativeTotals=journal.filter(row=>row.market==='total');
+  assert.ok(nativeTotals.some(row=>row.line===3.25)&&nativeTotals.some(row=>row.line===3.5),'actual native lines enter the existing journal');
+  const expectedNativeCount=[...fixtures.values()].reduce((sum,f)=>sum+f.odds.filter(row=>row.market==='total').length,0);
+  assert.equal(expectedNativeCount,110);
+  assert.equal(nativeTotals.length,108,'two actual orphan HardRock sides are excluded; only received complete source pairs are journaled');
+  for(const row of nativeTotals){
+   assert.ok(fixtures.get(row.providerId)!.odds.some(source=>source.market==='total'&&source.sportsbook===row.sportsbook
+    &&source.selection===row.side&&source.line===row.line&&source.odds_american===row.american&&source.fetched_at===row.recordedAt),
+    'native journal preserves actual contract, price and original quote clock');
+  }
+  let eplJournal:EplStoredPriceObservation[]=[];
+  await buildEplDailyEdgePreview(slate,{cacheNamespace:'test-epl-native-history-default',cacheIdentity:'epl-default2.5',captureAllBookPrices:rows=>{eplJournal=rows;},
+   marketProvider:{loadFixture:async f=>fixtures.get(f.providerId!)!}});
+  assert.ok(eplJournal.filter(row=>row.market==='total').every(row=>row.line===2.5),'EPL journal keeps its existing exact2.5 contract');
+  const gradeCounts=Object.fromEntries(['moneyline','total','first_inning'].map(key=>[key,board.games.reduce((counts,game)=>{
+   const grade=game.markets[key as keyof typeof game.markets].verdict?.key??'unknown';counts[grade]=(counts[grade]??0)+1;return counts;
+  },{} as Record<string,number>)]));
+  console.log('Controlled1.4/1.3-prior18-source final builder grade counts (not live performance):',JSON.stringify(gradeCounts));
+  const withoutNativeGoals=await buildEplDailyEdgePreview(slate,{cacheNamespace:'test-ucl-native-goals-ablation',cacheIdentity:'same-prior-same-sources-no-goal-constraints',skipForwardEvidence:true,
+   marketProvider:{loadFixture:async f=>fixtures.get(f.providerId!)!},authorities:{gradeRelease:UCL_CALIBRATION_RELEASE,
+    nativeGoalMarketContracts:true,useCoherentMatchResultForecast:true,
+    deriveCoherentOutcome:input=>deriveUclCoherentMarketOutcome({...input,totalVectors:[],bttsVectors:[]}),
+    deriveMatchResultDecision:deriveUclMatchResultDecision,derivePreviewGrade:deriveUclPreviewGrade,
+    selectMatchResultSide:prediction=>{const side=(["home","draw","away"] as const).reduce((best,s)=>prediction.probabilities[s]>prediction.probabilities[best]?s:best,"home");return{release:prediction.release,side,rawSide:side,applied:false};},
+   }});
+  const isActionable=(key:string|undefined)=>key==='lean'||key==='best_angle';
+  let promoted=0,demoted=0,changedSides=0;
+  const absentCounts:Record<string,Record<string,number>>={};
+  for(const key of ['moneyline','total','first_inning'] as const){absentCounts[key]={};for(const after of board.games){
+   const before=withoutNativeGoals.games.find(g=>g.external_id===after.external_id)!.markets[key];
+   const next=after.markets[key];const label=before.verdict?.key??'unknown';absentCounts[key]![label]=(absentCounts[key]![label]??0)+1;
+   if(!isActionable(before.verdict?.key)&&isActionable(next.verdict?.key))promoted++;
+   if(isActionable(before.verdict?.key)&&!isActionable(next.verdict?.key))demoted++;
+   if(before.pick!==next.pick)changedSides++;
+  }}
+  console.log('Controlled native-goal input ablation (same current grade policy; not live or outcome qualification):',JSON.stringify({before:absentCounts,after:gradeCounts,promoted,demoted,netActionable:promoted-demoted,changedSides}));
   const lask=fixtures.get(4243843)!;
   fixtures.set(4243843,{...lask,odds:lask.odds.filter(row=>row.market!=='total')});calls.clear();
   const partialBoard=await buildUclDailyEdgePreview({...slate,matches:slate.matches.filter(m=>m.id===4243843)},{cacheNamespace:'test-ucl-native-recovery',cacheIdentity:'partial-lask-recovery',marketProvider:{loadFixture:async f=>{calls.set(f.providerId!,(calls.get(f.providerId!)??0)+1);return fixtures.get(f.providerId!)!;}}});

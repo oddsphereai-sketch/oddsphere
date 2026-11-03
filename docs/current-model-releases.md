@@ -1,5 +1,21 @@
 # Current production model releases and qualified research candidates
 
+## UCL owner-approved native goals joint repair — November 3
+
+Owner-approved release: model R17 /calibration R20 /coherent outcome R10 /projected
+score R8 /member lifecycle R15. The exact UCL identifiers below describe the
+reviewed PR968 release, approved for activation and forward evaluation. Source provider
+R5 validates after receipt and keeps intact original quote families; exact club
+identity R3 adds LASK/LASK Linz and Lens/RC Lens without substring matching. This
+is a verified name-equivalence repair, not proof of the unretained source catalog. Stored
+fallback R3 selects intact complete captures. Native whole/half/quarter Total
+settlement and target-free direct BTTS may change the single joint score law.
+Supported three-way plurality may become Watchlist; no new actionable grade
+lane or stake is added. Existing prediction writers, soccer lease and all
+locked payloads remain exact. This is a new numerical policy, not a proven
+accuracy gain or a complete causal movement-reader certification. Evidence:
+`docs/model-audits/2026-11-03-ucl-native-goals-joint-repair.md`.
+
 ## UCL complete public-split source path — November 3
 
 Public-source identity is
@@ -16,7 +32,7 @@ Evidence: `docs/model-audits/2026-11-03-ucl-public-split-complete-path.md`.
 
 ## UCL recovered fixture native identity continuity — November 3
 
-Current UCL runtime is model R16 /calibration R19 /coherent outcome R9 /
+The preceding deployed UCL runtime is model R16 /calibration R19 /coherent outcome R9 /
 projected score R7 /member lifecycle R14. Exact identifiers are in the UCL
 runtime section below. Source telemetry remains R4 original-market-clock.
 Live R14 verification found the shared incomplete-fixture retry discarded
@@ -32,7 +48,7 @@ Evidence: `docs/model-audits/2026-11-03-ucl-recovery-native-identity.md`.
 
 The R15 predecessor used model R15 /calibration R18 /coherent outcome R8 /
 projected score R6 /member lifecycle R13, with the exact identifiers recorded
-in the UCL runtime section below. Current source telemetry is
+in the UCL runtime section below. Its source telemetry was
 `soccer_current_market_provider_2026_11_03_r4_ucl_original_market_clock`.
 The R14 native-fixture repair remains intact. Binary movement now compares
 only the same exact contract and physical book, with a complete, nonconflicting,
@@ -796,7 +812,7 @@ entry is not a deployment claim. Evidence, checks and rollback:
   kickoff tolerance, complete same-book vectors and timestamps remain mandatory.
 - Source / identity releases are
   `soccer_current_market_provider_2026_10_31_r2_complete_official_markets` /
-  `soccer_club_identity_2026_10_31_r2_exact_ucl_club_aliases`. EPL model/grade are
+  `soccer_club_identity_2026_11_03_r3_lask_lens_exact_aliases`. EPL model/grade are
   r23/v28 (`partial_price_publication`); UCL model/grade/projected-score are
   r13/r16/r4 (`complete_official_market_prices`). Score equations, grade thresholds, stakes,
   and the single `prediction_pipeline:soccer` writer/lease are unchanged.
@@ -4875,18 +4891,18 @@ The four-season chronological tournament selected the runtime configuration on 2
   fixture, model, probability, score, side, price, grade, stake, lock,
   tracking, writer, lease, or stored payload.
 
-- Runtime/model release: `ucl_goals_coherent_2026_11_03_r16_recovery_native_identity`
-- Coherent outcome contract: `ucl_coherent_market_outcome_2026_11_03_r9_recovery_native_identity`
+- Runtime/model release: `ucl_goals_coherent_2026_11_03_r17_native_goals_joint`
+- Coherent outcome contract: `ucl_coherent_market_outcome_2026_11_03_r10_native_goals_joint`
 - Elo foundation: `ucl_elo_strength_foundation_2026_10_14_r1_local_public_consensus`; the prior opening-market arbitration remains a historical audit comparator and is not the active reader.
-- Display-grade/calibration release: `ucl_grade_policy_2026_11_03_r19_recovery_native_identity`
+- Display-grade/calibration release: `ucl_grade_policy_2026_11_03_r20_native_goals_plurality`
 - Sharp market-identity release: `ucl_sharp_market_identity_2026_10_22_r6_exact_diacritic_club_identity`
 - Competition context: `ucl_competition_context_2026_09_03_r2_qualifying_truthful`; settlement: `ucl_regulation_settlement_2026_10_15_r4_frozen_member_forecast_continuity`
 - Frozen history manifest: `ucl_history_manifest_2026_09_03_r1` (185/126/63, cutoff `2026-01-28T20:00:00.000Z`, match SHA-256 `00d3761b7d94851776ffb5b893bdaded8dec85657f769140a2aef0dacd306d36`; 754 team-stat rows, stat SHA-256 `3b817b9aa164ebc5141c26dddf9194611735d98708deef2b5b7f16df91314f88`)
-- Stored-quote availability authority: `ucl_stored_quote_fallback_2026_10_14_r1_complete_same_book`
-- Member lifecycle: `ucl_member_snapshot_lifecycle_2026_11_03_r14_recovery_native_identity`
+- Stored-quote availability authority: `ucl_stored_quote_fallback_2026_11_03_r3_intact_complete_same_book`
+- Member lifecycle: `ucl_member_snapshot_lifecycle_2026_11_03_r15_native_goals_joint`
 - Runtime constants: `lib/services/ucl/uclModel.ts`, `lib/services/ucl/uclCoherentMarketOutcome.ts`, `lib/services/ucl/uclPreviewGrade.ts`, and `lib/services/ucl/uclCompetitionContext.ts`. The UCL model, outcome and grade authorities are owned/versioned in UCL; the EPL module supplies only shared display/writer adapters.
 - Provider boundary: the dedicated Ball Don't Lie UCL v1 product owns fixtures, history, stats, availability, 1X2 fallback, and provider opening odds. The documented plural `seasons[]` and bounded `start_date`/`end_date` filters ignored their values in live tests, returning 2026 and 2011 rows respectively. Production does not retry those known-bad paths. Current fixtures and historical cohorts each use the empirically verified singular `season=` transport, paginate, deduplicate exact IDs, reject conflicting duplicates and every returned-season mismatch, and fail closed on an empty current season or any historical season without regulation-final rows. Cache reads and fresh reads must also match the frozen match and team-stat manifests exactly before training. Cached telemetry must prove the same ready singular-season strategy and exact 189/189 cohorts. Schema v6 persists only authenticated raw inputs and deterministically rebuilds joined xG training rows on read. The deviation remains explicit in provider-health telemetry. The read-only replay returned exactly 189 rows for 2024 and 189 for 2025; 754 team-stat rows joined after the complete cohort passed. Empty, mismatched, partial, or manifest-drifted history is a write/publication error: the cycle preserves the last-known-good member snapshot and cannot publish a default-prior replacement. `CurrentSoccerMarketProvider` owns the primary exact-book Match Result, Double Chance, Total, and BTTS board; soccer splits remain truthfully unavailable.
-- Model/grade boundary: one UCL-owned regulation-time PMF supplies every outcome. The UCL-only Dixon-Coles PMF remains the starting opinion. A 25% logarithmic pool with an equal local/public cross-league Elo consensus improves the independent Match Result distribution, then a target-excluded median of at least two complete current named-book 1X2 vectors may receive at most 45% authority, continuously reduced by book disagreement and probability dispersion. R9 adds a narrow goals arbitration after that result read: Total requires a sub-60% independent side plus a robust opposing target-excluded Total consensus and no contrary same-book movement; BTTS additionally requires an independently reconstructed 1X2+Total score market to agree with the direct BTTS consensus. A 60%+ BTTS side can be corrected only when club evidence is thin, the direct disagreement is at least 20 percentage points, and movement does not resist. The evaluated exact quote remains downstream economics/grade evidence and can never validate itself. Every accepted correction is reconciled through the same mean-preserving PMF; no market is scalar-weighted into the independent model. R11 keeps the PMF's decimal means when their one-decimal display agrees with the final Match Result, Total, and BTTS leaders; a conflicting unlocked score moves only as far toward the coherent PMF representative as required to resolve all three directions. Existing grade thresholds remain unchanged. No quota, manufactured balance, forced side, contrarian selection or stake is permitted. Evidence: `docs/model-audits/2026-10-20-ucl-minimum-coherent-decimal-score-r11.md`, `docs/model-audits/2026-10-20-ucl-coherent-primary-score-r10.md`, `docs/model-audits/2026-10-20-ucl-qualified-goals-arbitration-r9.md`, and the retained r8u foundation evidence in `docs/model-audits/2026-10-14-ucl-elo-late-consensus-r8u-r10.md`.
+- Model/grade boundary: one UCL-owned regulation-time PMF supplies every outcome. The independent club/Elo law and existing target-excluded 1X2 reader supply the starting joint distribution. R17 consumes complete, fixture-attested current native Total pairs at their actual whole/half/quarter lines, and independent direct BTTS pairs when available. One physical reference per axis is selected with explicit source priority and freshness; alternate books remain documented context, never independent duplicate votes. Exact stake-settlement constraints update the joint law by minimum-information projection; expected goals, 1X2, Over/Under 2.5 and BTTS are then derived together, without freezing prior goals means or binary probabilities. A 3/3.25/3.5 settlement share is never relabeled as an executable 2.5 price. Evaluated books are excluded from their own goal constraint; self-only BTTS prices remain downstream economics and cannot corroborate their own value. Incompatible BTTS constraints cannot erase a valid Total update. R20 additionally permits a supported three-way leading outcome below 50% to be Watchlist when the independent reference and evaluated book agree; it creates no new actionable confidence or EV lane. The existing Lean economics and stakes remain. Existing locked payloads remain exact. The owner explicitly approved this release for activation and forward evaluation in PR968; functional source/scenario checks are not proof of higher prediction accuracy. Evidence: `docs/model-audits/2026-11-03-ucl-native-goals-joint-repair.md`.
 - Competition boundary: reciprocal schedule topology supplies leg and aggregate context. July/August is explicitly qualifying rather than league phase; unsupported provider round numbers are not claimed as provenance. Qualification/advancement is not inferred from Match Result.
 - Writer/member boundary: `ucl-daily-refresh` and `ucl-pregame-lock` use the existing `prediction_pipeline:soccer` lease and shared soccer writer implementation. UCL alone enables prior-priced-tuple recovery, so EPL lifecycle behavior remains unchanged. A disappearing T-60 quote locks the prior complete tuple without rewriting it. When a quote has always been missing, the row remains held for exact-price economics but now stores the exact displayed forecast side from the immutable member context; the prediction therefore remains trackable while ROI remains ineligible. Snapshot repair can authenticate already-locked current-authority IDs without changing their T1 payload. Both the regular refresh and targeted lock path verify every T-60-due game before publication: all four exact model/calibration/competition rows and every persisted scalar must pass identity and immutable-field checks, and the locked card is reconstructed from each DB row's stored `member_market_at_capture`; no fresh held tuple can stand in for a prior priced tuple. An incomplete refresh preserves the prior member LKG and publishes nothing. A refresh whose current-price coverage collapses from a nonzero prior member board to zero is also a publication/write error and preserves that priced LKG. Partial 1–3-market locks stay outside member publication, settlement, aggregate Tracking, and winner scorecards until the exact four-market manifest exists. A held row without a frozen displayed forecast remains void; a held row with that exact frozen forecast enters prediction accuracy only and never price ROI. One master-gated flag contract controls providers, writes, publication, member/API/navigation exposure, foundation writes, locks, and settlement. All 36 current clubs have deterministic ESPN-family crest IDs and primary colors through the same shared card components used by EPL.
 - Board lifecycle: the default member board selects one UCL round/matchweek. All fixtures played on the current `America/New_York` calendar day remain through ET midnight even after final whistle. On the next ET day, completed prior-day fixtures fall off while scheduled or in-progress fixtures in the same multi-day round remain; once that round has no current-day or future fixture, the complete upcoming round populates. The default slate cache is ET-day-keyed, and that selected ET day is frozen through preview construction and locked-card snapshot merging, so neither cache nor the shared EPL 2 a.m. carryover can retain the prior UCL board across midnight. Explicit requested historical/manual matchweek navigation remains complete and unchanged.

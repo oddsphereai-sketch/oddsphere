@@ -197,8 +197,10 @@ function requirements(market: EplForwardMarket): { outcomes: string[]; line: num
   return { outcomes: ["yes", "no"], line: null, probabilityTotal: 1 };
 }
 
-function vectorFromRows(market: EplForwardMarket, rows: EplSharpOddsRecord[], capturedAt: string): EplForwardBookVector | null {
+function vectorFromRows(market: EplForwardMarket, rows: EplSharpOddsRecord[], capturedAt: string, nativeTotalLine?: number, strictPair = false): EplForwardBookVector | null {
   const required = requirements(market);
+  if (strictPair && required.outcomes.some(side => new Set(rows.filter(row => row.selection === side)
+    .map(row => `${row.odds_american}:${row.odds_decimal}`)).size > 1)) return null;
   const latestBySide = new Map<string, EplSharpOddsRecord>();
   for (const row of rows) {
     const current = latestBySide.get(row.selection);
@@ -229,7 +231,7 @@ function vectorFromRows(market: EplForwardMarket, rows: EplSharpOddsRecord[], ca
   }));
   const endpoint = first.provider_endpoint;
   const eventId = first.provider_event_id;
-  const line = market === "total" ? 2.5 : null;
+  const line = market === "total" ? nativeTotalLine ?? 2.5 : null;
   return {
     identity: [first.provider, endpoint, eventId ?? "none", book, market, line ?? "main", required.outcomes.join("+")].join(":"),
     sportsbook: first.sportsbook!,
@@ -250,16 +252,19 @@ function vectorFromRows(market: EplForwardMarket, rows: EplSharpOddsRecord[], ca
   };
 }
 
-function sharpVectors(fixture: EplSharpFixtureMarket, market: EplForwardMarket, capturedAt: string): EplForwardBookVector[] {
+function sharpVectors(fixture: EplSharpFixtureMarket, market: EplForwardMarket, capturedAt: string, nativeTotalLines = false): EplForwardBookVector[] {
   const required = requirements(market);
   const groups = new Map<string, EplSharpOddsRecord[]>();
   for (const row of fixture.odds) {
-    if (row.market !== market || (market === "total" && row.line !== required.line) || !row.sportsbook) continue;
-    const key = `${row.provider_event_id ?? "none"}:${canonicalBook(row.sportsbook)}:${row.line ?? "main"}`;
+    if (row.market !== market || (market === "total" && !nativeTotalLines && row.line !== required.line) || !row.sportsbook) continue;
+    if (nativeTotalLines && market === "total" && (row.line === null || !Number.isFinite(row.line) || row.line < 0 || !Number.isInteger(row.line * 4))) continue;
+    const key = nativeTotalLines
+      ? `${row.provider}:${row.provider_endpoint}:${row.provider_event_id ?? "none"}:${canonicalBook(row.sportsbook)}:${row.line ?? "main"}:${row.fetched_at}`
+      : `${row.provider_event_id ?? "none"}:${canonicalBook(row.sportsbook)}:${row.line ?? "main"}`;
     groups.set(key, [...(groups.get(key) ?? []), row]);
   }
   return [...groups.values()]
-    .map((rows) => vectorFromRows(market, rows, capturedAt))
+    .map((rows) => vectorFromRows(market, rows, capturedAt, nativeTotalLines && market === "total" ? rows[0]?.line ?? undefined : undefined, nativeTotalLines))
     .filter((row): row is EplForwardBookVector => row !== null)
     .sort((a, b) => {
       const ai = BOOK_PRIORITY.indexOf(a.canonicalBook as (typeof BOOK_PRIORITY)[number]);
@@ -277,8 +282,9 @@ export function eplCurrentBookVectors(
   fixture: EplSharpFixtureMarket,
   market: EplForwardMarket,
   capturedAt: string,
+  options: { nativeTotalLines?: boolean } = {},
 ): EplForwardBookVector[] {
-  return sharpVectors(fixture, market, capturedAt);
+  return sharpVectors(fixture, market, capturedAt, options.nativeTotalLines === true);
 }
 
 export function canonicalEplBook(value: string | null): string {
