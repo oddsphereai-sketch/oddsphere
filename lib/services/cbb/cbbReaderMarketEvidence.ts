@@ -2,7 +2,7 @@ import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto, OddsTrailStopD
 import type { BookDisplayEntry, BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
 import type { DraftKingsNetworkSplitFeed } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
-export const CBB_READER_EVIDENCE_RELEASE="cbb_reader_evidence_2026_11_03_r8_named_retail_source" as const;
+export const CBB_READER_EVIDENCE_RELEASE="cbb_reader_evidence_2026_11_03_r9_separate_recorded_reference" as const;
 type SplitRow={canonical_event_id:string;market_type:string;selection_key:string;bets_pct:number|null;money_pct:number|null;
   provider:string;source_book:string;source_type:string;source_observed_at:string|null;fetched_at:string};
 export type CbbCapturedPublicSplitRow=SplitRow;
@@ -32,6 +32,41 @@ function stops(entry:BookDisplayEntry,cutoff:number):OddsTrailStopDto[]{
 function mergeTrail(history:OddsTrailStopDto[],current:OddsTrailStopDto[]):OddsTrailStopDto[]{
   return [...new Map([...history,...current].map(stop=>[`${stop.sportsbook}:${Date.parse(stop.observedAt??"")}:${stop.line}`,stop])).values()]
     .sort((a,b)=>Date.parse(a.observedAt??"")-Date.parse(b.observedAt??""));
+}
+/** A historical source may explain movement when the evaluated book has just
+ * one receipt. It is never an executable/current quote or a sharp reference. */
+function recordedReference(feed:BookDisplayFeed|null,game:DailyEdgeGameDto,kind:string,side:string,
+  currentBook:string|null|undefined,currentLine:number|null,cutoff:number,now:number):OddsTrailStopDto[]|null{
+  if(!feed||!Number.isFinite(cutoff))return null;
+  const candidates: {entry:BookDisplayEntry;trail:OddsTrailStopDto[];latest:number}[]=[];
+  for(const entry of feed.rows){
+    if(entry.event!==game.external_id||Date.parse(entry.start)!==Date.parse(game.gameStartAt??"")||
+      entry.away!==game.awayTeam||entry.home!==game.homeTeam||entry.kind!==kind||entry.side!==side||
+      entry.book===currentBook||entry.ambiguousHistory)continue;
+    const raw=[...(entry.opening?[entry.opening]:[]),...entry.quotes].filter(row=>row[0]<=cutoff);
+    const tuples=new Map<number,string>();let conflicting=false;
+    for(const row of raw){const tuple=JSON.stringify([row[1],row[2]]),seen=tuples.get(row[0]);
+      if(seen&&seen!==tuple){conflicting=true;break;}tuples.set(row[0],tuple);}
+    if(conflicting)continue;
+    const trail=stops(entry,cutoff),times=trail.map(stop=>Date.parse(stop.observedAt??""));
+    if(new Set(times).size<2||times.some(time=>(entry.ambiguousTimes??[]).includes(time))||
+      entry.ambiguousOpening&&trail.some(stop=>stop.source==="provider_opening"))continue;
+    const terminal=trail.at(-1)!,latest=Date.parse(terminal.observedAt??"");
+    if(terminal.line!==currentLine||latest>now||now-latest>3*60*60_000||
+      trail.some(stop=>stop.line===null&&kind!=="moneyline"))continue;
+    const opposite=matchingHistory(feed,game,kind,opposing(side),entry.book);
+    if(!opposite||opposite.ambiguousHistory||(opposite.ambiguousTimes??[]).includes(latest)||
+      new Set(opposite.quotes.filter(row=>row[0]===latest).map(row=>JSON.stringify([row[1],row[2]]))).size>1)continue;
+    const sameEpoch=stops(opposite,cutoff).filter(stop=>Date.parse(stop.observedAt??"")===latest);
+    const otherLine=kind==="spread"&&currentLine!==null?-currentLine:currentLine;
+    if(sameEpoch.length!==1||sameEpoch[0].line!==otherLine)continue;
+    const implied=(american:number)=>american>0?100/(100+american):-american/(100-american);
+    const hold=implied(terminal.american)+implied(sameEpoch[0].american);
+    if(hold<.98||hold>1.3)continue;
+    candidates.push({entry,trail,latest});
+  }
+  candidates.sort((a,b)=>b.latest-a.latest||b.trail.length-a.trail.length||a.entry.book.localeCompare(b.entry.book));
+  return candidates[0]?.trail??null;
 }
 function splitPair(rows:SplitRow[],id:number,kind:string,now:number):SplitRow[]|null{
   const sides=kind==="total"?["over","under"]:["away","home"];
@@ -233,6 +268,14 @@ export function mergeCbbReaderEvidence(board:DailyEdgeResponse,feed:BookDisplayF
           const existing=market.opposingOddsTrail?.side===opposing(side)?market.opposingOddsTrail.stops:[];
           market.opposingOddsTrail={side:opposing(side) as "home"|"away"|"over"|"under",label:label(game,opposing(side)),
             stops:mergeTrail(stops(other,cutoff),existing)};
+        }
+        // Keep the evaluated book's single real quote as current. An older
+        // second book is available only as a separate recorded reference.
+        if(book&&market.currentPriceAmerican!==null&&market.currentPriceAmerican!==undefined&&
+          Date.parse(game.gameStartAt??"")-now>60*60_000&&
+          new Set([...(market.lineTrail??[]),...(market.oddsTrail??[])]
+            .filter(stop=>stop.sportsbook===book).map(stop=>stop.observedAt)).size<2){
+          market.recordedReferenceTrail=recordedReference(feed,game,kind,side,book,market.line,cutoff,now)??undefined;
         }
       }
       markets[key]=market;

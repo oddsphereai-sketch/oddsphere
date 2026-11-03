@@ -77,13 +77,16 @@ Evidence: `docs/model-audits/2026-11-03-cfb-injury-news-player-identity.md`.
 
 ## CBB split source authority — November 3
 
-Reader evidence `cbb_reader_evidence_2026_11_03_r8_named_retail_source`
+Reader evidence `cbb_reader_evidence_2026_11_03_r9_separate_recorded_reference`
 classifies the stored DraftKings Network fallback as a retail source on open
 CBB rows and future locks. The member split panel, cross-source comparison and
 professional-availability field retain the correct source class. DraftKings
 consumer percentages cannot certify professional split availability. This
 does not change score R5, grade R6, selection, evaluated quote, or tracking.
 Existing locked member payloads and their reader text retain exact precedence.
+When an evaluated CBB book has only one recorded quote, R9 may show an older
+paired same-contract book trail as a separately timestamped reference. It does
+not replace the evaluated price, current source, forecast, grade or lock.
 The broader cross-sport split authority path remains under separate audit.
 
 ## CBB forward retail price journal — November 3

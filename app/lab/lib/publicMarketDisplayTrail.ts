@@ -50,6 +50,26 @@ export function publicMarketDisplayBook(market:MarketEdgeDto):PredictionMarketBo
  return {sportsbook:book,line,points,locked:terminal.label==="locked",marketHistory:[...new Map(all.map(s=>{const at=Date.parse(s.observedAt!);return [at+"|"+s.line,[at,s.american,s.line] as [number,number,number|null]];})).values()].sort((a,b)=>a[0]-b[0]),...(opening?{opening:{line:opening.line,point:[Date.parse(opening.observedAt!),implied(opening.american),opening.american]}}:{})};
 }
 
+/** A second book's older tape is intentionally separate from the executable
+ * quote and from the main Kalshi comparison curve. Its terminal is the last
+ * ACTUAL receipt, never a held value or a synthetic current quote. */
+export function publicMarketRecordedReferenceBook(market:MarketEdgeDto):PredictionMarketBookTrail|null {
+ const trail=market.recordedReferenceTrail??[],first=trail[0],last=trail.at(-1);
+ if(!first||!last||!first.sportsbook||trail.some(s=>s.sportsbook!==first.sportsbook)||
+  new Set(trail.map(s=>Date.parse(s.observedAt??""))).size<2||last.line!==market.line||
+  first.sportsbook===market.currentPriceSportsbook)return null;
+ const currentAt=Date.parse(market.currentPriceObservedAt??"");
+ if(!Number.isFinite(currentAt)||Date.parse(last.observedAt??"")>currentAt)return null;
+ const valid=trail.filter(s=>Number.isFinite(Date.parse(s.observedAt??""))&&Number.isFinite(s.american)&&Math.abs(s.american)>=100);
+ if(valid.length!==trail.length)return null;
+ const points=valid.filter(s=>s.line===market.line).map(s=>[Date.parse(s.observedAt!),implied(s.american),s.american] as [number,number,number]);
+ if(!points.length)return null;
+ const opening=first.source==="provider_opening"?{line:first.line,point:[Date.parse(first.observedAt!),implied(first.american),first.american] as [number,number,number]}:undefined;
+ return {sportsbook:first.sportsbook,line:market.line,points,locked:false,
+  marketHistory:valid.map(s=>[Date.parse(s.observedAt!),s.american,s.line] as [number,number,number|null]),
+  ...(opening?{opening}:{})};
+}
+
 /** An auxiliary download can recover EARLIER real same-book observations.
  * It cannot replace the public terminal quote/time or add another threshold's
  * prices to this curve. Stored observations always win timestamp ties. */

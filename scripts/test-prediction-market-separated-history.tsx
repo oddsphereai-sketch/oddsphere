@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { RecordedSportsbookHistory } from "../app/lab/components/daily-edge/PredictionMarketPanel";
+import { PredictionMarketUnavailable, RecordedSportsbookHistory } from "../app/lab/components/daily-edge/PredictionMarketPanel";
 import { predictionMarketVisibleComparison, type PredictionMarketBookTrail } from "../app/lab/lib/predictionMarketDisplay";
 
 // Realistic non-overlap: sportsbook last observed at 5:14; Kalshi starts
@@ -28,6 +28,18 @@ assert.match(html, new RegExp(`data-observed-at="${at("21:14")}"`));
 assert.doesNotMatch(html, /data-kalshi-line|data-book-odds="-112"|Shared chart window|NaN|Infinity/);
 assert.match(html, /single quote/);
 assert.equal(JSON.stringify({ book, row }), original);
+const earlier = renderToStaticMarkup(<RecordedSportsbookHistory book={{...book,sportsbook:"draftkings"}} label="NAU +21.5" referenceFor="fanduel" />);
+assert.match(earlier,/Earlier DraftKings history through/);
+assert.match(earlier,/Current evaluated quote stays at FanDuel/);
+assert.match(earlier,/data-recorded-sportsbook-history="draftkings"/);
+assert.doesNotMatch(earlier,/data-recorded-sportsbook-history="fanduel"/);
+const noKalshi = renderToStaticMarkup(<PredictionMarketUnavailable variant="mobile" label="NAU +21.5" status="contract_unavailable"
+  book={{...book,sportsbook:"fanduel",line:21.5}} recordedReference={{...book,sportsbook:"draftkings",line:21.5}}
+  currentBook="fanduel" kind="spread"/>);
+assert.match(noKalshi,/data-prediction-market-mode="sportsbook-only"/);
+assert.match(noKalshi,/data-recorded-sportsbook-history="draftkings"/);
+assert.match(noKalshi,/Current evaluated quote stays at FanDuel/);
+assert.doesNotMatch(noKalshi,/data-kalshi-line/);
 
 // An additional source-only graph uses the exact frozen record, never live
 // replacement odds, later observations or another threshold's price.

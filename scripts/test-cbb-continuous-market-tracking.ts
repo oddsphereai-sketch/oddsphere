@@ -7,6 +7,7 @@ import { parseContractFeed, contractsForPublishedReaders, resolveReaderContract 
 import { PREDICTION_MARKET_PRELOCK_RELEASE, capturePredictionMarketPrelock, type PrelockFeed } from "../lib/providers/owls/predictionMarketPrelock";
 import { OwlsInsightClient } from "../lib/providers/owls/owlsInsightClient";
 import { mergeCbbReaderEvidence } from "../lib/services/cbb/cbbReaderMarketEvidence";
+import { publicMarketRecordedReferenceBook } from "../app/lab/lib/publicMarketDisplayTrail";
 import type { DailyEdgeResponse } from "../app/lab/lib/labTypes";
 
 const now=Date.parse("2026-10-31T14:30:00Z"),iso=(t:number)=>new Date(t).toISOString();
@@ -47,6 +48,42 @@ async function main(){
  assert.equal(rendered.markets.first_inning.oddsTrail!.length,1,"a repeated terminal cannot manufacture an earlier price observation");
  assert.equal(rendered.markets.first_inning.opposingOddsTrail!.stops.length,1);
  assert.equal(rendered.markets.first_inning.priceAmerican,game.markets.first_inning.priceAmerican);
+ const referenceTime=Date.parse("2026-11-03T15:02:38Z"),dkFirst=Date.parse("2026-11-03T13:01:46.197Z"),dkLast=Date.parse("2026-11-03T14:47:08.118Z"),fdCurrent=Date.parse("2026-11-03T15:01:56.229Z");
+ const referenceGame=structuredClone(game);
+ referenceGame.gameStartAt="2026-11-04T03:00:00Z";
+ referenceGame.markets.first_inning={...referenceGame.markets.first_inning,pick:"LIB +21.5",line:21.5,
+  currentPriceAmerican:-110,currentPriceSportsbook:"fanduel",currentPriceObservedAt:iso(fdCurrent),
+  oddsTrail:[{...stop(21.5,-110,fdCurrent)}],lineTrail:[{...stop(21.5,-110,fdCurrent)}]};
+ const refRow=(side:string,book:string,quotes:Array<[number,number,number]>)=>({event:referenceGame.external_id,
+  start:referenceGame.gameStartAt!,away:referenceGame.awayTeam,home:referenceGame.homeTeam,kind:"spread",side,book,
+  providerEventId:"ncaab:exact",checkedAt:iso(referenceTime),opening:null,quotes,observedQuotes:true as const});
+ const referenceFeed={...books,rows:[
+  refRow("away","draftkings",[[dkFirst,-110,21.5],[dkLast,-112,21.5]]),
+  refRow("home","draftkings",[[dkFirst,-110,-21.5],[dkLast,-108,-21.5]]),
+  refRow("away","betmgm",[[dkFirst-60_000,-110,21.5],[dkFirst,-112,21.5]]),
+  refRow("home","betmgm",[[dkFirst-60_000,-110,-21.5],[dkFirst,-108,-21.5]])]} satisfies BookDisplayFeed;
+ const referenceBoard={sport:"cbb",games:[referenceGame]} as DailyEdgeResponse;
+ const reference=mergeCbbReaderEvidence(referenceBoard,referenceFeed,[],referenceTime).games[0].markets.first_inning;
+ assert.equal(reference.currentPriceSportsbook,"fanduel");assert.equal(reference.currentPriceAmerican,-110);
+ assert.deepEqual(reference.oddsTrail?.map(s=>s.sportsbook),["fanduel"]);
+ assert.deepEqual(reference.recordedReferenceTrail?.map(s=>s.sportsbook),["draftkings","draftkings"]);
+ assert.deepEqual(reference.recordedReferenceTrail?.map(s=>s.observedAt),[iso(dkFirst),iso(dkLast)]);
+ assert.equal(reference.recordedReferenceTrail?.at(-1)?.label,"move","retained observed quote is not relabeled current");
+ const referenceBook=publicMarketRecordedReferenceBook(reference)!;
+ assert.equal(referenceBook.sportsbook,"draftkings");assert.equal(referenceBook.points.at(-1)?.[0],dkLast);
+ assert.equal(referenceBook.opening,undefined,"first retained quote is not a provider opener");
+ assert.equal(publicMarketRecordedReferenceBook({...reference,recordedReferenceTrail:[...reference.recordedReferenceTrail!,{...stop(21.5,-110,fdCurrent)}]}),null,"books cannot be spliced");
+ assert.equal(mergeCbbReaderEvidence(referenceBoard,{...referenceFeed,rows:referenceFeed.rows.filter(r=>r.side!=="home")},[],referenceTime).games[0].markets.first_inning.recordedReferenceTrail,undefined,"unpaired reference is rejected");
+ const twoCurrent=structuredClone(referenceGame);twoCurrent.markets.first_inning.lineTrail=[];
+ twoCurrent.markets.first_inning.oddsTrail=[stop(21.5,-115,fdCurrent-60_000),stop(21.5,-110,fdCurrent)];
+ assert.equal(mergeCbbReaderEvidence({sport:"cbb",games:[twoCurrent]} as DailyEdgeResponse,referenceFeed,[],referenceTime).games[0].markets.first_inning.recordedReferenceTrail,undefined,"an existing current-book price trail does not need another book");
+ const noCurrent={...referenceGame,markets:{...referenceGame.markets,first_inning:{...referenceGame.markets.first_inning,currentPriceSportsbook:null}}};
+ assert.equal(mergeCbbReaderEvidence({sport:"cbb",games:[noCurrent]} as DailyEdgeResponse,referenceFeed,[],referenceTime).games[0].markets.first_inning.recordedReferenceTrail,undefined,"no alternate book can become current without an evaluated source");
+ assert.equal(mergeCbbReaderEvidence(referenceBoard,{...referenceFeed,rows:referenceFeed.rows.map(r=>r.book==="draftkings"&&r.side==="away"?{...r,ambiguousTimes:[dkLast]}:r)},[],referenceTime).games[0].markets.first_inning.recordedReferenceTrail?.[0]?.sportsbook,"betmgm","ambiguous latest source cannot displace a coherent older source");
+ const lockedReference={...referenceGame,lockState:"locked" as const,lockedAt:iso(referenceTime-1000)};
+ assert.deepEqual(mergeCbbReaderEvidence({sport:"cbb",games:[lockedReference]} as DailyEdgeResponse,referenceFeed,[],referenceTime).games[0],lockedReference,"locked reader payload remains exact");
+ assert.equal(mergeCbbReaderEvidence(referenceBoard,referenceFeed,[],Date.parse(referenceGame.gameStartAt!)-59*60_000).games[0].markets.first_inning.recordedReferenceTrail,undefined,"no new history at the T-60 boundary");
+ assert.deepEqual(referenceGame,referenceBoard.games[0],"unlocked source fixture remains immutable");
  const next=structuredClone(game);next.markets.first_inning.oddsTrail=[stop(-7.5,-110,now+60_000)];
  const advanced=accumulateCbbPublishedQuotes(feed,[next],archive,now+120_000);
  assert.deepEqual(advanced.rows.find(r=>r.kind==="spread"&&r.side==="home")!.quotes.map(q=>q[1]),[-102,-115,-110]);

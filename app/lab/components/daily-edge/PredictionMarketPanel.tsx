@@ -7,7 +7,7 @@ import { predictionMarketReaderBookTrail, predictionMarketComparisonBook, predic
 import {formatContractLine} from "@/lib/providers/owls/predictionMarketContracts";
 import {predictionMarketArchivedBook,predictionMarketBookOnlyComparison,predictionMarketVisibleComparison,predictionMarketHasSharedHistory,predictionMarketBookLineHistory,predictionMarketAllowsStandaloneHistory} from "@/app/lab/lib/predictionMarketDisplay";
 import {PredictionMarketSourcePins} from "@/app/lab/lib/predictionMarketSourcePins";
-import {publicMarketDisplayBook,publicMarketDisplayHistory,publicMarketPrelockHeldBook} from "@/app/lab/lib/publicMarketDisplayTrail";
+import {publicMarketDisplayBook,publicMarketDisplayHistory,publicMarketPrelockHeldBook,publicMarketRecordedReferenceBook} from "@/app/lab/lib/publicMarketDisplayTrail";
 
 type Receipt={market:ReaderMarketMatch|null;book:PredictionMarketBookTrail|null;availability?:string;prelockCapturedAt?:number;historicalThrough?:number;recoveredAt?:number;sourcePinned?:boolean};
 const cache = new Map<string, { at:number; value:Receipt; pending?:Promise<Receipt> }>();
@@ -48,6 +48,8 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   const sport=game.sport==="soccer"&&(game.id.startsWith("soccer-ucl-")||game.soccerCompetitionContext?.competition==="uefa_champions_league")?"ucl":game.sport;
   const legacySelection=readerContractSelection(game,marketKey),selection=readerHistoryContractSelection(game,marketKey),kind=marketKey==="moneyline"?"moneyline":selection?.kind??null;
   const selectedMarket=game.markets[marketKey],trackerBook=publicMarketDisplayBook(selectedMarket);
+  const recordedReference=game.sport==="cbb"&&game.lockState!=="locked"&&game.lockedAt===null?
+    publicMarketRecordedReferenceBook(selectedMarket):null;
   const query=new URLSearchParams({sport,away:game.awayTeam,home:game.homeTeam,start:game.gameStartAt??"",market:kind??"unsupported",event:String(game.external_id),display:"public-tracker-v1"});
   if(trackerBook){const last=trackerBook.points.at(-1)!;query.set("book",trackerBook.sportsbook);query.set("reference",[last[0],trackerBook.line,last[2]].join(":"));}
   if(selection){query.set("side",selection.side);if(selection.line!==null)query.set("line",String(selection.line));}
@@ -96,10 +98,10 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   // Other legacy locks retain their unavailable state; only the explicit CFB
   // historical view may recover already recorded quotes without a receipt.
   const fallbackBook=frozen&&!current?.prelockCapturedAt&&!historicalCfb?null:book;
-  if(kind===null||!current?.market)return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} kind={kind} lockedAt={lockedAt} status={kind===null?(game.sport==="mlb"&&marketKey==="first_inning"?"unsupported":"selection_pending"):current?.availability??(current?"contract_unavailable":"loading")} book={fallbackBook}/>;
+  if(kind===null||!current?.market)return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} kind={kind} lockedAt={lockedAt} status={kind===null?(game.sport==="mlb"&&marketKey==="first_inning"?"unsupported":"selection_pending"):current?.availability??(current?"contract_unavailable":"loading")} book={fallbackBook} recordedReference={!frozen?recordedReference:null} currentBook={selectedMarket.currentPriceSportsbook??null}/>;
   const market=current.market;
   const outcome=selectedPredictionMarketOutcome(market,selectedMarket.pick);
-  if(!outcome||(!current.prelockCapturedAt&&!historicalCfb&&current.checkedAt-Date.parse(market.asOf)>24*60*60_000))return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} kind={kind} lockedAt={lockedAt} status="feed_unavailable" book={fallbackBook}/>;
+  if(!outcome||(!current.prelockCapturedAt&&!historicalCfb&&current.checkedAt-Date.parse(market.asOf)>24*60*60_000))return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} kind={kind} lockedAt={lockedAt} status="feed_unavailable" book={fallbackBook} recordedReference={!frozen?recordedReference:null} currentBook={selectedMarket.currentPriceSportsbook??null}/>;
   const retained=current.checkedAt-Date.parse(market.asOf)>10*60_000;
   const archivedBook=book?.historyScope==="prelock_archive";
   const context=market.context;
@@ -111,7 +113,7 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   // Genuine supported Kalshi history remains visible without pretending a
   // one-quote sportsbook endpoint provides a full two-source overlap.
   const standaloneHistory=visible.standalone;
-  if(fallbackBook&&!sharedHistory&&!standaloneHistory)return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} kind={kind} lockedAt={lockedAt} status="history_building" book={fallbackBook} quote={!frozen||Date.parse(market.asOf)<=lockedAt!?{label:outcome.label,probability:outcome.probability,at:Date.parse(market.asOf),method:market.context?.method}:undefined}/>;
+  if(fallbackBook&&!sharedHistory&&!standaloneHistory)return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} kind={kind} lockedAt={lockedAt} status="history_building" book={fallbackBook} recordedReference={!frozen?recordedReference:null} currentBook={selectedMarket.currentPriceSportsbook??null} quote={!frozen||Date.parse(market.asOf)<=lockedAt!?{label:outcome.label,probability:outcome.probability,at:Date.parse(market.asOf),method:market.context?.method}:undefined}/>;
   if(!comparison.points.length)return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} status={frozen?"prelock_unavailable":"history_unavailable"} book={null}/>;
   const movementView=!frozen&&view==="movement"&&!!book;
   const separateBookHistory=!movementView&&standaloneHistory&&!!book?.points.length;
@@ -157,6 +159,7 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
       </div>:null}
       <PredictionMarketChart row={movementView?null:outcome} book={plottedBook} context={movementView?undefined:context} bookLabel={bookLabel} lockedAt={lockedAt} range={range} onRangeChange={setRange}/>
       {separateBookHistory?<RecordedSportsbookHistory book={book!} label={bookLabel} lockedAt={lockedAt}/>:null}
+      {!frozen&&recordedReference?<RecordedSportsbookHistory book={recordedReference} label={bookLabel} referenceFor={selectedMarket.currentPriceSportsbook??null}/>:null}
     </div>
     <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-white/[0.04] pt-2 text-[10px] text-[#b1a1bf] sm:mt-0 sm:block sm:space-y-2 sm:border-0 sm:pt-0">
       <p data-kalshi-start data-start-kind={kalshiOpening?.kind??"first_available"} data-start-at={kalshiStart[0]} className="min-w-0"><span className="font-semibold text-[#d9d1e4]">Kalshi {kalshiOpening?.kind==="opening_minute"?"opening minute":"first quoted"} · {(kalshiStart[1]*100).toFixed(1)}%</span><span className="block text-[#ac9bbd]">{time(kalshiStart[0],true)}</span><span className="block text-[#9d92ae]">{outcome.historyFrom?"History checked from market open":"Opening history pending"}{kalshiOpening?.kind==="first_available"?" · opening quote unavailable":""}</span></p>
@@ -176,15 +179,15 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
 /** Keep the exact existing book receipts visible when they cover a different
  * window from Kalshi. This adds a source-only view; it never extends a quote,
  * joins thresholds, or replaces any stored locked field or legacy curve. */
-export function RecordedSportsbookHistory({book,label,lockedAt}:{book:PredictionMarketBookTrail;label:string;lockedAt?:number}){
+export function RecordedSportsbookHistory({book,label,lockedAt,referenceFor}:{book:PredictionMarketBookTrail;label:string;lockedAt?:number;referenceFor?:string|null}){
   return <div className="mt-3 border-t border-white/[0.07] pt-2" data-recorded-sportsbook-history={book.sportsbook}>
     <p className="text-[10px] font-semibold text-[#d9d1e4]"><span aria-hidden="true" className="mr-1 inline-block h-0.5 w-2.5 bg-[#b7a0f4]"/>{bookTitle(book.sportsbook)} · {label} · recorded prices</p>
-    <p className="mt-1 text-[9px] text-[#ac9bbd]">The sources cover different time windows. Each history keeps its original quote times.</p>
+    <p className="mt-1 text-[9px] text-[#ac9bbd]">{referenceFor?`Earlier ${bookTitle(book.sportsbook)} history through ${time(book.marketHistory?.at(-1)?.[0]??book.points.at(-1)![0],true)}. Current evaluated quote stays at ${bookTitle(referenceFor)}. `:""}The sources cover different time windows. Each history keeps its original quote times.</p>
     <PredictionMarketChart row={null} book={book} context={undefined} bookLabel={label} lockedAt={lockedAt}/>
   </div>;
 }
 
-export function PredictionMarketUnavailable({variant,label,status,book,kind,lockedAt,quote}:{variant:"mobile"|"desktop";label:string;status:string;book:PredictionMarketBookTrail|null;kind?:string|null;lockedAt?:number;quote?:{label:string;probability:number;at:number;method?:"exact"|"nearby"|"push_adjusted"}}){
+export function PredictionMarketUnavailable({variant,label,status,book,kind,lockedAt,quote,recordedReference,currentBook}:{variant:"mobile"|"desktop";label:string;status:string;book:PredictionMarketBookTrail|null;kind?:string|null;lockedAt?:number;quote?:{label:string;probability:number;at:number;method?:"exact"|"nearby"|"push_adjusted"};recordedReference?:PredictionMarketBookTrail|null;currentBook?:string|null}){
   const [range,setRange]=useState<"all"|"24h">("all");
   const message=status==="loading"?"Loading this market…":status==="selection_pending"?"Waiting for this selection’s sportsbook line before matching a Kalshi contract.":status==="unsupported"?"No matching Kalshi market supported for this selection.":status==="prelock_unavailable"?"No eligible pre-lock prediction-market quotes were recorded.":["refresh_failed","feed_unavailable","market_feed_unavailable"].includes(status)?"Prediction-market feed temporarily unavailable. Retrying automatically.":status==="history_building"?"Kalshi history is building. Showing sportsbook movement until both sources overlap.":status==="history_unavailable"?"Matching contract found; quote history is building.":"No matching Kalshi contract is currently available. Updates automatically when one arrives.";
   const bookLabel=book?.line===null||book?.line===undefined?label:/^(Over|Under) /.test(label)?label.replace(/\d+(?:\.\d+)?$/,String(book.line)):label.replace(/(?:[+−-]?\d+(?:\.\d+)?|PK)$/i,formatContractLine(book.line));
@@ -205,6 +208,7 @@ export function PredictionMarketUnavailable({variant,label,status,book,kind,lock
         <BookLineHistory book={safeBook} kind={kind??(/^(Over|Under) /.test(label)?"total":"spread")} start={start} end={history.cutoff!} frozen={lockedAt!==undefined}/>
         <p>{lockedAt===undefined?"Sportsbook through ":"Pre-lock sportsbook through "}{time(last[0])}{safeBook.points.length===1?" · one quote recorded":""}</p>
       </div>
+      {lockedAt===undefined&&recordedReference?<div className="col-span-full"><RecordedSportsbookHistory book={recordedReference} label={label} referenceFor={currentBook}/></div>:null}
     </section>;
   }
   return <section aria-label={`Prediction market · ${label}`} data-prediction-market={variant} data-prediction-market-availability={status} className={variant==="mobile"?"sm:hidden rounded-lg border border-white/[0.07] bg-[#0d0b13] p-3":"hidden sm:flex items-center gap-4 border-y border-white/[0.07] bg-[#0d0b13] px-5 py-3"}>
