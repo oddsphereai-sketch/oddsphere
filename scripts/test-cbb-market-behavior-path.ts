@@ -157,6 +157,15 @@ const overlapFetched=time(21),overlapFlow={...flow(10),firstMoney:.8,secondMoney
 const overlapQuote={...q2,fetchedAt:overlapFetched,canonicalReceipt:metadata(overlapFetched,time(23),1005)};
 const overlapping=run([overlapQuote],{seedQuotes:[boundedStart],flows:[overlapFlow]});
 assert.equal(source(overlapping).boundFlows.length,0,"same-run DB insertion order never proves flow response ordering");
+const unchangedRecapture={...quote(9),fetchedAt:time(11),canonicalReceipt:metadata(time(11),time(12),1011)};
+const betweenFlow={...flow(10),fetchedAt:time(11),canonicalReceipt:metadata(time(11),time(11.5),1013)};
+const unchangedAfter={...quote(20),canonicalReceipt:metadata(time(21),time(22),1015)};
+const knownHeld=run([unchangedRecapture,unchangedAfter],{seedQuotes:[boundedStart],flows:[betweenFlow]});
+assert.equal(source(knownHeld).boundFlows.length,1,"a newer identical recapture must retain a provably known pre-flow state");
+assert.equal(source(knownHeld).boundFlows[0].sourceState.providerObservedAt,boundedStart.providerObservedAt);
+assert.equal(source(knownHeld).boundFlows[0].response,"held","the identical post-flow pair is a hold, not sharp confirmation");
+const changedRecapture=run([{...unchangedRecapture,firstPrice:-120},unchangedAfter],{seedQuotes:[boundedStart],flows:[betweenFlow]});
+assert.equal(source(changedRecapture).boundFlows.length,0,"a changed ambiguous pre-flow state cannot borrow an earlier receipt");
 const laterObserved={...quote(30,-130,110),canonicalReceipt:metadata(time(31),time(32),1007)};
 const ordered=run([laterObserved],{previous:overlapping.tape});
 assert.equal(source(ordered).pressureDirection,1,"a later independent run can prove availability ordering conservatively");

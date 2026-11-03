@@ -175,6 +175,10 @@ async function main(){
  const qualifiedBoard=buildCbbProvisionalBoard(confirmingRead.forecast,[target,current],{marketBehavior:confirmingRead.receipt});
  const qualifiedDto=adaptCbbProvisionalGame({game,snapshot:{...initial.record.snapshot,board:qualifiedBoard},homeLogo:null,awayLogo:null,now:at,marketQuotes:[target,current]});
  assert.equal(qualifiedDto.markets.first_inning.sharpStatus,"confirm");assert.equal(qualifiedDto.markets.first_inning.grade,"sharp_confirmed");
+ assert.equal(qualifiedDto.markets.first_inning.writerMovementDirection,
+  (confirmingRead.receipt.margin.sourceDirection??0)*(qualifiedBoard.rows.find(row=>row.market==="spread")!.selection==="first"?1:-1)>0?"support":"resistance",
+  "the new independent-relative receipt must still carry the actual professional price direction into the reader");
+ assert.equal(qualifiedDto.markets.first_inning.readerMovementSource,"writer_market_anchor");
  const priceOnlyRead=readCbbMarketBehavior({independent,independentInputKey:"frozen-source",startsAt:start,targets:[target],currentQuotes:[current],
    anchors:{release:CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,gameId:777,startsAt:start,independentRelease:CBB_CURRENT_SCORE_RELEASE,independentInputKey:"frozen-source",capturedAt:"2026-11-02T15:01:00Z",quotes:[anchor]}});
  const priceBoard=buildCbbProvisionalBoard(priceOnlyRead.forecast,[target,current],{marketBehavior:priceOnlyRead.receipt});

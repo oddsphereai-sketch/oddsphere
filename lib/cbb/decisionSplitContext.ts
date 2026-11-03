@@ -36,7 +36,7 @@ const valid=(n:number|null)=>n===null||Number.isFinite(n)&&n>=0&&n<=1;
 const coherent=(a:number|null,b:number|null)=>a===null&&b===null||a!==null&&b!==null&&Math.abs(a+b-1)<=.03;
 const qualified=(r:CbbDecisionSplitContext,at:number)=>{
   const received=Date.parse(r.availableBy),observed=r.observedAt===null?received:Date.parse(r.observedAt);
-  return Number.isFinite(received)&&Number.isFinite(observed)&&observed<=received&&received<=at&&at-received<=3*3600_000&&
+  return Number.isFinite(received)&&Number.isFinite(observed)&&observed<=received&&received<=at&&at-observed<=3*3600_000&&
     [r.firstMoney,r.secondMoney,r.firstTickets,r.secondTickets].every(valid)&&
     coherent(r.firstMoney,r.secondMoney)&&coherent(r.firstTickets,r.secondTickets)&&
     (r.firstMoney!==null||r.firstTickets!==null)&&
@@ -55,7 +55,8 @@ export function cbbDecisionSplitContext(args:{game:CbbGame;allGames:readonly Cbb
   const at=Date.parse(args.asOf);if(!Number.isFinite(at))throw new Error("CBB split decision clock invalid");
   const out:CbbDecisionSplitContext[]=[];
   const directGroups=new Map<string,typeof args.direct.rows>();
-  for(const row of args.direct.rows){const key=JSON.stringify([row.sourceBook,row.market,row.observedAt,row.sourceLine]);
+  for(const row of args.direct.rows){if(!["circa","draftkings","betmgm"].includes(row.sourceBook))continue;
+    const key=JSON.stringify([row.sourceBook,row.market,row.observedAt,row.sourceLine]);
     directGroups.set(key,[...(directGroups.get(key)??[]),row]);}
   for(const group of directGroups.values()){
     const first=group.filter(row=>row.selection==="first"),second=group.filter(row=>row.selection==="second");
@@ -69,7 +70,7 @@ export function cbbDecisionSplitContext(args:{game:CbbGame;allGames:readonly Cbb
       clockBasis:"verified_provider_observation",observationIds:[]});
   }
   for(const pair of args.canonical){
-    if(pair.gameId!==args.game.id||pair.evidenceClass!=="complete_money_and_tickets")continue;
+    if(pair.gameId!==args.game.id)continue;
     out.push({gameId:args.game.id,market:pair.market,sourceBook:pair.book,physicalFamily:family(pair.book),
       sourceClass:pair.sourceClass,provider:"owls",sourceEventId:pair.providerEventId,line:pair.first.ownLine,
       firstMoney:pair.first.money,secondMoney:pair.second.money,firstTickets:pair.first.tickets,secondTickets:pair.second.tickets,
@@ -81,10 +82,11 @@ export function cbbDecisionSplitContext(args:{game:CbbGame;allGames:readonly Cbb
     if(!pair)continue;
     const side=(name:string)=>pair.find(row=>row.selection_key.split(":").at(-1)===name)!;
     const a=side(market==="total"?"over":"home"),b=side(market==="total"?"under":"away");
+    if(a.source_observed_at!==b.source_observed_at)continue;
     out.push({gameId:args.game.id,market,sourceBook:"consensus",physicalFamily:"playbook_consensus",
       sourceClass:"multi_book_consensus",provider:"playbook",sourceEventId:String(args.game.id),line:null,
       firstMoney:a.money_pct,secondMoney:b.money_pct,firstTickets:a.bets_pct,secondTickets:b.bets_pct,
-      observedAt:a.source_observed_at&&a.source_observed_at===b.source_observed_at?a.source_observed_at:null,
+      observedAt:a.source_observed_at,
       availableBy:a.fetched_at,clockBasis:"capture_upper_bound",observationIds:[]});
   }
   const feed=args.draftKings;
@@ -94,7 +96,8 @@ export function cbbDecisionSplitContext(args:{game:CbbGame;allGames:readonly Cbb
       args.allGames.filter(other=>candidate.monthDay===monthDay(other.date)&&
         cbbSplitOrientation(candidate.awayName,candidate.homeName,names(other))!==null).length===1);
     if(matched.length===1)for(const market of ["moneyline","spread","total"] as const){
-      const source=matched[0].markets[market];if(!source)continue;
+      const source=matched[0].markets[market];if(!source||source.observedAt&&
+        (!Number.isFinite(Date.parse(source.observedAt))||Date.parse(source.observedAt)>Date.parse(feed.fetchedAt)))continue;
       const picked=source.sides.map(side=>{
         const label=side.label.replace(/\s+[+-]\d+(?:\.\d+)?\s*$/g,"");
         const first=market==="total"?/^over\b/i.test(label):cbbSplitTeamMatches(label,names(args.game),"home");
@@ -108,14 +111,26 @@ export function cbbDecisionSplitContext(args:{game:CbbGame;allGames:readonly Cbb
       out.push({gameId:args.game.id,market,sourceBook:"draftkings_network",physicalFamily:"draftkings",
         sourceClass:"retail_network",provider:"draftkings_network",sourceEventId:matched[0].providerEventId,line:null,
         firstMoney:a.money,secondMoney:b.money,firstTickets:a.tickets,secondTickets:b.tickets,
-        observedAt:null,availableBy:source.observedAt??feed.fetchedAt,clockBasis:"capture_upper_bound",observationIds:[]});
+        observedAt:source.observedAt??null,availableBy:feed.fetchedAt,clockBasis:"capture_upper_bound",observationIds:[]});
     }
   }
   // One latest state per physical family and market; the network and Owls
   // DraftKings observations never become independent votes.
-  const latest=new Map<string,CbbDecisionSplitContext>();
-  for(const row of out.filter(row=>qualified(row,at))){const key=`${row.physicalFamily}:${row.market}`,prior=latest.get(key);
-    if(!prior||Date.parse(row.availableBy)>Date.parse(prior.availableBy)||
-      row.availableBy===prior.availableBy&&row.clockBasis==="verified_provider_observation"&&prior.clockBasis!=="verified_provider_observation")latest.set(key,row);}
-  return [...latest.values()].sort((a,b)=>a.market.localeCompare(b.market)||a.physicalFamily.localeCompare(b.physicalFamily));
+  const families=new Map<string,CbbDecisionSplitContext[]>();
+  for(const row of out.filter(row=>qualified(row,at))){const key=`${row.physicalFamily}:${row.market}`;
+    families.set(key,[...(families.get(key)??[]),row]);}
+  const latest:CbbDecisionSplitContext[]=[];
+  for(const rows of families.values()){
+    // Availability admits evidence into the decision. It does not make an old
+    // provider observation newer than a previously captured provider state.
+    const known=rows.filter(row=>row.observedAt!==null);
+    const candidates=known.length?known:rows;
+    const sourceTime=(row:CbbDecisionSplitContext)=>Date.parse(row.observedAt??row.availableBy);
+    const newest=Math.max(...candidates.map(sourceTime));
+    const contemporaries=candidates.filter(row=>sourceTime(row)===newest);
+    const economic=(row:CbbDecisionSplitContext)=>JSON.stringify([row.line,row.firstMoney,row.secondMoney,row.firstTickets,row.secondTickets]);
+    if(new Set(contemporaries.map(economic)).size!==1)continue;
+    latest.push(contemporaries.sort((a,b)=>Date.parse(a.availableBy)-Date.parse(b.availableBy))[0]);
+  }
+  return latest.sort((a,b)=>a.market.localeCompare(b.market)||a.physicalFamily.localeCompare(b.physicalFamily));
 }

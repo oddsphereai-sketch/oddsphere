@@ -110,8 +110,10 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
     const read=snapshot.board.marketContext.verifiedMarketRead;
     if(read){
       const axis=kind==="total"?read.total:read.margin,sign=boardRow.selection==="first"?1:-1;
-      if(axis.status==="applied"&&axis.reason==="observed_same_book_relative_economics"&&axis.sourceMarket===kind){
-        const pressure=axis.delta*sign;
+      if((axis.status==="applied"||axis.status==="confirming")&&
+        ["observed_same_book_relative_economics","observed_move_corrects_independent","observed_move_crosses_independent",
+          "observed_move_confirms_independent_without_score_shift"].includes(axis.reason)&&axis.sourceMarket===kind){
+        const pressure=(axis.sourceDirection??0)*sign;
         market.writerMovementDirection=pressure>1e-7?"support":pressure< -1e-7?"resistance":"neutral";
         market.readerMovementSource="writer_market_anchor";
       }

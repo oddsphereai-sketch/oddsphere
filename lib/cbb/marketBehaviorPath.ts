@@ -4,7 +4,7 @@ import type { CbbCanonicalReceipt, CbbForecast, CbbMarket, CbbQuote } from "./ty
 import { cbbEvidenceAvailableAt, cbbEvidenceProvablyBefore } from "./marketReceiptTime";
 import type { CbbBehaviorFlow } from "./marketBehaviorCandidate";
 
-export const CBB_MARKET_BEHAVIOR_PATH_RELEASE = "cbb_market_behavior_path_2026_11_02_r3_compact_native_frontier" as const;
+export const CBB_MARKET_BEHAVIOR_PATH_RELEASE = "cbb_market_behavior_path_2026_11_03_r4_identical_preflow_state" as const;
 const BOOKS = ["circa", "pinnacle", "bookmaker"];
 const MARKETS: CbbMarket[] = ["moneyline", "spread", "total"];
 // Current writer cadence is15 minutes:32 states cover7h45, exceeding the
@@ -39,7 +39,7 @@ export type CbbMarketPathStreamTape = {
   flowTruncatedBefore: string | null;
 };
 export type CbbMarketBehaviorPathTape = {
-  release: typeof CBB_MARKET_BEHAVIOR_PATH_RELEASE|"cbb_market_behavior_path_2026_11_02_r2_availability_bounds";
+  release: typeof CBB_MARKET_BEHAVIOR_PATH_RELEASE|"cbb_market_behavior_path_2026_11_02_r3_compact_native_frontier"|"cbb_market_behavior_path_2026_11_02_r2_availability_bounds";
   gameId: number;
   startsAt: string;
   capturedAt: string;
@@ -198,7 +198,7 @@ export function readCbbMarketBehaviorPath(args: {
   const limit = args.limitPerSource ?? MAX_QUOTES;
   if (!Number.isInteger(limit) || limit < 2 || limit > MAX_QUOTES) throw new Error("CBB path retention bound invalid");
   const previous = args.previous;
-  if (previous && (![CBB_MARKET_BEHAVIOR_PATH_RELEASE,"cbb_market_behavior_path_2026_11_02_r2_availability_bounds"].includes(previous.release) || previous.gameId !== base.gameId ||
+  if (previous && (![CBB_MARKET_BEHAVIOR_PATH_RELEASE,"cbb_market_behavior_path_2026_11_02_r3_compact_native_frontier","cbb_market_behavior_path_2026_11_02_r2_availability_bounds"].includes(previous.release) || previous.gameId !== base.gameId ||
     previous.startsAt !== args.startsAt || !Number.isFinite(Date.parse(previous.capturedAt)) || Date.parse(previous.capturedAt) > at)) {
     throw new Error("CBB path prior identity/cutoff mismatch");
   }
@@ -310,8 +310,19 @@ export function readCbbMarketBehaviorPath(args: {
       if (at - observed > 3 * 3600_000) continue;
       // The last genuine source state at/before the flow owns its threshold.
       // If that state was truncated away, there is no retrospective binding.
-      const state = quotes.filter(q => sourceTime(q) <= observed).at(-1);
-      if (!state || state.line !== flow.line || observed - sourceTime(state) > 2 * 3600_000 || !cbbEvidenceProvablyBefore(state, flow)) continue;
+      const beforeFlow = quotes.filter(q => sourceTime(q) <= observed);
+      const latestState = beforeFlow.at(-1);
+      if (!latestState || latestState.line !== flow.line) continue;
+      // A concurrent recapture of the identical pair cannot erase an earlier
+      // verified receipt of that same state. Stop at any changed pair: its
+      // unknown collection order cannot be borrowed from the older state.
+      let state:CbbQuote|null=null;
+      for(let i=beforeFlow.length-1;i>=0&&pair(beforeFlow[i])===pair(latestState);i--){
+        const candidate=beforeFlow[i];
+        if(observed-sourceTime(candidate)>2*3600_000)break;
+        if(cbbEvidenceProvablyBefore(candidate,flow)){state=candidate;break;}
+      }
+      if(!state)continue;
       const reactions = read.intervals.filter(interval => sourceTime(interval.before) >= sourceTime(state) &&
         sourceTime(interval.after) > observed && cbbEvidenceProvablyBefore(flow, interval.after));
       const reaction = reactions.find(interval => interval.direction !== 0) ?? reactions.at(-1);

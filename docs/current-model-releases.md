@@ -63,8 +63,8 @@ accuracy gain or a complete causal movement-reader certification. Evidence:
 ## CBB integrated market-interpretation candidate — November 3, held offline
 
 The isolated candidate now proposes independent score R4, market score R7,
-grade R9, receipt R5, board R12, sole publisher R21, tracking R9 and adapter
-R10. R7 treats a verified same-book move toward the independent location as
+grade R9, receipt R5, path tape R4, board R12, sole publisher R21, tracking R9
+and adapter R10. R7 treats a verified same-book move toward the independent location as
 confirmation without adding score points, retains corrective movement and
 applies only the overshoot when a path crosses the independent location. One
 final margin/Total law still supplies scores and all market probabilities.
@@ -74,6 +74,11 @@ batch public-split read now precedes grading; a typed receipt retains the
 qualified Owls, canonical, DraftKings network and Playbook source classes,
 their original clocks, own lines and missing axes. Retail and aggregate splits
 are classified as context, not fabricated professional flow or score points.
+Path R4 can retain an earlier provably received identical pair when a later
+same-state recapture overlaps a split response window; changed or ambiguous
+states still fail closed. The adapter carries qualified movement direction
+from the observed episode even when it confirms the independent score without
+a numeric shift. R8 locked-grade lineage remains recognized in tracking.
 Official New Orleans venue-prior recovery from R4 remains in this candidate.
 
 On the 19:32 UTC frozen18-game board, the bounded score/grade replay changes14

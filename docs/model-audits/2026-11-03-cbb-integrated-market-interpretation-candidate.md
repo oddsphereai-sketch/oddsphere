@@ -56,21 +56,41 @@ for Alabama State, not automatic unresolved opposition.
    capture with no own contract cannot assert a same-book price reaction. These
    consumer contexts are classified at grade time; they are not added as
    invented score points or copied into the professional-flow path.
-4. The same single CBB writer, provider calls, immutable first retained input,
+   Source-observed age, rather than a later database insertion, determines
+   freshness when that clock exists. Physical-family deduplication follows
+   provider chronology and quarantines conflicting same-time states. A
+   money-only or tickets-only canonical pair retains its actual axis and a
+   null for the other. A later DraftKings capture cannot renew an old table
+   observation, and public-consensus sides from different source times cannot
+   form one decision pair.
+4. An identical later price recapture no longer suppresses a verified earlier
+   pre-split price state; any intervening changed price still blocks that
+   causal binding. A Duquesne–Rhode Island Circa replay now classifies the
+   observed opposing-money pressure and unchanged quote as a held response,
+   without claiming sharp confirmation or changing its numerical Lean. The
+   member adapter now carries the actual observed professional path direction
+   for confirming and corrective receipt reasons. Tracking recognizes prior
+   R8 locked-grade lineage without rewriting a lock.
+5. The same single CBB writer, provider calls, immutable first retained input,
    prelock cutoff and stored locked-reader precedence remain. New semantics
    apply only to future unlocked and future-locked rows under distinct releases.
 
 ## Replay and qualification limits
 
-The 18-game frozen board replay used the exact 19:32 stored source receipt and
-final independent score. Fourteen spread/Total axis responses changed; five
+The 18-game frozen board replay reran the candidate runtime against the exact
+19:32 stored source receipt and final independent score. Fourteen spread/Total
+axis responses changed; five
 of 54 market grades changed. Alabama State +32.5 fell from Best to Lean and
 its counterfactual cover probability fell from 73.309% to about 70.7%.
-Its Under 161.5 also fell Best to Lean. Sam Houston Total and Coppin State
+Its Under 161.5 also fell Best to Lean. Both Alabama demotions arise from the
+new Best-tier professional-value rule: professional exact-target EV remained
+only +1.863% on the Spread and +1.04% on the Total, despite positive model EV.
+The independent-relative score change separately reduced the two probabilities.
+Sam Houston Total and Coppin State
 Total fell Lean to No Play, while South Dakota State Total fell Watchlist to
 No Play. There were zero selected-side flips. Board actionables moved 16 to
 14, with zero observed promotions and zero Best. The exact replay report is
-`/private/tmp/cbb-relative-market-latest-board-20261103.json`. It does not
+`/private/tmp/cbb-full-runtime-stored-replay-20261103.json`. It does not
 simulate a fresh entire pipeline with the new source-context receipt, so its
 count is a bounded prepublication estimate.
 

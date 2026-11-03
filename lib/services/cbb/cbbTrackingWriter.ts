@@ -22,7 +22,7 @@ export function cbbLockedModelRelease(board:{release:string;modelRelease?:string
 
 /** Resolve the release that actually owns the frozen public decision. */
 export function cbbLockedGradeRelease(board: { release: string; gradeRelease?: string }): string {
-  if (board.gradeRelease === CBB_PROVISIONAL_GRADE_RELEASE || board.gradeRelease === CBB_LEGACY_PROVISIONAL_GRADE_RELEASE || board.gradeRelease === CBB_MARKET_BEHAVIOR_GRADE_RELEASE || board.gradeRelease === CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE || board.gradeRelease === CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE || board.gradeRelease === CBB_OLDER_MARKET_BEHAVIOR_GRADE_RELEASE) return board.gradeRelease;
+  if (board.gradeRelease === CBB_PROVISIONAL_GRADE_RELEASE || board.gradeRelease === CBB_LEGACY_PROVISIONAL_GRADE_RELEASE || board.gradeRelease === CBB_MARKET_BEHAVIOR_GRADE_RELEASE || board.gradeRelease === CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE || board.gradeRelease === CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE || board.gradeRelease === CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE || board.gradeRelease === CBB_OLDER_MARKET_BEHAVIOR_GRADE_RELEASE) return board.gradeRelease;
   if (board.gradeRelease !== undefined) throw new Error("CBB locked grade release is unknown");
   if (["cbb_candidate_2026_10_29_r2_explicit_unqualified_reader", "cbb_candidate_2026_10_29_r3_exact_quote_reader_fields",
     "cbb_candidate_2026_11_02_r4_supported_market_coverage"].includes(board.release)) return CBB_LEGACY_PROVISIONAL_GRADE_RELEASE;

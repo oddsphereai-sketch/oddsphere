@@ -38,7 +38,12 @@ for(const stored of artifact.rows){
   const counterfactualReceipt=structuredClone(receipt);
   counterfactualReceipt.finalScore={home:forecast.homeScore,away:forecast.awayScore,margin,total,homeWinProbability:forecast.homeWinProbability};
   for(const axis of axes){const entry=counterfactualReceipt[axis.axis];entry.delta=axis.newDelta;
-    if(axis.kind==="confirms_independent")entry.status="neutral";}
+    if(axis.kind==="confirms_independent"){
+      entry.status="confirming";
+      entry.reason="observed_move_confirms_independent_without_score_shift";
+    }else if(axis.kind==="corrects_independent")entry.reason="observed_move_corrects_independent";
+    else if(axis.kind==="crosses_independent")entry.reason="observed_move_crosses_independent";
+  }
   const markets=receipt.evaluatedTargets.map((target:CbbQuote)=>{
     const baseline=board.rows.find((row:{market:string})=>row.market===target.market);
     let grade;
