@@ -5,15 +5,16 @@ import { cbbImpliedProbability } from "@/lib/cbb/marketEvidence";
 import { CBB_SCORE_RESEARCH_RELEASE } from "@/lib/cbb/scoreResearch";
 import {CBB_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_OLDER_MARKET_BEHAVIOR_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import { CBB_CURRENT_SCORE_RELEASE } from "@/lib/cbb/currentScoreRuntime";
+import {CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import { CBB_PROVISIONAL_GRADE_RELEASE, CBB_LEGACY_PROVISIONAL_GRADE_RELEASE } from "@/lib/cbb/provisionalGradePolicy";
 import type { CbbStoredMemberGame } from "./cbbMemberGameStore";
 
-export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_03_r10_source_episode_lineage" as const;
-const receivedMarketGradeReleases:readonly string[]=[CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_OLDER_MARKET_BEHAVIOR_GRADE_RELEASE];
+export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_03_r11_retail_response_receipts" as const;
+const receivedMarketGradeReleases:readonly string[]=[CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_OLDER_MARKET_BEHAVIOR_GRADE_RELEASE];
 
 /** Never relabel an earlier public lock with the current score model. */
 export function cbbLockedModelRelease(board:{release:string;modelRelease?:string}):string{
-  if(board.modelRelease===CBB_SCORE_RESEARCH_RELEASE||board.modelRelease===CBB_CURRENT_SCORE_RELEASE||board.modelRelease===CBB_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_PRIOR_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE)return board.modelRelease;
+  if(board.modelRelease===CBB_SCORE_RESEARCH_RELEASE||board.modelRelease===CBB_CURRENT_SCORE_RELEASE||board.modelRelease===CBB_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_PRIOR_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE)return board.modelRelease;
   if(board.modelRelease!==undefined)throw new Error("CBB locked model release is unknown");
   if(["cbb_candidate_2026_10_29_r2_explicit_unqualified_reader","cbb_candidate_2026_10_29_r3_exact_quote_reader_fields",
     "cbb_candidate_2026_11_02_r4_supported_market_coverage","cbb_candidate_2026_11_02_r5_exact_reference_probabilities"].includes(board.release))return CBB_SCORE_RESEARCH_RELEASE;
@@ -22,7 +23,7 @@ export function cbbLockedModelRelease(board:{release:string;modelRelease?:string
 
 /** Resolve the release that actually owns the frozen public decision. */
 export function cbbLockedGradeRelease(board: { release: string; gradeRelease?: string }): string {
-  if (board.gradeRelease === CBB_PROVISIONAL_GRADE_RELEASE || board.gradeRelease === CBB_LEGACY_PROVISIONAL_GRADE_RELEASE || board.gradeRelease === CBB_MARKET_BEHAVIOR_GRADE_RELEASE || board.gradeRelease === CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE || board.gradeRelease === CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE || board.gradeRelease === CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE || board.gradeRelease === CBB_OLDER_MARKET_BEHAVIOR_GRADE_RELEASE) return board.gradeRelease;
+  if (board.gradeRelease === CBB_PROVISIONAL_GRADE_RELEASE || board.gradeRelease === CBB_LEGACY_PROVISIONAL_GRADE_RELEASE || receivedMarketGradeReleases.includes(board.gradeRelease??"")) return board.gradeRelease!;
   if (board.gradeRelease !== undefined) throw new Error("CBB locked grade release is unknown");
   if (["cbb_candidate_2026_10_29_r2_explicit_unqualified_reader", "cbb_candidate_2026_10_29_r3_exact_quote_reader_fields",
     "cbb_candidate_2026_11_02_r4_supported_market_coverage"].includes(board.release)) return CBB_LEGACY_PROVISIONAL_GRADE_RELEASE;
@@ -42,7 +43,7 @@ export async function writeLockedCbbTracking(record: CbbStoredMemberGame, db?: t
   const { snapshot, memberGame } = record;
   const gradeRelease = cbbLockedGradeRelease(snapshot.board);
   const modelRelease = cbbLockedModelRelease(snapshot.board);
-  if(modelRelease===CBB_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_PRIOR_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE){
+  if(modelRelease===CBB_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_PRIOR_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE){
     const read=snapshot.board.marketContext.verifiedMarketRead;
     if(!read||read.modelRelease!==modelRelease||read.anchors.gameId!==snapshot.gameId||
       !receivedMarketGradeReleases.includes(gradeRelease)||(["home","away","margin","total","homeWinProbability"] as const).some(key=>read.finalScore[key]!==snapshot.board.score[key]))
@@ -94,7 +95,8 @@ export async function writeLockedCbbTracking(record: CbbStoredMemberGame, db?: t
       odds_decimal: null, model_used: modelRelease===CBB_SCORE_RESEARCH_RELEASE?"cbb_independent_r2_provisional_market_reader":
         modelRelease===CBB_CURRENT_SCORE_RELEASE?"cbb_independent_r3_verified_venue_prior":
         modelRelease===CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE?"cbb_r5_received_market_response":
-        modelRelease===CBB_PRIOR_MARKET_BEHAVIOR_MODEL_RELEASE?"cbb_r6_new_orleans_prior_input":"cbb_r10_observed_episode_authority",
+        modelRelease===CBB_PRIOR_MARKET_BEHAVIOR_MODEL_RELEASE?"cbb_r6_new_orleans_prior_input":
+        modelRelease===CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE?"cbb_r10_observed_episode_authority":"cbb_r11_retail_response_receipts",
       model_version: modelRelease, calibration_version: gradeRelease,
       prediction_source: "cbb_daily_edge", confidence: row.probability,
       model_probability: row.probability, market_probability: cbbImpliedProbability(row.price),

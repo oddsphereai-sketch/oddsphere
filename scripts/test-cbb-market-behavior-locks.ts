@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {normalCdf} from "../lib/cbb/model";
+import {CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_RECEIPT_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
 import {CBB_CURRENT_SCORE_RELEASE} from "../lib/cbb/currentScoreRuntime";
 import {readCbbMarketBehavior,gradeCbbMarketBehavior,CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_OLDER_MARKET_BEHAVIOR_GRADE_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
 import {gradeCbbProvisional} from "../lib/cbb/provisionalGradePolicy";
@@ -158,6 +159,26 @@ async function main(){
  assert.equal(await writeLockedCbbTracking(priorPublic,priorTrackingDb),3);
  assert.ok(priorTracked.every(row=>row.model_version===CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE&&row.calibration_version===CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE));
  assert.equal(JSON.stringify(priorPublic),priorBytes,"old R7 lock remains byte exact after writer, reader and tracking");
+ const episodePublic=structuredClone(frozen.record);
+ Object.assign(episodePublic.snapshot.board,{release:"cbb_candidate_2026_11_03_r13_source_episode_decisions",
+  modelRelease:CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE,gradeRelease:CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE});
+ const episodeReceipt=episodePublic.snapshot.board.marketContext.verifiedMarketRead!;
+ Object.assign(episodeReceipt,{release:CBB_EPISODE_MARKET_BEHAVIOR_RECEIPT_RELEASE,modelRelease:CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE});
+ episodeReceipt.anchors.release=CBB_EPISODE_MARKET_BEHAVIOR_RECEIPT_RELEASE;
+ Object.assign(episodeReceipt.forecastIdentity,{release:CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE});
+ const episodeBytes=JSON.stringify(episodePublic);stored=episodePublic;
+ assert.equal((await writeCbbMemberGame({game,candidate:newR6,homeLogo:null,awayLogo:null,now:"2026-11-02T19:07:00Z"},db)).written,false);
+ assert.equal(readCbbProvisionalSnapshot({locked:episodePublic.snapshot,unlocked:initial.record.snapshot}),episodePublic.snapshot);
+ assert.deepEqual(cbbMemberGameForReader(episodePublic,game),episodePublic.memberGame);
+ priorTracked.length=0;
+ assert.equal(await writeLockedCbbTracking(episodePublic,priorTrackingDb),3);
+ assert.ok(priorTracked.every(row=>row.model_version===CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE&&
+  row.calibration_version===CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE&&row.model_used==="cbb_r10_observed_episode_authority"));
+ assert.equal(await writeLockedCbbTracking(episodePublic,priorTrackingDb),0);
+ assert.equal(JSON.stringify(episodePublic),episodeBytes,"R10/R12 lock survives new writer, reader and tracking exactly");
+ const oldEpisodeAnchors=structuredClone(read.receipt.anchors);oldEpisodeAnchors.release=CBB_EPISODE_MARKET_BEHAVIOR_RECEIPT_RELEASE;
+ const migrated=readCbbMarketBehavior({independent,independentInputKey:"frozen-source",startsAt:start,targets,currentQuotes:refs,anchors:oldEpisodeAnchors});
+ assert.deepEqual(migrated.receipt.anchors.quotes,oldEpisodeAnchors.quotes,"unlocked R6 receipt anchors are reused without inventing a new opening");
  const odds={success:true,data:[{id:"named-exact",sport:"ncaab",home_team:"Cornell",away_team:"Pepperdine",commence_time:start,bookmakers:[]}]};
  const splits={sport:"ncaab",meta:{status:"ok"},data:[{event_id:"ncaab:Pepperdine@Cornell-20261102",home_team:"Cornell",away_team:"Pepperdine",splits:[{book:"circa",as_of:"2026-11-02T15:10:00Z",spread:{home_line:3.5,away_line:-3.5,home_bets_pct:30,away_bets_pct:70,home_handle_pct:10,away_handle_pct:90}}]}]};
  const source=cbbCurrentSplitEvidence(game,odds,splits,at,at),flows=cbbBehaviorFlows(source);
