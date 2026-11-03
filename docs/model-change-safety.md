@@ -1,5 +1,18 @@
 # Model change safety protocol
 
+## CBB verified-action Best candidate — November 3
+
+The proposed grade R7 keeps scores and exact prices unchanged but removes a
+price-only Lean→Best route when neither professional exact-target value nor
+verified same-market split/price response supports the premium grade. In the
+18-game/54-market current replay, two Best Angles become Lean; actionable
+count remains 13 and no side changes. Professional-value and verified-action
+promotion routes remain tested. This is an unqualified candidate, not an
+extension of the owner's R5 score/grade exception. Do not publish before a
+specific owner decision or held-out qualification and the usual model,
+integration, locked-record and live gates. Evidence:
+`docs/model-audits/2026-11-03-cbb-verified-action-best-predeclaration.md`.
+
 ## CBB evidence correctness with unchanged decisions — November 3
 
 The owner explicitly requires independent market interpretation spot checks,
