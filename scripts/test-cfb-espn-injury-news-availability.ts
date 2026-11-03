@@ -1,3 +1,4 @@
+import {cfbMemberAvailabilityReport} from "../lib/services/football/cfbMemberAvailability";
 import assert from "node:assert/strict";
 import {
   CFB_ESPN_INJURY_NEWS_MAX_REQUESTS,
@@ -160,6 +161,14 @@ async function main(): Promise<void> {
   ]})) };
   const rawBefore = JSON.stringify(corruptNews);
   assert.equal(sanitizeCfbEspnInjuryNewsReport(corruptNews), null);
+  assert.equal(cfbMemberAvailabilityReport(corruptNews,{lockState:"open",lockedAt:null}),null,"legacy source rows cannot republish false injuries on open games");
+  assert.equal(cfbMemberAvailabilityReport(publicNews,{lockState:"open",lockedAt:null}),publicNews,"valid current report identity and clocks stay exact");
+  for(const state of [{lockState:"locked" as const,lockedAt:"2026-10-21T17:00:00Z"},
+    {lockState:"open" as const,lockedAt:"2026-10-21T17:00:00Z"},
+    {lockState:"locking" as const,lockedAt:null}]) {
+    assert.equal(cfbMemberAvailabilityReport(corruptNews,state),corruptNews,"new source semantics cannot overwrite or reinterpret a stored/locking record");
+  }
+  assert.equal(cfbMemberAvailabilityReport(corruptNews,undefined),corruptNews,"unknown member state never authorizes legacy migration");
   assert.equal(buildCfbGameAvailability({game:ohioStateGame,capturedAt:"2026-10-21T18:00:00Z",playbookRows:[],previous:corruptNews}),null,
     "retained corrupt partial news cannot resurrect and is not medical clearance");
   assert.equal(JSON.stringify(corruptNews),rawBefore,"stored/raw source evidence remains immutable");
