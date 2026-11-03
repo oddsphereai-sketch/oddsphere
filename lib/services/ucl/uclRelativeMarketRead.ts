@@ -64,7 +64,7 @@ export function uclPoissonNativeTotalShare(mu:number,line:number):number|null{
 }
 export function inferUclNativeTotalMean(line:number,q:number):number|null{
  if(!Number.isFinite(q)||q<=0||q>=1)return null;let low=1e-8,high=Math.max(4,line+2);
- let a=uclPoissonNativeTotalShare(low,line),b=uclPoissonNativeTotalShare(high,line);
+ const a=uclPoissonNativeTotalShare(low,line);let b=uclPoissonNativeTotalShare(high,line);
  if(a===null||b===null||a>q+EPS)return null;
  for(let i=0;i<12&&b<q;i++){high*=2;b=uclPoissonNativeTotalShare(high,line);if(b===null)return null;}
  if(b<q)return null;
