@@ -94,6 +94,34 @@ No Play. There were zero selected-side flips. Board actionables moved 16 to
 simulate a fresh entire pipeline with the new source-context receipt, so its
 count is a bounded prepublication estimate.
 
+A second read-only check at 21:23 UTC found the normal 21:17 refresh still
+partial solely because LSU–New Orleans lacks the current independent input;
+the 18 stored games were all unlocked, used one R5/R7 release family and had
+no new provider call or database write from this audit. Replaying those exact
+18 stored receipts with this candidate changes three of 54 grades: one Lean
+to Watchlist and two Lean to No Play. Actionables move 11 to 8, with zero
+promotions or side flips. This changing board count is another reason the
+19:32 impact cannot be treated as a quota or validated production outcome.
+
+An exact-head offline LSU–New Orleans replay at 17:19 UTC with six eligible
+canonical split contexts still gives New Orleans +27.5 at -110 a Lean with
+79.915% modeled cover probability and +52.56% modeled EV. Pinnacle's
+transported exact-target probability is 50.866% and target EV -2.89%. The
+Circa New Orleans split is off contract at +28.5; the DraftKings named-book
+split opposes New Orleans at the exact +27.5. Those source contexts are in
+the receipt but do not change the grade or score numerically. This remains a
+specific unresolved product decision, not a successful 19-game release
+rehearsal. The read-only output is
+`/private/tmp/cbb-lsu-pr974-exact-head-replay-20261103.json`.
+An independent bounded source audit also recovered the latest complete
+Playbook public capture (six sides fetched 17:15:24.948 UTC, inserted by
+17:15:25.826, before the decision). Adding its three market contexts yields
+nine split contexts and leaves every score, probability, EV and grade exact.
+Its spread money/tickets favor LSU 72%/64%; the upstream source clock is null,
+so the actual capture clock is only an upper bound. The only recoverable
+DraftKings network durable capture was after the decision and cannot be
+retimestamped into this replay.
+
 On the already-opened November 2 105-game pro-path development cohort, the
 independent-relative path idea improved margin MAE by approximately 0.044
 points per game and Total MAE by approximately 0.004 versus raw R5 endpoint
