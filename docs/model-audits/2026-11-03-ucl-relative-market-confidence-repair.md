@@ -92,3 +92,20 @@ reader precedence tests remain mandatory. No long historical tuning/replay or
 held-out win-rate claim is introduced. Evaluate forward outcomes by exact
 release and lock timestamp. Report TODAY and TOMORROW separately after normal
 production publication. Keep all previously locked payloads exact.
+
+## First-pass lock verifier follow-up
+
+Fresh base267b692213a7dd23027e46d079c68e598c27a034. The19:04scheduled lock
+run stored all28rows for seven due fixtures, but its outer identity check
+compared full-precision writer expectations with rounded NUMERIC columns
+using strict equality. All28stored captures already passed the inner declared
+storage-precision checks; every fixture had four markets and an identical
+stored projection. No record correction is authorized or needed.
+
+Member lifecycle R17 applies the same half-storage-quantum comparisons to
+fresh model/market probabilities, edge and EV. Other scalar fields and the
+entire stored snapshot JSON retain exact equality. This changes verification
+only; model R18, calibration R21 and score R9 stay unchanged. Functional cases
+cover first-pass fresh inserts without writer IDs, outside-quantum rejection,
+exact capture/evidence precedence and nonmutation. The stored locked tuples
+must remain byte-for-byte unchanged through publication.
