@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {applyDraftKingsNetworkSplitFallback,UCL_PUBLIC_SPLIT_IDENTITY_RELEASE,type DraftKingsNetworkSplitFeed} from '../lib/providers/draftkings/draftKingsNetworkSplits';
+import {applyDraftKingsNetworkSplitFallback,fetchDraftKingsNetworkSplits,UCL_PUBLIC_SPLIT_IDENTITY_RELEASE,type DraftKingsNetworkSplitFeed} from '../lib/providers/draftkings/draftKingsNetworkSplits';
 import {populateStoredUclPublicSplits,refreshScheduledUclPublicSplits,captureStoredUclPublicSplits} from '../lib/services/ucl/uclPublicSplitSource';
 import type {DailyEdgeResponse,DailyEdgeGameDto} from '../app/lab/lib/labTypes';
 const source=JSON.parse(readFileSync(new URL('./fixtures/ucl-draftkings-public-feed-20261103.json',import.meta.url),'utf8')).payload as DraftKingsNetworkSplitFeed;
@@ -22,6 +22,13 @@ const futureBoard=structuredClone(board);for(const game of futureBoard.games)gam
 assert.equal(applyDraftKingsNetworkSplitFallback(futureBoard,futureQuote).populatedMarkets,17,'future quote clocks are not observed evidence');
 
 export async function testUclPublicSplitSource(){
+ for(const sport of ['ucl','cbb'] as const){
+  const options:RequestInit[]=[];
+  await fetchDraftKingsNetworkSplits({sport,fetchImpl:async(_url,init)=>{options.push(init??{});return new Response('',{status:200,headers:{date:'Tue, 03 Nov 2026 16:00:00 GMT'}});}});
+  assert.equal(options.length,2,'same bounded source seed pages, no extra collection');
+  for(const init of options){if(sport==='ucl'){assert.equal(init.cache,'no-store');assert.equal('next'in init,false,'due UCL collector cannot reuse a stale HTTP cache capture');}
+   else{assert.equal(init.cache,undefined);assert.ok('next'in init,'other sports retain their existing HTTP cache policy');}}
+ }
  const now=new Date('2026-11-03T16:00:00Z');let requests=0;
  const fresh=structuredClone(source);fresh.fetchedAt=now.toISOString();for(const game of fresh.games)game.markets.moneyline!.observedAt=now.toISOString();
  const deps={now,readMember:async()=>board,readFeed:async()=>source,refreshFeed:async()=>{requests++;return fresh;}};
@@ -47,11 +54,16 @@ export async function testUclPublicSplitSource(){
  const carried=await captureStoredUclPublicSplits(locking,prior,{now:new Date(postFeed.fetchedAt),readFeed:async()=>postFeed});
  assert.equal(carried.carriedPrelockMarkets,1);assert.deepEqual(locking.games[0]!.markets.moneyline.sportsbookSplits,saved,'postcutoff source cannot replace the exact published prelock section');
  assert.equal(JSON.stringify(prior),priorBytes,'carry cannot mutate prior published evidence');
- for(const corrupt of ['postcapture','postquote','stale','wrongfixture','wrongteam','wrongfullname','wrongid','wrongcompetition','lockedprior'] as const){
+ const betweenRefreshes=structuredClone(prior),earlier=betweenRefreshes.games[0]!.markets.moneyline.sportsbookSplits!;
+ earlier.sourceObservedAt='2026-11-03T16:15:00Z';earlier.memberCapturedAt='2026-11-03T16:17:00Z';earlier.captureRelease='ucl_public_split_source_2026_11_03_r2_capture_before_lock';
+ const quarterHour=due();await captureStoredUclPublicSplits(quarterHour,betweenRefreshes,{now:new Date(postFeed.fetchedAt),readFeed:async()=>postFeed});
+ assert.deepEqual(quarterHour.games[0]!.markets.moneyline.sportsbookSplits,earlier,':17 publication survives :45 lock without inventing a newer source clock, including genuine R2 receipts');
+ for(const corrupt of ['postcapture','postquote','stale','stalecapture','wrongfixture','wrongteam','wrongfullname','wrongid','wrongcompetition','lockedprior'] as const){
   const bad=structuredClone(prior),g=bad.games[0]!,s=g.markets.moneyline.sportsbookSplits!;
   if(corrupt==='postcapture')s.memberCapturedAt=postFeed.fetchedAt;
   if(corrupt==='postquote')s.sourceObservedAt=postFeed.fetchedAt;
-  if(corrupt==='stale')s.sourceObservedAt='2026-11-03T16:00:00Z';
+  if(corrupt==='stale'){s.sourceObservedAt='2026-11-03T12:00:00Z';s.memberCapturedAt='2026-11-03T12:02:00Z';}
+  if(corrupt==='stalecapture')s.sourceObservedAt='2026-11-03T16:00:00Z';
   if(corrupt==='wrongfixture')g.gameStartAt='2026-11-04T17:45:00Z';
   if(corrupt==='wrongteam')g.homeTeam='OTHER';
   if(corrupt==='wrongfullname')g.homeTeamDisplayName='Other club with the same abbreviation';

@@ -317,7 +317,7 @@ const noPathOutcome = deriveUclCoherentMarketOutcome({
 });
 assert.deepEqual(noPathOutcome.joint, noPathPrior, "missing market paths preserve the exact independent law");
 assert.equal("bttsShadow" in noPathOutcome.audit, false, "UCL persists one authoritative forecast");
-assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_03_r19_capture_public_splits");
+assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_03_r21_fresh_public_capture");
 assert.deepEqual(
   { train: UCL_CHRONOLOGICAL_MANIFEST.train, calibration: UCL_CHRONOLOGICAL_MANIFEST.calibration, holdout: UCL_CHRONOLOGICAL_MANIFEST.holdout, cutoff: UCL_CHRONOLOGICAL_MANIFEST.cutoff },
   { train: 185, calibration: 126, holdout: 63, cutoff: "2026-01-28T20:00:00.000Z" },
