@@ -1,5 +1,22 @@
 # Current production model releases and qualified research candidates
 
+## CBB exact source-institution repair — November 3
+
+The authoritative source identity is
+`cbb_provider_identity_2026_11_03_r2_verified_owls_institution_aliases`, shared capture
+`market_intelligence_v2_capture_2026_11_03_r24_cbb_verified_institution_aliases`,
+and sole publisher `cbb_member_pipeline_2026_11_03_r16_verified_institution_inputs`.
+This source-only successor of R15 preserves the R5 score/grade, R9 board,
+R6 tracking, R7 adapter and stored DraftKings integration below. The three exact
+Owls institution labels IPFW, Purdue FW and S Dakota St now join Purdue Fort Wayne
+and South Dakota State through existing fixture/opponent/time/competition guards.
+No inferred quote, new consequence/grade rule, provider request, cadence change,
+writer, lease or lock migration is introduced. Existing locked payloads and
+tracking remain exact. Previously missing input may now affect future unlocked
+forecasts through the unchanged R5 reader; outcomes must retain their actual release.
+Source evidence, scope and checks:
+`docs/model-audits/2026-11-03-cbb-professional-source-identity.md`.
+
 ## CBB received-market R5 — owner-approved production cutover
 
 The owner approved PR938's reviewed repair: "Deploy this repair; continue the
@@ -9,7 +26,8 @@ This commit's authoritative runtime is score
 `cbb_candidate_2026_11_02_r9_resolved_price_grade`, grade
 `cbb_2026_11_02_r5_resolved_price_not_double_penalized`, receipt
 `cbb_market_behavior_2026_11_02_r2_received_source_path`, publisher
-`cbb_member_pipeline_2026_11_02_r15_resolved_price_grade`, tracking
+`cbb_member_pipeline_2026_11_03_r16_verified_institution_inputs` (source-only
+successor of R15 above), tracking
 `cbb_tracking_writer_2026_11_02_r6_received_market_lineage` and adapter
 `cbb_member_adapter_2026_11_02_r7_received_market_response` repair native
 history/availability/grade binding and remove the rejected static winner copy.
@@ -86,8 +104,9 @@ Predeclaration and evidence:
 
 ## CBB chart API and retained split display — November 2
 
-Current publisher is `cbb_member_pipeline_2026_11_02_r13_stored_draftkings_fallback`
-and reader evidence is `cbb_reader_evidence_2026_11_02_r7_stored_draftkings_fallback`.
+The November 2 source repair introduced publisher
+`cbb_member_pipeline_2026_11_02_r13_stored_draftkings_fallback` (superseded by R16
+above); reader evidence remains `cbb_reader_evidence_2026_11_02_r7_stored_draftkings_fallback`.
 Both reuse the same stored DraftKings Network R4 source as a display fallback;
 the existing CBB-first leased collector refreshes it with at most twelve free
 HTML page requests and no extra paid-provider call. Neither member reads nor

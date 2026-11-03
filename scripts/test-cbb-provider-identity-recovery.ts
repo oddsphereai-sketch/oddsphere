@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import {pairCbbCanonicalMarketEvidence,type CbbCanonicalPriceRow} from "../lib/services/cbb/cbbCanonicalMarketEvidence";
 import { cbbProviderInstitutionName as name } from "../lib/cbb/providerInstitutionIdentity";
-import { normalizeCbbOwlsCurrent } from "../lib/cbb/owlsMarketEvidence";
+import { normalizeCbbOwlsCurrent,normalizeCbbOwlsHistory } from "../lib/cbb/owlsMarketEvidence";
 import { buildCbbProvisionalBoard, chooseCbbSupportedTargetBook } from "../lib/cbb/provisionalBoard";
 import { applyCbbScheduleCoverage } from "../lib/services/cbb/cbbRollingSchedule";
 import type { CbbGame, CbbForecast, CbbQuote } from "../lib/cbb/types";
@@ -29,4 +31,45 @@ const schedule={release:"test",anchorDate:"2026-11-02",throughDate:"2026-11-08",
 const visible=applyCbbScheduleCoverage(schedule,{eligibleGameIds:[1,2],modelEligibleGameIds:[1]});
 assert.deepEqual(visible.games.map(g=>g.externalId),[1,2],"keep D1/D1 and D1/non-D1, exclude only non-D1/non-D1");
 assert.equal(visible.games.length,2);
+// Source metadata is an actual bounded stored receipt; numeric prices below
+// are synthetic contract checks, never an assertion about this game's market.
+const discovery=JSON.parse(readFileSync(new URL("./fixtures/owls-cbb-institution-discovery-20261103.json",import.meta.url),"utf8"));
+assert.equal(discovery.events.length,3);
+for(const source of discovery.events){
+ const pfw=source.home_team==="Duquesne";
+ const ownGame={...game,id:pfw?10882593:10882602,date:source.commence_time,
+  home_team:{...game.home_team,college:pfw?"Duquesne":"Kansas State",full_name:pfw?"Duquesne Dukes":"Kansas State Wildcats"},
+  visitor_team:{...game.visitor_team,college:pfw?"Purdue Fort Wayne":"South Dakota State",full_name:pfw?"Purdue Fort Wayne Mastodons":"South Dakota State Jackrabbits"}};
+ assert.equal(name(source.away_team),name(ownGame.visitor_team.college));
+ assert.equal(name(source.home_team),name(ownGame.home_team.college));
+ const captured="2026-11-03T11:59:00Z",fetched="2026-11-03T12:00:00Z",decision="2026-11-03T12:01:00Z";
+ const e={...source,sport:"ncaab",bookmakers:[{key:"pinnacle",last_update:captured,markets:[
+  {key:"h2h",outcomes:[{name:source.home_team,price:-150},{name:source.away_team,price:130}]},
+  {key:"spreads",outcomes:[{name:source.home_team,price:-110,point:-3.5},{name:source.away_team,price:-110,point:3.5}]},
+  {key:"totals",outcomes:[{name:"Over",price:-110,point:150.5},{name:"Under",price:-110,point:150.5}]}]}]};
+ const current=normalizeCbbOwlsCurrent(ownGame,{success:true,data:[e]},fetched,decision).quotes;
+ assert.equal(current.length,3,`${source.away_team}: all own-market pairs normalize`);
+ assert.equal(current.find(q=>q.market==="spread")?.line,-3.5);
+ assert.deepEqual(normalizeCbbOwlsCurrent(ownGame,{success:true,data:[{...e,home_team:e.away_team,away_team:e.home_team}]},fetched,decision).quotes,current);
+ for(const bad of [{...e,sport:"nba"},{...e,commence_time:"2026-11-05T00:00:00Z"},{...e,away_team:pfw?"Purdue":"South Dakota"}])
+  assert.equal(normalizeCbbOwlsCurrent(ownGame,{success:true,data:[bad]},fetched,decision).quotes.length,0);
+ const nativeId=`ncaab:${source.away_team}@${source.home_team}-20261103`;
+ const history=normalizeCbbOwlsHistory(ownGame,{homeTeam:source.home_team,awayTeam:source.away_team},[
+  {book:"pinnacle",market:"spreads",side:"home",price:-110,pointValue:-3.5,recordedAt:captured,recordedAtUtc:captured},
+  {book:"pinnacle",market:"spreads",side:"away",price:-110,pointValue:3.5,recordedAt:captured,recordedAtUtc:captured}],fetched,decision);
+ assert.equal(history.quotes.length,1);
+ const rows=["home","away"].map((side,i)=>({id:i+1,provider:"owls",provider_event_id:nativeId,
+  ingestion_run_id:`cbb:2026-11-03:${fetched}`,canonical_event_id:String(ownGame.id),canonical_market_id:`${ownGame.id}:spread`,
+  league:"cbb",sportsbook:"pinnacle",sharp_book:true,market_type:"spread",selection_key:`${ownGame.id}:spread:${side}`,
+  line:side==="home"?-3.5:3.5,american_price:-110,decimal_price:1+100/110,no_vig_probability:.5,
+  provider_timestamp:captured,fetched_at:fetched,inserted_at:"2026-11-03T12:00:01Z",raw_payload_hash:String(i+1).padStart(64,"a"),minutes_to_start:720})) as CbbCanonicalPriceRow[];
+ const paired=pairCbbCanonicalMarketEvidence({game:ownGame,decisionAt:decision,priceRows:rows});
+ assert.equal(paired.pricePairs.length,1,`${source.away_team}: native ID reaches the R5 reader`);
+ assert.equal(paired.pricePairs[0].first.ownLine,-3.5);
+ const changed=rows.map(row=>({...row,provider_event_id:nativeId.replace("20261103","20261105")}));
+ assert.equal(pairCbbCanonicalMarketEvidence({game:ownGame,decisionAt:decision,priceRows:changed}).pricePairs.length,0);
+}
+assert.notEqual(name("IPFW"),name("Purdue"));
+assert.notEqual(name("S Dakota St"),name("South Dakota"));
+assert.notEqual(name("S Dakota St"),name("San Diego State"));
 console.log("CBB verified institution aliases, negative school identities, exact sides/time/league, partial-market promotion, complete-book precedence and D1 schedule coverage passed.");
