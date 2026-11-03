@@ -83,9 +83,9 @@ qualified evidence support them. The board contains both Over and Under picks.
 Relative to the exact unlocked r23 board, there are zero pick changes, two
 grade promotions, two grade demotions, and an unchanged 20-actionable count.
 Candidate price-aware counts are 0 Best Angle / 20 Lean / 13 Watchlist / 0
-Pass. The current puck-line board contains four qualified stable reads (one
-confirmation—whose pressure basis is the money/ticket differential—and three
-resistance reads); two other apparent endpoint moves
+Pass. The current puck-line board contains five qualified stable reads (two
+confirmations—one of whose pressure basis is the money/ticket differential—and
+three resistance reads); two other apparent endpoint moves
 are correctly rejected after the complete path exposes buyback. The qualified
 spread lane produces symmetric promotion/demotion behavior and never creates a
 second score. No fabricated action was added to today's board.

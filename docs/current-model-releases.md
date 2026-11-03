@@ -6767,8 +6767,9 @@ with zero errors, four confirmations, two resistance reads, five unresolved
 reads, zero pick changes, two promotions, two demotions, and an unchanged 20
 actionables (0 Best Angle / 20 Lean / 13 Watchlist). It contains away and home
 Moneyline winners plus Overs and Unders; no favorite default or hidden board
-flattening occurs. The puck-line path has four qualified reads and rejects two
-endpoint directions because their full Circa histories expose buyback. Locked
+flattening occurs. The puck-line path has five qualified stable reads (two
+confirmations and three resistance reads) and rejects two endpoint directions
+because their full Circa histories expose buyback. Locked
 r23 payloads remain exact and render before r24.
 This is functional product qualification, not a future-accuracy claim.
 Evidence and rollback: `docs/model-audits/2026-11-03-nhl-market-reader-functional-consequence.md`.
