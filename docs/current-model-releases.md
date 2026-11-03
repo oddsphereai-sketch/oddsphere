@@ -77,8 +77,16 @@ Predeclaration and evidence:
 
 ## CBB chart API and retained split display — November 2
 
-Current publisher is `cbb_member_pipeline_2026_11_02_r12_retained_named_split_display`
-and reader evidence is `cbb_reader_evidence_2026_11_02_r6_retained_named_source`.
+Current publisher is `cbb_member_pipeline_2026_11_02_r13_stored_draftkings_fallback`
+and reader evidence is `cbb_reader_evidence_2026_11_02_r7_stored_draftkings_fallback`.
+Both reuse the same stored DraftKings Network R4 source as a display fallback;
+the existing CBB-first leased collector refreshes it with at most twelve free
+HTML page requests and no extra paid-provider call. Neither member reads nor
+the sole publisher fetch that source. Complete exact dated fixtures, source
+side/axis values, native-source priority and original page/market clocks remain
+required. This has zero score/grade/stake policy authority; future locks freeze
+the same panels members saw and prior locks remain opaque. Evidence:
+`docs/model-audits/2026-11-02-draftkings-current-table-ingestion.md`.
 The chart API uses `prediction_market_published_reader_2026_11_02_r3_cbb_indexed_details`:
 a small published membership index plus the exact selected member detail fixes
 the117-game history array exceeding its former8 MB decoding ceiling. All
@@ -86,7 +94,7 @@ stored quotes and locked detail precedence remain exact. An exact-game retained
 named-book pair remains visible with its original source time during an outage;
 fresh sources take priority. The independent three-hour split-input qualifier,
 score r3, board r6, grade r2, tracking r4, store schema r2, single leased writer,
-provider budget and cadence are unchanged. No retained display becomes a fresh
+paid-provider budget and cadence are unchanged. No retained display becomes a fresh
 model input or changes a grade. Existing locked records cannot acquire new
 source data. Evidence: `docs/model-audits/2026-11-02-cbb-byu-chart-split-continuity.md`.
 
@@ -768,7 +776,15 @@ forward grading remain required. Exact locked payloads retain precedence.
 
 ## CBB exact market-observation identity repair — October 30
 
-- November 2 capture scheduling repair: active observation capture is
+- November 2 stored free-source fallback: active observation capture is
+  `market_intelligence_v2_capture_2026_11_02_r23_cbb_draftkings_fallback`.
+  Retains R22 CBB-first order and all exact Playbook source aliases. Only the
+  existing leased collector refreshes the R4 DraftKings HTML source; member
+  reads and the sole R13 publisher consume stored values through reader R7.
+  Maximum twelve anonymous HTML requests, existing five-minute cache, no extra
+  paid-provider calls, no additional writer/lease or prediction authority.
+  R23 supersedes the R22 capture identifier below.
+- November 2 capture scheduling repair (superseded capture):
   `market_intelligence_v2_capture_2026_11_02_r22_cbb_before_member_refresh`.
   The existing all-sport collector processes CBB first, before unrelated work
   can push it into the sole CBB writer's :02/:17/:32/:47 slot. All other sports
@@ -1059,6 +1075,20 @@ No prediction or locked member game was written by the failed refresh.
 
 ## CBB named-book split display identity — October 30
 
+- November 2 shared free-source parser repair: active durable source is
+  `draftkings_network_splits_2026_11_02_r4_current_table_markup`. The current
+  DraftKings table uses weekday-prefixed dates, one shared column header and
+  separately labeled market groups, with classless percentage cells. Parse
+  those actual groups while retaining legacy markup, exact side/axis values,
+  complete complementary pairs, event dates and existing fixture/lock guards.
+  The existing cached/durable source path retains R3/R2 last-known-good data;
+  its cache key includes R4 so an old cached empty result cannot mask recovery.
+  Expose source-only refresh and stored-only reads for the existing CBB leased
+  collector/sole writer, without a duplicate Owls call or prediction authority.
+  Source proof: one saved page changed from zero to ten parsed games; the same
+  bounded live source collection returned 50 games / 142 market panels.
+  CBB consumer publication is tracked separately. Evidence:
+  `docs/model-audits/2026-11-02-draftkings-current-table-ingestion.md`.
 - Display/capture release `cbb_sharp_split_mapping_2026_10_30_r1_exact_institution_neutral_orientation`
   resolves CBB named-book and DraftKings Network split rows with verified
   institution/full team names rather than mascot or abbreviation guesses. A

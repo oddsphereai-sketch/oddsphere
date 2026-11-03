@@ -24,7 +24,8 @@ import { loadCbbRollingSchedule } from "./cbbRollingSchedule";
 import { dailyEdgeSnapshotKey, upsertLabResponseSnapshot } from "@/lib/services/labResponseSnapshots";
 import { writeLockedCbbTracking } from "./cbbTrackingWriter";
 import { readCbbCapturedMarketHistory,readCbbCapturedNamedSplits } from "./cbbCapturedMarketHistory";
-import { mergeCbbCapturedNamedSplitEvidence,mergeCbbReaderEvidence,readCbbCapturedPublicSplits,type CbbPreparedNamedSplitSections,type CbbPreparedPublicSplitSections } from "./cbbReaderMarketEvidence";
+import { mergeCbbCapturedNamedSplitEvidence,mergeCbbDraftKingsSplitEvidence,mergeCbbReaderEvidence,readCbbCapturedPublicSplits,type CbbPreparedNamedSplitSections,type CbbPreparedPublicSplitSections } from "./cbbReaderMarketEvidence";
+import { readStoredDraftKingsNetworkSplits,applyDraftKingsNetworkSplitFallback } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 import { applySharpApiCurrentSplitOverlay } from "@/lib/providers/real_api/sharpApiCurrentSplits";
 import { advanceCbbProvisionalSnapshot } from "@/lib/cbb/provisionalLifecycle";
 import { isOwnerApprovedCbbMemberExclusion } from "@/lib/cbb/memberBoardScope";
@@ -89,9 +90,10 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       return [game.id,evidence] as const;
     }));
   const providerWarnings:string[]=[];
-  const [bookHistory,capturedSplits]=await Promise.all([
+  const [bookHistory,capturedSplits,draftKingsFeed]=await Promise.all([
     readCbbCapturedMarketHistory(db).catch(error=>{providerWarnings.push(error instanceof Error?error.message:"CBB captured history unavailable");return null;}),
     readCbbCapturedNamedSplits(db).catch(error=>{providerWarnings.push(error instanceof Error?error.message:"CBB captured splits unavailable");return null;}),
+    readStoredDraftKingsNetworkSplits("cbb",db).catch(error=>{providerWarnings.push(error instanceof Error?error.message:"CBB stored DraftKings splits unavailable");return null;}),
   ]);
   const needsFallback=candidateGames.filter(game=>!prior.get(game.id)?.snapshot.lockedAt&&Date.parse(game.date)>Date.parse(asOf)&&
     !["moneyline","spread","total"].every(market=>namedById.get(game.id)?.quotes.some(q=>q.market===market)));
@@ -203,7 +205,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   const preparedPublic=new Map<number,CbbPreparedPublicSplitSections>();
   const publicRows=await readCbbCapturedPublicSplits(db,publishableGames.filter(game=>!prior.get(game.id)?.snapshot.lockedAt&&Date.parse(game.date)>Date.parse(asOf)+60*60_000).map(game=>game.id),Date.parse(asOf))
     .catch(error=>{providerWarnings.push(error instanceof Error?error.message:"CBB captured public splits unavailable");return [];});
-  if(capturedSplits||publicRows.length){
+  if(capturedSplits||publicRows.length||draftKingsFeed){
     const previews=publishableGames.flatMap(game=>{
       const previous=prior.get(game.id),identity=scheduled.get(game.id),candidate=boardCandidates.get(game.id);
       if(previous?.snapshot.lockedAt||Date.parse(asOf)>=Date.parse(game.date)-60*60_000||!candidate||!identity)
@@ -211,8 +213,8 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       const snapshot=advanceCbbProvisionalSnapshot({existing:previous?.snapshot??null,candidate,startsAt:game.date,now:asOf});
       return [adaptCbbProvisionalGame({game,snapshot,homeLogo:identity.homeTeamLogo,awayLogo:identity.awayTeamLogo,now:asOf})];
     });
-    const enriched=mergeCbbCapturedNamedSplitEvidence(mergeCbbReaderEvidence(cbbDailyEdgeResponse(args.anchorDate,previews,asOf),null,publicRows,Date.parse(asOf)),capturedSplits,
-      applySharpApiCurrentSplitOverlay,Date.parse(asOf));
+    const enriched=mergeCbbDraftKingsSplitEvidence(mergeCbbCapturedNamedSplitEvidence(mergeCbbReaderEvidence(cbbDailyEdgeResponse(args.anchorDate,previews,asOf),null,publicRows,Date.parse(asOf)),capturedSplits,
+      applySharpApiCurrentSplitOverlay,Date.parse(asOf)),draftKingsFeed,applyDraftKingsNetworkSplitFallback,Date.parse(asOf));
     for(const game of enriched.games){
       const sections:CbbPreparedNamedSplitSections={};
       for(const key of ["moneyline","first_inning","total"] as const){const section=game.markets[key].sportsbookSplits;if(section)sections[key]=section;}

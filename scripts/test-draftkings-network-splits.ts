@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import type { DailyEdgeResponse, MarketEdgeDto } from "../app/lab/lib/labTypes";
 import {
   applyDraftKingsNetworkSplitFallback,
@@ -50,6 +51,33 @@ assert.equal(draftKingsTest.providerTeamMatches("nhl", "LA Kings", "LAK"), true)
 assert.equal(draftKingsTest.providerTeamMatches("nhl", "PIT Penguins", "PIT"), true);
 assert.equal(draftKingsTest.providerTeamMatches("nhl", "NY Rangers", "NYI"), false, "NHL fallback matching cannot cross franchises");
 
+// Actual source fragment: weekday dates, one shared column header, separately
+// labeled market groups and percentage cells without the old flex-1 class.
+const currentHtml = readFileSync("scripts/fixtures/draftkings-network-cbb-current-table-20261102.html", "utf8");
+const currentParsed = parseDraftKingsNetworkSplitsHtml(currentHtml);
+assert.equal(currentParsed.length, 1, "current provider markup must not silently become an empty feed");
+assert.equal(currentParsed[0]?.providerEventId, "34940946");
+assert.equal(currentParsed[0]?.monthDay, "11/2");
+assert.equal(currentParsed[0]?.awayName, "Monmouth");
+assert.equal(currentParsed[0]?.homeName, "St. Johns");
+assert.deepEqual(Object.keys(currentParsed[0]?.markets ?? {}), ["moneyline", "spread", "total"]);
+assert.deepEqual(currentParsed[0]?.markets.moneyline?.sides, [
+  { label: "St. Johns", moneyPct: 4, betsPct: 92 },
+  { label: "Monmouth", moneyPct: 96, betsPct: 8 },
+], "handle and ticket columns keep their own exact values and side labels");
+assert.equal(currentParsed[0]?.markets.spread?.sides[0].label, "St. Johns -28.5");
+assert.deepEqual(currentParsed[0]?.markets.total?.sides, [
+  { label: "Over 155.5", moneyPct: 92, betsPct: 59 },
+  { label: "Under 155.5", moneyPct: 8, betsPct: 41 },
+]);
+assert.equal(parseDraftKingsNetworkSplitsHtml(currentHtml.replace("Mon 11/2", "unknown date")).length, 0,
+  "an unparseable event date cannot acquire a guessed slate date");
+const unlabeledTotal = currentHtml.replace(/>\s*Total\s*<\/div>/, ">Unknown market</div>");
+assert.equal(parseDraftKingsNetworkSplitsHtml(unlabeledTotal)[0]?.markets.total, undefined,
+  "a market group cannot borrow the previous group's label");
+assert.ok(parseDraftKingsNetworkSplitsHtml(unlabeledTotal)[0]?.markets.spread,
+  "rejecting an unknown market preserves a different complete market");
+
 const mergedProviderFeed = draftKingsTest.mergeDraftKingsNetworkFeeds({
   source: "draftkings_network",
   sport: "MLB",
@@ -80,6 +108,14 @@ const paginationTest = (async () => {
     },
   });
   assert.equal(completeFeed?.games.length, 2, "both required seed pages are retained when the feed succeeds");
+
+  const pageClocks=await fetchDraftKingsNetworkSplits({sport:"cbb",timeoutMs:1_000,fetchImpl:async input=>{
+    const second=new URL(String(input)).searchParams.get("tb_page")==="2";
+    return new Response(second?pageTwoHtml:html,{status:200,headers:{date:second?"Thu, 17 Sep 2026 15:02:00 GMT":"Thu, 17 Sep 2026 15:01:00 GMT"}});
+  }});
+  assert.equal(pageClocks?.fetchedAt,"2026-09-17T15:02:00.000Z");
+  assert.equal(pageClocks?.games.find(game=>game.providerEventId==="123456")?.markets.moneyline?.observedAt,"2026-09-17T15:01:00.000Z",
+    "a later page response cannot renew an earlier page's source clock");
 
   await assert.rejects(
     fetchDraftKingsNetworkSplits({

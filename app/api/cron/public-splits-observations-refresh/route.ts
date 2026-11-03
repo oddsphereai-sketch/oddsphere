@@ -24,6 +24,7 @@ import type { Sport } from "@/lib/types/domain/Sport";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 import { runScheduledMarketIntelligenceV2Collection } from "@/lib/services/marketIntelligenceV2/scheduledCollection";
 import { readMarketCaptureActivity } from "@/lib/services/dailyEdge/marketCaptureActivity";
+import { refreshDraftKingsNetworkSplitSource } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
 const ENV = "PUBLIC_SPLITS_OBSERVATIONS_ENABLED";
 // This remains an observation-only collector. Capability gates continue to
@@ -48,6 +49,9 @@ export async function GET(request: Request): Promise<Response> {
         return { records_updated: 0, api_calls_made: 0, details: { skipped: true, activity } };
       }
       const slate = currentSlateDate(sport);
+      // Reuse the existing free-source cache inside the same CBB lease. This
+      // does not call Owls again or put provider work on member reads.
+      const draftKingsFallback=sport==="cbb"?await refreshDraftKingsNetworkSplitSource("cbb").catch(()=>null):null;
       const result = await syncPublicSplitsObservations({
         supabase,
         sport,
@@ -99,6 +103,9 @@ export async function GET(request: Request): Promise<Response> {
         details: {
           activity,
           slate,
+          ...(sport==="cbb"?{draftkings_fallback:{games:draftKingsFallback?.games.length??0,
+            markets:draftKingsFallback?.games.reduce((sum,game)=>sum+Object.keys(game.markets).length,0)??0,
+            fetched_at:draftKingsFallback?.fetchedAt??null,public_html_page_request_ceiling:12,additional_paid_provider_calls:0}}:{}),
           sharpapi: result.sharpapiRows,
           playbook: result.playbookRows,
           upserted: result.upserted,
