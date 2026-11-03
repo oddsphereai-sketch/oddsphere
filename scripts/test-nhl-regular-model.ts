@@ -565,6 +565,63 @@ assert.equal(moneyDifferentialConfirmation.layers.moneyline_market_side, "home")
 assert.equal(moneyDifferentialConfirmation.layers.moneyline_market_pressure_basis, "money_differential");
 assert.ok(moneyDifferentialConfirmation.expected_goal_diff > result.expected_goal_diff);
 
+const verdictRank = (verdict: string) => ({ pass: 0, watchlist: 1, lean: 2, best_angle: 3 }[verdict] ?? -1);
+const baseTotalPickOver = result.total.pick.startsWith("OVER");
+const totalConfirmation = nhlRegularModelV1({
+  ...base,
+  market: {
+    ...base.market,
+    same_book_total_axis_move: baseTotalPickOver ? 0.25 : -0.25,
+    same_book_total_axis_move_sportsbook: "circa",
+    same_book_total_axis_move_source_class: "named",
+    same_book_total_axis_move_path_state: "stable",
+    total_over_bets_pct: baseTotalPickOver ? 67 : 33,
+    total_over_money_pct: baseTotalPickOver ? 71 : 29,
+  },
+});
+const totalOpposition = nhlRegularModelV1({
+  ...base,
+  market: {
+    ...base.market,
+    same_book_total_axis_move: baseTotalPickOver ? -0.25 : 0.25,
+    same_book_total_axis_move_sportsbook: "circa",
+    same_book_total_axis_move_source_class: "named",
+    same_book_total_axis_move_path_state: "stable",
+    total_over_bets_pct: baseTotalPickOver ? 67 : 33,
+    total_over_money_pct: baseTotalPickOver ? 71 : 29,
+  },
+});
+assert.equal(totalConfirmation.layers.total_market_read, "confirmation", "stable same-book Total response matching complete pressure is confirmation");
+assert.equal(totalConfirmation.layers.total_market_authority_source, "categorical_response");
+assert.equal(totalOpposition.layers.total_market_read, "resistance", "same-book Total response against complete pressure is resistance");
+assert.equal(totalOpposition.layers.total_market_side, baseTotalPickOver ? "under" : "over");
+assert.ok(
+  Math.sign(totalConfirmation.expected_total_goals - result.expected_total_goals) === (baseTotalPickOver ? 1 : -1),
+  "qualified Total confirmation moves one coherent score mean in the observed economic direction",
+);
+assert.ok(
+  Math.abs(totalConfirmation.moneyline.probability - result.moneyline.probability) < 1e-12,
+  "categorical Total consequence re-solves the margin and preserves the incumbent Moneyline probability",
+);
+assert.ok(
+  verdictRank(totalConfirmation.total.verdict) > verdictRank(totalOpposition.total.verdict),
+  "paired qualified Total confirmation and opposition produce promotion/demotion-capable grading",
+);
+const boughtBackTotal = nhlRegularModelV1({
+  ...base,
+  market: {
+    ...base.market,
+    same_book_total_axis_move: baseTotalPickOver ? 0.25 : -0.25,
+    same_book_total_axis_move_sportsbook: "circa",
+    same_book_total_axis_move_source_class: "named",
+    same_book_total_axis_move_path_state: "buyback",
+    total_over_bets_pct: baseTotalPickOver ? 67 : 33,
+    total_over_money_pct: baseTotalPickOver ? 71 : 29,
+  },
+});
+assert.equal(boughtBackTotal.layers.total_market_read, "unresolved", "Total buyback history vetoes endpoint authority");
+assert.equal(boughtBackTotal.expected_total_goals, result.expected_total_goals);
+
 const basePuckPickHome = result.puck_line.pick.startsWith(base.home.abbreviation);
 const puckEvidenceMarket = {
   ...base.market,
@@ -591,7 +648,6 @@ const puckOpposition = nhlRegularModelV1({
     spread_home_money_pct: basePuckPickHome ? 33 : 67,
   },
 });
-const verdictRank = (verdict: string) => ({ pass: 0, watchlist: 1, lean: 2, best_angle: 3 }[verdict] ?? -1);
 assert.equal(puckConfirmation.layers.puck_line_market_read, "confirmation");
 assert.equal(puckConfirmation.layers.puck_line_market_side, basePuckPickHome ? "home" : "away");
 assert.ok(verdictRank(puckConfirmation.puck_line.verdict) >= verdictRank(puckOpposition.puck_line.verdict), "matching puck-line evidence cannot grade below equally complete opposition");
@@ -915,14 +971,18 @@ const sameBookMovement = selectSameBookNhlMovement([
   { market_type: "spread", sportsbook: "Circa", side: "home", line_value: -1.5, odds_american: 150, implied_probability: null },
   { market_type: "spread", sportsbook: "Circa", side: "away", line_value: 1.5, odds_american: -170, implied_probability: null },
   { market_type: "total", sportsbook: "Circa", side: "over", line_value: 6.5, odds_american: -110, implied_probability: null },
+  { market_type: "total", sportsbook: "Circa", side: "under", line_value: 6.5, odds_american: -110, implied_probability: null },
 ], [
   { market_type: "moneyline", sportsbook: "Circa", side: "home", line_value: null, odds_american: -120, implied_probability: null },
   { market_type: "moneyline", sportsbook: "Circa", side: "away", line_value: null, odds_american: 100, implied_probability: null },
   { market_type: "spread", sportsbook: "Circa", side: "home", line_value: -1.5, odds_american: 170, implied_probability: null },
   { market_type: "spread", sportsbook: "Circa", side: "away", line_value: 1.5, odds_american: -200, implied_probability: null },
   { market_type: "total", sportsbook: "Circa", side: "over", line_value: 6, odds_american: -110, implied_probability: null },
+  { market_type: "total", sportsbook: "Circa", side: "under", line_value: 6, odds_american: -110, implied_probability: null },
 ]);
 assert.equal(sameBookMovement.totalMove, 0.5, "market reading retains the exact same-book Total trail");
+assert.ok((sameBookMovement.totalAxisMove ?? 0) > 0.49, "complete Total price pairs retain their no-vig same-book economic movement");
+assert.equal(sameBookMovement.totalAxisMovePathState, "stable");
 assert.ok((sameBookMovement.homePuckProbMove ?? 0) > 0, "the exact same puck-line contract retains its two-sided probability response");
 assert.equal(sameBookMovement.homeProbMovePathState, "stable");
 const boughtBackMovement = selectSameBookNhlMovement([
@@ -938,6 +998,21 @@ const boughtBackMovement = selectSameBookNhlMovement([
   { market_type: "moneyline", sportsbook: "Circa", side: "away", line_value: null, odds_american: null, implied_probability: 0.38, observed_at: "2026-11-03T15:00:00.000Z" },
 ]);
 assert.equal(boughtBackMovement.homeProbMovePathState, "buyback", "a large retracement cannot masquerade as a stable opening-to-current signal");
+const boughtBackTotalMovement = selectSameBookNhlMovement([
+  { market_type: "total", sportsbook: "Circa", side: "over", line_value: 7, odds_american: 110, implied_probability: null },
+  { market_type: "total", sportsbook: "Circa", side: "under", line_value: 7, odds_american: -130, implied_probability: null },
+], [
+  { market_type: "total", sportsbook: "Circa", side: "over", line_value: 6.5, odds_american: -135, implied_probability: null },
+  { market_type: "total", sportsbook: "Circa", side: "under", line_value: 6.5, odds_american: 115, implied_probability: null },
+], [
+  { market_type: "total", sportsbook: "Circa", side: "over", line_value: 6.5, odds_american: -135, implied_probability: null, observed_at: "2026-11-03T12:00:00.000Z" },
+  { market_type: "total", sportsbook: "Circa", side: "under", line_value: 6.5, odds_american: 115, implied_probability: null, observed_at: "2026-11-03T12:00:00.000Z" },
+  { market_type: "total", sportsbook: "Circa", side: "over", line_value: 7, odds_american: -120, implied_probability: null, observed_at: "2026-11-03T15:00:00.000Z" },
+  { market_type: "total", sportsbook: "Circa", side: "under", line_value: 7, odds_american: 100, implied_probability: null, observed_at: "2026-11-03T15:00:00.000Z" },
+  { market_type: "total", sportsbook: "Circa", side: "over", line_value: 7, odds_american: 110, implied_probability: null, observed_at: "2026-11-03T18:00:00.000Z" },
+  { market_type: "total", sportsbook: "Circa", side: "under", line_value: 7, odds_american: -130, implied_probability: null, observed_at: "2026-11-03T18:00:00.000Z" },
+]);
+assert.equal(boughtBackTotalMovement.totalAxisMovePathState, "buyback", "a transported Total endpoint cannot hide the full economic-axis buyback");
 const pickemQuotedLine = nhlRegularModelV1({
   ...base,
   home: { ...base.home, abbreviation: "TOR" },

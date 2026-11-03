@@ -26,6 +26,31 @@ functional checks, paired promotion/demotion coverage, actual whole-board
 counts, independent review, protected fresh-main publication and live proof
 remain mandatory. Evidence: `docs/model-audits/2026-11-03-cbb-aligned-native-reactions.md`.
 
+## Owner-directed NHL Total-reader spot-check repair — November 3
+
+After the r24 market-reader deployment, Daniel Mengel explicitly requested a
+multi-game sharp-reader spot check and repair of anything found. The read-only
+check found that the ordinary two-book Circa/Pinnacle board could leave the
+Total lane without any categorical interpretation after target-book exclusion,
+even though the safe independent fallback happened to produce coherent picks.
+
+R25 is limited to that functional gap. It adds a full same-book, no-vig Total
+economic path; classifies stable material pressure/response as confirmation or
+resistance; and rejects flat, sub-material, mixed, incomplete, bought-back and
+reversed evidence. Qualified response is an innovation from the independent
+Total, never a market-level blend, and the margin is re-solved to preserve the
+incumbent Moneyline probability. The target-excluded professional board remains
+primary. Paired promotion/demotion behavior is tested. The exact two-game /
+six-market unlocked comparison has zero side, grade or actionable changes and
+four actionables; this is not permission to manufacture a current-board effect.
+
+No provider call, writer, cron, lease, stake or locked payload changes. Existing
+r23/r24 locks retain exact precedence. Full/focused checks, current-board impact,
+fresh-main integration safety, protected PR publication and actual live release,
+writer, coverage, reader and lock proof remain mandatory. Forward evaluation is
+release- and lock-time-specific. Evidence:
+`docs/model-audits/2026-11-03-nhl-categorical-total-response-r25.md`.
+
 ## CBB live spot-check receipt correction — November 3
 
 The owner's explicit instruction to deploy the CBB repair, spot-check real games
