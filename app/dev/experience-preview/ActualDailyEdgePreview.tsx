@@ -2074,22 +2074,25 @@ function DefaultSplitSummary({ market, sport = null }: { market: MarketEdgeDto; 
   const consensus = displayedConsensusSection(market);
   const sharpDisplay = resolveDisplayedSharpSplit(market, sport);
   const displayedSharp = sharpDisplay.section;
+  // Only new unlocked CBB overlays carry this label. Legacy locked snapshots
+  // retain their stored wording and source section without read-time revision.
+  const draftKingsNetwork = sport === "cbb" && displayedSharp?.sourceBook === "draftkings_network" && displayedSharp.label === "DraftKings Splits";
   const displayedConflict = splitSourcesConflict(consensus, displayedSharp);
   if (consensus === null && displayedSharp === null) return <Unavailable label="Consensus and sharp-book split data are unavailable for this market." />;
   const hasSourceSpecificEvidence = displayedSharp !== null;
   return (
     <div className="mt-3 border-t border-white/[0.06] pt-3">
-      <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Market splits</p><p className="mt-0.5 text-[7px] text-gray-600">{hasSourceSpecificEvidence ? "Public and sharp splits remain separate signals" : "Public money and ticket distribution"}</p></div>{displayedConflict ? <span className="rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[7px] font-black uppercase tracking-wider text-amber-200">Sources conflict</span> : null}</div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Market splits</p><p className="mt-0.5 text-[7px] text-gray-600">{draftKingsNetwork ? "Public consensus and DraftKings network splits are separate sources" : hasSourceSpecificEvidence ? "Public and sharp splits remain separate signals" : "Public money and ticket distribution"}</p></div>{displayedConflict ? <span className="rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[7px] font-black uppercase tracking-wider text-amber-200">Sources conflict</span> : null}</div>
       <div className="mt-2 space-y-2">
         <SplitSourcePanel source="PUBLIC CONSENSUS" section={consensus} pick={market.pick} />
-        {displayedSharp ? <SplitSourcePanel source={displayedSharp.label === "Sharp Book Signal" ? "SHARP SPLITS" : "SHARP BOOK SPLITS"} section={displayedSharp} pick={market.pick} availabilityStatus={sharpDisplay.availabilityStatus} /> : null}
+        {displayedSharp ? <SplitSourcePanel source={draftKingsNetwork ? "DRAFTKINGS NETWORK SPLITS" : displayedSharp.label === "Sharp Book Signal" ? "SHARP SPLITS" : "SHARP BOOK SPLITS"} section={displayedSharp} pick={market.pick} availabilityStatus={draftKingsNetwork ? null : sharpDisplay.availabilityStatus} /> : null}
       </div>
-      {displayedSharp?.rows.length ? <CrossSourceSplitRead consensus={consensus} sharp={displayedSharp} /> : null}
+      {displayedSharp?.rows.length ? <CrossSourceSplitRead consensus={consensus} sharp={displayedSharp} sourceName={draftKingsNetwork ? "DraftKings" : "Sharp"} /> : null}
     </div>
   );
 }
 
-function SplitSourcePanel({ source, section, pick, availabilityStatus = null }: { source: "PUBLIC CONSENSUS" | "SHARP BOOK SPLITS" | "SHARP SPLITS"; section: MarketSplitDisplaySection | null; pick: string | null; availabilityStatus?: SharpAvailabilityStatus }) {
+function SplitSourcePanel({ source, section, pick, availabilityStatus = null }: { source: "PUBLIC CONSENSUS" | "SHARP BOOK SPLITS" | "SHARP SPLITS" | "DRAFTKINGS NETWORK SPLITS"; section: MarketSplitDisplaySection | null; pick: string | null; availabilityStatus?: SharpAvailabilityStatus }) {
   const moneyLeader = splitLeader(section, "moneyPct");
   const ticketLeader = splitLeader(section, "betsPct");
   const isSharp = source === "SHARP BOOK SPLITS" || source === "SHARP SPLITS";
@@ -2114,14 +2117,14 @@ function SingleSplitBar({ label, value }: { label: "Money" | "Tickets"; value: n
   return <div className="grid grid-cols-[48px_1fr_38px] items-center gap-2.5"><span className="text-[8px] font-black uppercase tracking-wider text-gray-400">{label}</span><div className="relative h-4 overflow-hidden rounded-md border border-white/[0.08] bg-white/[0.07] shadow-inner" aria-label={`${label} ${value === null ? "unavailable" : `${Math.round(value)} percent`}`}><span className={`absolute inset-y-0 left-0 rounded-[3px] bg-gradient-to-r ${fill} shadow-[0_0_12px_rgba(167,139,250,0.35)] transition-[width] duration-300`} style={{ width: `${width}%` }} /><span className="absolute inset-y-0 left-1/2 w-px bg-white/25" /><span className="absolute inset-y-0 left-1/4 w-px bg-white/[0.07]" /><span className="absolute inset-y-0 left-3/4 w-px bg-white/[0.07]" /></div><span className="text-right font-mono text-[10px] font-black text-white">{value === null ? "—" : `${Math.round(value)}%`}</span></div>;
 }
 
-function CrossSourceSplitRead({ consensus, sharp }: { consensus: MarketSplitDisplaySection | null; sharp: MarketSplitDisplaySection | null }) {
+function CrossSourceSplitRead({ consensus, sharp, sourceName = "Sharp" }: { consensus: MarketSplitDisplaySection | null; sharp: MarketSplitDisplaySection | null; sourceName?: string }) {
   const publicMoney = splitLeader(consensus, "moneyPct");
   const sharpMoney = splitLeader(sharp, "moneyPct");
   const publicTickets = splitLeader(consensus, "betsPct");
   const sharpTickets = splitLeader(sharp, "betsPct");
   if (!publicMoney && !sharpMoney && !publicTickets && !sharpTickets) return null;
-  const moneyRead = splitSourceComparison("Money", publicMoney, sharpMoney);
-  const ticketRead = splitSourceComparison("Tickets", publicTickets, sharpTickets);
+  const moneyRead = splitSourceComparison("Money", publicMoney, sharpMoney, sourceName);
+  const ticketRead = splitSourceComparison("Tickets", publicTickets, sharpTickets, sourceName);
   return <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-white/[0.07] bg-black/15 px-3 py-2"><span className="text-[7px] font-black uppercase tracking-[0.14em] text-gray-500">Cross-source read</span>{moneyRead ? <span className="text-[8px] font-bold text-gray-300">{moneyRead}</span> : null}{moneyRead && ticketRead ? <span className="hidden h-3 w-px bg-white/10 sm:block" /> : null}{ticketRead ? <span className="text-[8px] font-bold text-gray-400">{ticketRead}</span> : null}</div>;
 }
 
@@ -2595,7 +2598,7 @@ function DeepResearch({ game, market, marketKey, sport, history, sample, setSamp
       <div className="mt-4 rounded-xl border border-white/[0.07] bg-white/[0.02] p-4">
         {view === "case" && <CaseDeepDive game={game} market={market} marketKey={marketKey} illustrativeSample={illustrativeSample} />}
         {view === "trend" && <RelevantTrend game={game} market={market} marketKey={marketKey} sport={sport} history={history} sample={sample} setSample={setSample} illustrativeSample={illustrativeSample} />}
-        {view === "market" && <MarketDeepDive market={market} illustrativeSample={illustrativeSample} />}
+        {view === "market" && <MarketDeepDive market={market} sport={sport} illustrativeSample={illustrativeSample} />}
         {view === "matchup" && <MatchupDeepDive game={game} sport={sport} history={history} sample={sample} illustrativeSample={illustrativeSample} />}
         {view === "model" && <ModelDeepDive game={game} market={market} />}
       </div>
@@ -2611,12 +2614,12 @@ function CaseDeepDive({ game, market, marketKey, illustrativeSample = false }: {
   return <div><div className="flex flex-col gap-3 border-b border-white/[0.07] pb-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-[8px] font-black uppercase tracking-[0.17em] text-violet-200">The case for {market.pick ?? "this read"}</p><h3 className="mt-1 text-lg font-black tracking-tight text-white">Why it rates—and what could break it.</h3></div><VerdictBadge market={market} large /></div><div className="mt-4 grid gap-3 lg:grid-cols-2"><AnalysisCard label="Primary model factor" text={primaryFactor} /><section className="rounded-xl border border-amber-400/20 bg-amber-400/[0.045] p-4"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-amber-200">Biggest watch-out</p><p className="mt-2 text-[11px] leading-relaxed text-gray-300">{stripRiskPrefix(market.riskLine)}</p></section></div><section className="mt-4 rounded-xl border border-violet-400/15 bg-violet-500/[0.035] p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-violet-200">Market verdict</p><span className={`rounded-full border px-2 py-0.5 text-[7px] font-black uppercase tracking-wider ${pulse.tone === "emerald" ? "border-emerald-400/20 bg-emerald-400/[0.07] text-emerald-200" : pulse.tone === "amber" ? "border-amber-400/20 bg-amber-400/[0.07] text-amber-200" : "border-gray-700 bg-gray-800/60 text-gray-400"}`}>{pulse.chip}</span></div><p className="mt-2 text-[11px] leading-relaxed text-gray-300">{decisionCopy}</p></section><div className="mt-5"><div className="flex items-end justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.16em] text-sky-200">{illustrativeSample ? "Sample supporting evidence" : "Verified evidence"}</p><p className="mt-1 text-[9px] text-gray-600">The most relevant formatted rows supplied with this {illustrativeSample ? "illustrative market sample" : "market snapshot"}.</p></div><span className="text-[8px] font-black text-gray-600">{topDrivers.length} shown</span></div>{topDrivers.length > 0 ? <div className="mt-3 grid gap-2 lg:grid-cols-3">{topDrivers.map((stat) => <PredictionDriverCard key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} away={game.awayTeam} home={game.homeTeam} awayStarter={game.awayStarter?.name ?? null} homeStarter={game.homeStarter?.name ?? null} marketKey={marketKey} pick={market.pick} competitionLabel={soccerCompetitionLabel(game)} illustrativeSample={illustrativeSample} />)}</div> : <Unavailable label="No formatted evidence rows are available for this market snapshot." />}</div></div>;
 }
 
-function MarketDeepDive({ market, illustrativeSample = false }: { market: MarketEdgeDto; illustrativeSample?: boolean }) {
+function MarketDeepDive({ market, sport, illustrativeSample = false }: { market: MarketEdgeDto; sport: Sport; illustrativeSample?: boolean }) {
   return (
     <div>
       <div className="flex flex-col gap-2 border-b border-white/[0.07] pb-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[8px] font-black uppercase tracking-[0.17em] text-violet-200">Market intelligence</p><h3 className="mt-1 text-lg font-black tracking-tight text-white">How price and bettors reacted.</h3></div><span className="text-[8px] font-bold text-gray-600">{illustrativeSample ? "Sample source · consensus" : `Source · ${market.marketSource ?? "Unavailable"}`}</span></div>
       <section className="mt-4 rounded-xl border border-white/[0.08] bg-white/[0.015] p-4"><p className="text-[9px] font-black uppercase tracking-[0.16em] text-violet-200">{illustrativeSample ? "Illustrative price history" : "Observed price history"}</p><div className="grid gap-3 lg:grid-cols-[0.8fr_1.2fr]"><PriceStops market={market} />{(market.oddsTrail?.length ?? 0) > 0 ? <div className="mt-3 space-y-2">{market.oddsTrail?.map((point, index) => <div key={`${point.observedAt}-${index}`} className="grid grid-cols-[1fr_auto_auto] gap-3 rounded-lg border border-white/[0.08] bg-black/25 px-3 py-2 text-[9px]"><span className="text-gray-500">{point.observedAt ? formatTimestamp(point.observedAt) : point.label}</span><span className="font-black text-gray-200">{formatAmerican(point.american)}</span><span className="w-20 truncate text-right text-gray-600">{point.sportsbook ?? point.source}</span></div>)}</div> : <Unavailable label={illustrativeSample ? "No illustrative price trail is included for this market." : "No persisted price trail for this market."} />}</div></section>
-      <DefaultSplitSummary market={market} />
+      <DefaultSplitSummary market={market} sport={sport} />
       <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4"><InfoCard label="Current price" value={`${formatAmerican(currentDisplayedPrice(market))}${market.currentPriceSportsbook ? ` · ${formatSportsbook(market.currentPriceSportsbook)}` : ""}`} /><InfoCard label="Market probability" value={formatMarketProbability(market)} /><InfoCard label="Market EV" value={market.pinnacleEvPct === null ? "Unavailable" : `${market.pinnacleEvPct > 0 ? "+" : ""}${market.pinnacleEvPct.toFixed(1)}%`} /><InfoCard label="Data quality" value={market.marketDataQuality.replaceAll("_", " ")} /></div>
       {(market.modelTotal !== null || market.marketTotal !== null || market.fiMarketBoard) ? <div className="mt-3 grid gap-2 sm:grid-cols-3">{market.modelTotal !== null ? <InfoCard label="Projected total" value={market.modelTotal.toFixed(1)} /> : null}{market.marketTotal !== null ? <InfoCard label="Market total" value={market.marketTotal.toFixed(1)} /> : null}{market.fiMarketBoard ? <InfoCard label="First-inning board" value={`NRFI ${formatAmerican(market.fiMarketBoard.nrfiAmerican)} · YRFI ${formatAmerican(market.fiMarketBoard.yrfiAmerican)}`} /> : null}</div> : null}
     </div>

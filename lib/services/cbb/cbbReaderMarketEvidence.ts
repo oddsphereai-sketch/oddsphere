@@ -2,7 +2,7 @@ import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto, OddsTrailStopD
 import type { BookDisplayEntry, BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
 import type { DraftKingsNetworkSplitFeed } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
-export const CBB_READER_EVIDENCE_RELEASE="cbb_reader_evidence_2026_11_02_r7_stored_draftkings_fallback" as const;
+export const CBB_READER_EVIDENCE_RELEASE="cbb_reader_evidence_2026_11_03_r8_named_retail_source" as const;
 type SplitRow={canonical_event_id:string;market_type:string;selection_key:string;bets_pct:number|null;money_pct:number|null;
   provider:string;source_book:string;source_type:string;source_observed_at:string|null;fetched_at:string};
 export type CbbCapturedPublicSplitRow=SplitRow;
@@ -187,8 +187,11 @@ export function mergeCbbDraftKingsSplitEvidence(board:DailyEdgeResponse,feed:Dra
     for(const [key] of marketEntries){
       const section=candidate.markets[key].sportsbookSplits;
       if(!cbbQualifiedNamedSplitSection(original.markets[key].sportsbookSplits,section,now,{allowRetained:true}))continue;
-      markets[key]={...original.markets[key],sportsbookSplits:section,
-        sharpBookAvailability:{status:"complete",message:"Verified two-sided named-book split data is available.",lastUpdated:section.sourceObservedAt??""}};
+      // This is a DraftKings consumer-network observation, not a professional
+      // sharp-book receipt. The overlay is unlocked/display-only; any stored
+      // legacy lock keeps its exact original section and decision tuple.
+      markets[key]={...original.markets[key],sportsbookSplits:{...section,label:"DraftKings Splits"},
+        sharpBookAvailability:{status:"unavailable",message:"No current verified professional split for this market.",lastUpdated:null}};
       changed=true;
     }
     return changed?{...original,markets}:original;
