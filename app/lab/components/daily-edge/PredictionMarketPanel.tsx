@@ -143,7 +143,7 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
         <span className="ml-auto text-[10px] text-[#ac9bbd] sm:ml-0 sm:w-full sm:pl-[26px]">{context?.kind==="spread"?(game.sport==="nhl"?"Puck line":"Spread"):context?.kind==="total"?"Total":context?.kind==="btts"?"Both teams to score":"Game winner"}{game.sport==="soccer"?" · 90 minutes":""}</span>
       </div>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-1 sm:block sm:pl-[26px]">
-        <strong className="text-[17px] font-bold tracking-tight text-[#e9e2f3]">{outcome.label} {(comparisonOutcome.probability*100).toFixed(1)}%</strong>
+        <strong className="text-[17px] font-bold tracking-tight text-[#e9e2f3]">{movementView&&lastBook?bookLabel:outcome.label} {((movementView&&lastBook?lastBook[1]:comparisonOutcome.probability)*100).toFixed(1)}%</strong>
         <span className="block text-[10px] text-[#b2cbbc]">{movementView&&bookDelta!==null?(bookDelta>0?"↑ ":bookDelta<0?"↓ ":"↔ ")+Math.abs(bookDelta).toFixed(1)+" pp · "+bookName:delta===null?"History building":(delta>0?"↑ ":delta<0?"↓ ":"↔ ")+Math.abs(delta).toFixed(1)+" pp · chart window"}</span>
       </div>
       {legend}
