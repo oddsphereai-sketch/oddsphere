@@ -13,7 +13,7 @@ import { impliedEplGoalsMarketDistribution } from "@/lib/services/epl/eplDerived
 import { logPoolUclResult, reconcileUclMeanPreserving } from "./uclEloConsensus";
 
 export const UCL_COHERENT_MARKET_OUTCOME_RELEASE =
-  "ucl_coherent_market_outcome_2026_11_03_r8_exact_contract_movement" as const;
+  "ucl_coherent_market_outcome_2026_11_03_r9_recovery_native_identity" as const;
 
 type Side = "home" | "draw" | "away";
 type ResultVector = Record<Side, number>;
