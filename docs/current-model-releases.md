@@ -4,10 +4,10 @@
 
 PR938 remains draft and unmerged. Private score
 `cbb_candidate_2026_11_02_r5_received_market_response`, board
-`cbb_candidate_2026_11_02_r8_received_market_response`, grade
-`cbb_2026_11_02_r4_received_market_economics`, receipt
+`cbb_candidate_2026_11_02_r9_resolved_price_grade`, grade
+`cbb_2026_11_02_r5_resolved_price_not_double_penalized`, receipt
 `cbb_market_behavior_2026_11_02_r2_received_source_path`, publisher
-`cbb_member_pipeline_2026_11_02_r14_received_market_path`, tracking
+`cbb_member_pipeline_2026_11_02_r15_resolved_price_grade`, tracking
 `cbb_tracking_writer_2026_11_02_r6_received_market_lineage` and adapter
 `cbb_member_adapter_2026_11_02_r7_received_market_response` repair native
 history/availability/grade binding and remove the rejected static winner copy.
@@ -19,14 +19,18 @@ CFB and NBA contracts. Share source/path/receipt correctness, not sport-specific
 coefficients or winner overrides. Qualified native/direct references must use
 one latest professional frontier; actual target requests stay separate. An
 adverse episode already fully transported into the law is not a second blanket
-grade penalty. Static source target EV is not observed sharp betting action.
+grade penalty. Grade R5 fixes a remaining Best-tier duplicate price penalty:
+only a complete, resolved exact episode already transported into that axis is
+exempt. Actual native flow pressure/held response, buyback, unresolved effects
+and incomplete history remain separate concerns. Static source target EV is
+not observed sharp betting action.
 
 This remains an unfinished product: Cornell's large independent/market
 starting-level discrepancy survives relative transport. No dormant qualified
 CBB static-level head or verified input-invalidation receipt was found. Private
 research artifacts and CFB/NBA coefficients cannot supply that authority.
 The prior R4 owner exception does not qualify this new grade policy. Production
-remains independent R3 /board R6 /grade R2 /publisher R12 /tracking R4.
+remains independent R3 /board R6 /grade R2 /publisher R13 /tracking R4.
 Review, frozen replay limitations, memory budgets and remaining gates:
 `docs/model-audits/2026-11-02-cbb-native-reader-r5-review.md`.
 

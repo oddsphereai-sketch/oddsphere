@@ -65,18 +65,26 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
   const relevantPressure=streams.filter(s=>s.status==="observed"&&s.pressureDirection!==null&&s.pressureDirection!==0);
   const support=relevantPressure.filter(s=>s.pressureDirection!*sign>0),opposition=relevantPressure.filter(s=>s.pressureDirection!*sign<0);
   const marketPressure=opposition.length&&support.length?"mixed":opposition.length?"opposes":support.length?"supports":"unavailable";
+  const axis=input.target.market==="total"?receipt.total:receipt.margin;
   const adverseSources=streams.filter(s=>s.status==="observed"&&s.recentDirection*sign<0);
-  const freshAdverse=adverseSources.length>0;
+  // A complete, resolved own-source response already transported into this
+  // exact axis is not a second independent objection to the final law. An
+  // unequal/cross-market response, buyback or incomplete history cannot earn
+  // this exemption. Native flow below remains separate information: its
+  // concentration/pressure was never converted into numeric score points.
+  const fullyAppliedPriceResponse=(s:typeof streams[number])=>receipt.historyCompleteness.price&&s.coverage==="retained_window"&&
+    axis.status==="applied"&&["ongoing","resumed"].includes(s.sourceCurrentResolution)&&
+    receipt.episodes.some(e=>e.book===s.book&&e.market===s.market&&Math.abs(e.delta-axis.delta)<=1e-7);
+  const freshAdverse=adverseSources.some(s=>!fullyAppliedPriceResponse(s));
   // A named source's concentration is context even without matched response;
   // it cannot become invented score points or exact-target action confirmation.
   const unmatchedCircaOpposition=streams.some(s=>s.book==="circa"&&!s.latestFlowMatched&&s.flowConcentrationDirection*sign<0);
   // Response is relative to source money, not to this pick. A book resisting
   // opposite-side money can support the pick; only pick-adverse residuals or
   // pressure toward the pick that the source actually held are resistance.
-  const matchedFlowResistance=streams.some(s=>s.latestFlowMatched&&(
+  const matchedFlowResistance=streams.some(s=>s.latestFlowMatched&&s.boundFlowDirection!==null&&s.boundFlowDirection!==0&&(
     (s.flowReactionDirection!==null&&s.flowReactionDirection*sign<0)||
     (s.flowResponse==="held"&&s.boundFlowDirection!==null&&s.boundFlowDirection*sign>0)));
-  const axis=input.target.market==="total"?receipt.total:receipt.margin;
   const pathConflict=axis.status==="conflicting"||streams.some(s=>s.status==="conflicting"||s.flowCurrentResolution==="contested"||s.sourceCurrentResolution==="contested");
   const historyIncomplete=!receipt.historyCompleteness.price;
   const pathResistance=historyIncomplete||freshAdverse||unmatchedCircaOpposition||matchedFlowResistance||opposition.length>0||pathConflict;

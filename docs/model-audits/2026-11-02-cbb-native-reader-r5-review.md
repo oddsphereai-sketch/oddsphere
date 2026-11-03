@@ -5,6 +5,30 @@ PR938. It is not a production release, full-reader approval, qualified outcome
 improvement, or permission to alter any existing locked record. The owner's
 R4 exception does not automatically authorize the new grade policy.
 
+## Latest bounded comparison and independent grade correction review
+
+Source snapshots captured2026-11-03T00:28:10.985Z (November2 ET): exact120
+previously captured member keys, one435,313-byte SELECT;89 locked records left
+untouched,31 unlocked pre-T60 games/93 markets replayed. Complete native batch
+has4,328 price/1,914 split rows,9 queries/3.183s, no provider request or write.
+Each original decision cutoff is retained. No missing local fixture identity
+was invented. Replaying cached inputs after the final grade correction changes
+seven numerical forecasts (four margin/three Total), zero selected sides,
+20 Best to Lean and one Watchlist to No Play; actionables remain25. The grade
+correction itself changes zero tiers on this capture. This is a diagnostic,
+not production-equivalent causal qualification: stored targets have no original
+requestedAt, so causal price/native action confirmation stays unavailable.
+Cornell was already locked22:02:40.305Z with its original21:47:40.018Z board;
+it was neither replayed nor rewritten.
+
+Current report `/tmp/oddsphere-cbb-r5-fresh-impact-20261102-report.json` and
+summary preserve the00:28 capture time separately from the cached replay time.
+The predecessor report and raw snapshot/native input files remain available.
+External AI grade review independently passed candidate, lock/mock-writer and
+legacy grade tests after the pure-price/neutral-flow corrections. It found no
+remaining concrete bounded-grade blocker, but did not approve the static value
+rule as predictive qualification or the unfinished starting-level inference.
+
 ## Cross-product handoff
 
 The owner explicitly requested coordination with “Assess sharp market reader”
@@ -33,13 +57,29 @@ found missing public scopes. Do not describe that source repair as complete.
 
 ## Private implementation scope
 
-- Score R5 /board R8 /grade R4 /publisher R14 /tracking R6 /adapter R7.
+- Score R5 /board R9 /grade R5 /publisher R15 /tracking R6 /adapter R7.
   Independent prior R3 remains market-free. One existing leased CBB writer;
   no new provider requests, poller, prediction writer or production shadow.
 - One batched canonical price/split read before decisions: fixed high-water
   keyset pagination, exact fixture/as-of scope, six-hour bootstrap, per-family
   row/byte ceilings and shared deadline. Incomplete families are explicit;
   omitted middle history cannot earn new clean path confirmation.
+
+The final Best-tier review reproduced a remaining duplicate pure-price penalty:
+Pinnacle Spread-4.5 even to-3.5 even was fully applied to the law, yet the same
+final law/current target+110/source fair50% received Lean only when the historical
+adverse tick was present. Grade R5 removes that duplicate objection only when
+complete history proves an ongoing/resumed own-source episode with exactly the
+applied axis delta. Unequal/cross-market responses, cancelled/contested paths,
+buybacks and incomplete history receive no exemption. No positive causal/action
+confirmation is invented for the adverse move.
+
+Actual directional native volume remains separate grade information because
+only price, not volume, was converted into the score. Neutral50/50 flow or a
+rounded-uncertain direction0 cannot reintroduce the duplicate price penalty
+through matched-flow resistance. Regression mirrors cover Spread/Total, both
+pick sides, one/two equal physical-book responses, identical final-law/current
+economics, genuine native opposition and incomplete histories.
 - Reverify native event institutions/date, canonical event/market/selection,
   own signed line, native run, observation IDs and hashes. Never pair different
   runs. Original collector-start `fetched_at` stays exact; `inserted_at` is a

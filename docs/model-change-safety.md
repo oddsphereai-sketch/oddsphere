@@ -19,6 +19,12 @@ fresh-main protected publication/live verification. Existing locks and tracking
 must remain exact. Evidence and limitations:
 `docs/model-audits/2026-11-02-cbb-native-reader-r5-review.md`.
 
+The private grade R5 /board R9 /publisher R15 follow-up fixes a reproduced
+Best-tier duplicate pure-price penalty and excludes neutral/rounded-uncertain
+flow from directional matched-flow resistance. It preserves genuine native
+opposition and unresolved/history guards. It does not solve the static score
+gap or extend the old owner exception; the same publication gates remain.
+
 ## Owner-authorized CBB market-decision repair — November 2
 
 Subsequent owner requirement: external AI market-reader audit, followed by

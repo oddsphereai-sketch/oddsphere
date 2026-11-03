@@ -127,6 +127,44 @@ assert.ok(sourceVig.professionalTargetEconomics[0].expectedValue<0);assert.equal
 const valueTarget=quote("spread",-3.5,110,-130,"draftkings",true),valueRead=run([quote("spread",-3.5,-110,-110,"pinnacle",true)],{targets:[valueTarget],anchors:null});
 const valueGrade=gradeCbbMarketBehavior({forecast:valueRead.forecast,target:valueTarget,references:[quote("spread",-3.5,-110,-110,"pinnacle",true)],asOf:at},valueRead.receipt);
 assert.equal(valueGrade.grade,"Best Angle");assert.equal(valueGrade.economicCorroboration,true);assert.equal(valueGrade.actualActionConfirmation,false);
+// Identical final law/current economics must not receive a second pure-price
+// penalty solely because its genuine adverse response was fully transported.
+for(const market of ["spread","total"] as const)for(const pickSign of [1,-1] as const)for(const books of [["pinnacle"],["circa","pinnacle"]]){
+ const line=market==="spread"?-3.5*pickSign:150.5;
+ const independent=market==="spread"?forecast(12*pickSign):forecast(0,pickSign===1?166:134);
+ const target=quote(market,line,pickSign===1?110:-130,pickSign===1?-130:110,"draftkings",true);
+ const sources=books.map(book=>quote(market,line,-110,-110,book,true));
+ const old=books.map(book=>quote(market,line-pickSign,-110,-110,book));
+ // Total center follows its line; spread center has the opposite sign.
+ if(market==="total")for(const q of old)q.line=line+pickSign;
+ const applied=run(sources,{independent,targets:[target],anchors:anchors(old)});
+ const axis=market==="total"?applied.receipt.total:applied.receipt.margin;
+ assert.equal(axis.status,"applied");assert.ok(axis.delta*pickSign<0);
+ const grade=gradeCbbMarketBehavior({forecast:applied.forecast,target,references:[],asOf:at},applied.receipt);
+ const sameLaw=run(sources,{independent:{...applied.forecast,release:CBB_CURRENT_SCORE_RELEASE},targets:[target],anchors:null});
+ const staticGrade=gradeCbbMarketBehavior({forecast:sameLaw.forecast,target,references:[],asOf:at},sameLaw.receipt);
+ assert.equal(grade.grade,"Best Angle");assert.equal(grade.grade,staticGrade.grade);
+ assert.equal(grade.pathResistance,false);assert.equal(grade.economicCorroboration,true);
+ assert.equal(grade.economicPathConfirmation,false,"already applied adverse price is not invented positive confirmation");
+ assert.equal(grade.actualActionConfirmation,false);assert.equal(grade.modelExpectedValue,staticGrade.modelExpectedValue);
+ for(const neutral of [flow(.5,.5),{...flow(.5,.49),secondMoney:.49}]){
+  const neutralRead=run(sources,{independent,targets:[target],anchors:anchors(old),flows:[{...neutral,sourceBook:books[0],market,line:old[0].line}]});
+  assert.equal(neutralRead.receipt.pathPosture.find(s=>s.book===books[0])?.boundFlowDirection,0);
+  const neutralGrade=gradeCbbMarketBehavior({forecast:neutralRead.forecast,target,references:[],asOf:at},neutralRead.receipt);
+  assert.equal(neutralGrade.grade,"Best Angle","neutral or rounding-uncertain native flow cannot recreate a duplicate adverse-price penalty");
+  assert.equal(neutralGrade.pathResistance,false);assert.equal(neutralGrade.actualActionConfirmation,false);
+ }
+ const opposingNative=run(sources,{independent,targets:[target],anchors:anchors(old),
+  flows:[{...flow(pickSign===1?.2:.8,pickSign===1?.6:.4),sourceBook:books[0],market,line:old[0].line}]});
+ const nativeGrade=gradeCbbMarketBehavior({forecast:opposingNative.forecast,target,references:[],asOf:at},opposingNative.receipt);
+ assert.equal(nativeGrade.pathResistance,true);assert.equal(nativeGrade.grade,"Lean","genuine directional native pressure remains independent information, not transported price twice");
+ const truncatedReceipt=structuredClone(applied.receipt);truncatedReceipt.pathPosture.forEach(s=>{s.coverage="truncated_window";});
+ const truncatedGrade=gradeCbbMarketBehavior({forecast:applied.forecast,target,references:[],asOf:at},truncatedReceipt);
+ assert.equal(truncatedGrade.pathResistance,true);assert.notEqual(truncatedGrade.grade,"Best Angle","a truncated tape cannot prove full response resolution");
+ const partial=run(sources,{independent,targets:[target],anchors:anchors(old),historyCompleteness:{price:false,split:true}});
+ const partialGrade=gradeCbbMarketBehavior({forecast:partial.forecast,target,references:[],asOf:at},partial.receipt);
+ assert.equal(partialGrade.pathResistance,true);assert.notEqual(partialGrade.grade,"Best Angle");
+}
 const badTargetClock={...targets[1],fetchedAt:"2026-11-02T15:19:00Z",providerObservedAt:"2026-11-02T15:18:00Z"};
 const earlyTarget=run([quote("spread",-3.5,-110,-110,"pinnacle",true)],{targets:[badTargetClock],anchors:anchors([quote("spread",-3.5,120,-140)])});
 assert.equal(gradeCbbMarketBehavior({...supportInput,forecast:earlyTarget.forecast,target:badTargetClock},earlyTarget.receipt).economicPathConfirmation,false,"target must be received after source economics became available");
