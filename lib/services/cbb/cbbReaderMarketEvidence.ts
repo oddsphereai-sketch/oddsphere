@@ -191,7 +191,7 @@ export function mergeCbbDraftKingsSplitEvidence(board:DailyEdgeResponse,feed:Dra
       // sharp-book receipt. The overlay is unlocked/display-only; any stored
       // legacy lock keeps its exact original section and decision tuple.
       markets[key]={...original.markets[key],sportsbookSplits:{...section,label:"DraftKings Splits"},
-        sharpBookAvailability:{status:"complete",message:"Verified two-sided named-book split data is available.",lastUpdated:section.sourceObservedAt??""}};
+        sharpBookAvailability:{status:"unavailable",message:"No current verified professional split for this market.",lastUpdated:null}};
       changed=true;
     }
     return changed?{...original,markets}:original;

@@ -4,8 +4,9 @@
 
 Reader evidence `cbb_reader_evidence_2026_11_03_r8_named_retail_source`
 classifies the stored DraftKings Network fallback as a retail source on open
-CBB rows and future locks. The member split panel and cross-source comparison
-name that source instead of claiming professional sharp-book evidence. This
+CBB rows and future locks. The member split panel, cross-source comparison and
+professional-availability field retain the correct source class. DraftKings
+consumer percentages cannot certify professional split availability. This
 does not change score R5, grade R6, selection, evaluated quote, or tracking.
 Existing locked member payloads and their reader text retain exact precedence.
 The broader cross-sport split authority path remains under separate audit.

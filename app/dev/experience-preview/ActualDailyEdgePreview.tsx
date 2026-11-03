@@ -2085,7 +2085,7 @@ function DefaultSplitSummary({ market, sport = null }: { market: MarketEdgeDto; 
       <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Market splits</p><p className="mt-0.5 text-[7px] text-gray-600">{draftKingsNetwork ? "Public consensus and DraftKings network splits are separate sources" : hasSourceSpecificEvidence ? "Public and sharp splits remain separate signals" : "Public money and ticket distribution"}</p></div>{displayedConflict ? <span className="rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[7px] font-black uppercase tracking-wider text-amber-200">Sources conflict</span> : null}</div>
       <div className="mt-2 space-y-2">
         <SplitSourcePanel source="PUBLIC CONSENSUS" section={consensus} pick={market.pick} />
-        {displayedSharp ? <SplitSourcePanel source={draftKingsNetwork ? "DRAFTKINGS NETWORK SPLITS" : displayedSharp.label === "Sharp Book Signal" ? "SHARP SPLITS" : "SHARP BOOK SPLITS"} section={displayedSharp} pick={market.pick} availabilityStatus={sharpDisplay.availabilityStatus} /> : null}
+        {displayedSharp ? <SplitSourcePanel source={draftKingsNetwork ? "DRAFTKINGS NETWORK SPLITS" : displayedSharp.label === "Sharp Book Signal" ? "SHARP SPLITS" : "SHARP BOOK SPLITS"} section={displayedSharp} pick={market.pick} availabilityStatus={draftKingsNetwork ? null : sharpDisplay.availabilityStatus} /> : null}
       </div>
       {displayedSharp?.rows.length ? <CrossSourceSplitRead consensus={consensus} sharp={displayedSharp} sourceName={draftKingsNetwork ? "DraftKings" : "Sharp"} /> : null}
     </div>

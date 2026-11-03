@@ -97,6 +97,7 @@ async function main(){
     assert.deepEqual(actual,expected,"DKN display cannot change forecast, quote, grade, stake or decision evidence");
     assert.equal(sportsbookSplits?.sourceBook,"draftkings_network");assert.equal(sportsbookSplits?.sourceObservedAt,observed);
     assert.equal(sportsbookSplits?.label,"DraftKings Splits","retail network data cannot enter the sharp-book display class");
+    assert.equal(sharpBookAvailability?.status,"unavailable","consumer network percentages cannot satisfy professional availability");
   }
   assert.equal(JSON.stringify(response),sourceBytes,"source board remains unchanged");
   for(const invalid of [
@@ -116,11 +117,15 @@ async function main(){
   stored=null;writes=0;
   const dkSaved=await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:at,capturedNamedSections:dkSections},db);
   assert.deepEqual(dkSaved.record.memberGame.markets.moneyline.sportsbookSplits,dkSections.moneyline,"sole writer persists the source-qualified DKN display");
+  assert.equal(dkSaved.record.memberGame.markets.moneyline.sharpBookAvailability?.status,"unavailable","writer cannot freeze consumer splits as professional availability");
+  stored!.memberGame.markets.moneyline.sportsbookSplits!.label="Sharp Book Splits";
+  const migratedOpen=await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:"2026-11-02T15:05:00Z"},db);
+  assert.equal(migratedOpen.record.memberGame.markets.moneyline.sportsbookSplits?.label,"DraftKings Splits","open legacy fallback is classified before any future lock");
   const dkFrozen=await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:"2026-11-02T17:00:00Z",capturedNamedSections:sections},db);
   assert.deepEqual(dkFrozen.record.memberGame.markets.moneyline.sportsbookSplits,dkSections.moneyline,"future lock freezes the same DKN values and source time");
   const dkLockedBytes=JSON.stringify(stored);
   await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:"2026-11-02T17:10:00Z",capturedNamedSections:sections},db);
-  assert.equal(writes,2);assert.equal(JSON.stringify(stored),dkLockedBytes,"later native or DKN observations cannot rewrite a lock");
+  assert.equal(writes,3);assert.equal(JSON.stringify(stored),dkLockedBytes,"later native or DKN observations cannot rewrite a lock");
   console.log("PASS captured CBB splits: shared reader/writer rules, original clocks, identity/age/axis guards, unchanged decisions and immutable future locks");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

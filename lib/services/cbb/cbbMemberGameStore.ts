@@ -86,8 +86,11 @@ export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisi
     for(const key of ["moneyline","first_inning","total"] as const){
       const market=memberGame.markets[key],section=args.capturedNamedSections?.[key]??existing?.memberGame.markets[key].sportsbookSplits;
       if(cbbQualifiedNamedSplitSection(market.sportsbookSplits,section??null,evidenceAt,{allowRetained:true})){
-        market.sportsbookSplits=structuredClone(section!);
-        market.sharpBookAvailability={status:"complete",message:"Verified two-sided named-book split data is available.",lastUpdated:section!.sourceObservedAt??section!.lastUpdated??""};
+        market.sportsbookSplits=structuredClone(section!.sourceBook==="draftkings_network"
+          ?{...section!,label:"DraftKings Splits" as const}:section!);
+        market.sharpBookAvailability=section!.sourceBook==="circa"
+          ?{status:"complete",message:"Verified two-sided professional split data is available.",lastUpdated:section!.sourceObservedAt??section!.lastUpdated??""}
+          :{status:"unavailable",message:"No current verified professional split for this market.",lastUpdated:null};
       }
       const publicSection=args.capturedPublicSections?.[key]??existing?.memberGame.markets[key].publicSplits;
       if(cbbQualifiedPublicSplitSection(publicSection,key,evidenceAt))market.publicSplits=structuredClone(publicSection!);
