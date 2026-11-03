@@ -44,7 +44,8 @@ const DRAFTKINGS_NETWORK_LEGACY_DURABLE_RELEASE =
   "draftkings_network_splits_2026_09_20_r2_durable_last_known_good" as const;
 const DRAFTKINGS_NETWORK_DURABLE_TTL_MS = 5 * 60 * 1000;
 const DRAFTKINGS_NETWORK_DURABLE_STALE_MS = 10 * 24 * 60 * 60 * 1000;
-const SOURCE_FAILOVER_GRACE_MS = 3 * 60 * 60 * 1000;
+export const DRAFTKINGS_NETWORK_SPLIT_DISPLAY_MAX_AGE_MS = 3 * 60 * 60 * 1000;
+const SOURCE_FAILOVER_GRACE_MS = DRAFTKINGS_NETWORK_SPLIT_DISPLAY_MAX_AGE_MS;
 
 type DraftKingsNetworkSport =
   | "MLB"
@@ -161,7 +162,9 @@ export async function fetchDraftKingsNetworkSplits(args: {
       // One overall deadline covers both pagination waves, so a slow provider
       // can never stack multiple full timeouts onto the member board load.
       signal: AbortSignal.timeout(Math.max(1, remainingMs)),
-      next: { revalidate: DRAFTKINGS_NETWORK_REVALIDATE_SECONDS },
+      // UCL's existing durable collector already owns the15-minute cadence.
+      // A second HTTP cache can return the preceding capture at every refresh.
+      ...(args.sport === "ucl" ? { cache: "no-store" as const } : { next: { revalidate: DRAFTKINGS_NETWORK_REVALIDATE_SECONDS } }),
     } as RequestInit & { next: { revalidate: number } });
     if (!response.ok) throw new Error(`DraftKings Network splits page ${page} HTTP ${response.status}`);
     const responseDate = response.headers.get("date");
