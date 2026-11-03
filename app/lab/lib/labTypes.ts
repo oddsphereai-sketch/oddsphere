@@ -459,6 +459,9 @@ export type MarketEdgeDto = {
   movementReferenceObservedAt?: string | null;
   /** Same-book point-line history for totals and spreads; separate from exact-line prices. */
   lineTrail?: OddsTrailStopDto[];
+  /** Older, separately timestamped CBB same-book observations for display only.
+   * These never replace the evaluated quote, current trail, or model inputs. */
+  recordedReferenceTrail?: OddsTrailStopDto[];
   /**
    * The other outcome at the same market and, when available, the same book.
    * This is display/audit context only: it never changes the selected side,
