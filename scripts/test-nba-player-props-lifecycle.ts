@@ -61,4 +61,16 @@ assert.equal(lockedRow.decisionKey, prelockRow.decisionKey, "lock must preserve 
 assert.equal(lockedRow.projection, prelockRow.projection);
 assert(lockedRow.lockedAt);
 
+const changedLadder = {
+  ...forward,
+  decisions: forward.decisions.map(row => ({ ...row, priceLadder: [], americanPrice: -999 })),
+};
+const preserved = advanceNbaPlayerPropsCandidateLifecycle({
+  now: new Date(firstStart - 20 * 60_000).toISOString(),
+  previous: rerun.snapshot,
+  candidate: changedLadder,
+});
+assert.deepEqual(preserved.snapshot.decisions.find(row => row.decisionKey === lockedRow.decisionKey), lockedRow,
+  "member-price migrations must preserve the complete existing locked payload, including its legacy ladder");
+
 process.stdout.write("NBA player-props disabled lifecycle and lock immutability passed.\n");

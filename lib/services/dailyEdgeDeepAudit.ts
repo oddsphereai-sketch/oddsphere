@@ -10,6 +10,7 @@ export const DAILY_EDGE_DEEP_AUDIT_SPORTS = [
   "cfb",
   "nhl",
   "nba",
+  "cbb",
 ] as const;
 
 // The audit deliberately inspects heterogeneous versioned DTO payloads.
@@ -58,6 +59,7 @@ export type DailyEdgeDeepAuditResult = {
 type Direction = "support" | "resistance" | "neutral";
 
 const CRITICAL_REASONS = new Set([
+  "board_read_failed",
   "implausible_displayed_american_odds",
   "stale_price_displayed_as_current",
   "current_quote_not_recently_verified",
@@ -97,8 +99,8 @@ function isPlausibleDisplayedAmericanOdds(
   // audit-only allowance does not admit a price into a model or provider
   // pipeline; source-chain and same-market coherence are checked separately.
   const market = marketLabel(sport, slot);
-  const isTeamWinnerMarket = market === "moneyline" || market === "1x2";
-  const extendedMaximum = sport === "cfb"
+  const isTeamWinnerMarket = market === "moneyline" || market === "1x2" || market === "double_chance";
+  const extendedMaximum = sport === "cfb" || sport === "cbb"
     ? 100_000
     : sport === "nfl" || sport === "soccer" || sport === "ucl"
       ? 10_000
@@ -148,7 +150,7 @@ function matchup(game: Row): string {
 }
 
 function marketLabel(sport: string, slot: string): string {
-  if (["wnba", "nba", "nhl", "nfl", "cfb"].includes(sport) && slot === "first_inning") return "spread";
+  if (["wnba", "nba", "cbb", "nhl", "nfl", "cfb"].includes(sport) && slot === "first_inning") return "spread";
   if ((sport === "soccer" || sport === "ucl") && slot === "first_inning") return "btts";
   if ((sport === "soccer" || sport === "ucl") && slot === "moneyline") return "1x2";
   if ((sport === "soccer" || sport === "ucl") && slot === "spread") return "double_chance";
@@ -238,6 +240,8 @@ function issueSeverity(reason: string): DailyEdgeAuditSeverity {
 
 function actionFor(reason: string): string {
   switch (reason) {
+    case "board_read_failed":
+      return "investigate_member_board_read";
     case "implausible_displayed_american_odds":
       return "block_display_of_bad_odds";
     case "stale_price_displayed_as_current":
@@ -337,11 +341,22 @@ export function auditDailyEdgeBoards(
   for (const [sport, board] of Object.entries(boardsBySport)) {
     const games = Array.isArray(board?.games) ? board.games as Row[] : [];
     summary.sports[sport] = { games: games.length, markets: 0, reads: 0, sharpRows: 0 };
+    // A failed reader/401/error response is not evidence of an inactive slate.
+    if (!Array.isArray(board?.games) || board.error || board.ok === false) {
+      push("board_read_failed", sport, {}, "board", {}, { error: "member board unavailable or invalid" });
+      continue;
+    }
     summary.totalGames += games.length;
 
     for (const game of games) {
-      for (const [slot, marketRaw] of Object.entries(game.markets ?? {})) {
+      const marketSlots = { ...game.markets };
+      // Soccer stores Double Chance alongside, rather than inside, markets.
+      if ((sport === "soccer" || sport === "ucl") && game.soccerDoubleChanceMarket) {
+        marketSlots.spread = game.soccerDoubleChanceMarket;
+      }
+      for (const [slot, marketRaw] of Object.entries(marketSlots)) {
         if (!shouldAuditMarket(sport, slot)) continue;
+        if (!marketRaw || typeof marketRaw !== "object") continue;
         const market = marketRaw as Row;
         summary.sports[sport]!.markets += 1;
         summary.totalMarkets += 1;
@@ -653,7 +668,14 @@ export function auditDailyEdgeBoards(
             displayReason.includes("not enough value") ||
             displayReason.includes("does not leave enough value") ||
             displayReason.includes("doesn't leave enough value");
-          if (!neutralFirstInningDecision && !hasExplicitCapReason && !hasExplicitEconomicExplanation) {
+          // CBB serializes its released grade reason in whyLine. A positive
+          // no-vig gap can still have negative EV at the actual payout.
+          const cbbEconomicExplanation = sport === "cbb" && [
+            "non positive exact price value", "price too steep for actionable",
+            "edge below actionable reserve", "professional opposition",
+            "professional reference neutral", "professional reference mixed",
+          ].includes(String(market.whyLine ?? "").trim().toLowerCase());
+          if (!neutralFirstInningDecision && !hasExplicitCapReason && !hasExplicitEconomicExplanation && !cbbEconomicExplanation) {
             push("no_play_positive_edge_needs_explanation", sport, game, slot, market, {
               modelMarketGapPct: market.modelMarketGapPct,
               capReasons,

@@ -18,7 +18,7 @@ function check(name: string, cond: boolean, detail?: string): void {
 check(
   "deep audit covers every Daily Edge model individually",
   JSON.stringify(DAILY_EDGE_DEEP_AUDIT_SPORTS) ===
-    JSON.stringify(["mlb", "wnba", "soccer", "ucl", "nfl", "cfb", "nhl", "nba"]),
+    JSON.stringify(["mlb", "wnba", "soccer", "ucl", "nfl", "cfb", "nhl", "nba", "cbb"]),
 );
 
 const deepAuditRoute = readFileSync("app/api/internal/daily-edge-deep-audit/route.ts", "utf8");
@@ -46,6 +46,41 @@ function board(market: Record<string, unknown>) {
       },
     }],
   };
+}
+
+{
+  const result = auditDailyEdgeBoards({ cbb: { error: "Unauthorized" }, nba: { games: [] } });
+  check("failed board reads cannot certify an inactive slate", !result.ok && result.summary.issueCounts.board_read_failed === 1);
+  check("genuinely empty boards remain healthy", auditDailyEdgeBoards({ mlb: { games: [] } }).ok);
+  check("one failed sport preserves the other report", result.summary.sports.nba.games === 0);
+  check("errors with a games array still fail", !auditDailyEdgeBoards({ nba: { games: [], ok: false } }).ok);
+}
+
+{
+  const before = {
+    cbb: { games: [{ awayTeam: "A", homeTeam: "B", lockState: "locked", markets: {
+      first_inning: { pick: "B -3.5", priceAmerican: -110, lockedLineAmerican: -115 },
+    } }] },
+    ucl: { games: [{ awayTeam: "A", homeTeam: "B", markets: {}, soccerDoubleChanceMarket: {
+      pick: "B or Draw", priceAmerican: -110, lineOpenAmerican: -55,
+    } }] },
+  };
+  const immutable = JSON.stringify(before);
+  const result = auditDailyEdgeBoards(before);
+  check("CBB spread lock mismatch is covered", result.issues.some(issue => issue.sport === "cbb" && issue.market === "spread" && issue.reason === "locked_price_not_frozen"));
+  check("the actual soccer Double Chance DTO is covered", result.issues.some(issue => issue.sport === "ucl" && issue.market === "double_chance" && issue.reason === "implausible_displayed_american_odds"));
+  check("audits preserve every locked and unlocked field", JSON.stringify(before) === immutable);
+}
+
+{
+  const cbb = board({ priceAmerican: -30_000, verdict: { key: "no_play" },
+    modelMarketGapPct: 3, whyLine: "non positive exact price value" });
+  check("CBB released exact-price explanation is recognized", auditDailyEdgeBoards({ cbb }).ok);
+  Object.assign(cbb.games[0]!.markets.moneyline, { whyLine: "" });
+  check("unexplained CBB No Play still fails", !auditDailyEdgeBoards({ cbb }).ok);
+  check("CBB out-of-range winner prices still fail", !auditDailyEdgeBoards({ cbb: board({ priceAmerican: -100_001 }) }).ok);
+  const soccer = { games: [{ markets: {}, soccerDoubleChanceMarket: { priceAmerican: -2226 } }] };
+  check("real heavy-favorite Double Chance prices remain audit-visible", auditDailyEdgeBoards({ soccer }).ok);
 }
 
 {

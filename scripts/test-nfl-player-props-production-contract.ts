@@ -161,10 +161,10 @@ function boardRows(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerPropsRuntime
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_28_r52_owls_reference_prices");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_28_r66_owls_reference_prices");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_11_04_r67_settlement_identity_continuity");
 assert.equal(NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES, 60);
-assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_10_28_r40_owls_reference_prices");
-assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
+assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_11_04_r41_pregame_roster_identity");
+assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_11_04_r4_identity_queue_isolation");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM, 46, "slate/current+opening props/player identity and the one-request Owls lane are explicitly bounded");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE, 18);

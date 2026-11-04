@@ -3,13 +3,16 @@ import type { NflPlayerPropsProductionSnapshot } from "./nflPlayerPropsProductio
 import { buildNflPlayerPropsTrackingRows } from "./nflPlayerPropsProductionContract";
 import type { NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract";
 import type { NflPlayerPropsMarketObserverRow } from "./nflPlayerPropsMarketObserverStore";
+import type { NflPlayerPropsInferenceContext } from "./nflPlayerPropsInferenceContext";
+import { nflPlayerPropsTrackingIdentity } from "./nflPlayerPropsTrackingIdentity";
 
 export const NFL_PLAYER_PROPS_TRACKING_RELEASE =
-  "nfl_player_props_tracking_2026_10_28_r40_owls_reference_prices" as const;
+  "nfl_player_props_tracking_2026_11_04_r41_pregame_roster_identity" as const;
 
 export async function writeLockedNflPlayerPropsTracking(args: {
   client: SupabaseClient;
   snapshot: NflPlayerPropsProductionSnapshot;
+  context?: NflPlayerPropsInferenceContext;
 }): Promise<{ proposed: number; insertedOrExisting: number }> {
   const tracked = buildNflPlayerPropsTrackingRows(args.snapshot);
   if (tracked.length === 0) return { proposed: 0, insertedOrExisting: 0 };
@@ -18,10 +21,12 @@ export async function writeLockedNflPlayerPropsTracking(args: {
   ]));
   const rows = tracked.map((row) => {
     const decision = decisions.get(row.trackingKey);
+    const identity = decision ? nflPlayerPropsTrackingIdentity({ decision, context: args.context })
+      : { playerId: row.providerPlayerId, source: row.providerPlayerId ? "quote" : "unresolved", capturedAt: null };
     return {
       tracking_key: row.trackingKey,
       provider_game_id: row.gameId,
-      provider_player_id: row.providerPlayerId,
+      provider_player_id: identity.playerId,
       player_name: row.playerName,
       team: decision?.team ?? null,
       market: row.market,
@@ -36,7 +41,7 @@ export async function writeLockedNflPlayerPropsTracking(args: {
       model_release: row.modelRelease,
       calibration_release: row.calibrationRelease,
       decision_release: row.decisionRelease,
-      snapshot_json: { trackingRelease: NFL_PLAYER_PROPS_TRACKING_RELEASE, decision },
+      snapshot_json: { trackingRelease: NFL_PLAYER_PROPS_TRACKING_RELEASE, decision, settlementIdentity: identity },
     };
   });
   const { error } = await args.client.from("nfl_player_prop_records").upsert(rows, {
