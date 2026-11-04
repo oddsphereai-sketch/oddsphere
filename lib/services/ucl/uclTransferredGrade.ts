@@ -2,7 +2,7 @@ import type { Grade } from "@/lib/types/domain/Grade";
 import type { UclRelativeMarketAxisReceipt } from "./uclRelativeMarketRead";
 
 export const UCL_PREVIEW_GRADE_RELEASE =
-  "ucl_grade_policy_2026_11_04_r23_opponent_strength_score_law" as const;
+  "ucl_grade_policy_2026_11_04_r24_multibook_full_pregame_paths" as const;
 
 export type UclPreviewMarket = "match_result" | "double_chance" | "total" | "btts";
 export type UclPreviewGrade = {

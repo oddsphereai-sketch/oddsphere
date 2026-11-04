@@ -16,7 +16,8 @@ export type UclRelativeMarketPath={
  independentOfExecutionBook:boolean;baseline:UclRelativeCapture|null;current:UclRelativeCapture;
  factor:number|Record<string,number>|null;direction:UclRelativeDirection;latestLegDirection:UclRelativeDirection;
  latestInformativeDirection:UclRelativeDirection;latestInformativeAt:string|null;latestInformativeStartAt:string|null;latestInformativeFactor:number|Record<string,number>|null;
- retraced:boolean;roundTrip:boolean;conflicted:boolean;baselineRule:'earliest_complete_same_et_day'|'latest_complete_earlier_et_day'|'unavailable';
+ retraced:boolean;roundTrip:boolean;conflicted:boolean;baselineRule:'earliest_complete_same_et_day'|'latest_complete_earlier_et_day'|'first_observed_complete_pregame'|'unavailable';
+ economicPathHash?:string;
  captureCount:number;captureHash:string;captures:UclRelativeCapture[];incompleteCaptureCount:number;conflictingCaptureCount:number;unknownCaptureClocks:string[];latestLegFullyObserved:boolean;reason:string;
 };
 export type UclRelativeMarketAxisReceipt={
@@ -24,14 +25,22 @@ export type UclRelativeMarketAxisReceipt={
  candidates:UclRelativeMarketPath[];inactive:Array<{identity:string;reason:string}>;
  direction:UclRelativeDirection;latestLegDirection:UclRelativeDirection;latestInformativeDirection:UclRelativeDirection;
  currentSupportsPick:boolean;latestLegSupportsPick:boolean;latestInformativeSupportsPick:boolean;
- currentTargetProbabilities:Record<string,number>;currentTargetProbabilityBasis:'direct_paired_market'|'poisson_native_total_inference'|'unavailable';
+ currentTargetProbabilities:Record<string,number>;currentTargetProbabilityBasis:'direct_paired_market'|'poisson_native_total_inference'|'pooled_direct_paired_markets'|'pooled_native_total_inference'|'unavailable';
  pickedSide:string;retraced:boolean;roundTrip:boolean;conflicted:boolean;opposingCandidates:boolean;latestLegFullyObserved:boolean;
+ sourceOpinionPool?:UclSourceOpinionPool;
+};
+type UclSourceOpinion={probabilities:Record<string,number>;nativeMean:number|null};
+export type UclSourceOpinionPool={
+ method:'normalized_log_source_opinions';informationOverlap:'unknown_correlated_market_and_model_inputs';
+ baseline:UclSourceOpinion;current:UclSourceOpinion;factor:number|Record<string,number>;
+ families:Array<{economicPathHash:string;books:string[];identities:string[];baselineAt:string;currentAt:string;direction:UclRelativeDirection;latestInformativeDirection:UclRelativeDirection}>;
 };
 export type UclRelativeMarketReadReceipt={
- method:'original_independent_relative_marginals_joint_kl'|'joint_source_profile_density_ratio';markets:Record<UclRelativeMarket,UclRelativeMarketAxisReceipt>;
+ method:'original_independent_relative_marginals_joint_kl'|'joint_source_profile_density_ratio'|'joint_multibook_source_profile_density_ratio';markets:Record<UclRelativeMarket,UclRelativeMarketAxisReceipt>;
  converged:boolean;residual:number;appliedMarkets:UclRelativeMarket[];includedConstraintMarkets:UclRelativeMarket[];reason:string;targets:{match_result?:Record<string,number>;totalMean?:number;bttsYes?:number};
  originalMeans:{home:number;away:number};finalMeans:{home:number;away:number};
  originalProbabilities:ReturnType<typeof deriveSoccerMarketProbabilities>;finalProbabilities:ReturnType<typeof deriveSoccerMarketProbabilities>;
+ finalTeamToScoreProbabilities?:{home:number;away:number};
  crossMarketAffectedMarkets?:UclRelativeMarket[];
  sourceProfileResidual?:{baseline:number;current:number};
  sourceProfileStatus?:'not_required'|'applied'|'conflict';
@@ -45,8 +54,6 @@ export type UclRelativeMarketInput={
 const SIDES:Record<UclRelativeMarket,readonly string[]>={match_result:['home','draw','away'],total:['over','under'],btts:['yes','no']};
 const BOOKS=['pinnacle','circa','novig','draftkings','fanduel','betmgm','caesars'];
 const EPS=1e-12;
-const etFormatter=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'});
-const etDay=(at:number)=>etFormatter.format(new Date(at));
 const book=(value:string|null)=>String(value??'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const rank=(value:string)=>{const n=BOOKS.indexOf(value);return n<0?BOOKS.length:n;};
 const implied=(a:number)=>a>0?100/(a+100):-a/(-a+100);
@@ -79,7 +86,7 @@ function capture(market:UclRelativeMarket,line:number|null,observedAt:string,clo
  const nativeMean=market==='total'?inferUclNativeTotalMean(line!,p.over!):null;
  if(market==='total'&&nativeMean===null)return null;return{observedAt,clockBasis,line,probabilities:p,nativeMean};
 }
-function factors(market:UclRelativeMarket,a:UclRelativeCapture,b:UclRelativeCapture):number|Record<string,number>{
+function factors(market:UclRelativeMarket,a:UclSourceOpinion,b:UclSourceOpinion):number|Record<string,number>{
  if(market==='total')return b.nativeMean!/a.nativeMean!;
  if(market==='btts')return(b.probabilities.yes!/(1-b.probabilities.yes!))/(a.probabilities.yes!/(1-a.probabilities.yes!));
  return Object.fromEntries(SIDES.match_result.map(side=>[side,b.probabilities[side]!/a.probabilities[side]!]));
@@ -116,11 +123,12 @@ function chooseAtClock(rows:UclRelativeCapture[],line:number|null):UclRelativeCa
 function buildPath(input:UclRelativeMarketInput,market:UclRelativeMarket,vector:EplForwardBookVector,current:UclRelativeCapture):UclRelativeMarketPath{
  const excluded=market==='total'?input.evaluatedTotalCanonicalBook:market==='btts'?input.evaluatedBttsCanonicalBook:input.evaluatedMatchResultCanonicalBook;
  const history=historyFor(input,market,vector.canonicalBook,Date.parse(current.observedAt));
- const sameDay=history.captures.filter(c=>etDay(Date.parse(c.observedAt))===etDay(Date.parse(input.decisionAt)));
- const previous=history.captures.filter(c=>etDay(Date.parse(c.observedAt))<etDay(Date.parse(input.decisionAt)));
- const eligible=sameDay.length?sameDay:previous;
- const time=eligible.length?(sameDay.length?Math.min(...eligible.map(c=>Date.parse(c.observedAt))):Math.max(...eligible.map(c=>Date.parse(c.observedAt)))):null;
- const baseline=time===null?null:chooseAtClock(eligible.filter(c=>Date.parse(c.observedAt)===time),current.line);
+ // Calendar midnight cannot discard observed pregame evidence. This is the
+ // first complete observed pair, not a claim that we captured the true open.
+ // The operational isOpener flag does not itself invalidate a paired capture
+ // or establish a true sportsbook opening; all original fields stay intact.
+ const time=history.captures.length?Math.min(...history.captures.map(c=>Date.parse(c.observedAt))):null;
+ const baseline=time===null?null:chooseAtClock(history.captures.filter(c=>Date.parse(c.observedAt)===time),current.line);
  const byClock=new Map<number,UclRelativeCapture[]>();
  for(const c of history.captures){const at=Date.parse(c.observedAt);if(!baseline||at<Date.parse(baseline.observedAt))continue;const rows=byClock.get(at)??[];rows.push(c);byClock.set(at,rows);}
  const full=baseline?[...byClock.entries()].sort(([a],[b])=>a-b).map(([,rows])=>chooseAtClock(rows,current.line)).concat(current):[current];
@@ -149,11 +157,14 @@ function buildPath(input:UclRelativeMarketInput,market:UclRelativeMarket,vector:
  const selected=new Set<number>([0,Math.max(0,full.length-2),full.length-1]);
  for(const side of market==='match_result'?SIDES.match_result:['yes']){const values=full.map(c=>metric(market,c,side));selected.add(values.indexOf(Math.min(...values)));selected.add(values.indexOf(Math.max(...values)));}
  const bounded=[...selected].sort((a,b)=>a-b).map(i=>full[i]!);
+ const economic=full.map(c=>[c.line,...SIDES[market].map(s=>Number(c.probabilities[s]!.toPrecision(12)))]);
+ const economicPath=economic.filter((v,i)=>i===0||JSON.stringify(v)!==JSON.stringify(economic[i-1]));
  return{identity:vector.identity,book:vector.canonicalBook,sourceClass:vector.sourceClass,provider:vector.provider,providerEventId:vector.providerEventId,
   identityBasis:vector.provider==='stored_quote'?'exact_stored_fixture_capture':'native_event',
   independentOfExecutionBook:vector.canonicalBook!==excluded,baseline,current,factor,direction:netDirection,latestLegDirection:direction(market,latestFactor),latestInformativeDirection,latestInformativeAt,latestInformativeStartAt,latestInformativeFactor,
   retraced,roundTrip:!!baseline&&netDirection==='flat'&&everMoved,conflicted:!!baseline&&history.conflicts.some(at=>at>=Date.parse(baseline.observedAt)),
-  baselineRule:baseline?(sameDay.length?'earliest_complete_same_et_day':'latest_complete_earlier_et_day'):'unavailable',
+  baselineRule:baseline?'first_observed_complete_pregame':'unavailable',
+  economicPathHash:createHash('sha256').update(JSON.stringify(economicPath)).digest('hex'),
   captureCount:full.length,incompleteCaptureCount:incomplete.length,conflictingCaptureCount:conflicting.length,unknownCaptureClocks:unknown.length?[new Date(unknown[0]!).toISOString(),...(unknown.length>1?[new Date(unknown[unknown.length-1]!).toISOString()]:[])]:[],latestLegFullyObserved,captureHash:createHash('sha256').update(JSON.stringify(full)).digest('hex'),captures:bounded,
   reason:baseline?(netDirection==='flat'?'paired_path_net_unchanged':'paired_path_relative_innovation'):'no_complete_baseline_before_current_original_clock'};
 }
@@ -213,23 +224,65 @@ function factorOpposes(market:UclRelativeMarket,factor:number|Record<string,numb
  if(typeof factor==='object')return Number.isFinite(factor[side])&&Math.log(factor[side]!)<-EPS;
  return market==='total'?(side==='over'?factor<1-EPS:factor>1+EPS):(side==='yes'?factor<1-EPS:factor>1+EPS);
 }
+/** Books are correlated source opinions, never independent likelihoods. Pool
+ * each endpoint once in log space, excluding absent baselines and collapsing
+ * identical economic trajectories. Ten copied quotes cannot multiply a move.
+ * The independent model is not one of these opinions and is never blended
+ * with a fixed market weight. Only the pooled before/current innovation is
+ * subsequently applied to its joint score law. */
+function sourceOpinionPool(market:UclRelativeMarket,paths:UclRelativeMarketPath[]):UclSourceOpinionPool|null{
+ const byPath=new Map<string,UclRelativeMarketPath[]>();
+ for(const path of paths){if(!path.baseline)continue;
+  const key=path.economicPathHash!;const family=byPath.get(key)??[];family.push(path);byPath.set(key,family);}
+ const families=[...byPath.entries()].sort(([a],[b])=>a.localeCompare(b));
+ if(!families.length)return null;
+ const representatives=families.map(([,rows])=>rows[0]!);
+ const opinion=(which:'baseline'|'current'):UclSourceOpinion=>{
+  if(market==='total'){
+   const nativeMean=representatives.length===1?representatives[0]![which]!.nativeMean!
+    :Math.exp(representatives.reduce((s,p)=>s+Math.log(p[which]!.nativeMean!),0)/representatives.length);
+   const over=uclPoissonNativeTotalShare(nativeMean,2.5)!;
+   return{nativeMean,probabilities:{over,under:1-over}};
+  }
+  if(representatives.length===1){const p=representatives[0]![which]!;return{probabilities:{...p.probabilities},nativeMean:p.nativeMean};}
+  const logs=SIDES[market].map(side=>representatives.reduce((s,p)=>s+Math.log(p[which]!.probabilities[side]!),0)/representatives.length);
+  const shift=Math.max(...logs),raw=logs.map(v=>Math.exp(v-shift)),z=raw.reduce((s,p)=>s+p,0);
+  return{nativeMean:null,probabilities:Object.fromEntries(SIDES[market].map((side,i)=>[side,raw[i]!/z]))};
+ };
+ const baseline=opinion('baseline'),current=opinion('current');
+ return{method:'normalized_log_source_opinions',informationOverlap:'unknown_correlated_market_and_model_inputs',baseline,current,
+  factor:factors(market,baseline,current),
+  families:families.map(([economicPathHash,rows])=>({economicPathHash,books:rows.map(p=>p.book).sort(),identities:rows.map(p=>p.identity).sort(),
+   baselineAt:rows[0]!.baseline!.observedAt,currentAt:rows[0]!.current.observedAt,direction:rows[0]!.direction,latestInformativeDirection:rows[0]!.latestInformativeDirection}))};
+}
 export function deriveUclRelativeMarketRead(base:ScoreDistribution,input:UclRelativeMarketInput):{joint:ScoreDistribution;receipt:UclRelativeMarketReadReceipt}{
  const original=deriveSoccerMarketProbabilities({joint:base,totalLine:2.5}),axes:Record<UclRelativeMarket,UclRelativeMarketAxisReceipt>={match_result:emptyAxis(),total:emptyAxis(),btts:emptyAxis()};
  const groups:Array<{market:UclRelativeMarket;before:UclGoalConstraint[];after:UclGoalConstraint[]}>=[],targets:UclRelativeMarketReadReceipt['targets']={};
  for(const market of ['match_result','total','btts'] as const){const data=pathsFor(input,market),axis=axes[market],path=data.paths[0]??null;
   Object.assign(axis,{selected:path,candidates:data.paths,inactive:data.inactive});
   if(!path)continue;
+  const pool=sourceOpinionPool(market,data.paths);
   Object.assign(axis,{status:path.baseline?(path.direction==='flat'?'unchanged':'applied'):'context_only',reason:path.reason,direction:path.direction,latestLegDirection:path.latestLegDirection,
    latestInformativeDirection:path.latestInformativeDirection,latestLegFullyObserved:path.latestLegFullyObserved,retraced:path.retraced,roundTrip:path.roundTrip,conflicted:path.conflicted,
    opposingCandidates:data.paths.slice(1).some(other=>factorOpposes(market,other.factor,path.direction))});
   axis.currentTargetProbabilities=market==='total'?(()=>{const p=uclPoissonNativeTotalShare(path.current.nativeMean!,2.5)!;return{over:p,under:1-p};})():{...path.current.probabilities};
   axis.currentTargetProbabilityBasis=market==='total'?'poisson_native_total_inference':'direct_paired_market';
-  if(!path.baseline)continue;
-  const constraints=(c:UclRelativeCapture):UclGoalConstraint[]=>market==='match_result'
+  if(!pool)continue;
+  axis.sourceOpinionPool=pool;
+  axis.direction=direction(market,pool.factor);
+  axis.status=axis.direction==='flat'?'unchanged':'applied';
+  axis.reason='full_pregame_multibook_opinion_innovation';
+  axis.currentTargetProbabilities=market==='total'?(()=>{const over=uclPoissonNativeTotalShare(pool.current.nativeMean!,2.5)!;return{over,under:1-over};})():{...pool.current.probabilities};
+  axis.currentTargetProbabilityBasis=market==='total'?'pooled_native_total_inference':'pooled_direct_paired_markets';
+  axis.retraced=data.paths.some(p=>p.baseline&&p.retraced);
+  axis.roundTrip=axis.direction==='flat'&&data.paths.some(p=>p.baseline&&p.roundTrip);
+  axis.conflicted=data.paths.some(p=>p.baseline&&p.conflicted);
+  axis.latestLegFullyObserved=data.paths.filter(p=>p.baseline).every(p=>p.latestLegFullyObserved);
+  const constraints=(c:UclSourceOpinion):UclGoalConstraint[]=>market==='match_result'
    ?['home','draw'].map(side=>({identity:`profile_mr:${side}`,target:c.probabilities[side]!,feature:(h,a)=>side==='home'?(h>a?1:0):(h===a?1:0)}))
    :market==='total'?[{identity:'profile_native_total_mean',target:c.nativeMean!,feature:(h,a)=>h+a}]
    :[{identity:'profile_btts',target:c.probabilities.yes!,feature:(h,a)=>h>0&&a>0?1:0}];
-  groups.push({market,before:constraints(path.baseline),after:constraints(path.current)});
+  groups.push({market,before:constraints(pool.baseline),after:constraints(pool.current)});
  }
  let joint=base,residual=0,converged=true,applied:UclRelativeMarket[]=[],included:UclRelativeMarket[]=[];
  let sourceProfileResidual:{baseline:number;current:number}|undefined;
@@ -265,20 +318,21 @@ export function deriveUclRelativeMarketRead(base:ScoreDistribution,input:UclRela
  for(const market of ['match_result','total','btts'] as const){const axis=axes[market],path=axis.selected;
   const p=market==='match_result'?final.match_result:market==='total'?final.total:final.btts;
   axis.pickedSide=SIDES[market].reduce((best,side)=>(p as unknown as Record<string,number>)[side]!>(p as unknown as Record<string,number>)[best]!?side:best,SIDES[market][0]!);
-  if(path){axis.opposingCandidates=axis.candidates.filter(other=>other.book!==path.book).some(other=>
+  if(path){axis.opposingCandidates=axis.candidates.filter(other=>other.baseline).some(other=>
     factorOpposes(market,other.factor,axis.pickedSide as UclRelativeDirection)||factorOpposes(market,other.latestInformativeFactor,axis.pickedSide as UclRelativeDirection));
-   axis.currentSupportsPick=supports(market,path.factor,axis.pickedSide);
+   axis.currentSupportsPick=supports(market,axis.sourceOpinionPool?.factor??path.factor,axis.pickedSide);
    const last=path.captures.length>=2?path.captures[path.captures.length-2]:null;
    axis.latestLegSupportsPick=!!last&&supports(market,factors(market,last,path.current),axis.pickedSide);
    axis.latestInformativeSupportsPick=supports(market,path.latestInformativeFactor,axis.pickedSide);
    if(path.latestLegDirection==='flat'&&axis.latestInformativeSupportsPick)axis.latestLegSupportsPick=true;
   }
  }
- return{joint,receipt:{method:'joint_source_profile_density_ratio',markets:axes,targets,converged,residual,sourceProfileResidual,
+ return{joint,receipt:{method:'joint_multibook_source_profile_density_ratio',markets:axes,targets,converged,residual,sourceProfileResidual,
   sourceProfileStatus:!hasInnovation?'not_required':applied.length?'applied':'conflict',appliedMarkets:applied,includedConstraintMarkets:included,
   crossMarketAffectedMarkets:(['match_result','total','btts'] as const).filter(m=>!applied.includes(m)&&
    (m==='match_result'?SIDES.match_result.some(s=>Math.abs(final.match_result[s as 'home'|'draw'|'away']-original.match_result[s as 'home'|'draw'|'away'])>1e-9)
     :m==='total'?Math.abs(final.total.over-original.total.over)>1e-9:Math.abs(final.btts.yes-original.btts.yes)>1e-9)),
   reason:applied.length?'observed_relative_paths_applied_jointly':hasInnovation?'relative_projection_unavailable':'no_nonflat_complete_paired_market_path',
-  originalMeans:meanGoals(base),finalMeans:meanGoals(joint),originalProbabilities:original,finalProbabilities:final}};
+  originalMeans:meanGoals(base),finalMeans:meanGoals(joint),originalProbabilities:original,finalProbabilities:final,
+  finalTeamToScoreProbabilities:{home:1-joint[0]!.reduce((s,p)=>s+p,0),away:1-joint.reduce((s,row)=>s+row[0]!,0)}}};
 }

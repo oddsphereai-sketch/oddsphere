@@ -1,0 +1,3474 @@
+{
+  "at": "2026-11-04T13:03:36.506Z",
+  "mode": "offline_same_inputs_no_outcome_tuning",
+  "providerRequests": 0,
+  "writes": 0,
+  "statisticsCapturedAt": "2026-11-04T12:21:21.977Z",
+  "marketSnapshotAt": "2026-11-04T13:03:36.506+00:00",
+  "sourceBasis": "actual_stored_complete_quote_families_with_original_clocks",
+  "before": {
+    "moneyline": {
+      "watchlist": 9
+    },
+    "total": {
+      "watchlist": 6,
+      "lean": 3
+    },
+    "first_inning": {
+      "lean": 5,
+      "best_angle": 1,
+      "watchlist": 3
+    }
+  },
+  "after": {
+    "moneyline": {
+      "watchlist": 9
+    },
+    "total": {
+      "watchlist": 4,
+      "lean": 4,
+      "no_play": 1
+    },
+    "first_inning": {
+      "lean": 8,
+      "watchlist": 1
+    }
+  },
+  "coverage": {
+    "activeFixtures": 9,
+    "responseFixtures": 9,
+    "selectedCurrent": 36,
+    "selectedExpected": 36,
+    "outcomeCurrent": 90,
+    "outcomeExpected": 90,
+    "heldMarkets": 0,
+    "nonpositiveEvActionables": 2,
+    "qualifiedConfidenceLeans": 2,
+    "unqualifiedActionables": 0,
+    "priceCollapse": false,
+    "unlockedPriceRegressions": 0,
+    "hardErrors": [],
+    "errors": [],
+    "warnings": []
+  },
+  "promotions": 3,
+  "demotions": 0,
+  "netActionable": 3,
+  "sideChanges": 0,
+  "changes": [
+    {
+      "fixture": "Real Madrid at AEK Athens",
+      "market": "moneyline",
+      "before": {
+        "score": {
+          "away": 2.3021364595137306,
+          "home": 1.5099181659983891
+        },
+        "pick": "RMA",
+        "p": 0.5430526542915481,
+        "grade": "watchlist",
+        "price": -445
+      },
+      "after": {
+        "score": {
+          "away": 2.520144890752285,
+          "home": 1.4781897439299378
+        },
+        "pick": "RMA",
+        "p": 0.6037851336301302,
+        "grade": "watchlist",
+        "price": -445
+      }
+    },
+    {
+      "fixture": "Real Madrid at AEK Athens",
+      "market": "total",
+      "before": {
+        "score": {
+          "away": 2.3021364595137306,
+          "home": 1.5099181659983891
+        },
+        "pick": "Over",
+        "p": 0.7357408063319164,
+        "grade": "watchlist",
+        "price": -361
+      },
+      "after": {
+        "score": {
+          "away": 2.520144890752285,
+          "home": 1.4781897439299378
+        },
+        "pick": "Over",
+        "p": 0.7580780516145651,
+        "grade": "watchlist",
+        "price": -361
+      }
+    },
+    {
+      "fixture": "Real Madrid at AEK Athens",
+      "market": "first_inning",
+      "before": {
+        "score": {
+          "away": 2.3021364595137306,
+          "home": 1.5099181659983891
+        },
+        "pick": "Yes",
+        "p": 0.7227880745240718,
+        "grade": "lean",
+        "price": -140
+      },
+      "after": {
+        "score": {
+          "away": 2.520144890752285,
+          "home": 1.4781897439299378
+        },
+        "pick": "Yes",
+        "p": 0.7075771646352055,
+        "grade": "lean",
+        "price": -140
+      }
+    },
+    {
+      "fixture": "Liverpool at Fenerbahce",
+      "market": "moneyline",
+      "before": {
+        "score": {
+          "away": 2.2325095041863094,
+          "home": 1.3287322746188497
+        },
+        "pick": "LIV",
+        "p": 0.5686498708276098,
+        "grade": "watchlist",
+        "price": -204
+      },
+      "after": {
+        "score": {
+          "away": 2.481780570754311,
+          "home": 1.3362412805540105
+        },
+        "pick": "LIV",
+        "p": 0.6255938127856409,
+        "grade": "watchlist",
+        "price": -204
+      }
+    },
+    {
+      "fixture": "Liverpool at Fenerbahce",
+      "market": "total",
+      "before": {
+        "score": {
+          "away": 2.2325095041863094,
+          "home": 1.3287322746188497
+        },
+        "pick": "Over",
+        "p": 0.6918871547449152,
+        "grade": "watchlist",
+        "price": -272
+      },
+      "after": {
+        "score": {
+          "away": 2.481780570754311,
+          "home": 1.3362412805540105
+        },
+        "pick": "Over",
+        "p": 0.7322148556556923,
+        "grade": "lean",
+        "price": -272
+      }
+    },
+    {
+      "fixture": "Liverpool at Fenerbahce",
+      "market": "first_inning",
+      "before": {
+        "score": {
+          "away": 2.2325095041863094,
+          "home": 1.3287322746188497
+        },
+        "pick": "Yes",
+        "p": 0.6671840900323542,
+        "grade": "best_angle",
+        "price": -194
+      },
+      "after": {
+        "score": {
+          "away": 2.481780570754311,
+          "home": 1.3362412805540105
+        },
+        "pick": "Yes",
+        "p": 0.6781642814475419,
+        "grade": "lean",
+        "price": -194
+      }
+    },
+    {
+      "fixture": "Real Betis at Borussia Dortmund",
+      "market": "moneyline",
+      "before": {
+        "score": {
+          "away": 1.3529479581104906,
+          "home": 2.0738719808956385
+        },
+        "pick": "DOR",
+        "p": 0.5418731561801787,
+        "grade": "watchlist",
+        "price": -145
+      },
+      "after": {
+        "score": {
+          "away": 1.4151620741606246,
+          "home": 2.1388588495722014
+        },
+        "pick": "DOR",
+        "p": 0.5377638475610594,
+        "grade": "watchlist",
+        "price": -145
+      }
+    },
+    {
+      "fixture": "Real Betis at Borussia Dortmund",
+      "market": "total",
+      "before": {
+        "score": {
+          "away": 1.3529479581104906,
+          "home": 2.0738719808956385
+        },
+        "pick": "Over",
+        "p": 0.6705264823071515,
+        "grade": "lean",
+        "price": -192
+      },
+      "after": {
+        "score": {
+          "away": 1.4151620741606246,
+          "home": 2.1388588495722014
+        },
+        "pick": "Over",
+        "p": 0.6889548976990001,
+        "grade": "lean",
+        "price": -192
+      }
+    },
+    {
+      "fixture": "Real Betis at Borussia Dortmund",
+      "market": "first_inning",
+      "before": {
+        "score": {
+          "away": 1.3529479581104906,
+          "home": 2.0738719808956385
+        },
+        "pick": "Yes",
+        "p": 0.6724276123394203,
+        "grade": "lean",
+        "price": -179
+      },
+      "after": {
+        "score": {
+          "away": 1.4151620741606246,
+          "home": 2.1388588495722014
+        },
+        "pick": "Yes",
+        "p": 0.6738045191228991,
+        "grade": "lean",
+        "price": -179
+      }
+    },
+    {
+      "fixture": "Napoli at FC Porto",
+      "market": "moneyline",
+      "before": {
+        "score": {
+          "away": 1.2339026487376341,
+          "home": 1.6800280406545645
+        },
+        "pick": "FCP",
+        "p": 0.4730973402196927,
+        "grade": "watchlist",
+        "price": -117
+      },
+      "after": {
+        "score": {
+          "away": 1.1412973389583179,
+          "home": 1.8007096464899797
+        },
+        "pick": "FCP",
+        "p": 0.5385920860553146,
+        "grade": "watchlist",
+        "price": -117
+      }
+    },
+    {
+      "fixture": "Napoli at FC Porto",
+      "market": "total",
+      "before": {
+        "score": {
+          "away": 1.2339026487376341,
+          "home": 1.6800280406545645
+        },
+        "pick": "Over",
+        "p": 0.5574789517495827,
+        "grade": "watchlist",
+        "price": -140
+      },
+      "after": {
+        "score": {
+          "away": 1.1412973389583179,
+          "home": 1.8007096464899797
+        },
+        "pick": "Over",
+        "p": 0.5638821862889857,
+        "grade": "watchlist",
+        "price": -140
+      }
+    },
+    {
+      "fixture": "Napoli at FC Porto",
+      "market": "first_inning",
+      "before": {
+        "score": {
+          "away": 1.2339026487376341,
+          "home": 1.6800280406545645
+        },
+        "pick": "Yes",
+        "p": 0.5855240815287674,
+        "grade": "watchlist",
+        "price": -170
+      },
+      "after": {
+        "score": {
+          "away": 1.1412973389583179,
+          "home": 1.8007096464899797
+        },
+        "pick": "Yes",
+        "p": 0.5780556459572015,
+        "grade": "watchlist",
+        "price": -170
+      }
+    },
+    {
+      "fixture": "Como at Lens",
+      "market": "moneyline",
+      "before": {
+        "score": {
+          "away": 1.9236817796340728,
+          "home": 1.6693684770175
+        },
+        "pick": "COMO",
+        "p": 0.43747614922025274,
+        "grade": "watchlist",
+        "price": -104
+      },
+      "after": {
+        "score": {
+          "away": 2,
+          "home": 1.4
+        },
+        "pick": "COMO",
+        "p": 0.4631586245914395,
+        "grade": "watchlist",
+        "price": -104
+      }
+    },
+    {
+      "fixture": "Como at Lens",
+      "market": "total",
+      "before": {
+        "score": {
+          "away": 1.9236817796340728,
+          "home": 1.6693684770175
+        },
+        "pick": "Over",
+        "p": 0.695660538857772,
+        "grade": "lean",
+        "price": -181
+      },
+      "after": {
+        "score": {
+          "away": 2,
+          "home": 1.4
+        },
+        "pick": "Over",
+        "p": 0.6946200973296588,
+        "grade": "lean",
+        "price": -181
+      }
+    },
+    {
+      "fixture": "Como at Lens",
+      "market": "first_inning",
+      "before": {
+        "score": {
+          "away": 1.9236817796340728,
+          "home": 1.6693684770175
+        },
+        "pick": "Yes",
+        "p": 0.7066491573501473,
+        "grade": "lean",
+        "price": -190
+      },
+      "after": {
+        "score": {
+          "away": 2,
+          "home": 1.4
+        },
+        "pick": "Yes",
+        "p": 0.6931791917324922,
+        "grade": "lean",
+        "price": -190
+      }
+    },
+    {
+      "fixture": "Club Brugge at PSV Eindhoven",
+      "market": "moneyline",
+      "before": {
+        "score": {
+          "away": 1.6938051287213969,
+          "home": 2.2024961228737223
+        },
+        "pick": "PSV",
+        "p": 0.4935408713321593,
+        "grade": "watchlist",
+        "price": -105
+      },
+      "after": {
+        "score": {
+          "away": 1.4,
+          "home": 2.2
+        },
+        "pick": "PSV",
+        "p": 0.5184008661444253,
+        "grade": "watchlist",
+        "price": -105
+      }
+    },
+    {
+      "fixture": "Club Brugge at PSV Eindhoven",
+      "market": "total",
+      "before": {
+        "score": {
+          "away": 1.6938051287213969,
+          "home": 2.2024961228737223
+        },
+        "pick": "Over",
+        "p": 0.7492236134154888,
+        "grade": "lean",
+        "price": -291
+      },
+      "after": {
+        "score": {
+          "away": 1.4,
+          "home": 2.2
+        },
+        "pick": "Over",
+        "p": 0.7563894260423132,
+        "grade": "lean",
+        "price": -291
+      }
+    },
+    {
+      "fixture": "Club Brugge at PSV Eindhoven",
+      "market": "first_inning",
+      "before": {
+        "score": {
+          "away": 1.6938051287213969,
+          "home": 2.2024961228737223
+        },
+        "pick": "Yes",
+        "p": 0.7370023283274935,
+        "grade": "watchlist",
+        "price": -310
+      },
+      "after": {
+        "score": {
+          "away": 1.4,
+          "home": 2.2
+        },
+        "pick": "Yes",
+        "p": 0.7398503561096528,
+        "grade": "lean",
+        "price": -310
+      }
+    },
+    {
+      "fixture": "Manchester City at RB Leipzig",
+      "market": "moneyline",
+      "before": {
+        "score": {
+          "away": 1.8139856583830716,
+          "home": 1.443081702434043
+        },
+        "pick": "MNC",
+        "p": 0.4552412246914854,
+        "grade": "watchlist",
+        "price": -181
+      },
+      "after": {
+        "score": {
+          "away": 1.9,
+          "home": 1.4
+        },
+        "pick": "MNC",
+        "p": 0.4576546365621818,
+        "grade": "watchlist",
+        "price": -181
+      }
+    },
+    {
+      "fixture": "Manchester City at RB Leipzig",
+      "market": "total",
+      "before": {
+        "score": {
+          "away": 1.8139856583830716,
+          "home": 1.443081702434043
+        },
+        "pick": "Over",
+        "p": 0.6348111651382805,
+        "grade": "watchlist",
+        "price": -322
+      },
+      "after": {
+        "score": {
+          "away": 1.9,
+          "home": 1.4
+        },
+        "pick": "Over",
+        "p": 0.6691249261387002,
+        "grade": "watchlist",
+        "price": -322
+      }
+    },
+    {
+      "fixture": "Manchester City at RB Leipzig",
+      "market": "first_inning",
+      "before": {
+        "score": {
+          "away": 1.8139856583830716,
+          "home": 1.443081702434043
+        },
+        "pick": "Yes",
+        "p": 0.6613556491269135,
+        "grade": "lean",
+        "price": -255
+      },
+      "after": {
+        "score": {
+          "away": 1.9,
+          "home": 1.4
+        },
+        "pick": "Yes",
+        "p": 0.6930362162766082,
+        "grade": "lean",
+        "price": -255
+      }
+    },
+    {
+      "fixture": "Arsenal at Slavia Prague",
+      "market": "moneyline",
+      "before": {
+        "score": {
+          "away": 2.5,
+          "home": 0.4
+        },
+        "pick": "ARS",
+        "p": 0.7018141678186903,
+        "grade": "watchlist",
+        "price": -412
+      },
+      "after": {
+        "score": {
+          "away": 2.5,
+          "home": 0.4
+        },
+        "pick": "ARS",
+        "p": 0.7278463806560703,
+        "grade": "watchlist",
+        "price": -412
+      }
+    },
+    {
+      "fixture": "Arsenal at Slavia Prague",
+      "market": "total",
+      "before": {
+        "score": {
+          "away": 2.5,
+          "home": 0.4
+        },
+        "pick": "Over",
+        "p": 0.543586293788407,
+        "grade": "watchlist",
+        "price": -150
+      },
+      "after": {
+        "score": {
+          "away": 2.5,
+          "home": 0.4
+        },
+        "pick": "Over",
+        "p": 0.5037993633077789,
+        "grade": "no_play",
+        "price": -150
+      }
+    },
+    {
+      "fixture": "Arsenal at Slavia Prague",
+      "market": "first_inning",
+      "before": {
+        "score": {
+          "away": 2.5,
+          "home": 0.4
+        },
+        "pick": "No",
+        "p": 0.5438555539148606,
+        "grade": "watchlist",
+        "price": -125
+      },
+      "after": {
+        "score": {
+          "away": 2.5,
+          "home": 0.4
+        },
+        "pick": "No",
+        "p": 0.620624813610571,
+        "grade": "lean",
+        "price": -125
+      }
+    },
+    {
+      "fixture": "Sabah FK at Viking FK",
+      "market": "moneyline",
+      "before": {
+        "score": {
+          "away": 1.4083125408974864,
+          "home": 2.2826418779761575
+        },
+        "pick": "VFK",
+        "p": 0.5710155517571608,
+        "grade": "watchlist",
+        "price": -260
+      },
+      "after": {
+        "score": {
+          "away": 1.4,
+          "home": 2.4
+        },
+        "pick": "VFK",
+        "p": 0.5846344435252543,
+        "grade": "watchlist",
+        "price": -260
+      }
+    },
+    {
+      "fixture": "Sabah FK at Viking FK",
+      "market": "total",
+      "before": {
+        "score": {
+          "away": 1.4083125408974864,
+          "home": 2.2826418779761575
+        },
+        "pick": "Over",
+        "p": 0.7146518036310162,
+        "grade": "watchlist",
+        "price": -308
+      },
+      "after": {
+        "score": {
+          "away": 1.4,
+          "home": 2.4
+        },
+        "pick": "Over",
+        "p": 0.74855134445652,
+        "grade": "watchlist",
+        "price": -308
+      }
+    },
+    {
+      "fixture": "Sabah FK at Viking FK",
+      "market": "first_inning",
+      "before": {
+        "score": {
+          "away": 1.4083125408974864,
+          "home": 2.2826418779761575
+        },
+        "pick": "Yes",
+        "p": 0.6906874966761711,
+        "grade": "lean",
+        "price": -195
+      },
+      "after": {
+        "score": {
+          "away": 1.4,
+          "home": 2.4
+        },
+        "pick": "Yes",
+        "p": 0.7099736365836442,
+        "grade": "lean",
+        "price": -195
+      }
+    }
+  ],
+  "auditScope": "R20 and R21 rebuilt with identical current statistics and 11338 stored quote rows through 2026-11-04T13:03:36.506Z; not historical outcome testing or the exact source response of a later refresh",
+  "games": [
+    {
+      "fixture": "Real Madrid at AEK Athens",
+      "displayed": {
+        "away": 2.520144890752285,
+        "home": 1.4781897439299378
+      },
+      "projection": {
+        "matchResultOutlook": {
+          "expectedGoals": {
+            "away": 2.520144890752285,
+            "home": 1.4781897439299378
+          },
+          "likelyScore": {
+            "away": 2,
+            "home": 1
+          },
+          "likelyScoreProbability": 0.08622749326668681,
+          "medianTotal": 4,
+          "mostLikelyTotal": 4
+        },
+        "expectedGoals": {
+          "away": 2.520144890752285,
+          "home": 1.4781897439299378
+        },
+        "goalOutlookProbabilities": {
+          "home": 0.19700677235806063,
+          "draw": 0.1992080940118088,
+          "away": 0.6037851336301302,
+          "over25": 0.7580780516145651,
+          "under25": 0.24192194838543432,
+          "bttsYes": 0.7075771646352055,
+          "bttsNo": 0.2924228353647945
+        },
+        "likelyScore": {
+          "away": 2,
+          "home": 1
+        },
+        "likelyScoreProbability": 0.08622749326668681,
+        "representativeScore": {
+          "away": 2,
+          "home": 1
+        },
+        "representativeScoreProbability": 0.08622749326668681,
+        "medianTotal": 4,
+        "mostLikelyTotal": 4,
+        "teamToScoreProbabilities": {
+          "home": 0.7636002722165398,
+          "away": 0.9181133814927838
+        },
+        "coherentScorePresentation": {
+          "release": "ucl_projected_score_2026_11_04_r12_shared_joint_scenario",
+          "score": {
+            "away": 2.520144890752285,
+            "home": 1.4781897439299378
+          },
+          "scenario": {
+            "away": 2,
+            "home": 1
+          },
+          "scenarioProbability": 0.08622749326668681
+        }
+      },
+      "independent": {
+        "home": 1.5055744861524758,
+        "away": 2.3500417511406386
+      },
+      "markets": {
+        "moneyline": {
+          "pick": "RMA",
+          "p": 0.6037851336301302,
+          "grade": "watchlist",
+          "book": "pinnacle",
+          "price": -445,
+          "marketP": 0.7896489414992044
+        },
+        "total": {
+          "pick": "Over",
+          "p": 0.7580780516145651,
+          "grade": "watchlist",
+          "book": "pinnacle",
+          "price": -361,
+          "marketP": 0.7439329893185063
+        },
+        "first_inning": {
+          "pick": "Yes",
+          "p": 0.7075771646352055,
+          "grade": "lean",
+          "book": "draftkings",
+          "price": -140,
+          "marketP": 0.550561797752809
+        }
+      },
+      "sourceOpinionPools": {
+        "match_result": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": null,
+            "probabilities": {
+              "home": 0.10052531007465661,
+              "draw": 0.14816085311682028,
+              "away": 0.7513138368085233
+            }
+          },
+          "current": {
+            "nativeMean": null,
+            "probabilities": {
+              "home": 0.08176634623333258,
+              "draw": 0.13493541624416863,
+              "away": 0.7832982375224988
+            }
+          },
+          "factor": {
+            "home": 0.813390639358462,
+            "draw": 0.9107359562635361,
+            "away": 1.0425712919781178
+          },
+          "families": [
+            {
+              "economicPathHash": "4dbf873e4ccead584475fbb8627dc85a99dd701dfd89fc78727affb6ad367f19",
+              "books": [
+                "hardrock"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:hardrock:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-02T08:17:37.595+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "mixed"
+            },
+            {
+              "economicPathHash": "7499e227b6b249bde3dc20d6812d928fde386c683a6245f24b45861a20c2dcb1",
+              "books": [
+                "fanduel"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:fanduel:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-01T20:17:38.104+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "away"
+            },
+            {
+              "economicPathHash": "a2cfa6e549a7b8a1b54e98149a450ead9799e2285f909e3d0a3e9bc42be918be",
+              "books": [
+                "draftkings"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:draftkings:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-01T16:17:37.944+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "away"
+            },
+            {
+              "economicPathHash": "b3b1591e856248cd502ca62c356cb7b489d6a1fab9be724124b8636061fcc941",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-01T03:47:37.192+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "away"
+            },
+            {
+              "economicPathHash": "c38951887ff400607b5a53b22f90e7c822056ccf4058b5a43637e610e6038029",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-01T16:17:37.944+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "home"
+            },
+            {
+              "economicPathHash": "dd7523d15456db264cfc242886d485508c7db96e0a30b873cb130f5394fb1c39",
+              "books": [
+                "caesars"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:caesars:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-01T19:17:37.417+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "home"
+            }
+          ]
+        },
+        "total": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": 3.773783463810737,
+            "probabilities": {
+              "over": 0.7268425733504972,
+              "under": 0.2731574266495028
+            }
+          },
+          "current": {
+            "nativeMean": 3.914169499862204,
+            "probabilities": {
+              "over": 0.7490486255301203,
+              "under": 0.2509513744698797
+            }
+          },
+          "factor": 1.0372003421493894,
+          "families": [
+            {
+              "economicPathHash": "1e9a2e8d5e1e4cd777b78fc176b77172784ef304df63820e6af5a69ccbc1bd86",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:total:3.5:over+under"
+              ],
+              "baselineAt": "2026-11-03T17:46:47.741+00:00",
+              "currentAt": "2026-11-04T13:03:15.480Z",
+              "direction": "over",
+              "latestInformativeDirection": "over"
+            },
+            {
+              "economicPathHash": "2ff3393575464c0ac3dc37ae47e369dfe315212a0d60f4c90d460ab94124ec29",
+              "books": [
+                "fanduel"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:fanduel:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:02:21.000Z",
+              "direction": "over",
+              "latestInformativeDirection": "under"
+            },
+            {
+              "economicPathHash": "d2d6bf25d5b5b854959e0a700bd89ce6bd755814e793b54fa2b723010c643dc0",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:total:3.75:over+under"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:02:37.575Z",
+              "direction": "over",
+              "latestInformativeDirection": "under"
+            },
+            {
+              "economicPathHash": "d3a00b2f70136177c88df093761d4ba97d0e336c6a1c311fdd272b5cd144b10a",
+              "books": [
+                "draftkings"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:draftkings:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-01T19:47:38.097+00:00",
+              "currentAt": "2026-11-04T12:59:24.000Z",
+              "direction": "over",
+              "latestInformativeDirection": "under"
+            }
+          ]
+        },
+        "btts": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "probabilities": {
+              "yes": 0.5859872611464969,
+              "no": 0.4140127388535032
+            },
+            "nativeMean": null
+          },
+          "current": {
+            "probabilities": {
+              "yes": 0.5810439560439561,
+              "no": 0.41895604395604397
+            },
+            "nativeMean": null
+          },
+          "factor": 0.9798645759087667,
+          "families": [
+            {
+              "economicPathHash": "12299a5739f4679a855bec4b7911028619890496385faadf13d71186b7ccd4f2",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:btts:main:yes+no"
+              ],
+              "baselineAt": "2026-10-31T16:47:37.013+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "no",
+              "latestInformativeDirection": "no"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fixture": "Liverpool at Fenerbahce",
+      "displayed": {
+        "away": 2.481780570754311,
+        "home": 1.3362412805540105
+      },
+      "projection": {
+        "matchResultOutlook": {
+          "expectedGoals": {
+            "away": 2.481780570754311,
+            "home": 1.3362412805540105
+          },
+          "likelyScore": {
+            "away": 2,
+            "home": 1
+          },
+          "likelyScoreProbability": 0.09146612309193515,
+          "medianTotal": 4,
+          "mostLikelyTotal": 3
+        },
+        "expectedGoals": {
+          "away": 2.481780570754311,
+          "home": 1.3362412805540105
+        },
+        "goalOutlookProbabilities": {
+          "home": 0.17746125923468944,
+          "draw": 0.196944927979669,
+          "away": 0.6255938127856409,
+          "over25": 0.7322148556556923,
+          "under25": 0.2677851443443068,
+          "bttsYes": 0.6781642814475419,
+          "bttsNo": 0.32183571855245807
+        },
+        "likelyScore": {
+          "away": 2,
+          "home": 1
+        },
+        "likelyScoreProbability": 0.09146612309193515,
+        "representativeScore": {
+          "away": 2,
+          "home": 1
+        },
+        "representativeScoreProbability": 0.09146612309193515,
+        "medianTotal": 4,
+        "mostLikelyTotal": 3,
+        "teamToScoreProbabilities": {
+          "home": 0.732460104863898,
+          "away": 0.9169831189987455
+        },
+        "coherentScorePresentation": {
+          "release": "ucl_projected_score_2026_11_04_r12_shared_joint_scenario",
+          "score": {
+            "away": 2.481780570754311,
+            "home": 1.3362412805540105
+          },
+          "scenario": {
+            "away": 2,
+            "home": 1
+          },
+          "scenarioProbability": 0.09146612309193515
+        }
+      },
+      "independent": {
+        "home": 1.2883014195140878,
+        "away": 2.228334461297194
+      },
+      "markets": {
+        "moneyline": {
+          "pick": "LIV",
+          "p": 0.6255938127856409,
+          "grade": "watchlist",
+          "book": "pinnacle",
+          "price": -204,
+          "marketP": 0.652446677678825
+        },
+        "total": {
+          "pick": "Over",
+          "p": 0.7322148556556923,
+          "grade": "lean",
+          "book": "pinnacle",
+          "price": -272,
+          "marketP": 0.7038216560509554
+        },
+        "first_inning": {
+          "pick": "Yes",
+          "p": 0.6781642814475419,
+          "grade": "lean",
+          "book": "pinnacle",
+          "price": -194,
+          "marketP": 0.6379221163082834
+        }
+      },
+      "sourceOpinionPools": {
+        "match_result": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": null,
+            "probabilities": {
+              "home": 0.18402026069874047,
+              "draw": 0.2101445670513136,
+              "away": 0.6058351722499459
+            }
+          },
+          "current": {
+            "nativeMean": null,
+            "probabilities": {
+              "home": 0.15879840405792578,
+              "draw": 0.1898415562511599,
+              "away": 0.6513600396909143
+            }
+          },
+          "factor": {
+            "home": 0.8629397842115581,
+            "draw": 0.9033855070105331,
+            "away": 1.0751439822681448
+          },
+          "families": [
+            {
+              "economicPathHash": "3ce6c7e1be635c85e9258e8e99f0bdd261ce682c5dbecd4a7cedbe2ea2f432b4",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-10-31T18:17:37.488+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "home"
+            },
+            {
+              "economicPathHash": "3ee2fa82beb8781505dbdf850f6c34fa35a9e12df3f6346f050c37ab90c4bac8",
+              "books": [
+                "draftkings"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:draftkings:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-10-31T22:47:36.812+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "home"
+            },
+            {
+              "economicPathHash": "d10d0512808777a9e599d7ef9329b5c7ccfb2b0af991f2c8e7b92aa5b5ff7c34",
+              "books": [
+                "hardrock"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:hardrock:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-01T15:47:37.067+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "home"
+            },
+            {
+              "economicPathHash": "f20d6cc41b87104feac8b464ac481244f63960d902733e95e750116d779153ca",
+              "books": [
+                "fanduel"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:fanduel:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-01T20:17:38.104+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "draw"
+            }
+          ]
+        },
+        "total": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": 3.318457266072025,
+            "probabilities": {
+              "over": 0.6442668034200438,
+              "under": 0.35573319657995617
+            }
+          },
+          "current": {
+            "nativeMean": 3.601699670293906,
+            "probabilities": {
+              "over": 0.697553981373441,
+              "under": 0.30244601862655895
+            }
+          },
+          "factor": 1.0853536392099297,
+          "families": [
+            {
+              "economicPathHash": "2a81070a8e79fdf738c8337daa05878a8b02a3aea75b0839e3d482a50118fc39",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:03:07.000Z",
+              "direction": "over",
+              "latestInformativeDirection": "under"
+            },
+            {
+              "economicPathHash": "53913386813145faa1f3ca126e0b5c7de833046a8784972666e19ab7c158df4a",
+              "books": [
+                "draftkings"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:draftkings:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-01T19:47:38.097+00:00",
+              "currentAt": "2026-11-04T13:03:08.000Z",
+              "direction": "over",
+              "latestInformativeDirection": "under"
+            },
+            {
+              "economicPathHash": "956d209799088875d3d23a6dc45785a578c80d72ec583a0aa892a47e93caea60",
+              "books": [
+                "fanduel"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:fanduel:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-01T07:17:37.302+00:00",
+              "currentAt": "2026-11-04T13:02:22.000Z",
+              "direction": "over",
+              "latestInformativeDirection": "over"
+            },
+            {
+              "economicPathHash": "c8b5629dc601dc6360e2add676071b672e2373663900f8f1ea985fb39919823b",
+              "books": [
+                "hardrock"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:hardrock:total:1.5:over+under"
+              ],
+              "baselineAt": "2026-11-03T17:47:25.671+00:00",
+              "currentAt": "2026-11-04T13:03:05.219Z",
+              "direction": "over",
+              "latestInformativeDirection": "over"
+            }
+          ]
+        },
+        "btts": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": null,
+            "probabilities": {
+              "yes": 0.6096487250068684,
+              "no": 0.3903512749931315
+            }
+          },
+          "current": {
+            "nativeMean": null,
+            "probabilities": {
+              "yes": 0.6332865533172238,
+              "no": 0.36671344668277617
+            }
+          },
+          "factor": 1.1057306906305782,
+          "families": [
+            {
+              "economicPathHash": "a95ee109acfe99cae4ad55847ffe420544eedc6062b6ae981d2f3abcd37f8290",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:btts:main:yes+no"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "yes",
+              "latestInformativeDirection": "yes"
+            },
+            {
+              "economicPathHash": "dd9f96aadd2c48a91eff2b60f994be576e66c029431ab14e647770f09c2aeb91",
+              "books": [
+                "betmgm"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:betmgm:btts:main:yes+no"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "yes",
+              "latestInformativeDirection": "yes"
+            },
+            {
+              "economicPathHash": "e6fd63dfaf329115350caa3dd179578fe370a56d9202dd386015742fe559580e",
+              "books": [
+                "fanduel"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:fanduel:btts:main:yes+no"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "yes",
+              "latestInformativeDirection": "yes"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fixture": "Real Betis at Borussia Dortmund",
+      "displayed": {
+        "away": 1.4151620741606246,
+        "home": 2.1388588495722014
+      },
+      "projection": {
+        "matchResultOutlook": {
+          "expectedGoals": {
+            "away": 1.4151620741606246,
+            "home": 2.1388588495722014
+          },
+          "likelyScore": {
+            "away": 1,
+            "home": 2
+          },
+          "likelyScoreProbability": 0.09397945487000839,
+          "medianTotal": 3,
+          "mostLikelyTotal": 3
+        },
+        "expectedGoals": {
+          "away": 1.4151620741606246,
+          "home": 2.1388588495722014
+        },
+        "goalOutlookProbabilities": {
+          "home": 0.5377638475610594,
+          "draw": 0.2217563982159609,
+          "away": 0.24047975422297954,
+          "over25": 0.6889548976990001,
+          "under25": 0.3110451023009998,
+          "bttsYes": 0.6738045191228991,
+          "bttsNo": 0.32619548087710093
+        },
+        "likelyScore": {
+          "away": 1,
+          "home": 2
+        },
+        "likelyScoreProbability": 0.09397945487000839,
+        "representativeScore": {
+          "away": 1,
+          "home": 2
+        },
+        "representativeScoreProbability": 0.09397945487000839,
+        "medianTotal": 3,
+        "mostLikelyTotal": 3,
+        "teamToScoreProbabilities": {
+          "home": 0.8820751429165807,
+          "away": 0.7548373890567028
+        },
+        "coherentScorePresentation": {
+          "release": "ucl_projected_score_2026_11_04_r12_shared_joint_scenario",
+          "score": {
+            "away": 1.4151620741606246,
+            "home": 2.1388588495722014
+          },
+          "scenario": {
+            "away": 1,
+            "home": 2
+          },
+          "scenarioProbability": 0.09397945487000839
+        }
+      },
+      "independent": {
+        "home": 2.0802523986861368,
+        "away": 1.427983175516538
+      },
+      "markets": {
+        "moneyline": {
+          "pick": "DOR",
+          "p": 0.5377638475610594,
+          "grade": "watchlist",
+          "book": "pinnacle",
+          "price": -145,
+          "marketP": 0.5756481132578994
+        },
+        "total": {
+          "pick": "Over",
+          "p": 0.6889548976990001,
+          "grade": "lean",
+          "book": "pinnacle",
+          "price": -192,
+          "marketP": 0.6336077092953222
+        },
+        "first_inning": {
+          "pick": "Yes",
+          "p": 0.6738045191228991,
+          "grade": "lean",
+          "book": "pinnacle",
+          "price": -179,
+          "marketP": 0.6206404242300632
+        }
+      },
+      "sourceOpinionPools": {
+        "match_result": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": null,
+            "probabilities": {
+              "home": 0.5498663258725152,
+              "draw": 0.23419363133405324,
+              "away": 0.2159400427934316
+            }
+          },
+          "current": {
+            "nativeMean": null,
+            "probabilities": {
+              "home": 0.5698171026400719,
+              "draw": 0.22592809714836015,
+              "away": 0.20425480021156786
+            }
+          },
+          "factor": {
+            "home": 1.0362829579278188,
+            "draw": 0.9647064092280838,
+            "away": 0.9458866339438404
+          },
+          "families": [
+            {
+              "economicPathHash": "09c15c2e1791a120d6a2965854a84e5dbb70a499bf26648ece995813d146fab7",
+              "books": [
+                "caesars"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:caesars:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-03T19:04:49.413+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "home"
+            },
+            {
+              "economicPathHash": "2cdda749422c4c2702024bce76d6039461f98c59b92874e6244d60cd8064194c",
+              "books": [
+                "hardrock"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:hardrock:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-03T19:04:49.413+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "home"
+            },
+            {
+              "economicPathHash": "b6f90e405aca2931470cfaeca6a8dc66c098144986180a83bec9beb3aa3a979b",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-10-31T15:17:36.717+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "home"
+            },
+            {
+              "economicPathHash": "db90fcf046b19a73df5fce196710204bee207cc6de183721a5e4c3885ff98393",
+              "books": [
+                "draftkings"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:draftkings:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-03T19:04:49.413+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "home"
+            }
+          ]
+        },
+        "total": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": 3.250883641610656,
+            "probabilities": {
+              "over": 0.630614249700493,
+              "under": 0.36938575029950704
+            }
+          },
+          "current": {
+            "nativeMean": 3.2933610074203554,
+            "probabilities": {
+              "over": 0.639238489204574,
+              "under": 0.36076151079542595
+            }
+          },
+          "factor": 1.0130664060891006,
+          "families": [
+            {
+              "economicPathHash": "b8614606ad8004a73c8acacda8fefd9ca577944508c4308b7c952ff1e19164df",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:03:07.000Z",
+              "direction": "over",
+              "latestInformativeDirection": "under"
+            },
+            {
+              "economicPathHash": "d10d6644ead0ada73efb5167357034c913f93177cc51155cf4e5bfddbdaa5649",
+              "books": [
+                "draftkings"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:draftkings:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-01T13:17:38.061+00:00",
+              "currentAt": "2026-11-04T13:01:34.000Z",
+              "direction": "over",
+              "latestInformativeDirection": "under"
+            },
+            {
+              "economicPathHash": "f798a283c7867490b564536d1455650d68b76774033494b90b5616500a2925c4",
+              "books": [
+                "fanduel"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:fanduel:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:03:16.000Z",
+              "direction": "over",
+              "latestInformativeDirection": "over"
+            }
+          ]
+        },
+        "btts": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": null,
+            "probabilities": {
+              "yes": 0.6232505264478165,
+              "no": 0.37674947355218347
+            }
+          },
+          "current": {
+            "nativeMean": null,
+            "probabilities": {
+              "yes": 0.62240026029802,
+              "no": 0.37759973970197996
+            }
+          },
+          "factor": 0.9963870616636641,
+          "families": [
+            {
+              "economicPathHash": "008471d54ae1d82a97d43bb0f711a3a0a90e4ce16ed7fb08511d2e7081ffc477",
+              "books": [
+                "fanduel"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:fanduel:btts:main:yes+no"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "yes",
+              "latestInformativeDirection": "no"
+            },
+            {
+              "economicPathHash": "a6ca30f159a3af8b26f0089125c9d2b0584a8652f1fdb1d987923c5eaf2af3a0",
+              "books": [
+                "draftkings"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:draftkings:btts:main:yes+no"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "yes",
+              "latestInformativeDirection": "no"
+            },
+            {
+              "economicPathHash": "aa1da14b63e2b870217135820d7499da2e6bd4e94ffe8b9fecc94052448e8c60",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:btts:main:yes+no"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "no",
+              "latestInformativeDirection": "no"
+            },
+            {
+              "economicPathHash": "d6cdccd9d23a7e6e0a5db5e54b659273e944b0ccf3613a47827f91858a373f8d",
+              "books": [
+                "betmgm"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:betmgm:btts:main:yes+no"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "no",
+              "latestInformativeDirection": "no"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fixture": "Napoli at FC Porto",
+      "displayed": {
+        "away": 1.1412973389583179,
+        "home": 1.8007096464899797
+      },
+      "projection": {
+        "matchResultOutlook": {
+          "expectedGoals": {
+            "away": 1.1412973389583179,
+            "home": 1.8007096464899797
+          },
+          "likelyScore": {
+            "away": 1,
+            "home": 1
+          },
+          "likelyScoreProbability": 0.11392804018973109,
+          "medianTotal": 3,
+          "mostLikelyTotal": 2
+        },
+        "expectedGoals": {
+          "away": 1.1412973389583179,
+          "home": 1.8007096464899797
+        },
+        "goalOutlookProbabilities": {
+          "home": 0.5385920860553146,
+          "draw": 0.24765263298045598,
+          "away": 0.21375528096422974,
+          "over25": 0.5638821862889857,
+          "under25": 0.43611781371101466,
+          "bttsYes": 0.5780556459572015,
+          "bttsNo": 0.4219443540427985
+        },
+        "likelyScore": {
+          "away": 1,
+          "home": 1
+        },
+        "likelyScoreProbability": 0.11392804018973109,
+        "representativeScore": {
+          "away": 1,
+          "home": 2
+        },
+        "representativeScoreProbability": 0.10820429542178045,
+        "medianTotal": 3,
+        "mostLikelyTotal": 2,
+        "teamToScoreProbabilities": {
+          "home": 0.8394704998221465,
+          "away": 0.6754009971928512
+        },
+        "coherentScorePresentation": {
+          "release": "ucl_projected_score_2026_11_04_r12_shared_joint_scenario",
+          "score": {
+            "away": 1.1412973389583179,
+            "home": 1.8007096464899797
+          },
+          "scenario": {
+            "away": 1,
+            "home": 2
+          },
+          "scenarioProbability": 0.10820429542178045
+        }
+      },
+      "independent": {
+        "home": 1.7200270156465018,
+        "away": 1.334202486655447
+      },
+      "markets": {
+        "moneyline": {
+          "pick": "FCP",
+          "p": 0.5385920860553146,
+          "grade": "watchlist",
+          "book": "pinnacle",
+          "price": -117,
+          "marketP": 0.5248739910887301
+        },
+        "total": {
+          "pick": "Over",
+          "p": 0.5638821862889857,
+          "grade": "watchlist",
+          "book": "draftkings",
+          "price": -140,
+          "marketP": 0.550561797752809
+        },
+        "first_inning": {
+          "pick": "Yes",
+          "p": 0.5780556459572015,
+          "grade": "watchlist",
+          "book": "draftkings",
+          "price": -170,
+          "marketP": 0.5967139656460044
+        }
+      },
+      "sourceOpinionPools": {
+        "match_result": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": null,
+            "probabilities": {
+              "home": 0.43537374024837333,
+              "draw": 0.26587422477883826,
+              "away": 0.2987520349727883
+            }
+          },
+          "current": {
+            "nativeMean": null,
+            "probabilities": {
+              "home": 0.5187904835594666,
+              "draw": 0.2576312344857045,
+              "away": 0.22357828195482887
+            }
+          },
+          "factor": {
+            "home": 1.1915980124651189,
+            "draw": 0.968996655091367,
+            "away": 0.7483740888164776
+          },
+          "families": [
+            {
+              "economicPathHash": "218eb78973dc07af1b3dc490fa5dae2a659d39a4ba2bea307483433c8b07f0c0",
+              "books": [
+                "hardrock"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:hardrock:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-01T15:47:37.067+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "draw"
+            },
+            {
+              "economicPathHash": "6d09ab47fc46e7066136067df8045c9204ba8da00bd738f86066431023855c3a",
+              "books": [
+                "draftkings"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:draftkings:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-01T22:17:37.534+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "home"
+            },
+            {
+              "economicPathHash": "6e3f6ee0ed987def3710036cb819bd2b3858c1742c8e2f78a8dce6328ec9520e",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-10-31T18:47:37.037+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "home"
+            },
+            {
+              "economicPathHash": "89392ece97aecb7da6b744f4e1e65376158a2f248d09d8cd312d92c56c66b025",
+              "books": [
+                "fanduel"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:fanduel:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-01T21:47:37.213+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "home"
+            },
+            {
+              "economicPathHash": "8abfa73d199b67030d5a821b395785cf8865be626c3d08a454ee5663f9809128",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-01T21:47:37.213+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "mixed"
+            },
+            {
+              "economicPathHash": "f8617a2610749f04bbf781a521f63c3cb68fb1af5f12d1fe368c3ab084c23bcf",
+              "books": [
+                "caesars"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:caesars:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-01T23:17:37.857+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "home"
+            }
+          ]
+        },
+        "total": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": 2.895432238106843,
+            "probabilities": {
+              "over": 0.5529791977456616,
+              "under": 0.4470208022543384
+            }
+          },
+          "current": {
+            "nativeMean": 2.7863629478858263,
+            "probabilities": {
+              "over": 0.5272892628415884,
+              "under": 0.4727107371584116
+            }
+          },
+          "factor": 0.9623305671652219,
+          "families": [
+            {
+              "economicPathHash": "296b616284542ffbcae81c4663d7329d6fb6a88d44de66a3207608545acb47b5",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-10-31T17:47:39.925+00:00",
+              "currentAt": "2026-11-04T13:03:15.480Z",
+              "direction": "under",
+              "latestInformativeDirection": "over"
+            },
+            {
+              "economicPathHash": "8081792c93e69fa1bf3c92193cba259044abd28d01eec586b7afecf3a97974e1",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:total:2.75:over+under"
+              ],
+              "baselineAt": "2026-11-03T17:46:34.167+00:00",
+              "currentAt": "2026-11-04T13:02:37.576Z",
+              "direction": "under",
+              "latestInformativeDirection": "over"
+            },
+            {
+              "economicPathHash": "ba9622817ea91e384ca26fb7fe78d33ff508d8ac99b6b2e793e06ce18e08842b",
+              "books": [
+                "hardrock"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:hardrock:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-03T15:47:40.107+00:00",
+              "currentAt": "2026-11-04T13:02:30.143Z",
+              "direction": "under",
+              "latestInformativeDirection": "under"
+            }
+          ]
+        },
+        "btts": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "probabilities": {
+              "yes": 0.5859872611464969,
+              "no": 0.4140127388535032
+            },
+            "nativeMean": null
+          },
+          "current": {
+            "probabilities": {
+              "yes": 0.5483396008675064,
+              "no": 0.45166039913249373
+            },
+            "nativeMean": null
+          },
+          "factor": 0.8577547404711742,
+          "families": [
+            {
+              "economicPathHash": "fe7d0d71409c9ab359f5628a5a7f42dfc8dfdeb6a7328ffebe27b5ba93bdf4a7",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:btts:main:yes+no"
+              ],
+              "baselineAt": "2026-11-01T07:17:37.302+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "no",
+              "latestInformativeDirection": "no"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fixture": "Como at Lens",
+      "displayed": {
+        "away": 2,
+        "home": 1.4
+      },
+      "projection": {
+        "matchResultOutlook": {
+          "expectedGoals": {
+            "away": 1.9824960195082153,
+            "home": 1.630494637842445
+          },
+          "likelyScore": {
+            "away": 1,
+            "home": 1
+          },
+          "likelyScoreProbability": 0.09498123707513713,
+          "medianTotal": 3,
+          "mostLikelyTotal": 3
+        },
+        "expectedGoals": {
+          "away": 1.9824960195082153,
+          "home": 1.630494637842445
+        },
+        "goalOutlookProbabilities": {
+          "home": 0.29685871841484024,
+          "draw": 0.23998265699371993,
+          "away": 0.4631586245914395,
+          "over25": 0.6946200973296588,
+          "under25": 0.30537990267034104,
+          "bttsYes": 0.6931791917324922,
+          "bttsNo": 0.3068208082675078
+        },
+        "likelyScore": {
+          "away": 1,
+          "home": 1
+        },
+        "likelyScoreProbability": 0.09498123707513713,
+        "representativeScore": {
+          "away": 2,
+          "home": 1
+        },
+        "representativeScoreProbability": 0.08838914222789651,
+        "medianTotal": 3,
+        "mostLikelyTotal": 3,
+        "teamToScoreProbabilities": {
+          "home": 0.796068530380025,
+          "away": 0.8587320111930463
+        },
+        "coherentScorePresentation": {
+          "release": "ucl_projected_score_2026_11_04_r12_shared_joint_scenario",
+          "score": {
+            "away": 2,
+            "home": 1.4
+          },
+          "scenario": {
+            "away": 2,
+            "home": 1
+          },
+          "scenarioProbability": 0.08838914222789651
+        }
+      },
+      "independent": {
+        "home": 1.7821238659926606,
+        "away": 1.9256565673608834
+      },
+      "markets": {
+        "moneyline": {
+          "pick": "COMO",
+          "p": 0.4631586245914395,
+          "grade": "watchlist",
+          "book": "pinnacle",
+          "price": -104,
+          "marketP": 0.49622079338036956
+        },
+        "total": {
+          "pick": "Over",
+          "p": 0.6946200973296588,
+          "grade": "lean",
+          "book": "pinnacle",
+          "price": -181,
+          "marketP": 0.6206496206496207
+        },
+        "first_inning": {
+          "pick": "Yes",
+          "p": 0.6931791917324922,
+          "grade": "lean",
+          "book": "draftkings",
+          "price": -190,
+          "marketP": 0.6209150326797386
+        }
+      },
+      "sourceOpinionPools": {
+        "match_result": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": null,
+            "probabilities": {
+              "home": 0.3120700101092048,
+              "draw": 0.24469051327712624,
+              "away": 0.4432394766136689
+            }
+          },
+          "current": {
+            "nativeMean": null,
+            "probabilities": {
+              "home": 0.2579480474854531,
+              "draw": 0.2500109911953683,
+              "away": 0.49204096131917874
+            }
+          },
+          "factor": {
+            "home": 0.8265710870300788,
+            "draw": 1.0217437032886367,
+            "away": 1.1101018462487844
+          },
+          "families": [
+            {
+              "economicPathHash": "1eddb5e0de0fb3660e9677d9f3e12d507b11b576d19f395bfb5295f101d4ad43",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-10-31T23:17:37.226+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "home"
+            },
+            {
+              "economicPathHash": "2d315f91fc268784d2bf90a39b3fb6d44c80f59573bdee5521acbe93904e6aa2",
+              "books": [
+                "fanduel"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:fanduel:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-01T20:17:38.104+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "away"
+            },
+            {
+              "economicPathHash": "448956f1ebff50e8b5017c7cd5e17f105dc5054323604a204f0e08afc5f1e10e",
+              "books": [
+                "hardrock"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:hardrock:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-03T19:04:49.413+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "draw"
+            },
+            {
+              "economicPathHash": "6df15195dbd268f20524bb26dfe5384da06a10146d7a59037b28ae5399ccdf42",
+              "books": [
+                "caesars"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:caesars:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-03T05:17:39.423+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "away"
+            },
+            {
+              "economicPathHash": "a68d84a0c3a1e2d78dba04a46cc50c2138ad342d4cc42c2ee6820ebae3fb269c",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-01T21:47:37.213+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "away"
+            },
+            {
+              "economicPathHash": "f3213bad79de7315cab268a4b6abfe7cf52750ef912fe568759f0bb6674c7c1c",
+              "books": [
+                "draftkings"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:draftkings:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-03T05:47:38.592+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "draw"
+            }
+          ]
+        },
+        "total": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": 3.278909648424871,
+            "probabilities": {
+              "over": 0.6363203969217436,
+              "under": 0.3636796030782564
+            }
+          },
+          "current": {
+            "nativeMean": 3.1854449023808895,
+            "probabilities": {
+              "over": 0.617050289779123,
+              "under": 0.382949710220877
+            }
+          },
+          "factor": 0.9714951749009368,
+          "families": [
+            {
+              "economicPathHash": "3d91bd188c089b74fb9d73b0e9d5752d4ba420673a8bdcf6028d5922f81233d1",
+              "books": [
+                "draftkings"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:draftkings:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-03T17:47:05+00:00",
+              "currentAt": "2026-11-04T13:02:57.543Z",
+              "direction": "under",
+              "latestInformativeDirection": "under"
+            },
+            {
+              "economicPathHash": "438eec70cf86881c19101d6cfb7a87796ff2f9be11622ce214d2f90f32c39553",
+              "books": [
+                "hardrock"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:hardrock:total:6.5:over+under"
+              ],
+              "baselineAt": "2026-11-03T17:46:58.705+00:00",
+              "currentAt": "2026-11-04T13:02:46.257Z",
+              "direction": "under",
+              "latestInformativeDirection": "under"
+            },
+            {
+              "economicPathHash": "8523aafe56812a8f9bd8268a6f5ae5d24b055630a1d7fbd15ade752f7b1c1ad6",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:total:3:over+under"
+              ],
+              "baselineAt": "2026-11-03T17:46:34.166+00:00",
+              "currentAt": "2026-11-04T13:02:37.575Z",
+              "direction": "under",
+              "latestInformativeDirection": "over"
+            },
+            {
+              "economicPathHash": "d9f6cf7744b139062da96840de21fda81ddb66ffaea5c5c17e9c9c72bda33e41",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-03T17:46:47.741+00:00",
+              "currentAt": "2026-11-04T13:03:15.480Z",
+              "direction": "under",
+              "latestInformativeDirection": "under"
+            }
+          ]
+        },
+        "btts": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "probabilities": {
+              "yes": 0.6464145573713941,
+              "no": 0.3535854426286059
+            },
+            "nativeMean": null
+          },
+          "current": {
+            "probabilities": {
+              "yes": 0.6171298922291548,
+              "no": 0.3828701077708451
+            },
+            "nativeMean": null
+          },
+          "factor": 0.8816746838226391,
+          "families": [
+            {
+              "economicPathHash": "b71342cdbf7fe732cd3e6c995deaad71e7504b931f689c44152657b0e36bde14",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:btts:main:yes+no"
+              ],
+              "baselineAt": "2026-10-31T16:17:36.715+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "no",
+              "latestInformativeDirection": "no"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fixture": "Club Brugge at PSV Eindhoven",
+      "displayed": {
+        "away": 1.4,
+        "home": 2.2
+      },
+      "projection": {
+        "matchResultOutlook": {
+          "expectedGoals": {
+            "away": 1.6719825431176576,
+            "home": 2.2883922408243507
+          },
+          "likelyScore": {
+            "away": 1,
+            "home": 2
+          },
+          "likelyScoreProbability": 0.08726375950898253,
+          "medianTotal": 4,
+          "mostLikelyTotal": 3
+        },
+        "expectedGoals": {
+          "away": 1.6719825431176576,
+          "home": 2.2883922408243507
+        },
+        "goalOutlookProbabilities": {
+          "home": 0.5184008661444253,
+          "draw": 0.21585091005335158,
+          "away": 0.2657482238022228,
+          "over25": 0.7563894260423132,
+          "under25": 0.24361057395768623,
+          "bttsYes": 0.7398503561096528,
+          "bttsNo": 0.2601496438903472
+        },
+        "likelyScore": {
+          "away": 1,
+          "home": 2
+        },
+        "likelyScoreProbability": 0.08726375950898253,
+        "representativeScore": {
+          "away": 1,
+          "home": 2
+        },
+        "representativeScoreProbability": 0.08726375950898253,
+        "medianTotal": 4,
+        "mostLikelyTotal": 3,
+        "teamToScoreProbabilities": {
+          "home": 0.9006475244383634,
+          "away": 0.8130210134837834
+        },
+        "coherentScorePresentation": {
+          "release": "ucl_projected_score_2026_11_04_r12_shared_joint_scenario",
+          "score": {
+            "away": 1.4,
+            "home": 2.2
+          },
+          "scenario": {
+            "away": 1,
+            "home": 2
+          },
+          "scenarioProbability": 0.08726375950898253
+        }
+      },
+      "independent": {
+        "home": 2.20543311874554,
+        "away": 1.7126911225570105
+      },
+      "markets": {
+        "moneyline": {
+          "pick": "PSV",
+          "p": 0.5184008661444253,
+          "grade": "watchlist",
+          "book": "pinnacle",
+          "price": -105,
+          "marketP": 0.49869867956063474
+        },
+        "total": {
+          "pick": "Over",
+          "p": 0.7563894260423132,
+          "grade": "lean",
+          "book": "pinnacle",
+          "price": -291,
+          "marketP": 0.7167487684729064
+        },
+        "first_inning": {
+          "pick": "Yes",
+          "p": 0.7398503561096528,
+          "grade": "lean",
+          "book": "draftkings",
+          "price": -310,
+          "marketP": 0.7138869504535938
+        }
+      },
+      "sourceOpinionPools": {
+        "match_result": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": null,
+            "probabilities": {
+              "home": 0.4625986381366937,
+              "draw": 0.22117536543538027,
+              "away": 0.3162259964279259
+            }
+          },
+          "current": {
+            "nativeMean": null,
+            "probabilities": {
+              "home": 0.49512067698603857,
+              "draw": 0.2189920054279046,
+              "away": 0.2858873175860569
+            }
+          },
+          "factor": {
+            "home": 1.0703029282151386,
+            "draw": 0.9901283761725553,
+            "away": 0.9040601367864334
+          },
+          "families": [
+            {
+              "economicPathHash": "04d8b70e82ef7f3f4f37ece356dbec46a3ad41b09c39b405ad61e5c4f5008b85",
+              "books": [
+                "fanduel"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:fanduel:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-02T20:47:39.431+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "away"
+            },
+            {
+              "economicPathHash": "394e3dcff81f286cf03aef1c7b700eae8d21fde557d86012e1fe703b95cbc51b",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-01T02:47:37.05+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "away"
+            },
+            {
+              "economicPathHash": "5cc90a4973340bc9f64d6f6563039727dca4d7d8f43b2c2c6712d458c0831302",
+              "books": [
+                "draftkings"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:draftkings:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-02T07:47:38.776+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "home"
+            },
+            {
+              "economicPathHash": "7c854fe43d94f975ec8b485fd27dd36ab34a89e052ab5b7a8505959ffed988d8",
+              "books": [
+                "caesars"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:caesars:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-01T23:17:37.857+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "home"
+            },
+            {
+              "economicPathHash": "8317d5860a857e78f5bfefb3ac35af34999dbca7e469a61c38d1512184d06483",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-03T13:17:38.373+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "away"
+            },
+            {
+              "economicPathHash": "a544a8749bdbda6943285b6cc21baf48176559590f5b9d349e7ef91e675d5896",
+              "books": [
+                "hardrock"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:hardrock:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-03T19:04:49.413+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "home"
+            }
+          ]
+        },
+        "total": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": 3.6710512099098125,
+            "probabilities": {
+              "over": 0.7096351852803661,
+              "under": 0.29036481471963393
+            }
+          },
+          "current": {
+            "nativeMean": 3.7102849179479946,
+            "probabilities": {
+              "over": 0.716303319213893,
+              "under": 0.283696680786107
+            }
+          },
+          "factor": 1.0106873224574675,
+          "families": [
+            {
+              "economicPathHash": "647c0dba4c516ad8001202435e6487d22fdc765be1b9e37b57e6dfe1cfea8ab2",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:03:27.000Z",
+              "direction": "over",
+              "latestInformativeDirection": "under"
+            },
+            {
+              "economicPathHash": "861990e7a04cea58f75182b205505f0e3e713ee00abc10964d9cec6f3c130cf2",
+              "books": [
+                "hardrock"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:hardrock:total:5.5:over+under"
+              ],
+              "baselineAt": "2026-11-03T17:46:43.603+00:00",
+              "currentAt": "2026-11-04T13:03:22.214Z",
+              "direction": "under",
+              "latestInformativeDirection": "under"
+            },
+            {
+              "economicPathHash": "d29edc9db8e4626bd910b8c18e3470220a01375966829d9f10c367a0a9c67019",
+              "books": [
+                "draftkings"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:draftkings:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:00:53.000Z",
+              "direction": "over",
+              "latestInformativeDirection": "under"
+            },
+            {
+              "economicPathHash": "e3d5dfa6aba28821d8e601950130d419edde0d32538997ad45cbfa4ac58f1f98",
+              "books": [
+                "fanduel"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:fanduel:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:03:24.000Z",
+              "direction": "over",
+              "latestInformativeDirection": "under"
+            },
+            {
+              "economicPathHash": "e4af4a360aeec2ef4936134ec6b9bcc5627bfdb39be4f2b16e083ac82f5215d4",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:total:3.5:over+under"
+              ],
+              "baselineAt": "2026-11-03T17:45:48.732+00:00",
+              "currentAt": "2026-11-04T13:03:15.480Z",
+              "direction": "under",
+              "latestInformativeDirection": "over"
+            }
+          ]
+        },
+        "btts": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "probabilities": {
+              "yes": 0.7026325763097286,
+              "no": 0.2973674236902714
+            },
+            "nativeMean": null
+          },
+          "current": {
+            "probabilities": {
+              "yes": 0.7056422687807653,
+              "no": 0.2943577312192347
+            },
+            "nativeMean": null
+          },
+          "factor": 1.0145518561766846,
+          "families": [
+            {
+              "economicPathHash": "837c7208dd432c05dc31d036542f69e5d36852fdbbb29f1ff04e16c1255f372f",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:btts:main:yes+no"
+              ],
+              "baselineAt": "2026-10-31T16:17:36.715+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "yes",
+              "latestInformativeDirection": "yes"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fixture": "Manchester City at RB Leipzig",
+      "displayed": {
+        "away": 1.9,
+        "home": 1.4
+      },
+      "projection": {
+        "matchResultOutlook": {
+          "expectedGoals": {
+            "away": 1.8973080971293566,
+            "home": 1.5233293602489004
+          },
+          "likelyScore": {
+            "away": 1,
+            "home": 1
+          },
+          "likelyScoreProbability": 0.10975266524796888,
+          "medianTotal": 3,
+          "mostLikelyTotal": 3
+        },
+        "expectedGoals": {
+          "away": 1.8973080971293566,
+          "home": 1.5233293602489004
+        },
+        "goalOutlookProbabilities": {
+          "home": 0.298381487959857,
+          "draw": 0.24396387547796064,
+          "away": 0.4576546365621818,
+          "over25": 0.6691249261387002,
+          "under25": 0.3308750738612992,
+          "bttsYes": 0.6930362162766082,
+          "bttsNo": 0.30696378372339184
+        },
+        "likelyScore": {
+          "away": 1,
+          "home": 1
+        },
+        "likelyScoreProbability": 0.10975266524796888,
+        "representativeScore": {
+          "away": 2,
+          "home": 1
+        },
+        "representativeScoreProbability": 0.09601320590787235,
+        "medianTotal": 3,
+        "mostLikelyTotal": 3,
+        "teamToScoreProbabilities": {
+          "home": 0.7936627754978847,
+          "away": 0.8596974339193824
+        },
+        "coherentScorePresentation": {
+          "release": "ucl_projected_score_2026_11_04_r12_shared_joint_scenario",
+          "score": {
+            "away": 1.9,
+            "home": 1.4
+          },
+          "scenario": {
+            "away": 2,
+            "home": 1
+          },
+          "scenarioProbability": 0.09601320590787235
+        }
+      },
+      "independent": {
+        "home": 1.462341137932036,
+        "away": 1.8189258450497396
+      },
+      "markets": {
+        "moneyline": {
+          "pick": "MNC",
+          "p": 0.4576546365621818,
+          "grade": "watchlist",
+          "book": "pinnacle",
+          "price": -181,
+          "marketP": 0.6266952633261319
+        },
+        "total": {
+          "pick": "Over",
+          "p": 0.6691249261387002,
+          "grade": "watchlist",
+          "book": "pinnacle",
+          "price": -322,
+          "marketP": 0.7314735864184176
+        },
+        "first_inning": {
+          "pick": "Yes",
+          "p": 0.6930362162766082,
+          "grade": "lean",
+          "book": "draftkings",
+          "price": -255,
+          "marketP": 0.6793858658839468
+        }
+      },
+      "sourceOpinionPools": {
+        "match_result": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": null,
+            "probabilities": {
+              "home": 0.17722133422895942,
+              "draw": 0.1988141645567393,
+              "away": 0.6239645012143012
+            }
+          },
+          "current": {
+            "nativeMean": null,
+            "probabilities": {
+              "home": 0.17463003903940386,
+              "draw": 0.1960838494746279,
+              "away": 0.6292861114859681
+            }
+          },
+          "factor": {
+            "home": 0.9853781983933844,
+            "draw": 0.9862669991939522,
+            "away": 1.008528706779489
+          },
+          "families": [
+            {
+              "economicPathHash": "026d3ca5a3758e4411d34c9ccc0a37ba5943bbf0361ae41a086e6c1f6785ae65",
+              "books": [
+                "caesars"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:caesars:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-03T19:04:49.413+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "home"
+            },
+            {
+              "economicPathHash": "57ecb2b63bdfa1826df98c9965d477ded65d09a685572d5cc3d0412409e27986",
+              "books": [
+                "hardrock"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:hardrock:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-03T04:47:39.301+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "away"
+            },
+            {
+              "economicPathHash": "722bc61717b28a8d9e9aee8116e3c70566b51323ef5c914648b63e3959bbb55a",
+              "books": [
+                "draftkings"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:draftkings:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-10-31T23:47:37.25+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "flat",
+              "latestInformativeDirection": "unknown"
+            },
+            {
+              "economicPathHash": "75d384b1267b3976d30982a1283d186d69dd2911a5be9070fa3ac7d61011e879",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-10-31T17:17:37.635+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "away"
+            },
+            {
+              "economicPathHash": "887a83802f95b6c7a47641be5d706ab95e194fdb1e3b03fd250fe1472b7f819f",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-10-31T17:17:37.635+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "mixed",
+              "latestInformativeDirection": "away"
+            }
+          ]
+        },
+        "total": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": 3.677788971144231,
+            "probabilities": {
+              "over": 0.7107888587740371,
+              "under": 0.2892111412259629
+            }
+          },
+          "current": {
+            "nativeMean": 3.833414005564855,
+            "probabilities": {
+              "over": 0.7364576284610546,
+              "under": 0.26354237153894544
+            }
+          },
+          "factor": 1.0423148352560876,
+          "families": [
+            {
+              "economicPathHash": "36820107b62e0012abc474cff76073f84697e0ffcdbf4cdbd232ed44556aee3e",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:total:3.5:over+under"
+              ],
+              "baselineAt": "2026-11-03T17:45:48.732+00:00",
+              "currentAt": "2026-11-04T13:03:15.480Z",
+              "direction": "over",
+              "latestInformativeDirection": "over"
+            },
+            {
+              "economicPathHash": "7179beaf6c0d89d3fb46f6594a1aae4a9cfcc10670249d134b4ff7c55e1f1d70",
+              "books": [
+                "draftkings"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:draftkings:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:03:13.000Z",
+              "direction": "over",
+              "latestInformativeDirection": "under"
+            },
+            {
+              "economicPathHash": "9e79c85fcc3d13e7a9c31c2fa4fe8fb95a784685ba8106576b53d7de3b0d1779",
+              "books": [
+                "hardrock"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:hardrock:total:4.5:over+under"
+              ],
+              "baselineAt": "2026-11-03T17:47:18.747+00:00",
+              "currentAt": "2026-11-04T13:02:40.275Z",
+              "direction": "over",
+              "latestInformativeDirection": "over"
+            },
+            {
+              "economicPathHash": "ad784943b4fea27b08d763ea3d96aa69a0451309c8656742c19ebf643b6cfbd4",
+              "books": [
+                "fanduel"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:fanduel:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:01:42.000Z",
+              "direction": "over",
+              "latestInformativeDirection": "over"
+            },
+            {
+              "economicPathHash": "ce505eea444b30e212f2977f4751f46fc633ed752d7e9a999c372ea3c2b4ad3d",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:03:27.000Z",
+              "direction": "over",
+              "latestInformativeDirection": "under"
+            }
+          ]
+        },
+        "btts": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "probabilities": {
+              "yes": 0.6464145573713941,
+              "no": 0.3535854426286059
+            },
+            "nativeMean": null
+          },
+          "current": {
+            "probabilities": {
+              "yes": 0.6865262781349726,
+              "no": 0.3134737218650274
+            },
+            "nativeMean": null
+          },
+          "factor": 1.1979516037951101,
+          "families": [
+            {
+              "economicPathHash": "3d77f72e9da474bb3bdfc4484acb552717b6ca5b0b80f600f0159e811eca5075",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:btts:main:yes+no"
+              ],
+              "baselineAt": "2026-10-31T16:17:36.715+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "yes",
+              "latestInformativeDirection": "yes"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fixture": "Arsenal at Slavia Prague",
+      "displayed": {
+        "away": 2.5,
+        "home": 0.4
+      },
+      "projection": {
+        "matchResultOutlook": {
+          "expectedGoals": {
+            "away": 2.1170826297929293,
+            "home": 0.5838603508785127
+          },
+          "likelyScore": {
+            "away": 2,
+            "home": 0
+          },
+          "likelyScoreProbability": 0.15638173516536288,
+          "medianTotal": 3,
+          "mostLikelyTotal": 2
+        },
+        "expectedGoals": {
+          "away": 2.1170826297929293,
+          "home": 0.5838603508785127
+        },
+        "goalOutlookProbabilities": {
+          "home": 0.07952739962897158,
+          "draw": 0.1926262197149581,
+          "away": 0.7278463806560703,
+          "over25": 0.5037993633077789,
+          "under25": 0.49620063669222125,
+          "bttsYes": 0.3793751863894291,
+          "bttsNo": 0.620624813610571
+        },
+        "likelyScore": {
+          "away": 2,
+          "home": 0
+        },
+        "likelyScoreProbability": 0.15638173516536288,
+        "representativeScore": {
+          "away": 3,
+          "home": 0
+        },
+        "representativeScoreProbability": 0.1092147620659852,
+        "medianTotal": 3,
+        "mostLikelyTotal": 2,
+        "teamToScoreProbabilities": {
+          "home": 0.4255444394801876,
+          "away": 0.8757553123477402
+        },
+        "coherentScorePresentation": {
+          "release": "ucl_projected_score_2026_11_04_r12_shared_joint_scenario",
+          "score": {
+            "away": 2.5,
+            "home": 0.4
+          },
+          "scenario": {
+            "away": 3,
+            "home": 0
+          },
+          "scenarioProbability": 0.1092147620659852
+        }
+      },
+      "independent": {
+        "home": 0.750539246286352,
+        "away": 2.174542116123049
+      },
+      "markets": {
+        "moneyline": {
+          "pick": "ARS",
+          "p": 0.7278463806560703,
+          "grade": "watchlist",
+          "book": "pinnacle",
+          "price": -412,
+          "marketP": 0.7781224254924327
+        },
+        "total": {
+          "pick": "Over",
+          "p": 0.5037993633077789,
+          "grade": "no_play",
+          "book": "draftkings",
+          "price": -150,
+          "marketP": 0.5689655172413793
+        },
+        "first_inning": {
+          "pick": "No",
+          "p": 0.620624813610571,
+          "grade": "lean",
+          "book": "draftkings",
+          "price": -125,
+          "marketP": 0.5263157894736842
+        }
+      },
+      "sourceOpinionPools": {
+        "match_result": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": null,
+            "probabilities": {
+              "home": 0.09732989063658488,
+              "draw": 0.162364395075258,
+              "away": 0.7403057142881571
+            }
+          },
+          "current": {
+            "nativeMean": null,
+            "probabilities": {
+              "home": 0.07226887176448775,
+              "draw": 0.1536202837344554,
+              "away": 0.7741108445010568
+            }
+          },
+          "factor": {
+            "home": 0.7425146714109523,
+            "draw": 0.9461451426173234,
+            "away": 1.045663743451454
+          },
+          "families": [
+            {
+              "economicPathHash": "4b67eb267725721ab3a7b3e9a58699f781df461e60c782d233d94d87d962731c",
+              "books": [
+                "hardrock"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:hardrock:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-02T09:47:39.137+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "home"
+            },
+            {
+              "economicPathHash": "68bb7d06e72477299cf78329a3bf3c75d355b3cc28d91ea3799c532fac75c129",
+              "books": [
+                "fanduel"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:fanduel:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-01T20:17:38.104+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "away"
+            },
+            {
+              "economicPathHash": "987a34a5bc63616653198daa1ab1ba930dee2bf7bc5d3f8c70b4d8e78dfdf6d6",
+              "books": [
+                "caesars"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:caesars:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-02T10:17:37.684+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "draw"
+            },
+            {
+              "economicPathHash": "a6eb8d02629f4d6437026c2b801613607f8e0d9fb49456c3333ecde0438eb5ea",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-02T07:47:38.776+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "mixed"
+            },
+            {
+              "economicPathHash": "b29363964cb20b3d18a6b589a86f084699de7cf31d33b998ee8add73337110b5",
+              "books": [
+                "draftkings"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:draftkings:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-03T18:17:39.821+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "draw",
+              "latestInformativeDirection": "away"
+            },
+            {
+              "economicPathHash": "eeb7b9f82b48125c19777c56d8451a259df79c43e505ce49a24ffa55b576233c",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-10-31T14:47:37.092+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "away",
+              "latestInformativeDirection": "home"
+            }
+          ]
+        },
+        "total": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": 3.2203410391877876,
+            "probabilities": {
+              "over": 0.6243252776977996,
+              "under": 0.37567472230220045
+            }
+          },
+          "current": {
+            "nativeMean": 2.98364614665664,
+            "probabilities": {
+              "over": 0.5731360037696153,
+              "under": 0.42686399623038473
+            }
+          },
+          "factor": 0.926500053984703,
+          "families": [
+            {
+              "economicPathHash": "00ed934e8fe17970902ffda6db3e8dc7406b4352e8140650c452709779a4fc5d",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-03T17:45:48.732+00:00",
+              "currentAt": "2026-11-04T13:03:15.480Z",
+              "direction": "under",
+              "latestInformativeDirection": "under"
+            },
+            {
+              "economicPathHash": "35f668ffc70e36437dedf8bfe427ce3a153181c0ce36fc8ba05485cb7349f3b4",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:total:2.75:over+under"
+              ],
+              "baselineAt": "2026-11-03T17:46:34.166+00:00",
+              "currentAt": "2026-11-04T13:02:37.575Z",
+              "direction": "under",
+              "latestInformativeDirection": "under"
+            },
+            {
+              "economicPathHash": "9c9688272dddff40860193933e7206d1dd0fdfb47cc04bef3beccc04b6cf6c02",
+              "books": [
+                "hardrock"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:hardrock:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-02T11:17:37.412+00:00",
+              "currentAt": "2026-11-04T13:02:25.187Z",
+              "direction": "under",
+              "latestInformativeDirection": "over"
+            }
+          ]
+        },
+        "btts": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "probabilities": {
+              "yes": 0.49251637043966323,
+              "no": 0.5074836295603368
+            },
+            "nativeMean": null
+          },
+          "current": {
+            "probabilities": {
+              "yes": 0.393939393939394,
+              "no": 0.6060606060606061
+            },
+            "nativeMean": null
+          },
+          "factor": 0.6697530864197533,
+          "families": [
+            {
+              "economicPathHash": "b675640cb43a1ffc3ee7a80133adfb73cc5d6465f7f8098eb244a1d2e370ada0",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:btts:main:yes+no"
+              ],
+              "baselineAt": "2026-10-31T17:17:37.635+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "no",
+              "latestInformativeDirection": "no"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fixture": "Sabah FK at Viking FK",
+      "displayed": {
+        "away": 1.4,
+        "home": 2.4
+      },
+      "projection": {
+        "matchResultOutlook": {
+          "expectedGoals": {
+            "away": 1.4843992294142112,
+            "home": 2.4365689270158235
+          },
+          "likelyScore": {
+            "away": 1,
+            "home": 2
+          },
+          "likelyScoreProbability": 0.08853878133107151,
+          "medianTotal": 4,
+          "mostLikelyTotal": 3
+        },
+        "expectedGoals": {
+          "away": 1.4843992294142112,
+          "home": 2.4365689270158235
+        },
+        "goalOutlookProbabilities": {
+          "home": 0.5846344435252543,
+          "draw": 0.2046790608361334,
+          "away": 0.21068649563861158,
+          "over25": 0.74855134445652,
+          "under25": 0.25144865554347917,
+          "bttsYes": 0.7099736365836442,
+          "bttsNo": 0.2900263634163558
+        },
+        "likelyScore": {
+          "away": 1,
+          "home": 2
+        },
+        "likelyScoreProbability": 0.08853878133107151,
+        "representativeScore": {
+          "away": 1,
+          "home": 2
+        },
+        "representativeScoreProbability": 0.08853878133107151,
+        "medianTotal": 4,
+        "mostLikelyTotal": 3,
+        "teamToScoreProbabilities": {
+          "home": 0.9129834013762665,
+          "away": 0.7702900499813239
+        },
+        "coherentScorePresentation": {
+          "release": "ucl_projected_score_2026_11_04_r12_shared_joint_scenario",
+          "score": {
+            "away": 1.4,
+            "home": 2.4
+          },
+          "scenario": {
+            "away": 1,
+            "home": 2
+          },
+          "scenarioProbability": 0.08853878133107151
+        }
+      },
+      "independent": {
+        "home": 2.236361976759237,
+        "away": 1.4431338396387896
+      },
+      "markets": {
+        "moneyline": {
+          "pick": "VFK",
+          "p": 0.5846344435252543,
+          "grade": "watchlist",
+          "book": "pinnacle",
+          "price": -260,
+          "marketP": 0.7020046956835831
+        },
+        "total": {
+          "pick": "Over",
+          "p": 0.74855134445652,
+          "grade": "watchlist",
+          "book": "pinnacle",
+          "price": -308,
+          "marketP": 0.7237194940274656
+        },
+        "first_inning": {
+          "pick": "Yes",
+          "p": 0.7099736365836442,
+          "grade": "lean",
+          "book": "draftkings",
+          "price": -195,
+          "marketP": 0.623003194888179
+        }
+      },
+      "sourceOpinionPools": {
+        "match_result": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": null,
+            "probabilities": {
+              "home": 0.6586226697433081,
+              "draw": 0.19121158991080633,
+              "away": 0.1501657403458856
+            }
+          },
+          "current": {
+            "nativeMean": null,
+            "probabilities": {
+              "home": 0.6912660888718141,
+              "draw": 0.176532332828338,
+              "away": 0.13220157829984794
+            }
+          },
+          "factor": {
+            "home": 1.0495631575226958,
+            "draw": 0.923230296399315,
+            "away": 0.880371101926047
+          },
+          "families": [
+            {
+              "economicPathHash": "2467cde034d1e10f898316789626d5fea17f67776c01d4165e866e0705267478",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-10-31T13:47:36.703+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "home"
+            },
+            {
+              "economicPathHash": "99d9b9f97fc215330f4f30caed26fc9eab3fc52e0497c78900e778e2bc24dad7",
+              "books": [
+                "draftkings"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:draftkings:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-03T08:47:39.067+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "home"
+            },
+            {
+              "economicPathHash": "acc79266ecf7e4d7deedeaa979959443149eddc85c3a82fc14e99d96a50ab960",
+              "books": [
+                "hardrock"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:hardrock:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-03T07:17:37.881+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "home"
+            },
+            {
+              "economicPathHash": "c277474b98b4ba0a3d706e4f2774f60269bbfcc797d8ba518e14ee5a57d567a1",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-02T21:47:39.124+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "mixed"
+            },
+            {
+              "economicPathHash": "c72aa8216ea9b826f55e4a93a75f198a76b15f76d63824d89174e5e646d19f6b",
+              "books": [
+                "caesars"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:caesars:match_result:main:home+draw+away"
+              ],
+              "baselineAt": "2026-11-02T21:47:39.124+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "home",
+              "latestInformativeDirection": "home"
+            }
+          ]
+        },
+        "total": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": 3.464505330826939,
+            "probabilities": {
+              "over": 0.6725377843725096,
+              "under": 0.32746221562749045
+            }
+          },
+          "current": {
+            "nativeMean": 3.6970264288510912,
+            "probabilities": {
+              "over": 0.7140633180954183,
+              "under": 0.28593668190458166
+            }
+          },
+          "factor": 1.06711523747855,
+          "families": [
+            {
+              "economicPathHash": "3ef627655b95224f09039b380f5b9360930880604b8bed3d9a74d4c0639a3aaf",
+              "books": [
+                "hardrock"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:hardrock:total:1.5:over+under"
+              ],
+              "baselineAt": "2026-11-03T17:46:43.6+00:00",
+              "currentAt": "2026-11-04T13:03:04.235Z",
+              "direction": "over",
+              "latestInformativeDirection": "under"
+            },
+            {
+              "economicPathHash": "698e2c9ddd9e97fe9618e600ca6c0aebdd22c194b620a21cdf9cf5b36714441b",
+              "books": [
+                "draftkings"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:draftkings:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-01T20:17:38.104+00:00",
+              "currentAt": "2026-11-04T13:01:55.000Z",
+              "direction": "over",
+              "latestInformativeDirection": "under"
+            },
+            {
+              "economicPathHash": "a0dbc7637d571a02f630c4890f2c336dd432187c635fd49963454fd822d4e4ce",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:total:3.5:over+under"
+              ],
+              "baselineAt": "2026-11-03T17:45:48.732+00:00",
+              "currentAt": "2026-11-04T13:03:15.480Z",
+              "direction": "over",
+              "latestInformativeDirection": "over"
+            },
+            {
+              "economicPathHash": "a5fc8aabdffcb7179c083be5b2e2ee96e3c7382cfb408a9cc5056b0ef6bb24ce",
+              "books": [
+                "fanduel"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:fanduel:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:01:47.000Z",
+              "direction": "over",
+              "latestInformativeDirection": "over"
+            },
+            {
+              "economicPathHash": "cc7990d40fcb242649077766ec44131e4592b3108c89a2afc49cc2d82b4b6f6b",
+              "books": [
+                "pinnacle"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:pinnacle:total:2.5:over+under"
+              ],
+              "baselineAt": "2026-11-01T00:17:37.624+00:00",
+              "currentAt": "2026-11-04T13:03:27.000Z",
+              "direction": "over",
+              "latestInformativeDirection": "under"
+            }
+          ]
+        },
+        "btts": {
+          "method": "normalized_log_source_opinions",
+          "informationOverlap": "unknown_correlated_market_and_model_inputs",
+          "baseline": {
+            "nativeMean": null,
+            "probabilities": {
+              "yes": 0.6043986303542273,
+              "no": 0.39560136964577286
+            }
+          },
+          "current": {
+            "nativeMean": null,
+            "probabilities": {
+              "yes": 0.62521208177823,
+              "no": 0.37478791822177004
+            }
+          },
+          "factor": 1.091882975311551,
+          "families": [
+            {
+              "economicPathHash": "1c0598a3779189ddd42b8dabcfe363067e1fb523fee2c38494e442c04b8bad7f",
+              "books": [
+                "novig"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:novig:btts:main:yes+no"
+              ],
+              "baselineAt": "2026-10-31T16:17:36.715+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "yes",
+              "latestInformativeDirection": "yes"
+            },
+            {
+              "economicPathHash": "7f43e9fd95a44295cf90c9e93e2706e5b1e027ce729dc2c528529b35a90776f1",
+              "books": [
+                "draftkings"
+              ],
+              "identities": [
+                "stored_quote:/oddsphere/ucl/stored-line-history:none:draftkings:btts:main:yes+no"
+              ],
+              "baselineAt": "2026-11-01T20:17:38.104+00:00",
+              "currentAt": "2026-11-04T13:03:27.643Z",
+              "direction": "yes",
+              "latestInformativeDirection": "no"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
