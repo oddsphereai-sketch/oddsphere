@@ -42,6 +42,47 @@ This is functional product qualification followed by forward evaluation, not a
 future betting-accuracy guarantee. It adds no provider request, writer, cron,
 lease, stake or locked-record mutation. Evidence and rollback:
 `docs/model-audits/2026-11-04-nhl-external-audited-sharp-reader-r27.md`.
+## Owner-directed UCL opponent-strength scoring repair — November 4
+
+After reviewing the exact November 3 1–8 BTTS cohort and code attribution,
+Daniel Mengel instructed: "fix those problems and get it working properly
+before today's games" and required the independent model and market reader
+to affect scores and picks coherently, "not just forcing some games to No or
+Under." This continues the owner's explicit functional-repair/forward-evaluation
+direction in this chat; retrospective accuracy qualification is not a gate for
+this identified correction. It does not authorize tuning on yesterday's nine
+outcomes or claiming a proven higher win rate.
+
+The exception is limited to UCL model R20 /grade R23 /coherent outcome R13
+/projected score R11 /member R22 and canonical Elo input R2. It replaces raw
+sparse venue scoring ratios with a regularized opponent-adjusted shared
+attack/defense fit, lets the existing correlated strength opinion affect the
+score allocation and BTTS law, fixes the three confirmed club aliases, and
+uses a common-reference baseline/current source-profile density ratio instead
+of frozen independent marginal targets. Current market levels alone still do
+not replace the independent forecast. All-flat/no-history/round-trip forecasts
+retain the independent law; no side quota, hard endpoint snap or new blend is
+authorized. Source probabilities, inferred native-total means and provenance
+must remain distinct.
+
+The discovered publication mismatch is included: the existing owner-approved
+confidence Lean can be honestly nonpositive EV within the actual paired vig
+envelope, while the obsolete universal positive-EV gate was stopping normal
+forecasts and quote journaling. Publication must recheck the same authoritative
+grade function, current release, selected PMF probability, evaluated/current
+price, exact EV and bound source receipt. Invalid actionables and nonpositive-EV
+Best remain rejected. Existing locked tuples keep their original semantics.
+
+No shadow model, second writer, new schedule, provider quota increase, stake,
+member surface/copy, other-sport rule or historical locked correction is
+authorized. One bounded four-request read-only BDL statistical pull was used
+for the offline same-input comparison, not installed as a new production fetch.
+Paired promotion/demotion tests, full model-change verification, focused UCL
+writer/reader/lock tests, actual board-count/coverage proof, independent review,
+fresh-main protected PR and exact live release/normal writer/lock verification
+remain required. See
+`docs/model-audits/2026-11-04-ucl-opponent-strength-score-law.md`.
+
 ## Current-board CBB source identity correction — November 4
 
 The owner's standing instruction is to publish the reviewed functional reader,
