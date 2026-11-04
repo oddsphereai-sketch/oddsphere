@@ -4,7 +4,8 @@ import { advanceCbbProvisionalSnapshot } from "../lib/cbb/provisionalLifecycle";
 import type { CbbForecast, CbbGame, CbbQuote } from "../lib/cbb/types";
 import { adaptCbbProvisionalGame } from "../lib/services/cbb/adaptCbbProvisionalToDailyEdge";
 import { CBB_MEMBER_GAME_STORE_RELEASE, type CbbStoredMemberGame } from "../lib/services/cbb/cbbMemberGameStore";
-import { writeLockedCbbTracking, cbbLockedGradeRelease, cbbLockedModelRelease } from "../lib/services/cbb/cbbTrackingWriter";
+import { writeLockedCbbTracking, cbbLockedGradeRelease, cbbLockedModelRelease, cbbTrackingEvidenceSha256 } from "../lib/services/cbb/cbbTrackingWriter";
+import { hasVerifiedAlternateLineSource } from "../lib/services/tracking/alternateLinePerformance";
 import { CBB_SCORE_RESEARCH_RELEASE } from "../lib/cbb/scoreResearch";
 import { CBB_CURRENT_SCORE_RELEASE } from "../lib/cbb/currentScoreRuntime";
 import { CBB_PROVISIONAL_GRADE_RELEASE, CBB_LEGACY_PROVISIONAL_GRADE_RELEASE } from "../lib/cbb/provisionalGradePolicy";
@@ -43,6 +44,28 @@ async function main(){
   assert.equal(rows[1].line_value,-7.5);
   assert.equal(rows[1].locked_at,lock);
   assert.equal(rows.every(row=>row.provisional===true&&row.sport==="cbb"),true);
+  const originalBytes=JSON.stringify(record);
+  const hash=cbbTrackingEvidenceSha256(record);
+  const reordered={memberGame:record.memberGame,snapshot:record.snapshot,release:record.release};
+  assert.equal(cbbTrackingEvidenceSha256(reordered),hash,"jsonb key ordering cannot invalidate original member evidence");
+  for(const row of rows){
+    const receipt=row.snapshot_json as Record<string,unknown>;
+    assert.equal(receipt.evidence_payload_sha256,hash);
+    assert.equal(receipt.evidence_snapshot_key,"cbb::member-game::777");
+    assert.equal(receipt.evidence_payload_hash_format,"sha256_sorted_json_v1");
+    if(row.market!=="moneyline"){
+      const late={...row,created_at:"2026-11-02T00:00:00Z"} as PredictionRecordRow;
+      assert.equal(hasVerifiedAlternateLineSource(late),true,"late materialization retains verified original pregame evidence");
+      assert.equal(hasVerifiedAlternateLineSource({...late,published_at:"2026-11-01T20:00:00Z"}),false,"a hash cannot legitimize post-start publication");
+      assert.equal(hasVerifiedAlternateLineSource({...late,locked_at:"2026-11-01T20:00:00Z"}),false,"a hash cannot legitimize a post-start lock");
+    }
+  }
+  assert.equal(JSON.stringify(record),originalBytes,"receipt creation never changes the frozen source payload");
+  // Existing incomplete historical receipts remain owner-controlled.
+  for(const row of rows){const receipt=row.snapshot_json as Record<string,unknown>;delete receipt.evidence_payload_sha256;}
+  const historicalBytes=JSON.stringify(rows);
+  assert.equal(await writeLockedCbbTracking(record,db),0);
+  assert.equal(JSON.stringify(rows),historicalBytes,"new writer cannot repair or overwrite an existing locked receipt");
   const settled=rows.map(row=>gradePrediction({record:{...row,id:1} as PredictionRecordRow,
     game:{status:"STATUS_FINAL",home_score:80,away_score:72,first_inning_runs:null},source:"auto_score_ingest"}).result);
   assert.deepEqual(settled,["win","win","loss"]);

@@ -1,5 +1,37 @@
 # Current production model releases and qualified research candidates
 
+## NBA props historical settlement catch-up — November 4
+
+The sole writer advances to
+`nba_player_props_private_writer_2026_11_04_r12_settlement_catchup` and settlement
+to `nba_player_props_private_settlement_2026_11_04_r2_bounded_old_slate_catchup`.
+The existing full refresh still rechecks its recent seven dates for official
+stat revisions. It also discovers at most three older tracking slates not yet
+fully represented in settlement, using a bounded400-row checksum-only catalog.
+Full runs on rest days also refresh official stats and settle while incomplete
+tracking receipts exist; a clear ledger makes zero provider calls on a rest day.
+Completed source checksums are receipted; changed tracking checksums reopen the
+slate. Legacy outcome revisions remain exact and new outcomes append normally.
+No extra market-provider call, independent writer, lease, timer, frozen prediction,
+probability, grade, price, side, model input or actionable-board change.
+Audit found157 missing private outcomes across two older games outside the
+seven-day window. Evidence:
+`docs/model-audits/2026-11-04-nba-props-settlement-catchup.md`.
+
+## CBB future tracking evidence receipts — November 4
+
+Tracking alone advances to
+`cbb_tracking_writer_2026_11_04_r15_original_member_evidence_hash`.
+Every newly inserted tracking receipt includes the SHA256 of the original
+locked member JSON, a sorted-JSON format identifier and its exact snapshot key.
+This preserves alternate-line eligibility when the existing insert-only mirror
+materializes a verified pregame lock after the game. Existing rows, including
+older missing-hash receipts, remain unchanged and owner-controlled. Post-start
+publication or locks still fail alternate-line admission. No model, forecast,
+probability, grade, pick, price, stake, reader rule, writer, lease, provider call,
+schedule or actionable-board changes. Evidence:
+`docs/model-audits/2026-11-04-cbb-future-tracking-evidence.md`.
+
 ## NFL market-specific splits and NBA complete consumer pairs — November 4
 
 The owner directed repair of NFL split qualification, NBA future-price coverage,
@@ -264,7 +296,7 @@ Evidence: `docs/model-audits/2026-11-04-product-refresh-health.md`.
 
 ## NBA player-props member quote authority — November 4
 
-Sole writer is `nba_player_props_private_writer_2026_11_04_r11_member_quote_authority`.
+Sole writer is now `nba_player_props_private_writer_2026_11_04_r12_settlement_catchup` (operational catch-up above); R11 introduced this quote-authority behavior.
 The expanded comparison ladder now uses only the captured current provider cycle,
 retains the runtime's existing retail-primary/Owls-reference precedence, and
 preserves the actual evaluated quote in its own book/side slot. Historical,
@@ -326,7 +358,7 @@ The sole independent runtime remains
 The sole market path is now
 `cbb_candidate_2026_11_04_r14_current_board_source_aliases`, grade
 `cbb_2026_11_04_r16_current_board_source_aliases`, receipt R10, path R4,
-board R17, publisher R26, tracking R14 and adapter R15. Canonical history R2,
+board R17, publisher R26, tracking R15 (evidence receipts above) and adapter R15. Canonical history R2,
 evidence R4 and reader evidence R11 retain their bounded native contracts.
 
 Source identity R5 /split mapping R4 admits exact observed labels N Dakota St,
@@ -2264,7 +2296,7 @@ No prediction or locked member game was written by the failed refresh.
   `nba_player_props_model_tournament_2026_10_28_r16_owls_sharp_market_reader` /
   `nba_player_props_exact_price_grade_2026_10_28_r15_owls_sharp_market_reader`.
   The sole private writer is
-  `nba_player_props_private_writer_2026_11_04_r11_member_quote_authority`; it
+  `nba_player_props_private_writer_2026_11_04_r12_settlement_catchup`; it
   canonicalizes ESPN schedule abbreviations (`GS`, `NO`, `UTAH`, `WSH`) before
   exact provider-game coverage checks, while retaining the same fail-closed
   behavior for a genuinely missing scheduled game. Its private store release is
