@@ -20,7 +20,6 @@ export async function GET(request: Request): Promise<Response> {
       return { records_updated: 0, details: { disabled: true, reason: "UCL refresh gate disabled" } };
     }
     const apply = !providerProbe && flags.writes;
-    const now = new Date();
     const slate = await buildUclSlate();
     const previousResponse = await readCurrentUclMemberSnapshot();
     hydrateUclPriceHistory(previousResponse);
@@ -46,6 +45,8 @@ export async function GET(request: Request): Promise<Response> {
     const lineHistory = historyWritable && seeded.errors.length === 0
       ? await persistUclLineHistory({ response, allBookPrices, apply })
       : { proposed: 0, written: 0, errors: ["line history blocked by UCL coverage/history gate"] };
+    // The lock timestamp must follow complete quote/input collection.
+    const now = new Date();
     const predictions = historyWritable
       ? await writeUclPredictionRecords({ slate, response, apply, now })
       : { mode: apply ? "write" as const : "dry-run" as const, proposed: [], written: 0, lockedPreserved: 0, priorTuplesLocked: 0, lockedRecordIds: [], errors: ["prediction write blocked by UCL coherence/fixture coverage gate"], captureWarnings: [] };

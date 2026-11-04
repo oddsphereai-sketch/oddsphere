@@ -5406,7 +5406,8 @@ The four-season chronological tournament selected the runtime configuration on 2
 - Competition context: `ucl_competition_context_2026_09_03_r2_qualifying_truthful`; settlement: `ucl_regulation_settlement_2026_10_15_r4_frozen_member_forecast_continuity`
 - Frozen history manifest: `ucl_history_manifest_2026_09_03_r1` (185/126/63, cutoff `2026-01-28T20:00:00.000Z`, match SHA-256 `00d3761b7d94851776ffb5b893bdaded8dec85657f769140a2aef0dacd306d36`; 754 team-stat rows, stat SHA-256 `3b817b9aa164ebc5141c26dddf9194611735d98708deef2b5b7f16df91314f88`)
 - Stored-quote availability authority: `ucl_stored_quote_fallback_2026_11_03_r4_attested_stored_paths`
-- Member lifecycle: `ucl_member_snapshot_lifecycle_2026_11_04_r24_current_strength_scoring_prior`
+- Member lifecycle: `ucl_member_snapshot_lifecycle_2026_11_04_r25_input_completion_clock`
+- Prediction writer: `ucl_prediction_writer_2026_11_04_r1_input_completion_clock`; actual completed-input clock owns future capture/lock timestamps, with legacy lock precedence unchanged.
 - Runtime constants: `lib/services/ucl/uclModel.ts`, `lib/services/ucl/uclCoherentMarketOutcome.ts`, `lib/services/ucl/uclPreviewGrade.ts`, and `lib/services/ucl/uclCompetitionContext.ts`. The UCL model, outcome and grade authorities are owned/versioned in UCL; the EPL module supplies only shared display/writer adapters.
 - Provider boundary: the dedicated Ball Don't Lie UCL v1 product owns fixtures, history, stats, availability, 1X2 fallback, and provider opening odds. The documented plural `seasons[]` and bounded `start_date`/`end_date` filters ignored their values in live tests, returning 2026 and 2011 rows respectively. Production does not retry those known-bad paths. Current fixtures and historical cohorts each use the empirically verified singular `season=` transport, paginate, deduplicate exact IDs, reject conflicting duplicates and every returned-season mismatch, and fail closed on an empty current season or any historical season without regulation-final rows. Cache reads and fresh reads must also match the frozen match and team-stat manifests exactly before training. Cached telemetry must prove the same ready singular-season strategy and exact 189/189 cohorts. Schema v6 persists only authenticated raw inputs and deterministically rebuilds joined xG training rows on read. The deviation remains explicit in provider-health telemetry. The read-only replay returned exactly 189 rows for 2024 and 189 for 2025; 754 team-stat rows joined after the complete cohort passed. Empty, mismatched, partial, or manifest-drifted history is a write/publication error: the cycle preserves the last-known-good member snapshot and cannot publish a default-prior replacement. `CurrentSoccerMarketProvider` owns the primary exact-book Match Result, Double Chance, Total, and BTTS board; soccer splits remain truthfully unavailable.
 - Model/grade boundary: R22 uses dated official current-strength priors with mode-one Gamma attack/defense residuals; the original-source coefficient is reproducible from147/185 strictly pre-match 2024-season pairs. Current Elo is current-ability prior knowledge, not a historical forecast covariate. The four-match exposure,365-day decay and xG blend remain; sparse clubs start at distinct attested strengths. The fixed postfit Elo layer is inactive. UCL adaptive goal support replaces the3.8 ceiling/0..8 tail clipping; neutral sites are symmetric and weighted effective samples are truthful. Source completion clocks and exact current-club identity are enforced. Historical/scaffold rows cannot write asR22; complete existing current-release locks restore themselves without a fresh post-kickoff proposal. All locked fields remain exact. See `docs/model-audits/2026-11-04-ucl-current-strength-prior.md`. R21's relative market reader remains: Every validated physical-book path with a complete earlier observed pair enters a normalized logarithmic source-opinion pool; identical economic trajectories form one family and missing history is not a zero vote. Before/current opinions use the same families and apply one joint profile density ratio to the independent law. Books are correlated opinions, never multiplied independent likelihoods or a fixed model/book blend. The baseline is first-observed complete pregame evidence rather than a midnight reset; a true sportsbook opening and information independence from current statistical inputs are not claimed. Net moves, latest reactions, retraces, gaps, opposition and actual source clocks remain distinct. A reversal affects the endpoint once; no extra momentum multiplier or forced No/Under quota exists. Grade R25 retains R24/R23's confidence, value, movement and price thresholds. Best still requires clean originator confirmation, positive EV and price -200 or better; qualified confidence Leans retain honest exact-price EV and the -350 boundary. Scores and all probabilities come from one final law. New snapshots store one coherent decimal scenario presentation for card and reader, with the unconditional means and exact scenario probability retained separately; team-to-score display probabilities are exact joint-law marginals. Old locked payloads never acquire this field or new semantics. Existing quote/split/history recovery, the single leased writer and tracking contracts remain unchanged. Evidence: `docs/model-audits/2026-11-04-ucl-multibook-full-pregame-coherence.md`.
@@ -8323,3 +8324,32 @@ production suite and proves current-release suppression plus legacy markup hashe
 Model/outcome/grade/presentation payload/member identifiers remain the complete
 R22/R25/R15/R13/R24 tuple. No source, writer, lease, schedule, refresh, record or
 tracking changes are made by this presentation correction.
+
+
+## UCL sportsbook-graph capture clock — November 4, 2026
+
+The owner reported a missing purple sportsbook trace on locked Real Madrid MR
+and requested a general prospective repair. The stored daily-refresh request
+started16:47:34.581Z, but its current quotes arrived16:47:39.295Z. Using request
+start as locked_at made the immutable snapshot contradict its own quote clocks;
+the strict graph correctly rejected the whole book. Four actual cases reproduce:
+Madrid MR and Liverpool MR/Total/BTTS. Source data and pre-lock archives exist.
+
+The existing daily route now samples one publication clock after all inputs and
+history writes complete, immediately before the sole prediction writer; lock
+verification uses that exact clock. UCL's wrapper rejects an unlocked/new tuple
+with quote evidence after its proposed capture clock. Real stored locks are
+never revalidated or repaired. WriterR1 is recorded in future snapshot_json;
+member lifecycleR25 identifies the new publication contract. The existing lock
+route already used a post-input default clock and shares the same guard.
+Scheduled T60 metadata, actual lock capture, cadence, sport lease and provider
+budgets remain distinct and unchanged. No new refresh or graph reconstruction.
+
+No prediction, probability, price, score, pick, grade, stake or threshold changes.
+ModelR22/gradeR25/outcomeR15/projected-scoreR13 remain exact; future writer and
+member versions alone advance. All existing locked snapshots retain their own
+clock and original graph behavior. Tests reproduce the four missing curves and
+show both actual source traces across all six future market cases/two layouts,
+plus equal numerical tuples, unchanged legacy bytes, T60-crossing route timing
+and the existing leased cadence. See
+`docs/model-audits/2026-11-04-ucl-sportsbook-graph-clock.md`.

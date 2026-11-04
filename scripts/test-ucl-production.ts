@@ -1,3 +1,4 @@
+import {runUclPublicationClockTests} from "./test-ucl-publication-clock";
 import "./test-soccer-forecast-reliability-display";
 import "./test-ucl-current-native-inputs";
 import {testUclOpponentStrengthScoreLaw} from "./test-ucl-opponent-strength-score-law";
@@ -322,7 +323,7 @@ const noPathOutcome = deriveUclCoherentMarketOutcome({
 });
 assert.deepEqual(noPathOutcome.joint, noPathPrior, "missing market paths preserve the exact independent law");
 assert.equal("bttsShadow" in noPathOutcome.audit, false, "UCL persists one authoritative forecast");
-assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_04_r24_current_strength_scoring_prior");
+assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_04_r25_input_completion_clock");
 assert.deepEqual(
   { train: UCL_CHRONOLOGICAL_MANIFEST.train, calibration: UCL_CHRONOLOGICAL_MANIFEST.calibration, holdout: UCL_CHRONOLOGICAL_MANIFEST.holdout, cutoff: UCL_CHRONOLOGICAL_MANIFEST.cutoff },
   { train: 185, calibration: 126, holdout: 63, cutoff: "2026-01-28T20:00:00.000Z" },
@@ -782,6 +783,7 @@ assert.match(slateBuilder, /provider\.listCurrentSeasonMatches\(UCL_CURRENT_SEAS
 assert.doesNotMatch(slateBuilder, /listMatches\(\{ seasons: \[UCL_CURRENT_SEASON\]/, "production never retries the known-bad plural current-season filter");
 assert.match(slateBuilder, /default:\$\{computeSlateDate\("soccer", selectionNow\)\}/, "the default board cache is keyed by the ET calendar day");
 
+await runUclPublicationClockTests();
 console.log("UCL production contract tests passed");
 }
 
