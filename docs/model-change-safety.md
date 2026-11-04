@@ -1,5 +1,31 @@
 # Model change safety protocol
 
+## Current-board CBB source identity correction — November 4
+
+The owner's standing instruction is to publish the reviewed functional reader,
+spot-check actual games and fix anything that needs fixing. The latest request
+asks independent AI reviewers to read every current game's market and confirm
+its projections/predictions/grades make sense. One bounded actual provider read
+revealed available Pinnacle contracts dropped for exact institution spelling,
+not genuinely unavailable data. This narrow source-identity repair continues
+that authorized functional scope: independent R4 unchanged; market R14 /grade
+R16 /receipt R10 /board R17 /publisher R26 /tracking R14 /adapter R15, with
+provider identity R5 and split mapping R4.
+
+No numerical algorithm, grade threshold, stake, source preference, provider
+cadence or writer changes. Only four observed aliases are added; wrong-school
+Maryland/High Point, North Dakota versus North Dakota State, Colorado State
+versus Northridge and other Loyola/Queens institutions remain distinct.
+The same actual response /11-game/33-market comparison restores6 professional
+contracts and changes2 scores,0 sides and1 actionable demotion (13→12), with
+existing paired promotion/demotion functionality tested and no replacement quota.
+All quotes retain their genuine post-discovery availability, not historical
+backdating. Locked R13/R15/R9 and earlier records remain exact; original R9
+anchors continue. Full/focused checks, independent source/legacy review,
+fresh-main protected PR and post-deployment release/data/reader/lock proof
+remain mandatory. No outcome-accuracy claim. Evidence:
+`docs/model-audits/2026-11-04-cbb-current-board-source-aliases.json`.
+
 ## Owner-directed three-gap CBB joint decision repair — November 3
 
 After three independent reviewers reproduced the remaining native/network clock
