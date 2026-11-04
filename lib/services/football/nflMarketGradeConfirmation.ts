@@ -1,3 +1,5 @@
+import {assessNflUnchangedMoneylineConfirmation,type NflUnchangedMoneylineProof} from './nflUnchangedMoneylineConfirmation';
+import type {NflEpisodeHistoryBook} from './nflMoneylineEpisodeTransport';
 import type { NflPreviewBookOdds } from "./balldontlieNflPreviewSlate";
 import type { NflRegularEvaluatedBetDecision } from "./nflRegularDecisionEvidence";
 import type { NflMarketInnovationReceipt } from "./nflMarketInnovationRuntime";
@@ -24,10 +26,13 @@ export type NflMarketGradePromotionContext = {
   marketQualification: Partial<Record<Market, NflMarketQualificationReceipt>>;
   books: NflPreviewBookOdds[];
   referenceBooks?: NflPreviewBookOdds[];
+  /** Original source pairs with native identity and actual capture availability. */
+  sourceHistory?: NflEpisodeHistoryBook[];
   /** Successful current executable-quote batch availability, not last price-change time. */
   executionAvailableAt: string;
 };
 export type NflMarketGradeConfirmation = {
+  unchangedMoneylineProof?: NflUnchangedMoneylineProof[];
   supportingSources: string[];
   convictionRiskSources: string[];
   heldResistanceSources: string[];
@@ -107,6 +112,9 @@ export function assessNflMarketGradeConfirmation(args: {
       c.independentForecast.providerGameId !== d.providerGameId || c.finalForecast.homeTeam !== args.homeTeam ||
       c.independentForecast.homeTeam !== args.homeTeam || d.market !== "total" &&
       d.side !== c.finalForecast.homeTeam && d.side !== c.finalForecast.awayTeam) return result;
+  const unchanged = assessNflUnchangedMoneylineConfirmation({decision:d,innovation:read,context:c,
+    direction,convictionRiskSources:result.convictionRiskSources});
+  if (unchanged) return {...result,...unchanged};
   const qualification = c.marketQualification[d.market];
   if (qualification?.basis !== "source_bound_joint_innovation" || !nflMarketQualificationMatches({
     receipt: qualification, market: d.market, providerGameId: d.providerGameId, evaluatedAt: d.evaluatedAt,

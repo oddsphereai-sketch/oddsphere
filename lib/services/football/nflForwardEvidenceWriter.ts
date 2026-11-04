@@ -162,7 +162,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_02_r106_published_rounding_pressure" as const;
+  "nfl_forward_evidence_writer_2026_11_04_r107_unchanged_ml_confirmation" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;

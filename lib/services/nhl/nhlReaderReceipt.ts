@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
+import type { NhlBookPathReceipt } from "./nhlMarketEpisodeArbiter";
 
+export const NHL_LEGACY_READER_RECEIPT_RELEASE = "nhl_reader_receipt_2026_11_04_r2_identity_bound_market_evidence" as const;
 export const NHL_READER_RECEIPT_RELEASE =
-  "nhl_reader_receipt_2026_11_04_r2_identity_bound_market_evidence" as const;
+  "nhl_reader_receipt_2026_11_04_r3_exact_price_professional_best" as const;
 export const NHL_READER_RECEIPT_SCHEMA_VERSION = 2 as const;
 export const NHL_READER_RECEIPT_MAX_BYTES = 64 * 1024;
 
@@ -64,6 +66,10 @@ export type NhlReaderDecisionPoint = {
 };
 
 export type NhlReaderMarketReceipt = {
+  /** Exact current author pair; absent on immutable R2 receipts. */
+  confirmationQuotePair?: { home: NhlReaderQuoteStop; away: NhlReaderQuoteStop } | null;
+  /** Native professional paths retain causal legs and competing sources across older volatility. */
+  confirmationSourcePaths?: NhlBookPathReceipt[];
   evaluatedQuote: NhlReaderQuoteStop | null;
   opposingQuote: NhlReaderQuoteStop | null;
   selectedTrail: NhlReaderQuoteStop[];
@@ -90,7 +96,7 @@ export type NhlReaderMarketReceipt = {
 
 export type NhlReaderReceiptBody = {
   schemaVersion: typeof NHL_READER_RECEIPT_SCHEMA_VERSION;
-  release: typeof NHL_READER_RECEIPT_RELEASE;
+  release: typeof NHL_READER_RECEIPT_RELEASE | typeof NHL_LEGACY_READER_RECEIPT_RELEASE;
   capturedAt: string;
   cutoffAt: string;
   identity: {
@@ -263,6 +269,22 @@ function sideFitsMarket(side: NhlReaderSide, market: NhlReaderMarket): boolean {
 
 function validMarket(value: unknown, market: NhlReaderMarket): value is NhlReaderMarketReceipt {
   if (!isPlainObject(value)) return false;
+  if (value.confirmationSourcePaths != null) {
+    if (!Array.isArray(value.confirmationSourcePaths)) return false;
+    for (const path of value.confirmationSourcePaths) {
+    if (!isPlainObject(path) || path.market !== "moneyline" || typeof path.sportsbook !== "string"
+      || typeof path.sportsbookFamily !== "string" || typeof path.contractKey !== "string"
+      || typeof path.complete !== "boolean" || (path.sourceClass !== "named" && path.sourceClass !== "broad")
+      || !["stable", "flat", "buyback", "reversal", "incomplete", "unavailable"].includes(String(path.state))
+      || !isFiniteNumber(path.openingValue) || !isFiniteNumber(path.currentValue)
+      || !isIso(path.openingObservedAt) || !isIso(path.currentObservedAt)
+      || (path.firstMaterialMoveAt !== null && !isIso(path.firstMaterialMoveAt))
+      || !Array.isArray(path.observations) || !path.observations.every(point => isPlainObject(point)
+        && isIso(point.at) && isFiniteNumber(point.value))) return false;
+    }
+  }
+  if (value.confirmationQuotePair != null && (!isPlainObject(value.confirmationQuotePair)
+    || !validQuote(value.confirmationQuotePair.home) || !validQuote(value.confirmationQuotePair.away))) return false;
   if (value.evaluatedQuote !== null && !validQuote(value.evaluatedQuote)) return false;
   if (value.opposingQuote !== null && !validQuote(value.opposingQuote)) return false;
   if (!Array.isArray(value.selectedTrail) || !value.selectedTrail.every(validQuote)) return false;
@@ -302,7 +324,7 @@ function validMarket(value: unknown, market: NhlReaderMarket): value is NhlReade
 
 export function validateNhlReaderReceiptBody(value: unknown): value is NhlReaderReceiptBody {
   if (!isPlainObject(value)) return false;
-  if (value.schemaVersion !== NHL_READER_RECEIPT_SCHEMA_VERSION || value.release !== NHL_READER_RECEIPT_RELEASE) return false;
+  if (value.schemaVersion !== NHL_READER_RECEIPT_SCHEMA_VERSION || value.release !== NHL_READER_RECEIPT_RELEASE && value.release !== NHL_LEGACY_READER_RECEIPT_RELEASE) return false;
   if (!isIso(value.capturedAt) || !isIso(value.cutoffAt) || !isPlainObject(value.markets)) return false;
   if (!isPlainObject(value.identity)
     || !Number.isInteger(value.identity.gameId)
