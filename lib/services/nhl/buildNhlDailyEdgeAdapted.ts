@@ -39,7 +39,11 @@ import {
 } from "../../automodel/nhlRosterPrior2026";
 import type { SharpNhlOpportunity } from "../../providers/nhl/_sharpApiNhlClient";
 import type { DailyEdgeResponse } from "../../../app/lab/lib/labTypes";
-import { resolvedNhlSplitsByGame, type ResolvedNhlSplitsEvent } from "./nhlResolvedSplits";
+import {
+  nhlSplitPressureReceipt,
+  resolvedNhlSplitsByGame,
+  type ResolvedNhlSplitsEvent,
+} from "./nhlResolvedSplits";
 import { loadNhlRegularStateForSlate } from "./loadNhlRegularState";
 import { loadNhlOpponentAdjustedState } from "./loadNhlOpponentAdjustedState";
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
@@ -52,9 +56,21 @@ import {
 } from "./nhlLineBoard";
 import { buildNhlRegularMarketAwareForecast } from "./nhlTargetExcludedTotalMarket";
 import { loadCompleteNhlLineHistory } from "./nhlLineStore";
+import {
+  decodeNhlReaderReceipt,
+  type NhlReaderMarketReceipt,
+  type NhlReaderReceipt,
+} from "./nhlReaderReceipt";
+import type { MarketSplitDisplaySection } from "../../types/domain/RecommendationDecision";
+import {
+  identifiedNhlProfessionalSplits,
+  readStoredSharpApiCurrentSplits,
+  type SharpApiCurrentSplitFeed,
+} from "../../providers/real_api/sharpApiCurrentSplits";
+import { selectNhlProfessionalSplitPressure } from "./nhlProfessionalSplitPressure";
 
 export const NHL_DAILY_EDGE_READER_RELEASE =
-  "nhl_daily_edge_reader_2026_10_27_r18_owls_same_book_movement" as const;
+  "nhl_daily_edge_reader_2026_11_04_r20_identity_bound_reader_receipt" as const;
 
 type NhlStoredSnapshot = {
   model_output?: NhlModelOutput;
@@ -62,6 +78,7 @@ type NhlStoredSnapshot = {
   evaluated_quotes?: Partial<Record<"moneyline" | "total" | "spread", NhlSelectedPriceQuote | null>>;
   market_at_lock?: { lines_snapshot?: NhlCanonicalLineRow[] };
   captured_at?: string | null;
+  nhl_reader_receipt_v2?: unknown;
 };
 
 type NhlStoredRecord = {
@@ -98,6 +115,216 @@ export function nhlVerdictFromStoredDecision(
     default:
       return "pass";
   }
+}
+
+function bundleFromReaderReceipt(
+  receipt: NhlReaderMarketReceipt,
+  opposingLabel: string,
+): NhlPerMarketBest {
+  const trail = (stops: NhlReaderMarketReceipt["selectedTrail"]) => stops.map((stop, index) => ({
+    american: stop.american,
+    line: stop.line,
+    observedAt: stop.clock.sourceObservedAt,
+    sportsbook: stop.sportsbook,
+    source: index === stops.length - 1 ? "current_line" as const : "line_history" as const,
+    label: index === stops.length - 1 ? "current" as const : index === 0 ? "first" as const : "move" as const,
+  }));
+  const selected = trail(receipt.selectedTrail);
+  const opposing = trail(receipt.opposingTrail);
+  const line = trail(receipt.lineTrail);
+  return {
+    priceAmerican: receipt.evaluatedQuote?.american ?? null,
+    sportsbook: receipt.evaluatedQuote?.sportsbook ?? null,
+    openAmerican: selected[0]?.american ?? receipt.evaluatedQuote?.american ?? null,
+    observedAt: receipt.evaluatedQuote?.clock.sourceObservedAt ?? null,
+    oddsTrail: selected,
+    lineTrail: line,
+    opposingOddsTrail: {
+      side: receipt.opposingQuote?.side ?? (receipt.evaluatedQuote?.side === "home" ? "away" : receipt.evaluatedQuote?.side === "away" ? "home" : receipt.evaluatedQuote?.side === "over" ? "under" : "over"),
+      label: opposingLabel,
+      stops: opposing,
+    },
+    pinnacleEvPct: null,
+    fairProbability: null,
+  };
+}
+
+export function professionalSectionFromReaderReceipt(
+  receipt: NhlReaderMarketReceipt,
+  selectedLabel: string,
+  opposingLabel: string,
+): MarketSplitDisplaySection | null {
+  // Display and numerical authority are separate contracts. A fresh neutral or
+  // conflicting Circa row remains useful member evidence even though it must
+  // not move the model. Only clock-invalid rows are hidden; frozen priority
+  // order (Circa then fallbacks) chooses the display source.
+  const split = receipt.splits.professionalBooks.find((candidate) => (
+    candidate.rejectionReason !== "invalid_clock"
+      && candidate.rejectionReason !== "future_observation"
+      && candidate.rejectionReason !== "stale_observation"
+  ));
+  if (!split) return null;
+  const sourceBook = split.sourceBook === "circa" || split.sourceBook === "draftkings"
+    || split.sourceBook === "consensus" || split.sourceBook === "betmgm"
+    || split.sourceBook === "draftkings_network"
+    ? split.sourceBook
+    : null;
+  const opposingSide = split.selectedSide === "home" ? "away"
+    : split.selectedSide === "away" ? "home"
+      : split.selectedSide === "over" ? "under" : "over";
+  return {
+    label: "Sharp Book Splits",
+    sourceBook,
+    sourceObservedAt: split.clock.sourceObservedAt,
+    rows: [
+      {
+        side: split.selectedSide,
+        label: selectedLabel,
+        moneyPct: split.selectedMoneyPct,
+        betsPct: split.selectedBetsPct,
+        observedAt: split.clock.sourceObservedAt,
+        freshnessCheckedAt: split.clock.receivedAt,
+        isStale: false,
+      },
+      {
+        side: opposingSide,
+        label: opposingLabel,
+        moneyPct: split.opposingMoneyPct,
+        betsPct: split.opposingBetsPct,
+        observedAt: split.clock.sourceObservedAt,
+        freshnessCheckedAt: split.clock.receivedAt,
+        isStale: false,
+      },
+    ],
+    signal: null,
+    lastUpdated: null,
+  };
+}
+
+function splitsFromReaderReceipt(receipt: NhlReaderReceipt): ResolvedNhlSplitsEvent | null {
+  const out: ResolvedNhlSplitsEvent = {};
+  let populated = false;
+  for (const market of ["moneyline", "spread", "total"] as const) {
+    const split = receipt.markets[market].splits.publicConsensus;
+    if (!split) continue;
+    const source = split.provider === "playbook" || split.provider === "sharpapi" ? split.provider : null;
+    if (!source) continue;
+    const selectedPrimary = market === "total" ? split.selectedSide === "over" : split.selectedSide === "home";
+    const primaryBets = (selectedPrimary ? split.selectedBetsPct : split.opposingBetsPct) / 100;
+    const primaryMoney = (selectedPrimary ? split.selectedMoneyPct : split.opposingMoneyPct) / 100;
+    if (market === "total") {
+      out.total = {
+        bets_pct: { over: primaryBets, under: 1 - primaryBets },
+        handle_pct: { over: primaryMoney, under: 1 - primaryMoney },
+      };
+    } else {
+      out[market] = {
+        bets_pct: { home: primaryBets, away: 1 - primaryBets },
+        handle_pct: { home: primaryMoney, away: 1 - primaryMoney },
+      };
+    }
+    out.internal_resolution ??= {};
+    out.internal_resolution[market] = {
+      source,
+      agreement: "single_source",
+      confidence: split.confidence,
+      providerGapPct: null,
+      observedAt: split.clock.sourceObservedAt,
+      receivedAt: split.clock.receivedAt,
+      completePair: true,
+    };
+    populated = true;
+  }
+  return populated ? out : null;
+}
+
+function splitsFromStoredSnapshot(snapshot: NhlFeatureSnapshot): ResolvedNhlSplitsEvent | null {
+  const out: ResolvedNhlSplitsEvent = {};
+  const addSide = (market: "moneyline" | "spread", bets: number | null | undefined, money: number | null | undefined) => {
+    if (bets == null || money == null) return;
+    out[market] = {
+      bets_pct: { home: bets / 100, away: 1 - bets / 100 },
+      handle_pct: { home: money / 100, away: 1 - money / 100 },
+    };
+  };
+  addSide("moneyline", snapshot.market.ml_home_bets_pct, snapshot.market.ml_home_money_pct);
+  addSide("spread", snapshot.market.spread_home_bets_pct, snapshot.market.spread_home_money_pct);
+  if (snapshot.market.total_over_bets_pct != null && snapshot.market.total_over_money_pct != null) {
+    out.total = {
+      bets_pct: { over: snapshot.market.total_over_bets_pct / 100, under: 1 - snapshot.market.total_over_bets_pct / 100 },
+      handle_pct: { over: snapshot.market.total_over_money_pct / 100, under: 1 - snapshot.market.total_over_money_pct / 100 },
+    };
+  }
+  const sources = {
+    moneyline: snapshot.market.ml_split_source,
+    spread: snapshot.market.spread_split_source,
+    total: snapshot.market.total_split_source,
+  } as const;
+  const confidence = {
+    moneyline: snapshot.market.ml_split_confidence,
+    spread: snapshot.market.spread_split_confidence,
+    total: snapshot.market.total_split_confidence,
+  } as const;
+  for (const market of ["moneyline", "spread", "total"] as const) {
+    if (!out[market] || !sources[market]) continue;
+    out.internal_resolution ??= {};
+    out.internal_resolution[market] = {
+      source: sources[market]!,
+      agreement: "single_source",
+      confidence: confidence[market] ?? "none",
+      providerGapPct: null,
+    };
+  }
+  return out.moneyline || out.spread || out.total ? out : null;
+}
+
+function legacyLockedBundle(args: {
+  market: "moneyline" | "total" | "spread";
+  selectedSide: "home" | "away" | "over" | "under";
+  opposingSide: "home" | "away" | "over" | "under";
+  selectedLine: number | null;
+  opposingLine: number | null;
+  record: NhlStoredRecord | undefined;
+  stored: NhlStoredSnapshot;
+  lockedAt: string;
+  opposingLabel: string;
+}): NhlPerMarketBest {
+  const frozenLines = (args.stored.market_at_lock?.lines_snapshot ?? []).map((line) => ({
+    ...line,
+    observed_at: line.observed_at ?? args.stored.captured_at ?? args.lockedAt,
+  }));
+  const evaluatedQuote = args.stored.evaluated_quotes?.[args.market] ?? null;
+  const selectedQuote = resolveNhlLockedPriceQuote({
+    market: args.market,
+    side: args.selectedSide,
+    line: args.selectedLine,
+    price: args.record?.odds_american ?? evaluatedQuote?.odds_american ?? null,
+    lockedAt: args.lockedAt,
+    evaluatedQuote,
+    frozenLines,
+  });
+  const trail = buildNhlTwoSidedPriceTrail({
+    live: frozenLines.map((line) => ({ ...line, observed_at: line.observed_at ?? null })),
+    history: [],
+    market: args.market,
+    selectedSide: args.selectedSide,
+    opposingSide: args.opposingSide,
+    selectedLine: args.selectedLine,
+    opposingLine: args.opposingLine,
+    preferredBook: selectedQuote?.sportsbook || null,
+    preservePreferredBook: true,
+  });
+  return {
+    priceAmerican: selectedQuote?.odds_american ?? null,
+    sportsbook: selectedQuote?.sportsbook || null,
+    openAmerican: trail.selected[0]?.american ?? selectedQuote?.odds_american ?? null,
+    observedAt: selectedQuote?.observed_at ?? args.lockedAt,
+    oddsTrail: trail.selected,
+    lineTrail: trail.line,
+    opposingOddsTrail: { side: args.opposingSide, label: args.opposingLabel, stops: trail.opposing },
+    pinnacleEvPct: null,
+    fairProbability: null,
+  };
 }
 
 /**
@@ -169,13 +396,6 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     return buildNhlDailyEdgeResponse({ date, requestedDate: date, games: [] });
   }
 
-  let splitsByGame = new Map<number, ResolvedNhlSplitsEvent>();
-  try {
-    splitsByGame = await resolvedNhlSplitsByGame(supabase, date);
-  } catch (error) {
-    console.warn(`nhl daily-edge: persisted splits unavailable: ${(error as Error).message}`);
-  }
-
   // Load teams for the games.
   const teamIds = new Set<number>();
   for (const g of games) {
@@ -189,64 +409,6 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
   const teamById = new Map<number, { id: number; abbreviation: string }>(
     ((teamsData ?? []) as Array<{ id: number; abbreviation: string }>).map((t) => [t.id, t]),
   );
-
-  const featureSeason = nhlSeasonStartYearFromExternalId(games[0]!.external_id);
-  const calibratedStateByTeam = await loadNhlRegularStateForSlate(
-    supabase,
-    featureSeason,
-    games.reduce((earliest, game) => game.game_date < earliest ? game.game_date : earliest, games[0]!.game_date),
-  );
-  const replayedState = await loadNhlOpponentAdjustedState(featureSeason, date);
-  const priorGameCountResult = await supabase.from("games")
-    .select("external_id")
-    .eq("sport", "nhl")
-    .gte("external_id", featureSeason * 1_000_000 + 20_000)
-    .lte("external_id", featureSeason * 1_000_000 + 29_999)
-    .lt("slate_date", date)
-    .not("home_score", "is", null)
-    .not("away_score", "is", null);
-  const expectedPriorGameIds = new Set((priorGameCountResult.data ?? []).map((game) => Number(game.external_id)));
-  const expectedPriorGames = expectedPriorGameIds.size;
-  const replayComplete = priorGameCountResult.error === null
-    && replayedState.complete
-    && [...expectedPriorGameIds].every((gameId) => replayedState.gameIdsApplied.has(gameId));
-  if (!replayComplete) {
-    console.warn(`nhl daily-edge: MoneyPuck replay incomplete (${replayedState.gamesApplied}/${expectedPriorGames}): ${replayedState.error ?? priorGameCountResult.error?.message ?? "coverage gap"}`);
-  }
-  let providerMetricsByTeam: Awaited<ReturnType<typeof fetchBdlNhlTeamMetricsWithPriorFallback>>["metrics"] = new Map();
-  let providerFeatureSeason: number | null = null;
-  const rosterPriorByTeam = new Map<string, NhlRosterPrior>();
-  const currentRosterGoaliesByTeam = new Map<string, ReadonlySet<string>>(
-    [...teamById.values()].map((team) => [team.abbreviation, new Set<string>()]),
-  );
-  const bdlKey = process.env.BALLDONTLIE_API_KEY;
-  if (bdlKey) {
-    try {
-      const provider = await fetchBdlNhlTeamMetricsWithPriorFallback(featureSeason, bdlKey);
-      providerMetricsByTeam = provider.metrics;
-      providerFeatureSeason = provider.sourceSeason;
-    } catch (error) {
-      console.warn(`nhl daily-edge: BALLDONTLIE team metrics unavailable: ${(error as Error).message}`);
-    }
-    try {
-      const rosters = await fetchBdlNhlRosters(
-        featureSeason,
-        [...teamById.values()].map((team) => team.abbreviation),
-        bdlKey,
-      );
-      for (const [team, players] of rosters) {
-        const prior = aggregateNhlRosterPrior(players);
-        if (prior) rosterPriorByTeam.set(team, prior);
-        currentRosterGoaliesByTeam.set(team, new Set(
-          players
-            .filter((player) => player.positionCode === "G")
-            .map((player) => normalizeNhlPlayerName(player.fullName)),
-        ));
-      }
-    } catch (error) {
-      console.warn(`nhl daily-edge: BALLDONTLIE current rosters unavailable: ${(error as Error).message}`);
-    }
-  }
 
   // Read the writer-owned active-release tuple for both unlocked and locked
   // games. Recomputing an unlocked r6 card without the writer's persisted
@@ -285,11 +447,13 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         payload.model_output.model_version as typeof NHL_REGULAR_TRANSITION_MODEL_RELEASES[number],
       )
       && payload.feature_inputs.game_type === 2
-      && (r.model_version === NHL_REGULAR_MODEL_RELEASE || r.locked_at !== null || !replayComplete)
+      && (r.model_version === NHL_REGULAR_MODEL_RELEASE || r.locked_at !== null)
     ) {
       const identity = JSON.stringify({
         model: payload.model_output,
         snapshot: payload.feature_inputs,
+        evaluatedQuotes: payload.evaluated_quotes ?? null,
+        readerReceipt: payload.nhl_reader_receipt_v2 ?? null,
       });
       const prior = predictionPayloadByGame.get(r.game_id);
       if (prior && prior.modelVersion === r.model_version && prior.identity !== identity) {
@@ -311,7 +475,15 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
   }
   for (const [gameId, payload] of predictionPayloadByGame) {
     if (incoherentPayloadReleaseGames.has(`${gameId}:${payload.modelVersion}`)) {
-      predictionPayloadByGame.delete(gameId);
+      console.warn(`nhl daily-edge: sibling payload mismatch for game ${gameId}; preserving stored decisions but refusing receipt/quote precedence`);
+      predictionPayloadByGame.set(gameId, {
+        ...payload,
+        storedSnapshot: {
+          ...payload.storedSnapshot,
+          evaluated_quotes: undefined,
+          nhl_reader_receipt_v2: undefined,
+        },
+      });
     }
   }
   const writerVerdictsByGame = new Map<number, NhlWriterVerdicts>();
@@ -336,6 +508,104 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     }
   }
 
+  // Locked public records are rendered entirely from their stored payloads.
+  // Load mutable stats, splits and provider state only when at least one game
+  // still needs an unlocked build, and fail those dependencies per game/slate
+  // without making an immutable locked card disappear.
+  const hasUnlockedGame = games.some((game) => predictionPayloadByGame.get(game.id)?.lockedAt == null);
+  const featureSeason = nhlSeasonStartYearFromExternalId(games[0]!.external_id);
+  let splitsByGame = new Map<number, ResolvedNhlSplitsEvent>();
+  let professionalSplitFeed: SharpApiCurrentSplitFeed | null = null;
+  let calibratedStateByTeam: Awaited<ReturnType<typeof loadNhlRegularStateForSlate>> = new Map();
+  let replayedState: Awaited<ReturnType<typeof loadNhlOpponentAdjustedState>> = {
+    states: new Map(),
+    fastStates: new Map(),
+    gameIdsApplied: new Set(),
+    source: "fallback",
+    complete: false,
+    gamesApplied: 0,
+    requestCount: 0,
+    error: "not loaded",
+  };
+  let expectedPriorGames = 0;
+  let replayComplete = false;
+  let providerMetricsByTeam: Awaited<ReturnType<typeof fetchBdlNhlTeamMetricsWithPriorFallback>>["metrics"] = new Map();
+  let providerFeatureSeason: number | null = null;
+  const rosterPriorByTeam = new Map<string, NhlRosterPrior>();
+  const currentRosterGoaliesByTeam = new Map<string, ReadonlySet<string>>(
+    [...teamById.values()].map((team) => [team.abbreviation, new Set<string>()]),
+  );
+  if (hasUnlockedGame) {
+    try {
+      professionalSplitFeed = await readStoredSharpApiCurrentSplits("nhl");
+    } catch (error) {
+      console.warn(`nhl daily-edge: identified professional splits unavailable: ${(error as Error).message}`);
+    }
+    try {
+      splitsByGame = await resolvedNhlSplitsByGame(supabase, date);
+    } catch (error) {
+      console.warn(`nhl daily-edge: persisted splits unavailable: ${(error as Error).message}`);
+    }
+    try {
+      calibratedStateByTeam = await loadNhlRegularStateForSlate(
+        supabase,
+        featureSeason,
+        games.reduce((earliest, game) => game.game_date < earliest ? game.game_date : earliest, games[0]!.game_date),
+      );
+    } catch (error) {
+      console.warn(`nhl daily-edge: calibrated state unavailable: ${(error as Error).message}`);
+    }
+    try {
+      replayedState = await loadNhlOpponentAdjustedState(featureSeason, date);
+    } catch (error) {
+      replayedState = { ...replayedState, error: (error as Error).message };
+    }
+    const priorGameCountResult = await supabase.from("games")
+      .select("external_id")
+      .eq("sport", "nhl")
+      .gte("external_id", featureSeason * 1_000_000 + 20_000)
+      .lte("external_id", featureSeason * 1_000_000 + 29_999)
+      .lt("slate_date", date)
+      .not("home_score", "is", null)
+      .not("away_score", "is", null);
+    const expectedPriorGameIds = new Set((priorGameCountResult.data ?? []).map((game) => Number(game.external_id)));
+    expectedPriorGames = expectedPriorGameIds.size;
+    replayComplete = priorGameCountResult.error === null
+      && replayedState.complete
+      && [...expectedPriorGameIds].every((gameId) => replayedState.gameIdsApplied.has(gameId));
+    if (!replayComplete) {
+      console.warn(`nhl daily-edge: MoneyPuck replay incomplete (${replayedState.gamesApplied}/${expectedPriorGames}): ${replayedState.error ?? priorGameCountResult.error?.message ?? "coverage gap"}`);
+    }
+    const bdlKey = process.env.BALLDONTLIE_API_KEY;
+    if (bdlKey) {
+      try {
+        const provider = await fetchBdlNhlTeamMetricsWithPriorFallback(featureSeason, bdlKey);
+        providerMetricsByTeam = provider.metrics;
+        providerFeatureSeason = provider.sourceSeason;
+      } catch (error) {
+        console.warn(`nhl daily-edge: BALLDONTLIE team metrics unavailable: ${(error as Error).message}`);
+      }
+      try {
+        const rosters = await fetchBdlNhlRosters(
+          featureSeason,
+          [...teamById.values()].map((team) => team.abbreviation),
+          bdlKey,
+        );
+        for (const [team, players] of rosters) {
+          const prior = aggregateNhlRosterPrior(players);
+          if (prior) rosterPriorByTeam.set(team, prior);
+          currentRosterGoaliesByTeam.set(team, new Set(
+            players
+              .filter((player) => player.positionCode === "G")
+              .map((player) => normalizeNhlPlayerName(player.fullName)),
+          ));
+        }
+      } catch (error) {
+        console.warn(`nhl daily-edge: BALLDONTLIE current rosters unavailable: ${(error as Error).message}`);
+      }
+    }
+  }
+
   // Per-game pipeline.
   const dtos = [];
   for (const g of games) {
@@ -343,6 +613,146 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     const awayAbbr = g.away_team_id !== null ? teamById.get(g.away_team_id)?.abbreviation ?? "?" : "?";
     try {
       const splitsEvent = splitsByGame.get(g.id) ?? null;
+      const storedPayload = predictionPayloadByGame.get(g.id);
+      const isStoredLock = storedPayload?.lockedAt !== null && storedPayload?.lockedAt !== undefined;
+      if (storedPayload && isStoredLock) {
+        const decoded = decodeNhlReaderReceipt(storedPayload.storedSnapshot.nhl_reader_receipt_v2, {
+          gameId: g.id,
+          externalId: g.external_id,
+          slateDate: date,
+          gameStartAt: g.game_date,
+          awayAbbr,
+          homeAbbr,
+          lockBoundaryAt: g.game_date,
+          modelVersion: storedPayload.model.model_version,
+          calibrationVersion: storedPayload.model.calibration_version,
+          decisionVersion: storedPayload.model.decision_version,
+        });
+        if (decoded.status === "valid") {
+          const lockedReceipt = decoded.receipt;
+          const lockedModel = storedPayload.model;
+          const mlSelectedHome = lockedReceipt.markets.moneyline.evaluatedQuote?.side === "home";
+          const spreadSelectedHome = lockedReceipt.markets.spread.evaluatedQuote?.side === "home";
+          const totalSelectedOver = lockedReceipt.markets.total.evaluatedQuote?.side === "over";
+          const lockedInput: NhlAdapterGameInput = {
+            gameId: g.id,
+            externalId: g.external_id,
+            homeAbbr,
+            awayAbbr,
+            gameDateIso: g.game_date,
+            status: g.status,
+            homeScore: g.home_score,
+            awayScore: g.away_score,
+            model: lockedModel,
+            snapshot: storedPayload.snapshot,
+            mlBundle: bundleFromReaderReceipt(
+              lockedReceipt.markets.moneyline,
+              mlSelectedHome ? awayAbbr : homeAbbr,
+            ),
+            totalBundle: bundleFromReaderReceipt(
+              lockedReceipt.markets.total,
+              totalSelectedOver ? "Under" : "Over",
+            ),
+            puckLineBundle: bundleFromReaderReceipt(
+              lockedReceipt.markets.spread,
+              `${spreadSelectedHome ? awayAbbr : homeAbbr} ${lockedReceipt.markets.spread.opposingQuote?.line ?? ""}`.trim(),
+            ),
+            marketTotalLine: lockedReceipt.markets.total.evaluatedQuote?.line
+              ?? storedPayload.snapshot.market.market_total_line,
+            puckLineMarketLine: lockedReceipt.markets.spread.evaluatedQuote?.line
+              ?? lockedModel.puck_line.puck_line_value,
+            splits: splitsFromReaderReceipt(lockedReceipt),
+            lockedAt: storedPayload.lockedAt,
+            writerVerdicts: writerVerdictsByGame.get(g.id),
+          };
+          const lockedDto = adaptNhlGameToDto(lockedInput);
+          lockedDto.markets.moneyline.sportsbookSplits = professionalSectionFromReaderReceipt(
+            lockedReceipt.markets.moneyline,
+            lockedModel.moneyline.pick,
+            mlSelectedHome ? awayAbbr : homeAbbr,
+          );
+          lockedDto.markets.total.sportsbookSplits = professionalSectionFromReaderReceipt(
+            lockedReceipt.markets.total,
+            lockedModel.total.pick,
+            totalSelectedOver ? "Under" : "Over",
+          );
+          lockedDto.markets.first_inning.sportsbookSplits = professionalSectionFromReaderReceipt(
+            lockedReceipt.markets.spread,
+            lockedModel.puck_line.pick,
+            spreadSelectedHome ? awayAbbr : homeAbbr,
+          );
+          dtos.push(lockedDto);
+          continue;
+        }
+        if (decoded.status === "invalid") {
+          console.warn(`nhl daily-edge: locked reader receipt invalid for game ${g.id}: ${decoded.reason}; rendering immutable stored tuple without receipt reconstruction`);
+        }
+        const lockedModel = storedPayload.model;
+        const lockedRecords = selectedRecordsByGame.get(g.id);
+        const mlRecord = lockedRecords?.get("moneyline");
+        const totalRecord = lockedRecords?.get("total");
+        const spreadRecord = lockedRecords?.get("spread");
+        const mlSide = mlRecord?.side === "home" || mlRecord?.side === "away"
+          ? mlRecord.side
+          : lockedModel.moneyline.pick.startsWith(homeAbbr) ? "home" : "away";
+        const totalSide = totalRecord?.side === "over" || totalRecord?.side === "under"
+          ? totalRecord.side
+          : lockedModel.total.pick.startsWith("OVER") ? "over" : "under";
+        const spreadSide = spreadRecord?.side === "home" || spreadRecord?.side === "away"
+          ? spreadRecord.side
+          : lockedModel.puck_line.pick.startsWith(homeAbbr) ? "home" : "away";
+        const totalLine = totalRecord?.line_value ?? storedPayload.snapshot.market.market_total_line;
+        const spreadLine = spreadRecord?.line_value ?? lockedModel.puck_line.puck_line_value;
+        const legacyInput: NhlAdapterGameInput = {
+          gameId: g.id,
+          externalId: g.external_id,
+          homeAbbr,
+          awayAbbr,
+          gameDateIso: g.game_date,
+          status: g.status,
+          homeScore: g.home_score,
+          awayScore: g.away_score,
+          model: lockedModel,
+          snapshot: storedPayload.snapshot,
+          mlBundle: legacyLockedBundle({
+            market: "moneyline", selectedSide: mlSide, opposingSide: mlSide === "home" ? "away" : "home",
+            selectedLine: null, opposingLine: null, record: mlRecord, stored: storedPayload.storedSnapshot,
+            lockedAt: storedPayload.lockedAt!, opposingLabel: mlSide === "home" ? awayAbbr : homeAbbr,
+          }),
+          totalBundle: legacyLockedBundle({
+            market: "total", selectedSide: totalSide, opposingSide: totalSide === "over" ? "under" : "over",
+            selectedLine: totalLine, opposingLine: totalLine, record: totalRecord, stored: storedPayload.storedSnapshot,
+            lockedAt: storedPayload.lockedAt!, opposingLabel: totalSide === "over" ? "Under" : "Over",
+          }),
+          puckLineBundle: legacyLockedBundle({
+            market: "spread", selectedSide: spreadSide, opposingSide: spreadSide === "home" ? "away" : "home",
+            selectedLine: spreadLine, opposingLine: spreadLine === null ? null : -spreadLine,
+            record: spreadRecord, stored: storedPayload.storedSnapshot, lockedAt: storedPayload.lockedAt!,
+            opposingLabel: `${spreadSide === "home" ? awayAbbr : homeAbbr}${spreadLine === null ? "" : ` ${-spreadLine > 0 ? "+" : ""}${(-spreadLine).toFixed(1)}`}`,
+          }),
+          marketTotalLine: totalLine,
+          puckLineMarketLine: spreadLine,
+          splits: splitsFromStoredSnapshot(storedPayload.snapshot),
+          lockedAt: storedPayload.lockedAt,
+          writerVerdicts: writerVerdictsByGame.get(g.id),
+        };
+        dtos.push(adaptNhlGameToDto(legacyInput));
+        continue;
+      }
+      const decisionAt = new Date().toISOString();
+      const professionalSplits = identifiedNhlProfessionalSplits({
+        feed: professionalSplitFeed,
+        slateDate: date,
+        gameStartAt: g.game_date,
+        awayAbbr,
+        homeAbbr,
+        cutoffAt: decisionAt,
+      });
+      const professionalPressure = (market: "moneyline" | "spread" | "total") => selectNhlProfessionalSplitPressure({
+        splits: professionalSplits,
+        market,
+        decisionAt,
+      });
       const built = await buildNhlFeatureSnapshot({
         gameId: g.id,
         providerMetricsByTeam,
@@ -365,9 +775,11 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
           spreadSplitConfidence: splitsEvent?.internal_resolution?.spread?.confidence ?? "none",
           totalSplitSource: splitsEvent?.internal_resolution?.total?.source ?? null,
           totalSplitConfidence: splitsEvent?.internal_resolution?.total?.confidence ?? "none",
+          moneylinePressureReceipt: professionalPressure("moneyline") ?? nhlSplitPressureReceipt(splitsEvent, "moneyline"),
+          spreadPressureReceipt: professionalPressure("spread") ?? nhlSplitPressureReceipt(splitsEvent, "spread"),
+          totalPressureReceipt: professionalPressure("total") ?? nhlSplitPressureReceipt(splitsEvent, "total"),
         },
       });
-      const storedPayload = predictionPayloadByGame.get(g.id);
       const marketAware = storedPayload ? null : buildNhlRegularMarketAwareForecast({
         snapshot: built.snapshot,
         currentRows: built.meta.market_lines,

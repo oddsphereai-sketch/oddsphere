@@ -146,7 +146,7 @@
     "test:football-production-publication": "tsx scripts/test-football-production-publication.ts",
     "test:football-tracking-lifecycle": "tsx scripts/test-football-tracking-lifecycle.ts",
     "test:official-tracking-markets": "tsx scripts/test-official-tracking-markets.ts",
-    "test:nhl-regular-model": "tsx scripts/test-nhl-sharpapi-complete-market-scopes.ts && tsx --env-file=.env.local scripts/test-nhl-regular-model.ts",
+    "test:nhl-regular-model": "tsx scripts/test-nhl-sharpapi-complete-market-scopes.ts && tsx --env-file=.env.local scripts/test-nhl-market-episode-arbiter.ts && tsx --env-file=.env.local scripts/test-nhl-professional-split-pressure.ts && tsx --env-file=.env.local scripts/test-nhl-joint-market-projection.ts && tsx --env-file=.env.local scripts/test-nhl-reader-receipt.ts && tsx --env-file=.env.local scripts/test-nhl-regular-model.ts",
     "test:tracking-scope-invariant": "tsx scripts/test-wc2-tracking-scope-invariant.ts",
     "test:football-player-props-foundation": "tsx scripts/test-football-player-props-foundation.ts",
     "test:nba-player-props-foundation": "tsx scripts/test-nba-player-props-foundation.ts",

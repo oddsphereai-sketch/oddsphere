@@ -51,6 +51,11 @@ function obs(row: ObsRow | undefined): PublicSplitObservation | null {
     public_money_pct: row.public_money_pct,
     books_used: row.books_used,
     observed_at: row.observed_at,
+    // Schema v25 defines observed_at as the provider fetch/compute clock, so
+    // it is also the earliest local availability clock for this current-row
+    // source. created_at is the row's original insert time and is not advanced
+    // by later upserts; using it would create an invalid old receipt clock.
+    received_at: row.observed_at,
   };
 }
 

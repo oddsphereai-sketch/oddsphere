@@ -69,10 +69,37 @@ import {
 } from "../../automodel/nhlRosterPrior2026";
 import { assertOfficialTrackingMarket } from "../../config/officialTrackingMarkets";
 import type { PredictionRecordRow } from "../../types/domain/Tracking";
-import { resolvedNhlSplitsByGame, type ResolvedNhlSplitsEvent } from "./nhlResolvedSplits";
+import {
+  identifiedNhlProfessionalSplits,
+  readStoredSharpApiCurrentSplits,
+  type NhlIdentifiedProfessionalSplit,
+} from "../../providers/real_api/sharpApiCurrentSplits";
+import {
+  nhlSplitPressureReceipt,
+  resolvedNhlSplitsByGame,
+  type ResolvedNhlSplitsEvent,
+} from "./nhlResolvedSplits";
 import { loadNhlRegularStateForSlate } from "./loadNhlRegularState";
 import { loadNhlOpponentAdjustedState } from "./loadNhlOpponentAdjustedState";
 import { buildNhlRegularMarketAwareForecast } from "./nhlTargetExcludedTotalMarket";
+import { buildNhlTwoSidedPriceTrail, type NhlTwoSidedPriceTrail } from "./nhlPriceTrail";
+import {
+  NHL_PROFESSIONAL_SPLIT_MAX_AGE_MS,
+  selectNhlProfessionalSplitPressure,
+} from "./nhlProfessionalSplitPressure";
+import {
+  buildNhlReaderReceipt,
+  NHL_READER_RECEIPT_RELEASE,
+  NHL_READER_RECEIPT_SCHEMA_VERSION,
+  type NhlReaderDecisionPoint,
+  type NhlReaderMarket,
+  type NhlReaderMarketReceipt,
+  type NhlReaderQuoteStop,
+  type NhlReaderReceipt,
+  type NhlReaderSide,
+  type NhlReaderSplitReceipt,
+} from "./nhlReaderReceipt";
+import type { NhlMarketEpisodeDecision } from "./nhlMarketEpisodeArbiter";
 
 const LOCK_MINUTES_BEFORE_PUCK_DROP = 60;
 
@@ -165,6 +192,7 @@ function buildSnapshotJson(opts: {
   // P1-2 Commit A — needed to build the PL* substrate.
   homeAbbr: string;
   capturedAt: string;
+  readerReceipt: NhlReaderReceipt;
 }): Record<string, unknown> {
   return {
     model_version: NHL_REGULAR_MODEL_RELEASE,
@@ -178,7 +206,10 @@ function buildSnapshotJson(opts: {
           ? opts.model.moneyline.probability - opts.model.moneyline.model_market_gap_pct
           : null
         : null,
-      ml_book_count: opts.model.inputs_summary.market_book_count,
+      ml_book_count: opts.model.inputs_summary.moneyline_book_count,
+      moneyline_book_count: opts.model.inputs_summary.moneyline_book_count,
+      spread_book_count: opts.model.inputs_summary.spread_book_count,
+      total_book_count: opts.model.inputs_summary.total_book_count,
       total_line: opts.model.total.model_market_gap_pct !== null
         ? opts.model.expected_total_goals - opts.model.total.model_market_gap_pct
         : null,
@@ -187,11 +218,324 @@ function buildSnapshotJson(opts: {
       lines_snapshot: opts.marketLines,
     },
     evaluated_quotes: opts.evaluatedQuotes,
+    nhl_reader_receipt_v2: opts.readerReceipt,
     captured_at: opts.capturedAt,
     goalie_assumption: opts.goalieAssumption,
     locked_at_iso: opts.lockedAtIso,
     lock_source: opts.lockSource,
   };
+}
+
+type ReaderLineRow = {
+  market_type: string;
+  sportsbook: string;
+  side: string;
+  line_value: number | null;
+  odds_american: number | null;
+  observed_at?: string | null;
+  source_timestamp?: string | null;
+};
+
+function buildReaderReceiptForWrite(args: {
+  gameId: number;
+  externalId: number;
+  slateDate: string;
+  gameStartAt: string;
+  snapshot: NhlFeatureSnapshot;
+  seedModel: NhlModelOutput;
+  finalModel: NhlModelOutput;
+  currentRows: readonly ReaderLineRow[];
+  historyRows: readonly ReaderLineRow[];
+  evaluatedQuotes: Record<NhlReaderMarket, NhlSelectedPriceQuote | null>;
+  split: ResolvedNhlSplitsEvent | null;
+  professionalSplits: readonly NhlIdentifiedProfessionalSplit[];
+  capturedAt: string;
+  homeAbbr: string;
+  awayAbbr: string;
+}): NhlReaderReceipt {
+  const clock = (sourceObservedAt: string | null, receivedAt = args.capturedAt) => ({
+    sourceObservedAt,
+    receivedAt,
+    capturedAt: args.capturedAt,
+  });
+  const quoteStop = (
+    quote: NhlSelectedPriceQuote | null,
+    side: NhlReaderSide,
+  ): NhlReaderQuoteStop | null => quote && quote.sportsbook
+    ? {
+      sportsbook: quote.sportsbook,
+      side,
+      line: quote.line_value,
+      american: quote.odds_american,
+      clock: clock(quote.observed_at),
+    }
+    : null;
+  const decisionPoint = (model: NhlModelOutput, market: NhlReaderMarket): NhlReaderDecisionPoint => {
+    const output = market === "moneyline" ? model.moneyline : market === "total" ? model.total : model.puck_line;
+    return {
+      awayScore: model.projected_away_goals,
+      homeScore: model.projected_home_goals,
+      pick: output.pick,
+      probability: output.probability,
+      verdict: output.verdict,
+    };
+  };
+  const episodeFor = (market: NhlReaderMarket): NhlMarketEpisodeDecision | null => market === "moneyline"
+    ? args.snapshot.market.moneyline_market_episode ?? null
+    : market === "spread"
+      ? args.snapshot.market.spread_market_episode ?? null
+      : args.snapshot.market.total_market_episode ?? null;
+  const sideFor = (market: NhlReaderMarket): NhlReaderSide => {
+    if (market === "total") return args.finalModel.total.pick.startsWith("OVER") ? "over" : "under";
+    const pick = market === "moneyline" ? args.finalModel.moneyline.pick : args.finalModel.puck_line.pick;
+    return pick.startsWith(args.homeAbbr) ? "home" : "away";
+  };
+  const lineFor = (market: NhlReaderMarket, side: NhlReaderSide): number | null => {
+    if (market === "moneyline") return null;
+    if (market === "total") return args.snapshot.market.market_total_line;
+    return side === "home"
+      ? args.snapshot.market.market_home_puck_line
+      : args.snapshot.market.market_away_puck_line;
+  };
+  const splitReceipt = (market: NhlReaderMarket, selectedSide: NhlReaderSide): NhlReaderSplitReceipt | null => {
+    const evidence = args.split?.internal_resolution?.[market];
+    if (!evidence?.source || !evidence.observedAt || !evidence.completePair) return null;
+    const homeOrOver = market === "total" ? "over" : "home";
+    const selectedIsPrimary = selectedSide === homeOrOver;
+    const primaryBets = market === "total"
+      ? args.split?.total?.bets_pct?.over
+      : market === "moneyline"
+        ? args.split?.moneyline?.bets_pct?.home
+        : args.split?.spread?.bets_pct?.home;
+    const primaryMoney = market === "total"
+      ? args.split?.total?.handle_pct?.over
+      : market === "moneyline"
+        ? args.split?.moneyline?.handle_pct?.home
+        : args.split?.spread?.handle_pct?.home;
+    if (primaryBets == null || primaryMoney == null) return null;
+    const selectedBetsPct = (selectedIsPrimary ? primaryBets : 1 - primaryBets) * 100;
+    const selectedMoneyPct = (selectedIsPrimary ? primaryMoney : 1 - primaryMoney) * 100;
+    return {
+      family: "public_consensus",
+      provider: evidence.source,
+      sourceBook: null,
+      selectedSide,
+      selectedMoneyPct,
+      selectedBetsPct,
+      opposingMoneyPct: 100 - selectedMoneyPct,
+      opposingBetsPct: 100 - selectedBetsPct,
+      marketLine: lineFor(market, selectedSide),
+      confidence: evidence.confidence,
+      selectedForPressure: episodeFor(market)?.pressure?.sourceClass === "public",
+      rejectionReason: episodeFor(market)?.pressure?.sourceClass === "public" ? null : "not_selected_for_pressure",
+      clock: clock(evidence.observedAt, evidence.receivedAt ?? evidence.observedAt),
+    };
+  };
+  const professionalSplitReceipts = (
+    market: NhlReaderMarket,
+    selectedSide: NhlReaderSide,
+  ): NhlReaderSplitReceipt[] => args.professionalSplits
+    .filter((split) => split.market === market)
+    .map((split) => {
+      const episodePressure = episodeFor(market)?.pressure ?? null;
+      const selectedForPressure = episodePressure?.source === "identified_professional_split"
+        && episodePressure.sourceBook === split.sourceBook;
+      const observedMs = Date.parse(split.observedAt);
+      const receivedMs = Date.parse(split.receivedAt);
+      const capturedMs = Date.parse(args.capturedAt);
+      const rejectionReason = selectedForPressure
+        ? null
+        : !Number.isFinite(observedMs) || !Number.isFinite(receivedMs) || receivedMs < observedMs
+          ? "invalid_clock"
+          : observedMs > capturedMs || receivedMs > capturedMs
+            ? "future_observation"
+            : capturedMs - observedMs > NHL_PROFESSIONAL_SPLIT_MAX_AGE_MS
+              || capturedMs - receivedMs > NHL_PROFESSIONAL_SPLIT_MAX_AGE_MS
+              ? "stale_observation"
+              : episodePressure?.source === "identified_professional_conflict"
+                ? "professional_conflict"
+                : "not_selected_for_pressure";
+      const primarySide: NhlReaderSide = market === "total" ? "over" : "away";
+      const selectedIsPrimary = selectedSide === primarySide;
+      const selectedMoneyPct = selectedIsPrimary ? split.awayOrOverMoneyPct : split.homeOrUnderMoneyPct;
+      const selectedBetsPct = selectedIsPrimary ? split.awayOrOverBetsPct : split.homeOrUnderBetsPct;
+      return {
+        family: "professional_book" as const,
+        provider: "owls_current_splits",
+        sourceBook: split.sourceBook,
+        selectedSide,
+        selectedMoneyPct,
+        selectedBetsPct,
+        opposingMoneyPct: selectedIsPrimary ? split.homeOrUnderMoneyPct : split.awayOrOverMoneyPct,
+        opposingBetsPct: selectedIsPrimary ? split.homeOrUnderBetsPct : split.awayOrOverBetsPct,
+        marketLine: lineFor(market, selectedSide),
+        confidence: "high" as const,
+        selectedForPressure,
+        rejectionReason,
+        clock: {
+          sourceObservedAt: split.observedAt,
+          receivedAt: split.receivedAt,
+          capturedAt: args.capturedAt,
+        },
+      };
+    });
+  const trailStop = (side: NhlReaderSide, stop: NhlTwoSidedPriceTrail["selected"][number]): NhlReaderQuoteStop | null => (
+    stop.sportsbook === null ? null : {
+      sportsbook: stop.sportsbook,
+      side,
+      line: stop.line,
+      american: stop.american,
+      clock: clock(stop.observedAt),
+    }
+  );
+  const buildMarket = (market: NhlReaderMarket): NhlReaderMarketReceipt => {
+    const selectedSide = sideFor(market);
+    const opposingSide: NhlReaderSide = market === "total"
+      ? selectedSide === "over" ? "under" : "over"
+      : selectedSide === "home" ? "away" : "home";
+    const selectedLine = lineFor(market, selectedSide);
+    const opposingLine = lineFor(market, opposingSide);
+    const evaluatedQuote = args.evaluatedQuotes[market];
+    const opposingQuote = selectNhlBestPriceQuote({
+      rows: args.currentRows,
+      market,
+      side: opposingSide,
+      line: opposingLine,
+    });
+    const trail = buildNhlTwoSidedPriceTrail({
+      live: args.currentRows.map((row) => ({ ...row, observed_at: row.observed_at ?? row.source_timestamp ?? null })),
+      history: args.historyRows.map((row) => ({ ...row, observed_at: row.observed_at ?? row.source_timestamp ?? null })),
+      market,
+      selectedSide,
+      opposingSide,
+      selectedLine,
+      opposingLine,
+      preferredBook: evaluatedQuote?.sportsbook ?? null,
+      preservePreferredBook: true,
+    });
+    const episode = episodeFor(market);
+    const rejectedByFamily = new Map((episode?.rejectedPaths ?? []).map((path) => [path.sportsbookFamily, path.reason]));
+    const selectedFamily = episode?.author?.sportsbookFamily ?? null;
+    const consideredPaths = (args.snapshot.market.market_episode_paths ?? [])
+      .filter((path) => path.market === market)
+      .map((path) => {
+        const netMove = Number.isFinite(path.currentValue - path.openingValue)
+          ? path.currentValue - path.openingValue
+          : null;
+        return {
+          sportsbook: path.sportsbook,
+          sourceClass: path.sourceClass,
+          state: path.state === "incomplete" ? "unavailable" as const : path.state,
+          direction: netMove === null || Math.abs(netMove) < 1e-12
+            ? null
+            : market === "total"
+              ? netMove > 0 ? "over" as const : "under" as const
+              : netMove > 0 ? "home" as const : "away" as const,
+          selected: path.sportsbookFamily === selectedFamily,
+          rejectionReason: rejectedByFamily.get(path.sportsbookFamily) ?? null,
+          openingCoordinate: path.openingValue,
+          currentCoordinate: path.currentValue,
+          netMove,
+          latestLeg: null,
+          clock: clock(path.currentObservedAt),
+        };
+      });
+    const finalLayer = market === "moneyline"
+      ? {
+        state: args.finalModel.layers.moneyline_market_read,
+        side: args.finalModel.layers.moneyline_market_side,
+        basis: args.finalModel.layers.moneyline_market_pressure_basis,
+      }
+      : market === "spread"
+        ? {
+          state: args.finalModel.layers.puck_line_market_read,
+          side: args.finalModel.layers.puck_line_market_side,
+          basis: args.finalModel.layers.puck_line_market_pressure_basis,
+        }
+        : {
+          state: args.finalModel.layers.total_market_read,
+          side: args.finalModel.layers.total_market_side,
+          basis: args.finalModel.layers.total_market_pressure_basis,
+        };
+    const selectedAxisAuthor = market === "moneyline"
+      ? args.finalModel.layers.side_market_authority === "moneyline"
+      : market === "spread"
+        ? args.finalModel.layers.side_market_authority === "spread"
+        : args.finalModel.layers.total_market_authority_source === "market_episode";
+    const applied = args.finalModel.layers.joint_market_projection_status === "projected"
+      && episode?.author != null
+      && selectedAxisAuthor;
+    const homeProbability = (model: NhlModelOutput) => model.moneyline.pick.startsWith(args.homeAbbr)
+      ? model.moneyline.probability
+      : 1 - model.moneyline.probability;
+    const homeCoverProbability = (model: NhlModelOutput) => model.puck_line.pick.startsWith(args.homeAbbr)
+      ? model.puck_line.probability
+      : 1 - model.puck_line.probability;
+    const appliedInnovation = !applied ? 0 : market === "moneyline"
+      ? homeProbability(args.finalModel) - homeProbability(args.seedModel)
+      : market === "spread"
+        ? homeCoverProbability(args.finalModel) - homeCoverProbability(args.seedModel)
+        : args.finalModel.expected_total_goals - args.seedModel.expected_total_goals;
+    return {
+      evaluatedQuote: quoteStop(evaluatedQuote, selectedSide),
+      opposingQuote: quoteStop(opposingQuote, opposingSide),
+      selectedTrail: trail.selected.flatMap((stop) => trailStop(selectedSide, stop) ?? []),
+      opposingTrail: trail.opposing.flatMap((stop) => trailStop(opposingSide, stop) ?? []),
+      lineTrail: trail.line.flatMap((stop) => trailStop(selectedSide, stop) ?? []),
+      splits: {
+        publicConsensus: splitReceipt(market, selectedSide),
+        professionalBooks: professionalSplitReceipts(market, selectedSide),
+      },
+      consideredPaths,
+      interpretation: {
+        state: episode?.state ?? "unavailable",
+        side: finalLayer.side,
+        pressureBasis: finalLayer.basis,
+        authoritySource: applied ? "market_episode" : "independent",
+        observedInnovation: episode?.author ? episode.innovation : null,
+        appliedInnovation,
+        selectedMoveAt: episode?.selectedMoveAt ?? null,
+        reasonCodes: [
+          episode?.reason ?? "no_episode",
+          ...(episode?.rejectedPressure ? [`pressure_${episode.rejectedPressure.reason}`] : []),
+          ...(args.finalModel.layers.joint_market_projection_reason ? [args.finalModel.layers.joint_market_projection_reason] : []),
+        ],
+      },
+      before: decisionPoint(args.seedModel, market),
+      after: decisionPoint(args.finalModel, market),
+    };
+  };
+  return buildNhlReaderReceipt({
+    schemaVersion: NHL_READER_RECEIPT_SCHEMA_VERSION,
+    release: NHL_READER_RECEIPT_RELEASE,
+    capturedAt: args.capturedAt,
+    cutoffAt: args.snapshot.market.market_decision_at ?? args.capturedAt,
+    identity: {
+      gameId: args.gameId,
+      externalId: args.externalId,
+      slateDate: args.slateDate,
+      gameStartAt: args.gameStartAt,
+      awayAbbr: args.awayAbbr,
+      homeAbbr: args.homeAbbr,
+      lockBoundaryAt: args.gameStartAt,
+    },
+    modelRelease: {
+      modelVersion: args.finalModel.model_version,
+      calibrationVersion: args.finalModel.calibration_version,
+      decisionVersion: args.finalModel.decision_version,
+    },
+    markets: {
+      moneyline: buildMarket("moneyline"),
+      total: buildMarket("total"),
+      spread: buildMarket("spread"),
+    },
+    finalDecision: {
+      independentAwayGoals: args.seedModel.projected_away_goals,
+      independentHomeGoals: args.seedModel.projected_home_goals,
+      finalAwayGoals: args.finalModel.projected_away_goals,
+      finalHomeGoals: args.finalModel.projected_home_goals,
+    },
+  });
 }
 
 export async function writeNhlPredictionRecords(
@@ -303,6 +647,10 @@ export async function writeNhlPredictionRecords(
   } catch (error) {
     errors.push(`resolved NHL splits: ${(error as Error).message}`);
   }
+  const professionalSplitFeed = await readStoredSharpApiCurrentSplits("nhl").catch((error) => {
+    errors.push(`identified NHL professional splits: ${(error as Error).message}`);
+    return null;
+  });
 
   // 3. For each game: snapshot → model → write record(s).
   let recordsCreated = 0;
@@ -315,6 +663,19 @@ export async function writeNhlPredictionRecords(
       const homeAbbr = g.home_team_id !== null ? teamById.get(g.home_team_id)?.abbreviation ?? "?" : "?";
       const awayAbbr = g.away_team_id !== null ? teamById.get(g.away_team_id)?.abbreviation ?? "?" : "?";
       const split = splitsByGame.get(g.id) ?? null;
+      const professionalSplits = identifiedNhlProfessionalSplits({
+        feed: professionalSplitFeed,
+        slateDate: opts.slateDate,
+        gameStartAt: g.game_date,
+        awayAbbr,
+        homeAbbr,
+        cutoffAt: now.toISOString(),
+      });
+      const professionalPressure = (market: "moneyline" | "spread" | "total") => selectNhlProfessionalSplitPressure({
+        splits: professionalSplits,
+        market,
+        decisionAt: now.toISOString(),
+      });
       const built = await buildNhlFeatureSnapshot({
         gameId: g.id,
         season: featureSeason,
@@ -340,6 +701,9 @@ export async function writeNhlPredictionRecords(
           spreadSplitConfidence: split?.internal_resolution?.spread?.confidence ?? "none",
           totalSplitSource: split?.internal_resolution?.total?.source ?? null,
           totalSplitConfidence: split?.internal_resolution?.total?.confidence ?? "none",
+          moneylinePressureReceipt: professionalPressure("moneyline") ?? nhlSplitPressureReceipt(split, "moneyline"),
+          spreadPressureReceipt: professionalPressure("spread") ?? nhlSplitPressureReceipt(split, "spread"),
+          totalPressureReceipt: professionalPressure("total") ?? nhlSplitPressureReceipt(split, "total"),
         },
       });
       const marketAware = buildNhlRegularMarketAwareForecast({
@@ -350,6 +714,24 @@ export async function writeNhlPredictionRecords(
       const snapshot = marketAware.snapshot;
       const model = marketAware.model;
       const meta = built.meta;
+      if (!opts.apply) {
+        const episodeDiagnostic = (decision: NhlFeatureSnapshot["market"]["moneyline_market_episode"]) => ({
+          state: decision?.state ?? "missing",
+          reason: decision?.reason ?? "missing",
+          counts: decision?.counts ?? null,
+          rejected: decision?.rejectedPaths.reduce<Record<string, number>>((counts, rejection) => {
+            counts[rejection.reason] = (counts[rejection.reason] ?? 0) + 1;
+            return counts;
+          }, {}) ?? {},
+          pressureRejected: decision?.rejectedPressure?.reason ?? null,
+        });
+        log(`  [episode-audit] ${awayAbbr} @ ${homeAbbr} ${JSON.stringify({
+          paths: snapshot.market.market_episode_paths?.length ?? 0,
+          moneyline: episodeDiagnostic(snapshot.market.moneyline_market_episode),
+          spread: episodeDiagnostic(snapshot.market.spread_market_episode),
+          total: episodeDiagnostic(snapshot.market.total_market_episode),
+        })}`);
+      }
       const openingWindow = snapshot.game_type === 2
         && Math.max(snapshot.home.current_season_games ?? 0, snapshot.away.current_season_games ?? 0) < 10;
       if (openingWindow
@@ -506,20 +888,40 @@ export async function writeNhlPredictionRecords(
           ),
         },
       };
+      const evaluatedQuotes = {
+        moneyline: marketsToWrite.find((entry) => entry.market === "moneyline")?.quote ?? null,
+        total: marketsToWrite.find((entry) => entry.market === "total")?.quote ?? null,
+        spread: marketsToWrite.find((entry) => entry.market === "spread")?.quote ?? null,
+      } satisfies Record<NhlReaderMarket, NhlSelectedPriceQuote | null>;
+      const capturedAt = now.toISOString();
+      const readerReceipt = buildReaderReceiptForWrite({
+        gameId: g.id,
+        externalId: g.external_id,
+        slateDate: opts.slateDate,
+        gameStartAt: g.game_date,
+        snapshot,
+        seedModel: marketAware.seedModel,
+        finalModel: pricedModel,
+        currentRows: lines,
+        historyRows: meta.market_history_lines,
+        evaluatedQuotes,
+        split,
+        professionalSplits,
+        capturedAt,
+        homeAbbr,
+        awayAbbr,
+      });
       const snapshotJson = buildSnapshotJson({
         model: pricedModel,
         marketLines: lines,
-        evaluatedQuotes: {
-          moneyline: marketsToWrite.find((entry) => entry.market === "moneyline")?.quote ?? null,
-          total: marketsToWrite.find((entry) => entry.market === "total")?.quote ?? null,
-          spread: marketsToWrite.find((entry) => entry.market === "spread")?.quote ?? null,
-        },
+        evaluatedQuotes,
         goalieAssumption,
         featureInputs: snapshot,
         lockedAtIso,
         lockSource,
         homeAbbr,
-        capturedAt: now.toISOString(),
+        capturedAt,
+        readerReceipt,
       });
 
       for (const m of marketsToWrite) {
@@ -594,7 +996,11 @@ export async function writeNhlPredictionRecords(
           market_aligned: m.modelMarket.model_market_gap_pct !== null
             ? Math.abs(m.modelMarket.model_market_gap_pct) <= 0.05
             : false,
-          data_quality_tier: model.inputs_summary.market_book_count >= 3 ? "two_sided_consensus" : "single_book",
+          data_quality_tier: (
+            m.market === "moneyline" ? model.inputs_summary.moneyline_book_count
+              : m.market === "spread" ? model.inputs_summary.spread_book_count
+                : model.inputs_summary.total_book_count
+          ) >= 3 ? "two_sided_consensus" : "single_book",
           source_quality: "release_pure_holdout",
           provisional: false,
           held: false,
@@ -607,7 +1013,7 @@ export async function writeNhlPredictionRecords(
         };
 
         if (!opts.apply) {
-          log(`  [dry-run] ${matchup} ${m.market}/${pickSide}  pick=${m.modelMarket.pick}  prob=${m.modelMarket.probability.toFixed(3)}  verdict=${effectiveVerdict}  score=${model.projected_away_goals.toFixed(2)}-${model.projected_home_goals.toFixed(2)}  price=${m.priceAmerican}  ml_read=${model.layers.moneyline_market_read}:${model.layers.moneyline_market_side ?? "none"}:${model.layers.moneyline_market_pressure_basis ?? "none"}  ml_source=${model.layers.moneyline_market_source_class ?? "none"}:${model.layers.moneyline_market_sportsbook ?? "none"}:${model.layers.moneyline_market_path_state}  puck_read=${model.layers.puck_line_market_read}:${model.layers.puck_line_market_side ?? "none"}:${model.layers.puck_line_market_pressure_basis ?? "none"}  puck_source=${model.layers.puck_line_market_source_class ?? "none"}:${model.layers.puck_line_market_sportsbook ?? "none"}:${model.layers.puck_line_market_path_state}  total_read=${model.layers.total_market_read}:${model.layers.total_market_side ?? "none"}:${model.layers.total_market_pressure_basis ?? "none"}  total_source=${model.layers.total_market_source_class ?? "none"}:${model.layers.total_market_sportsbook ?? "none"}:${model.layers.total_market_path_state}:${model.layers.total_market_authority_source}  locked_at=${lockedAtIso ?? "null"}`);
+          log(`  [dry-run] ${matchup} ${m.market}/${pickSide}  pick=${m.modelMarket.pick}  prob=${m.modelMarket.probability.toFixed(3)}  verdict=${effectiveVerdict}  score=${model.projected_away_goals.toFixed(2)}-${model.projected_home_goals.toFixed(2)}  price=${m.priceAmerican}  ml_read=${model.layers.moneyline_market_read}:${model.layers.moneyline_market_side ?? "none"}:${model.layers.moneyline_market_pressure_basis ?? "none"}  ml_source=${model.layers.moneyline_market_source_class ?? "none"}:${model.layers.moneyline_market_sportsbook ?? "none"}:${model.layers.moneyline_market_path_state}  puck_read=${model.layers.puck_line_market_read}:${model.layers.puck_line_market_side ?? "none"}:${model.layers.puck_line_market_pressure_basis ?? "none"}  puck_source=${model.layers.puck_line_market_source_class ?? "none"}:${model.layers.puck_line_market_sportsbook ?? "none"}:${model.layers.puck_line_market_path_state}  total_read=${model.layers.total_market_read}:${model.layers.total_market_side ?? "none"}:${model.layers.total_market_pressure_basis ?? "none"}  total_source=${model.layers.total_market_source_class ?? "none"}:${model.layers.total_market_sportsbook ?? "none"}:${model.layers.total_market_path_state}:${model.layers.total_market_authority_source}  reasons=${model.layers.moneyline_market_reason ?? "none"}:${model.layers.puck_line_market_reason ?? "none"}:${model.layers.total_market_reason ?? "none"}  locked_at=${lockedAtIso ?? "null"}`);
           recordsCreated += 1;
           continue;
         }
