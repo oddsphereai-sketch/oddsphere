@@ -7,7 +7,7 @@ import {bivariatePoissonScoreDistribution,medianTotalFromDistribution,mostLikely
 import {deriveSoccerMarketProbabilities} from "@/lib/services/soccer/soccerMarketProbabilities";
 import {deriveUclRelativeMarketRead,type UclRelativeMarketReadReceipt} from "./uclRelativeMarketRead";
 export const UCL_COHERENT_MARKET_OUTCOME_RELEASE =
-  "ucl_coherent_market_outcome_2026_11_03_r12_attested_stored_paths" as const;
+  "ucl_coherent_market_outcome_2026_11_04_r13_unfrozen_score_law" as const;
 
 type Side="home"|"draw"|"away";
 const SIDES=["home","draw","away"] as const;
@@ -54,7 +54,7 @@ export function deriveUclCoherentMarketOutcome(input:{matchId?:number;independen
  joint,markets,...summarize(joint,markets),medianTotal:medianTotalFromDistribution(joint),mostLikelyTotal:mostLikelyTotalFromDistribution(joint),
  audit:{evaluatedCanonicalBooksExcluded:[],eligibleAlternativeBooks:axes.match_result.candidates.filter(p=>p.independentOfExecutionBook).map(p=>p.book),eligibleAlternativeSources:[],
  correlationState:"correlated_or_indeterminate",movementRole:"relative_same_book_price_paths",evaluatedQuoteRole:"paired_path_evidence_and_execution_economics",
- inactiveVectors:inactive,targetOverProbability:null,totalProbabilityResidual:read.receipt.residual,maximumMatchResultResidual:mrApplied?Math.max(...SIDES.map(side=>Math.abs(markets.match_result[side]-read.receipt.targets.match_result![side]!))):0,gateReasons:[],
+ inactiveVectors:inactive,targetOverProbability:null,totalProbabilityResidual:read.receipt.residual,maximumMatchResultResidual:mrApplied?read.receipt.residual:0,gateReasons:[],
  matchResultReader:{consensus:null,consensusLeader:axes.match_result.currentTargetProbabilities.home!==undefined?leader(axes.match_result.currentTargetProbabilities as Record<Side,number>):null,eligibleBooks:axes.match_result.candidates.map(p=>p.book),agreement:0,dispersion:0,authority:0},
  goalsReader:{totalConsensus:null,bttsConsensus:null,crossMarketBttsYes:totalApplied?markets.btts.yes:null,totalEligibleBooks:axes.total.candidates.filter(p=>p.baseline).map(p=>p.book),bttsEligibleBooks:axes.btts.candidates.filter(p=>p.baseline).map(p=>p.book),
  totalMovement:pathMovement("total") as NonNullable<EplCoherentMarketOutcome["audit"]["goalsReader"]>["totalMovement"],bttsMovement:pathMovement("btts") as NonNullable<EplCoherentMarketOutcome["audit"]["goalsReader"]>["bttsMovement"],totalCorrectionApplied:totalApplied,bttsCorrectionApplied:bttsApplied,modelEvidenceQuality:input.modelEvidenceQuality??"standard",

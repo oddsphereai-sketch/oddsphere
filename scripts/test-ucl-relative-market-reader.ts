@@ -34,8 +34,15 @@ export function testUclRelativeMarketReader(){
  assert.notEqual(relativeTotal.receipt.finalProbabilities.btts.yes,prior.btts.yes,'total evidence affects BTTS through one law');
  const flatBtts=vector('btts',[.6,.4]);
  const held=deriveUclRelativeMarketRead(base,{...common,totalVectors:[vector('total',[1-qCurrent,qCurrent],3.25)],bttsVectors:[flatBtts],storedPriceHistory:[...history(totalBase),...history(flatBtts)]});
- assert.ok(Math.abs(held.receipt.finalProbabilities.btts.yes-prior.btts.yes)<1e-7,'observed flat BTTS holds its original marginal when total changes');
- assert.equal(held.receipt.markets.btts.status,'unchanged');assert.ok(held.receipt.includedConstraintMarkets.includes('btts'));assert.ok(!held.receipt.appliedMarkets.includes('btts'));
+ assert.ok(Math.abs(held.receipt.finalProbabilities.btts.yes-prior.btts.yes)>1e-5,'flat BTTS cannot freeze scoring consequences of genuine Total evidence');
+ assert.equal(held.receipt.markets.btts.status,'unchanged');assert.ok(held.receipt.includedConstraintMarkets.includes('btts'),'flat source context is common to both profiles, not a frozen forecast marginal');assert.ok(!held.receipt.appliedMarkets.includes('btts'));
+ assert.ok(held.receipt.crossMarketAffectedMarkets?.includes('btts'));
+ for(const epsilon of [-1e-6,1e-6]){
+  const nearlyFlat=vector('btts',[.6+epsilon,.4-epsilon]);
+  const near=deriveUclRelativeMarketRead(base,{...common,totalVectors:[vector('total',[1-qCurrent,qCurrent],3.25)],bttsVectors:[nearlyFlat],storedPriceHistory:[...history(totalBase),...history(flatBtts)]});
+  assert.ok(Math.abs(near.receipt.finalProbabilities.btts.yes-held.receipt.finalProbabilities.btts.yes)<.0001,
+   'tiny changes across flat cannot switch between frozen and freely changing score laws');
+ }
  const btts=vector('btts',[.5,.5]),bttsBase=vector('btts',[.6,.4]);
  for(const market of ['match_result','total','btts'] as const){
   const before=market==='match_result'?mrBase:market==='total'?vector('total',[.65,.35],2.5):bttsBase;
@@ -81,9 +88,12 @@ export function testUclRelativeMarketReader(){
  assert.equal(actualRead.receipt.markets.btts.direction,'yes');
  const combined=deriveUclRelativeMarketRead(base,{...common,matchResultVectors:[mr],totalVectors:[total],bttsVectors:[btts],storedPriceHistory:[...history(mrBase),...history(totalBase),...history(bttsBase)]});
  assert.deepEqual(new Set(combined.receipt.appliedMarkets),new Set(['match_result','total','btts']));
- assert.ok(Math.abs(combined.receipt.finalMeans.home+combined.receipt.finalMeans.away-relativeTotal.receipt.finalMeans.home-relativeTotal.receipt.finalMeans.away)<1e-7,'total target comes from original-only tilt, not a serial BTTS update');
+ assert.equal(combined.receipt.method,'joint_source_profile_density_ratio');
  const oddsTarget=(prior.btts.yes*(2/3))/(1-prior.btts.yes+prior.btts.yes*(2/3));
- assert.ok(Math.abs(combined.receipt.finalProbabilities.btts.yes-oddsTarget)<1e-7,'BTTS target is original odds times observed odds innovation');
+ const bttsOnly=deriveUclRelativeMarketRead(base,{...common,bttsVectors:[btts],storedPriceHistory:history(bttsBase)});
+ assert.ok(Math.abs(bttsOnly.receipt.finalProbabilities.btts.yes-oddsTarget)<1e-7,'single-axis limit remains original odds times observed odds innovation');
+ const reversed=deriveUclRelativeMarketRead(base,{...common,matchResultVectors:[mr],totalVectors:[total],bttsVectors:[btts],storedPriceHistory:[...history(bttsBase),...history(totalBase),...history(mrBase)].reverse()});
+ assert.deepEqual(reversed.joint,combined.joint,'joint market interpretation is not an arbitrary serial market order');
  assert.ok(combined.receipt.residual<1e-7);assert.ok(Math.abs(combined.joint.flat().reduce((s,p)=>s+p,0)-1)<1e-10);
  const returned=deriveUclRelativeMarketRead(base,{...common,bttsVectors:[bttsBase],storedPriceHistory:[...history(bttsBase),...history(vector('btts',[.8,.2]),'2026-11-03T12:00:00Z')]});
  assert.strictEqual(returned.joint,base);assert.equal(returned.receipt.markets.btts.roundTrip,true,'net buyback is not a synthetic new edge');
@@ -115,9 +125,11 @@ export function testUclRelativeMarketReader(){
  assert.equal(incomplete.receipt.markets.btts.latestLegFullyObserved,false);assert.equal(incomplete.receipt.markets.btts.selected?.incompleteCaptureCount,1);
  const conflicting=deriveUclRelativeMarketRead(base,{...common,bttsVectors:[btts,vector('btts',[.7,.3])],storedPriceHistory:history(bttsBase)});
  assert.strictEqual(conflicting.joint,base);assert.ok(conflicting.receipt.markets.btts.inactive.some(r=>r.reason==='conflicting_same_physical_book_contract_clock'));
- const conflictBase=[[.25,.25],[.25,.25]],qHigh=uclPoissonNativeTotalShare(3,.5)!,qLow=uclPoissonNativeTotalShare(.1,.5)!;
+ const conflictBase=Array.from({length:3},()=>[1/9,1/9,1/9]),qHigh=uclPoissonNativeTotalShare(3,.5)!,qLow=uclPoissonNativeTotalShare(.1,.5)!;
  const incompatible=deriveUclRelativeMarketRead(conflictBase,{...common,totalVectors:[vector('total',[qLow,1-qLow],.5)],bttsVectors:[vector('btts',[.5,.5])],storedPriceHistory:[...history(vector('total',[qHigh,1-qHigh],.5)),...history(vector('btts',[.5,.5]))]});
  assert.equal(incompatible.receipt.markets.total.status,'applied');assert.equal(incompatible.receipt.markets.btts.status,'conflict','incompatible held BTTS cannot erase feasible observed total innovation');assert.ok(incompatible.receipt.finalMeans.home+incompatible.receipt.finalMeans.away<.1);
+ const outsideSupport=deriveUclRelativeMarketRead([[.25,.25],[.25,.25]],{...common,totalVectors:[vector('total',[qLow,1-qLow],.5)],storedPriceHistory:history(vector('total',[qHigh,1-qHigh],.5))});
+ assert.equal(outsideSupport.receipt.markets.total.status,'conflict','an impossible baseline profile cannot silently create an invented density ratio');
  const gappedHeld=deriveUclRelativeMarketRead(base,{...common,bttsVectors:[vector('btts',[.7,.3])],storedPriceHistory:[...history(bttsBase),...history(vector('btts',[.65,.35]),'2026-11-03T12:10:00Z').slice(0,1),...history(vector('btts',[.7,.3]),'2026-11-03T12:20:00Z')]});
  assert.equal(gappedHeld.receipt.markets.btts.latestLegDirection,'flat');assert.equal(gappedHeld.receipt.markets.btts.latestLegFullyObserved,false,'a held capture cannot erase a gap inside the informative reaction leg');
  const homeStrong=bivariatePoissonScoreDistribution(3,.5,-.1),pinGain=vector('match_result',[.5,.3,.2]),dkGain=vector('match_result',[.5,.3,.2],null,'draftkings');

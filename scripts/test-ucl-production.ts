@@ -1,4 +1,6 @@
 import "./test-ucl-current-native-inputs";
+import {testUclOpponentStrengthScoreLaw} from "./test-ucl-opponent-strength-score-law";
+import {testUclConfidencePublication} from "./test-ucl-confidence-publication";
 import "./test-ucl-native-goals-market-reader";
 import "./test-ucl-relative-market-grades";
 import {testUclRelativeMarketReader} from "./test-ucl-relative-market-reader";
@@ -64,6 +66,8 @@ function match(overrides: Partial<BdlUclMatch> & Pick<BdlUclMatch, "id" | "home_
 }
 
 async function main() {
+testUclOpponentStrengthScoreLaw();
+testUclConfidencePublication();
 testUclRelativeMarketReader();
 await testUclNativeLineHistoryDurability();
 await testUclAtomicMarketHistory();
@@ -317,7 +321,7 @@ const noPathOutcome = deriveUclCoherentMarketOutcome({
 });
 assert.deepEqual(noPathOutcome.joint, noPathPrior, "missing market paths preserve the exact independent law");
 assert.equal("bttsShadow" in noPathOutcome.audit, false, "UCL persists one authoritative forecast");
-assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_03_r21_fresh_public_capture");
+assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_04_r22_opponent_strength_score_law");
 assert.deepEqual(
   { train: UCL_CHRONOLOGICAL_MANIFEST.train, calibration: UCL_CHRONOLOGICAL_MANIFEST.calibration, holdout: UCL_CHRONOLOGICAL_MANIFEST.holdout, cutoff: UCL_CHRONOLOGICAL_MANIFEST.cutoff },
   { train: 185, calibration: 126, holdout: 63, cutoff: "2026-01-28T20:00:00.000Z" },
@@ -361,7 +365,7 @@ assert.equal(uclTeamsMatch("Sabah Masazir", "Sabah Baku FK"), true);
 assert.equal(uclTeamsMatch("FC Sabah Masazir", "Sabah"), true);
 assert.equal(uclTeamsMatch("Bodø/Glimt", "Bodo/Glimt"), true);
 assert.equal(UCL_SHARP_MARKET_IDENTITY_RELEASE, "ucl_sharp_market_identity_2026_10_22_r6_exact_diacritic_club_identity");
-assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_11_03_r10_attested_stored_paths");
+assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_11_04_r11_opponent_strength_score_law");
 const romaExpectedGoalsCard = {
   lockState: "open",
   projected: { away: 1.1, home: 3.3 },
@@ -654,7 +658,7 @@ const unsafeCoverage = evaluateUclPublicationCoverage(
   { games: [{ external_id: 1, soccerProjection: { goalOutlookProbabilities: { home: 0.4, draw: 0.3, away: 0.3, over25: 0.55, under25: 0.45, bttsYes: 0.52, bttsNo: 0.48 } }, markets: { moneyline: { ...pricedMarket, verdict: { key: "lean" }, pinnacleEvPct: 0 }, total: heldMarket, first_inning: heldMarket }, soccerDoubleChanceMarket: heldMarket }] } as never,
 );
 assert.equal(unsafeCoverage.nonpositiveEvActionables, 1);
-assert.match(unsafeCoverage.errors.join(";"), /positive-EV actionable coverage/);
+assert.match(unsafeCoverage.errors.join(";"), /qualified actionable coverage/);
 
 // Integration contracts: one shared writer/lease, snapshot-only member route,
 // shared UI, and release-separated legacy archive.
