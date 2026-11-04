@@ -105,6 +105,9 @@ export const CFB_FORWARD_WRITER_LIFECYCLE_MAX_ROWS = 12_000 as const;
 export const CFB_FORWARD_WRITER_RECENT_UNLOCKED_MAX_ROWS = 30_000 as const;
 export const CFB_FORWARD_WRITER_UNLOCKED_CONTINUITY_HOURS = 48 as const;
 export const CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE = 1_000 as const;
+export const CFB_FORWARD_MARKET_HISTORY_RPC_PAGE_SIZE = 250 as const;
+export const CFB_FORWARD_MARKET_HISTORY_TRANSPORT_RELEASE =
+  "cfb_market_history_transport_2026_11_04_r1_bounded_json_pages" as const;
 // The visible-board movement reader retains 72 hours, versus the writer's
 // 48-hour unlocked continuity scan. A 96-game board observed every 15 minutes
 // contributes 27,648 movement rows before immutable openings/T-60 rows and
@@ -172,6 +175,7 @@ const CFB_FORWARD_MARKET_HISTORY_SELECT = [
   "context_total_target_excluded_families:payload->contextualEvidenceCapture->markets->total->targetExcludedFamilies",
 ].join(",");
 const CFB_FORWARD_MARKET_HISTORY_VIEW = "cfb_forward_market_history_projection";
+const CFB_FORWARD_MARKET_HISTORY_RPC = "cfb_forward_market_history_page";
 
 export async function readCfbForwardMarketHistory(args: {
   client: SupabaseClient;
@@ -184,10 +188,14 @@ export async function readCfbForwardMarketHistory(args: {
   if (providerGameIds.length === 0) return [];
   const capturedAfter = args.capturedAfter === undefined ? null : new Date(args.capturedAfter).toISOString();
   const rows: StoredMarketHistoryRow[] = [];
+  // Legacy read-only clients and an app deployed before its additive migration
+  // keep the exact existing projection. Real RPC failures never retry a scan.
+  let useRpc = typeof args.client.rpc === "function";
   let useLegacyProjection = false;
   for (let gameIndex = 0; gameIndex < providerGameIds.length; gameIndex += CFB_FORWARD_MARKET_HISTORY_GAME_BATCH_SIZE) {
     const gameIds = providerGameIds.slice(gameIndex, gameIndex + CFB_FORWARD_MARKET_HISTORY_GAME_BATCH_SIZE);
-    for (let from = 0; from < CFB_FORWARD_MARKET_HISTORY_MAX_ROWS; from += CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE) {
+    for (let from = 0; from < CFB_FORWARD_MARKET_HISTORY_MAX_ROWS;) {
+      let pageSize: number = useRpc ? CFB_FORWARD_MARKET_HISTORY_RPC_PAGE_SIZE : CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE;
       const pageQuery = () => {
         let query = args.client
           .from(useLegacyProjection ? "cfb_forward_evidence_snapshots" : CFB_FORWARD_MARKET_HISTORY_VIEW)
@@ -198,9 +206,22 @@ export async function readCfbForwardMarketHistory(args: {
         if (capturedAfter !== null) query = query.or(`stage.eq.opening,captured_at.gte.${capturedAfter}`);
         return query.order("captured_at", { ascending: true })
           .order("id", { ascending: true })
-          .range(from, from + CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE - 1);
+          .range(from, from + pageSize - 1);
       };
-      let { data, error } = await pageQuery();
+      let { data, error } = useRpc ? await args.client.rpc(CFB_FORWARD_MARKET_HISTORY_RPC, {
+        p_season: args.season,
+        p_releases: [...CFB_FORWARD_MARKET_HISTORY_COMPATIBLE_RELEASES],
+        p_game_ids: gameIds,
+        p_captured_after: capturedAfter,
+        p_offset: from,
+        p_limit: pageSize,
+      }) : await pageQuery();
+      if (useRpc && error && ["PGRST202", "42883"].includes(error.code)
+        && error.message.includes(CFB_FORWARD_MARKET_HISTORY_RPC)) {
+        useRpc = false;
+        pageSize = CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE;
+        ({ data, error } = await pageQuery());
+      }
       if (!useLegacyProjection && error
         && ["PGRST205", "42P01"].includes(error.code)
         && error.message.includes(CFB_FORWARD_MARKET_HISTORY_VIEW)) {
@@ -208,13 +229,17 @@ export async function readCfbForwardMarketHistory(args: {
         ({ data, error } = await pageQuery());
       }
       if (error) throw new Error(`CFB forward market history read failed: ${error.message}`);
+      if (data !== null && (!Array.isArray(data) || data.length > pageSize)) {
+        throw new Error("CFB forward market history returned an invalid bounded page.");
+      }
       const page = (data ?? []) as unknown as StoredMarketHistoryRow[];
       if (rows.length + page.length > CFB_FORWARD_MARKET_HISTORY_MAX_ROWS) {
         throw new Error(`CFB forward market history exceeded its bounded ${CFB_FORWARD_MARKET_HISTORY_MAX_ROWS}-row visible-board limit.`);
       }
       rows.push(...page);
-      if (page.length < CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE) break;
-      if (from + CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE >= CFB_FORWARD_MARKET_HISTORY_MAX_ROWS) {
+      if (page.length < pageSize) break;
+      from += pageSize;
+      if (from >= CFB_FORWARD_MARKET_HISTORY_MAX_ROWS) {
         throw new Error(`CFB forward market history exceeded its bounded ${CFB_FORWARD_MARKET_HISTORY_MAX_ROWS}-row visible-board limit.`);
       }
     }
