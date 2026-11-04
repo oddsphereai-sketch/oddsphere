@@ -1,4 +1,4 @@
-import type { ScoreDistribution } from "@/lib/services/soccer/dixonColes";
+import { bivariatePoissonScoreDistribution, type ScoreDistribution } from "@/lib/services/soccer/dixonColes";
 import { deriveSoccerMarketProbabilities } from "@/lib/services/soccer/soccerMarketProbabilities";
 import type { UclEloPair } from "./uclEloStrengthFoundation";
 
@@ -135,6 +135,29 @@ export function deriveUclEloConsensusJoint(base: ScoreDistribution, elo: UclEloP
     : local;
   const result = logPoolUclResult(markets.match_result, strength, 0.25);
   return reconcileUclMeanPreserving(base, result, markets.total.over, markets.btts.yes);
+}
+
+/** Strength describes scoring separation, not a new scoring pace. The fitted
+ * attack/defense model owns the total; solve the goal allocation for the existing
+ * correlated Elo opinion, then derive ALL markets from that score law. Unlike
+ * the legacy marginal projection, a strength change can change clean sheets,
+ * BTTS and the draw probability. Elo is not independent corroboration. */
+export function deriveUclStrengthScoreJoint(base: ScoreDistribution, elo: UclEloPair): ScoreDistribution {
+  const p = deriveSoccerMarketProbabilities({ joint: base, totalLine: 2.5 });
+  const local = eloVector(p.match_result, elo.homeLocal, elo.awayLocal);
+  const strength = elo.homePublic !== null && elo.awayPublic !== null
+    ? logPoolUclResult(local, eloVector(p.match_result, elo.homePublic, elo.awayPublic), .5) : local;
+  const target = logPoolUclResult(p.match_result, strength, .25);
+  const decisiveHome = target.home / (target.home + target.away);
+  const total = expectedTotal(base);
+  let low = 1e-8, high = total - 1e-8;
+  for (let i = 0; i < 64; i++) {
+    const home = (low + high) / 2;
+    const q = deriveSoccerMarketProbabilities({ joint: bivariatePoissonScoreDistribution(home, total-home, -.1), totalLine: 2.5 }).match_result;
+    if (q.home / (q.home + q.away) < decisiveHome) low = home; else high = home;
+  }
+  const home = (low + high) / 2;
+  return bivariatePoissonScoreDistribution(home, total-home, -.1);
 }
 
 export function uclJointExpectedGoals(joint: ScoreDistribution): { home: number; away: number } {

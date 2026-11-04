@@ -8,10 +8,10 @@ import {
 import type { UclCompetitionContext } from "./uclCompetitionContext";
 import { regulationScore } from "./uclCompetitionContext";
 import { UCL_PREVIEW_GRADE_RELEASE } from "./uclPreviewGrade";
-import { deriveUclEloConsensusJoint, uclJointExpectedGoals } from "./uclEloConsensus";
+import { deriveUclStrengthScoreJoint, uclJointExpectedGoals } from "./uclEloConsensus";
 import type { UclEloPair } from "./uclEloStrengthFoundation";
 
-export const UCL_MODEL_RELEASE = "ucl_goals_coherent_2026_11_03_r19_attested_stored_paths" as const;
+export const UCL_MODEL_RELEASE = "ucl_goals_coherent_2026_11_04_r20_opponent_strength_score_law" as const;
 export const UCL_BASELINE_MODEL_RELEASE = "ucl_goals_coherent_2026_10_06_r7_target_excluded_opening_market_score" as const;
 export const UCL_CALIBRATION_RELEASE = UCL_PREVIEW_GRADE_RELEASE;
 export { UCL_COHERENT_MARKET_OUTCOME_RELEASE } from "./uclCoherentMarketOutcome";
@@ -41,6 +41,7 @@ type UclFit = {
   leagueAwayRate: number;
   strengths: Map<number, UclStrength>;
   proxy: Omit<UclStrength, "teamId" | "effectiveMatches" | "source">;
+  opponentFit?: { iterations: number; converged: boolean; uniqueMatches: number };
 };
 
 export type UclTravelRestContext = {
@@ -60,6 +61,7 @@ export type UclPrediction = EplShadowPrediction & {
     awayMultiplier: number;
     neutralVenue: boolean;
     strengthPrior: "local_public_elo_consensus" | "shared_ucl_cross_league_scale";
+    opponentFit?: UclFit["opponentFit"];
   };
 };
 
@@ -158,6 +160,72 @@ export function fitUclModel(matches: EplTrainingMatch[], asOfIso: string): UclFi
   };
 }
 
+/** Regularized Poisson attack/defense fit. Each club shares its strength across
+ * venues and is evaluated against the actual opponent. Gamma mode-one priors
+ * identify the attack/defense scales and retain the existing four-match prior
+ * exposure. This is a statistical prior, not market evidence or a score bonus. */
+export function fitUclOpponentModel(matches: EplTrainingMatch[], asOfIso: string): UclFit {
+  const asOf = Date.parse(asOfIso);
+  const byId = new Map<number,EplTrainingMatch>();
+  for (const m of matches) {
+    if (!Number.isFinite(Date.parse(m.date)) || Date.parse(m.date) >= asOf || m.status_state !== "final"
+      || m.home_score === null || m.away_score === null) continue;
+    const prior = byId.get(m.id);
+    const identity = (r:EplTrainingMatch) => JSON.stringify([r.date,r.home_team_id,r.away_team_id,r.home_score,r.away_score,r.home_xg,r.away_xg]);
+    if (prior && identity(prior) !== identity(m)) throw new Error(`Conflicting UCL scoring fixture ${m.id}`);
+    if (![m.home_score,m.away_score].every(g=>Number.isFinite(g)&&g>=0)) throw new Error(`Invalid UCL regulation goals ${m.id}`);
+    byId.set(m.id,m);
+  }
+  const priorRows = [...byId.values()];
+  const rows = priorRows.map(m => ({ home: m.home_team_id, away: m.away_team_id,
+    homeGoals: effectiveGoals(m.home_score!, m.home_xg), awayGoals: effectiveGoals(m.away_score!, m.away_xg),
+    weight: Math.pow(.5, (asOf - Date.parse(m.date)) / 86_400_000 / UCL_MODEL_CONFIG.halfLifeDays) }));
+  const ids = [...new Set(rows.flatMap(m => [m.home, m.away]))];
+  const attack = new Map(ids.map(id => [id, 1])), defense = new Map(ids.map(id => [id, 1]));
+  const weight = rows.reduce((s,m) => s + m.weight, 0);
+  let homeRate = weight ? rows.reduce((s,m) => s + m.weight * m.homeGoals, 0) / weight : 1.5;
+  let awayRate = weight ? rows.reduce((s,m) => s + m.weight * m.awayGoals, 0) / weight : 1.2;
+  // A positive rate is required even in a synthetic all-zero cohort.
+  homeRate = Math.max(1e-8, homeRate); awayRate = Math.max(1e-8, awayRate);
+  const exposure = UCL_MODEL_CONFIG.shrinkageMatches * (homeRate + awayRate) / 2;
+  let iterations = 0, converged = !rows.length;
+  for (; iterations < 256 && !converged; iterations++) {
+    const before = [...attack.values(), ...defense.values(), homeRate, awayRate];
+    for (const id of ids) {
+      let scored = exposure, predicted = exposure;
+      for (const m of rows) {
+        if (m.home === id) { scored += m.weight * m.homeGoals; predicted += m.weight * homeRate * defense.get(m.away)!; }
+        if (m.away === id) { scored += m.weight * m.awayGoals; predicted += m.weight * awayRate * defense.get(m.home)!; }
+      }
+      attack.set(id, scored / predicted);
+    }
+    for (const id of ids) {
+      let conceded = exposure, predicted = exposure;
+      for (const m of rows) {
+        if (m.home === id) { conceded += m.weight * m.awayGoals; predicted += m.weight * awayRate * attack.get(m.away)!; }
+        if (m.away === id) { conceded += m.weight * m.homeGoals; predicted += m.weight * homeRate * attack.get(m.home)!; }
+      }
+      defense.set(id, conceded / predicted);
+    }
+    if (weight) {
+      homeRate = Math.max(1e-8, rows.reduce((s,m) => s + m.weight * m.homeGoals, 0)
+        / rows.reduce((s,m) => s + m.weight * attack.get(m.home)! * defense.get(m.away)!, 0));
+      awayRate = Math.max(1e-8, rows.reduce((s,m) => s + m.weight * m.awayGoals, 0)
+        / rows.reduce((s,m) => s + m.weight * attack.get(m.away)! * defense.get(m.home)!, 0));
+    }
+    const after = [...attack.values(), ...defense.values(), homeRate, awayRate];
+    converged = after.every((v,i) => Math.abs(Math.log(v / before[i]!)) < 1e-8);
+  }
+  if (!converged) throw new Error("UCL opponent-adjusted scoring fit did not converge");
+  const strengths = new Map<number,UclStrength>();
+  for (const id of ids) strengths.set(id, { teamId: id, homeAttack: attack.get(id)!, awayAttack: attack.get(id)!,
+    homeDefense: defense.get(id)!, awayDefense: defense.get(id)!,
+    effectiveMatches: rows.reduce((s,m) => s + (m.home === id || m.away === id ? m.weight : 0), 0), source: "club_history" });
+  return { leagueHomeRate: homeRate, leagueAwayRate: awayRate, strengths,
+    proxy: { homeAttack: 1, awayAttack: 1, homeDefense: 1, awayDefense: 1 },
+    opponentFit: { iterations, converged, uniqueMatches: rows.length } };
+}
+
 function strengthFor(fit: UclFit, teamId: number): UclStrength {
   return fit.strengths.get(teamId) ?? { teamId, ...fit.proxy, effectiveMatches: 0, source: "promoted_proxy" };
 }
@@ -165,9 +233,10 @@ function strengthFor(fit: UclFit, teamId: number): UclStrength {
 function predictUclBaseline(fit: UclFit, homeTeamId: number, awayTeamId: number) {
   const home = strengthFor(fit, homeTeamId);
   const away = strengthFor(fit, awayTeamId);
+  const minRate = fit.opponentFit ? 1e-8 : .2;
   return {
-    lambdaHome: Math.max(0.2, Math.min(3.8, fit.leagueHomeRate * home.homeAttack * away.awayDefense)),
-    lambdaAway: Math.max(0.2, Math.min(3.8, fit.leagueAwayRate * away.awayAttack * home.homeDefense)),
+    lambdaHome: Math.max(minRate, Math.min(3.8, fit.leagueHomeRate * home.homeAttack * away.awayDefense)),
+    lambdaAway: Math.max(minRate, Math.min(3.8, fit.leagueAwayRate * away.awayAttack * home.homeDefense)),
     homeStrengthSource: home.source,
     awayStrengthSource: away.source,
     confidence: home.source === "promoted_proxy" || away.source === "promoted_proxy" ? "limited" as const : "standard" as const,
@@ -279,17 +348,19 @@ function fitAndPredictUclInternal(
   input: UclPredictionInput & { elo?: UclEloPair },
   release: typeof UCL_MODEL_RELEASE | typeof UCL_BASELINE_MODEL_RELEASE,
 ) {
-  const fit = fitUclModel(input.training, input.match.date);
+  const fit = release === UCL_BASELINE_MODEL_RELEASE ? fitUclModel(input.training, input.match.date)
+    : fitUclOpponentModel(input.training, input.match.date);
   const baseline = predictUclBaseline(fit, input.match.home_team_id, input.match.away_team_id);
   const rest = buildUclTravelRestContext(input.match, input.history);
   const neutralMultiplier = input.context.neutralVenue ? Math.sqrt(fit.leagueAwayRate / fit.leagueHomeRate) : 1;
   const homeMultiplier = fatigueMultiplier(rest.homeRestDays, rest.homeMatchesLast14Days) * neutralMultiplier;
   const awayMultiplier = fatigueMultiplier(rest.awayRestDays, rest.awayMatchesLast14Days)
     * (rest.awayTravelKm !== null && rest.awayTravelKm >= 2_000 ? 0.96 : 1);
-  const lambdaHome = Math.max(0.2, baseline.lambdaHome * homeMultiplier);
-  const lambdaAway = Math.max(0.2, baseline.lambdaAway * awayMultiplier);
+  const minRate = fit.opponentFit ? 1e-8 : .2;
+  const lambdaHome = Math.max(minRate, baseline.lambdaHome * homeMultiplier);
+  const lambdaAway = Math.max(minRate, baseline.lambdaAway * awayMultiplier);
   const baseJoint = bivariatePoissonScoreDistribution(lambdaHome, lambdaAway, UCL_MODEL_CONFIG.dixonColesTau);
-  const coherentJoint = input.elo ? deriveUclEloConsensusJoint(baseJoint, input.elo) : undefined;
+  const coherentJoint = input.elo ? deriveUclStrengthScoreJoint(baseJoint, input.elo) : undefined;
   return {
     release,
     calibrationRelease: UCL_CALIBRATION_RELEASE,
@@ -303,6 +374,7 @@ function fitAndPredictUclInternal(
       awayMultiplier,
       neutralVenue: input.context.neutralVenue === true,
       strengthPrior: input.elo ? "local_public_elo_consensus" as const : "shared_ucl_cross_league_scale" as const,
+      ...(fit.opponentFit ? { opponentFit: fit.opponentFit } : {}),
     },
   };
 }

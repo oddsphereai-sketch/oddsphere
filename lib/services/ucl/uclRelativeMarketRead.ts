@@ -28,10 +28,13 @@ export type UclRelativeMarketAxisReceipt={
  pickedSide:string;retraced:boolean;roundTrip:boolean;conflicted:boolean;opposingCandidates:boolean;latestLegFullyObserved:boolean;
 };
 export type UclRelativeMarketReadReceipt={
- method:'original_independent_relative_marginals_joint_kl';markets:Record<UclRelativeMarket,UclRelativeMarketAxisReceipt>;
+ method:'original_independent_relative_marginals_joint_kl'|'joint_source_profile_density_ratio';markets:Record<UclRelativeMarket,UclRelativeMarketAxisReceipt>;
  converged:boolean;residual:number;appliedMarkets:UclRelativeMarket[];includedConstraintMarkets:UclRelativeMarket[];reason:string;targets:{match_result?:Record<string,number>;totalMean?:number;bttsYes?:number};
  originalMeans:{home:number;away:number};finalMeans:{home:number;away:number};
  originalProbabilities:ReturnType<typeof deriveSoccerMarketProbabilities>;finalProbabilities:ReturnType<typeof deriveSoccerMarketProbabilities>;
+ crossMarketAffectedMarkets?:UclRelativeMarket[];
+ sourceProfileResidual?:{baseline:number;current:number};
+ sourceProfileStatus?:'not_required'|'applied'|'conflict';
 };
 export type UclRelativeMarketInput={
  matchId?:number;matchResultVectors?:EplForwardBookVector[];totalVectors:EplForwardBookVector[];bttsVectors?:EplForwardBookVector[];
@@ -204,11 +207,6 @@ function pathsFor(input:UclRelativeMarketInput,market:UclRelativeMarket):{paths:
   ||rank(a.book)-rank(b.book)||a.book.localeCompare(b.book)),inactive};
 }
 function meanGoals(joint:ScoreDistribution){let home=0,away=0;for(let h=0;h<joint.length;h++)for(let a=0;a<joint[h]!.length;a++){home+=h*joint[h]![a]!;away+=a*joint[h]![a]!;}return{home,away};}
-function totalTilt(base:ScoreDistribution,factor:number):ScoreDistribution{
- const log=Math.log(factor),shift=Math.max(...base.flatMap((row,h)=>row.map((p,a)=>p>0?log*(h+a):-Infinity)));
- const raw=base.map((row,h)=>row.map((p,a)=>p*Math.exp(log*(h+a)-shift))),z=raw.flat().reduce((s,p)=>s+p,0);
- return raw.map(row=>row.map(p=>p/z));
-}
 function emptyAxis():UclRelativeMarketAxisReceipt{return{status:'unavailable',reason:'no_current_paired_source',selected:null,candidates:[],inactive:[],direction:'unknown',latestLegDirection:'unknown',latestInformativeDirection:'unknown',currentSupportsPick:false,latestLegSupportsPick:false,latestInformativeSupportsPick:false,currentTargetProbabilities:{},currentTargetProbabilityBasis:'unavailable',pickedSide:'',retraced:false,roundTrip:false,conflicted:false,opposingCandidates:false,latestLegFullyObserved:false};}
 function factorOpposes(market:UclRelativeMarket,factor:number|Record<string,number>|null,side:UclRelativeDirection):boolean{
  if(factor===null||['unknown','flat','mixed'].includes(side))return false;
@@ -217,7 +215,7 @@ function factorOpposes(market:UclRelativeMarket,factor:number|Record<string,numb
 }
 export function deriveUclRelativeMarketRead(base:ScoreDistribution,input:UclRelativeMarketInput):{joint:ScoreDistribution;receipt:UclRelativeMarketReadReceipt}{
  const original=deriveSoccerMarketProbabilities({joint:base,totalLine:2.5}),axes:Record<UclRelativeMarket,UclRelativeMarketAxisReceipt>={match_result:emptyAxis(),total:emptyAxis(),btts:emptyAxis()};
- const groups:Array<{market:UclRelativeMarket;constraints:UclGoalConstraint[]}>=[],targets:UclRelativeMarketReadReceipt['targets']={};
+ const groups:Array<{market:UclRelativeMarket;before:UclGoalConstraint[];after:UclGoalConstraint[]}>=[],targets:UclRelativeMarketReadReceipt['targets']={};
  for(const market of ['match_result','total','btts'] as const){const data=pathsFor(input,market),axis=axes[market],path=data.paths[0]??null;
   Object.assign(axis,{selected:path,candidates:data.paths,inactive:data.inactive});
   if(!path)continue;
@@ -227,36 +225,40 @@ export function deriveUclRelativeMarketRead(base:ScoreDistribution,input:UclRela
   axis.currentTargetProbabilities=market==='total'?(()=>{const p=uclPoissonNativeTotalShare(path.current.nativeMean!,2.5)!;return{over:p,under:1-p};})():{...path.current.probabilities};
   axis.currentTargetProbabilityBasis=market==='total'?'poisson_native_total_inference':'direct_paired_market';
   if(!path.baseline)continue;
-  let constraints:UclGoalConstraint[]=[];
-  if(market==='match_result'){
-   const factor=path.factor as Record<string,number>,raw=Object.fromEntries(SIDES.match_result.map(s=>[s,original.match_result[s as 'home'|'draw'|'away']*factor[s]!]));
-   const z=path.direction==='flat'?1:Object.values(raw).reduce((s,p)=>s+p,0);
-   targets.match_result=Object.fromEntries(Object.entries(raw).map(([side,p])=>[side,p/z]));
-   constraints=['home','draw'].map(side=>({identity:`relative_mr:${side}`,target:raw[side]!/z,feature:(h,a)=>side==='home'?(h>a?1:0):(h===a?1:0)}));
-  }else if(market==='total'){
-   const tilted=path.direction==='flat'?base:totalTilt(base,path.factor as number),mean=meanGoals(tilted);
-   targets.totalMean=mean.home+mean.away;
-   constraints=[{identity:'relative_total_mean',target:mean.home+mean.away,feature:(h,a)=>h+a}];
-  }else{
-   const p=original.btts.yes,r=path.factor as number,target=p<=0||p>=1?p:(p*r)/(1-p+p*r);
-   targets.bttsYes=target;
-   constraints=[{identity:'relative_btts',target,feature:(h,a)=>h>0&&a>0?1:0}];
-  }
-  groups.push({market,constraints});
+  const constraints=(c:UclRelativeCapture):UclGoalConstraint[]=>market==='match_result'
+   ?['home','draw'].map(side=>({identity:`profile_mr:${side}`,target:c.probabilities[side]!,feature:(h,a)=>side==='home'?(h>a?1:0):(h===a?1:0)}))
+   :market==='total'?[{identity:'profile_native_total_mean',target:c.nativeMean!,feature:(h,a)=>h+a}]
+   :[{identity:'profile_btts',target:c.probabilities.yes!,feature:(h,a)=>h>0&&a>0?1:0}];
+  groups.push({market,before:constraints(path.baseline),after:constraints(path.current)});
  }
  let joint=base,residual=0,converged=true,applied:UclRelativeMarket[]=[],included:UclRelativeMarket[]=[];
+ let sourceProfileResidual:{baseline:number;current:number}|undefined;
  const hasInnovation=groups.some(g=>axes[g.market].direction!=='flat');
  if(hasInnovation){
-  // First solve all observed, nonflat original-relative marginals together.
-  // On a physical conflict preserve the largest feasible subset; total has
-  // precedence over BTTS in ties so unavailable BTTS cannot cancel valid goals.
+  // One joint innovation, not separately frozen original marginals. Build
+  // baseline/current source profiles against the SAME reference law, then
+  // apply their density ratio once to the original statistical forecast.
+  // Current book probabilities are never adopted as final targets. Flat
+  // axes retain source context without freezing the forecast's BTTS/Total.
   const priority:UclRelativeMarket[]=['total','match_result','btts'];
   const subsets=Array.from({length:(1<<groups.length)-1},(_,i)=>groups.filter((_,j)=>(i+1)&(1<<j)))
    .sort((a,b)=>b.filter(g=>axes[g.market].direction!=='flat').length-a.filter(g=>axes[g.market].direction!=='flat').length||b.length-a.length||priority.reduce((score,m,i)=>score+((b.some(g=>g.market===m)?1:0)-(a.some(g=>g.market===m)?1:0))*(1<<(priority.length-i)),0));
   let found=false;
-  for(const subset of subsets){const result=projectUclGoalMarkets(base,subset.flatMap(g=>g.constraints));if(!result.converged)continue;
-   joint=result.joint;residual=result.residual;included=subset.map(g=>g.market);applied=included.filter(m=>axes[m].direction!=='flat');if(!applied.length)joint=base;found=true;break;}
-  if(!found){converged=false;residual=projectUclGoalMarkets(base,groups.flatMap(g=>g.constraints)).residual;}
+  for(const subset of subsets){
+   const before=projectUclGoalMarkets(base,subset.flatMap(g=>g.before));
+   const after=projectUclGoalMarkets(base,subset.flatMap(g=>g.after));
+   if(!before.converged||!after.converged)continue;
+   if(base.some((row,h)=>row.some((p,a)=>p>0&&(!(before.joint[h]![a]!>0)||!(after.joint[h]![a]!>0)))))continue;
+   const logs=base.map((row,h)=>row.map((p,a)=>p>0&&before.joint[h]![a]!>0&&after.joint[h]![a]!>0
+    ?Math.log(p)+Math.log(after.joint[h]![a]!)-Math.log(before.joint[h]![a]!):-Infinity));
+   const shift=Math.max(...logs.flat()),raw=logs.map(row=>row.map(v=>Math.exp(v-shift))),mass=raw.flat().reduce((s,p)=>s+p,0);
+   if(!Number.isFinite(mass)||mass<=0)continue;
+   included=subset.map(g=>g.market);applied=included.filter(m=>axes[m].direction!=='flat');
+   joint=applied.length?raw.map(row=>row.map(p=>p/mass)):base;
+   sourceProfileResidual={baseline:before.residual,current:after.residual};
+   residual=Math.max(before.residual,after.residual);found=true;break;
+  }
+  if(!found){converged=false;residual=1;}
   for(const group of groups)if(!included.includes(group.market)){axes[group.market].status='conflict';axes[group.market].conflicted=true;axes[group.market].reason='relative_joint_marginal_incompatible_or_projection_unavailable';}
  }
  const final=deriveSoccerMarketProbabilities({joint,totalLine:2.5});
@@ -272,7 +274,11 @@ export function deriveUclRelativeMarketRead(base:ScoreDistribution,input:UclRela
    if(path.latestLegDirection==='flat'&&axis.latestInformativeSupportsPick)axis.latestLegSupportsPick=true;
   }
  }
- return{joint,receipt:{method:'original_independent_relative_marginals_joint_kl',markets:axes,targets,converged,residual,appliedMarkets:applied,includedConstraintMarkets:included,
+ return{joint,receipt:{method:'joint_source_profile_density_ratio',markets:axes,targets,converged,residual,sourceProfileResidual,
+  sourceProfileStatus:!hasInnovation?'not_required':applied.length?'applied':'conflict',appliedMarkets:applied,includedConstraintMarkets:included,
+  crossMarketAffectedMarkets:(['match_result','total','btts'] as const).filter(m=>!applied.includes(m)&&
+   (m==='match_result'?SIDES.match_result.some(s=>Math.abs(final.match_result[s as 'home'|'draw'|'away']-original.match_result[s as 'home'|'draw'|'away'])>1e-9)
+    :m==='total'?Math.abs(final.total.over-original.total.over)>1e-9:Math.abs(final.btts.yes-original.btts.yes)>1e-9)),
   reason:applied.length?'observed_relative_paths_applied_jointly':hasInnovation?'relative_projection_unavailable':'no_nonflat_complete_paired_market_path',
   originalMeans:meanGoals(base),finalMeans:meanGoals(joint),originalProbabilities:original,finalProbabilities:final}};
 }
