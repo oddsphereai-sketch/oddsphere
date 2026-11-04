@@ -7,6 +7,7 @@ import { refreshCbbMemberBoard } from "@/lib/services/cbb/cbbMemberPipeline";
 import { CBB_ACTIVATION } from "@/lib/cbb/releases";
 import { gradePredictionsForSlate } from "@/lib/services/predictionGradingService";
 import { supabase } from "@/lib/db/supabase";
+import { readCbbSettlementFixtureCatchupDates } from "@/lib/services/cbb/cbbSettlementFixtureCatchup";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -22,7 +23,8 @@ export async function GET(request: Request): Promise<Response> {
     // The next morning's grader reads canonical games, not provider responses.
     // Refresh yesterday's fixture too: a late ET tip can finish after the
     // prior daily seed, and the rolling forward board no longer includes it.
-    const dates = intraday ? [] : cbbFixtureRefreshDates(today);
+    const catchupDates = await readCbbSettlementFixtureCatchupDates(supabase,today);
+    const dates = [...new Set([...catchupDates,...(intraday ? [] : cbbFixtureRefreshDates(today))])];
     const seeded = [];
     for (const slateDate of dates) {
       seeded.push(await seedCbbGames({ slateDate, season, apiKey, dryRun: false,

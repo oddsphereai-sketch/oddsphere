@@ -1,5 +1,23 @@
 # Current production model releases and qualified research candidates
 
+## CBB locked terminal-score continuity — November 4
+
+The sole fixture seed advances to
+`cbb_fixture_seed_2026_11_04_r7_locked_terminal_score_continuity`.
+A verified final for the same provider event, season and exact two team IDs may
+fill terminal status/scores while preserving the locked start, slate, team
+orientation and all prediction/member fields. Scores are mapped by team ID when
+the provider reverses home/away labels. The exact original locked member names,
+orientation and start must agree with the canonical identities first; a missing
+or conflicting receipt stays held. Unknown participants, changed event or
+season, nonfinal/tied/malformed scores, canceled/postponed fixtures, a different
+ET slate, >18-hour changes or a revised existing final remain held for review.
+The existing CBB leased cron seeds at most three additional pending slate dates
+inside its existing six-day grading window; no pending rows means no added
+provider request. No independent writer, timer, model input, score forecast,
+probability, pick, grade, stake, lock or reader interpretation changes.
+Evidence: `docs/model-audits/2026-11-04-cbb-locked-terminal-score-continuity.md`.
+
 ## NFL full-distribution authority and mean-direction diagnostics — November 4
 
 This supersedes the NFL tuple in the moneyline repair below. Live verification
