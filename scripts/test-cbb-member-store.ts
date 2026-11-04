@@ -1,3 +1,4 @@
+import "./test-cbb-published-probability-comparison";
 import assert from "node:assert/strict";
 import type { CbbForecast, CbbGame, CbbQuote } from "../lib/cbb/types";
 import { buildCbbProvisionalBoard } from "../lib/cbb/provisionalBoard";

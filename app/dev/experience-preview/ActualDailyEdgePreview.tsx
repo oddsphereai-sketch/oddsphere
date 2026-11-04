@@ -14,6 +14,7 @@ import type {
   NbaRollingScheduleDto,
 } from "@/app/lab/lib/labTypes";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
+import { publishedProbabilityComparison } from "@/app/lab/lib/publishedProbabilityComparison";
 import { marketSplitSectionIsStale } from "@/app/lab/lib/dailyEdgeSplitFreshness";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { currentSlateDate } from "@/lib/dates/slateDate";
@@ -1376,9 +1377,10 @@ function PitcherFirstInningRate({ starter, sample, pick, illustrativeSample = fa
   return <div className={`rounded-lg border p-4 ${toneClass}`}><div className="flex items-start justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.14em] text-sky-300">Starter opening frames</p><p className="mt-1 text-sm font-black text-white">{starter?.name ?? "Starter unavailable"}</p></div>{hasDirectionalPick && tone !== "neutral" ? <span className={`rounded-full border px-2 py-0.5 text-[7px] font-black uppercase tracking-wider ${tone === "support" ? "border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-200" : "border-rose-400/20 bg-rose-400/[0.07] text-rose-200"}`}>{tone === "support" ? `Recent context aligns with ${pick}` : `Recent context opposes ${pick}`}</span> : null}</div><div className="mt-3 flex items-end justify-between gap-3"><div><p className={`font-mono text-xl font-black ${tone === "support" ? "text-emerald-300" : tone === "challenge" ? "text-rose-300" : "text-white"}`}>{primaryCount}/{points.length}</p><p className="mt-0.5 text-[8px] text-gray-500">{primaryLabel}</p></div><div className="text-right"><p className="font-mono text-sm font-black text-gray-200">{average === null ? "—" : average.toFixed(2)}</p><p className="mt-0.5 text-[8px] text-gray-500">Avg FI runs allowed</p></div></div><p className="mt-3 border-t border-white/[0.07] pt-3 text-[9px] leading-relaxed text-gray-500">{primaryCount} of {points.length} recent starts aligned with {pick ?? "the displayed FI read"}. This is recent-result context, not the model grade itself, and each starter is evaluated against the prediction independently.</p></div>;
 }
 
-function DecisionMetricGrid({ market, probabilityLabel, compact = false }: { market: MarketEdgeDto; probabilityLabel: string; compact?: boolean }) {
-  const probabilityGap = displayedProbabilityGap(market);
-  return <div className="mt-4"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-600">Decision metrics</p><div className="mt-2 grid grid-cols-2 gap-2"><ProofCell label={probabilityLabel} value={formatProbability(market.modelProb)} note={compact ? "Selected side" : "Exact-price selected-side probability"} tone="violet" /><ProofCell label="Market at publish" value={formatMarketProbability(market)} note={market.marketSource ? `${formatSportsbook(market.marketSource)} · no-vig` : "Unavailable"} tone="gray" /><ProofCell label="Publish-time gap" value={probabilityGap === null ? "—" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`} note={compact ? "Model minus market" : "Displayed probability gap"} tone={probabilityGap !== null && probabilityGap >= 1 ? "emerald" : "gray"} /><ProofCell label="Bet actionability" value={market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "—" : `${market.recommendationConfidence.toFixed(0)}/100`} note={compact ? "Exact-price strength" : "Exact-price grade strength"} tone="violet" /></div></div>;
+export function DecisionMetricGrid({ market, probabilityLabel, compact = false }: { market: MarketEdgeDto; probabilityLabel: string; compact?: boolean }) {
+  const comparison = publishedProbabilityComparison(market);
+  const probabilityGap = comparison.probabilityGap;
+  return <div className="mt-4"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-600">Decision metrics</p><div className="mt-2 grid grid-cols-2 gap-2"><ProofCell label={probabilityLabel} value={formatProbability(market.modelProb)} note={compact ? "Selected side" : "Exact-price selected-side probability"} tone="violet" /><ProofCell label="Market at publish" value={comparison.marketProbabilityText} note={comparison.storedBasis && !comparison.marketAvailable ? "Unavailable" : market.marketSource ? `${formatSportsbook(market.marketSource)} · no-vig` : "Unavailable"} tone="gray" /><ProofCell label="Publish-time gap" value={probabilityGap === null ? "—" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`} note={compact ? "Model minus market" : "Displayed probability gap"} tone={probabilityGap !== null && probabilityGap >= 1 ? "emerald" : "gray"} /><ProofCell label="Bet actionability" value={market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "—" : `${market.recommendationConfidence.toFixed(0)}/100`} note={compact ? "Exact-price strength" : "Exact-price grade strength"} tone="violet" /></div></div>;
 }
 
 function CompactMarketPulse({ market, showSplits = false, sport = null, illustrativeSample = false }: { market: MarketEdgeDto; showSplits?: boolean; sport?: Sport | null; illustrativeSample?: boolean }) {
@@ -3639,9 +3641,7 @@ function recentTrendInterpretation(away: PreviewHistoryPoint[], home: PreviewHis
 }
 
 function displayedProbabilityGap(market: MarketEdgeDto): number | null {
-  if (market.modelProb === null || market.marketImpliedPct === null) return null;
-  const modelPct = market.modelProb <= 1 ? market.modelProb * 100 : market.modelProb;
-  return +(modelPct - market.marketImpliedPct).toFixed(1);
+  return publishedProbabilityComparison(market).probabilityGap;
 }
 
 function displayRiskLine(market: MarketEdgeDto): string {
@@ -3661,8 +3661,7 @@ function formatProbability(value: number | null): string {
 }
 
 function formatMarketProbability(market: MarketEdgeDto): string {
-  if (market.marketImpliedPct !== null) return `${market.marketImpliedPct.toFixed(1)}%`;
-  return formatProbability(market.marketFairProb);
+  return publishedProbabilityComparison(market).marketProbabilityText;
 }
 
 function currentDisplayedPrice(market: MarketEdgeDto): number | null {

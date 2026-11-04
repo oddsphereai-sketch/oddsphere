@@ -543,6 +543,9 @@ export type MarketEdgeDto = {
    * of guessing a gap. Read-only stat, not a calibrated edge.
    */
   modelMarketGapPct: number | null;
+  /** Explicit publication contract. Absent on legacy locks and other sports.
+   * The reader uses stored marketFairProb and modelMarketGapPct verbatim. */
+  publishedProbabilityComparisonBasis?: "stored_no_vig";
   /**
    * Push 3C-2 (Phase 6B.1.6m) — Recommendation Confidence (0..100).
    *

@@ -1,5 +1,25 @@
 # Model change safety protocol
 
+## Owner-directed CBB stored probability comparison repair — November 4
+
+The owner required probabilities, market interpretation and play grades be
+spot-checked together. The live Butler check found correct stored fair probability
+and grade math, but the reader displayed raw52.38% as no-vig instead of stored50%.
+This scoped publication/presentation repair stamps new unlocked CBB DTOs and
+uses their existing stored fair probability and stored gap without reconstruction.
+Legacy locks retain their exact presentation; future locks clone the new stamp.
+
+Publisher R28 /adapter R17 version this non-numerical repair; market model R15,
+grade R17 and receipt R11 stay exact. No forecast/probability/price/pick/grade/stake,
+provider request, writer, lease, schedule or source method changes. Same-input
+board counts and all economic fields must remain identical, so no promotion or
+demotion rule is introduced. Missing stored comparisons never fall back to a
+raw break-even number under a no-vig label. Actual rendered Butler/legacy/missing
+and stored-gap tests, writer/reader lock precedence, focused/full checks,
+independent review, fresh-main protected PR and normal live publisher/UI/lock
+verification are required. Evidence:
+`docs/model-audits/2026-11-04-cbb-published-probability-comparison.json`.
+
 ## Owner-directed CBB response continuity and source-law support repair — November 4
 
 The owner requested complete current-board price/source checks, several independent
