@@ -6,6 +6,7 @@ import {cbbBookFamily,CBB_MARKET_BEHAVIOR_GRADE_RELEASE,assertCbbMarketBehaviorG
 import {cbbEvidenceAvailableAt} from "./marketReceiptTime";
 import type {CbbQuote} from "./types";
 import {readCbbDecisionSplits} from "./decisionSplitContext";
+import {cbbQualifiedCounterpressure} from "./nativeCounterpressure";
 
 export type CbbProfessionalTargetEconomics={quote:CbbQuote;probability:number;pushProbability:number;expectedValue:number};
 /** Each physical source is inverted independently through the declared CBB
@@ -102,7 +103,9 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
   const professionalPressure=pressure.filter(row=>row.sourceClass==="professional_adjacent_named_book"&&!receipt.excludedFamilies.includes(row.book));
   const nativeResistance=professionalPressure.some(row=>row.resolution==="contested"||row.moneyDirection===sign&&row.reactionDirection!==sign||
     row.moneyDirection===-sign&&row.reactionDirection===-sign);
-  const contrarianSupport=professionalPressure.some(row=>row.moneyDirection===-sign&&row.resolution==="held");
+  const heldContrarianSupport=professionalPressure.some(row=>row.moneyDirection===-sign&&row.resolution==="held");
+  const counterpressureSupport=professionalPressure.some(row=>cbbQualifiedCounterpressure(row,references,input.asOf,sign));
+  const contrarianSupport=heldContrarianSupport||counterpressureSupport;
   const retailResistance=pressure.some(row=>row.sourceClass!=="professional_adjacent_named_book"&&
     (row.resolution==="contested"||row.moneyDirection===sign&&row.reactionDirection!==sign||row.moneyDirection===-sign&&row.reactionDirection===-sign));
   const laterProfessionalSupport=professionalPressure.some(row=>row.reactionDirection===sign&&row.latestDirection===sign&&["ongoing","resumed","reversed"].includes(row.resolution)&&
@@ -157,7 +160,7 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
       grade="Lean";reason="positive_model_value_without_qualified_action_confirmation";gradeBasis="model_value";
     }
     if(modelExpectedValue>=.03&&eligible&&contrarianSupport&&!pathResistance&&grade==="Watchlist"){
-      grade="Lean";reason="opposite_source_money_met_by_held_quote";gradeBasis="qualified_contrarian_response";
+      grade="Lean";reason=heldContrarianSupport?"opposite_source_money_met_by_held_quote":"source_quote_moved_against_opposite_money";gradeBasis="qualified_contrarian_response";
     }
     if(modelExpectedValue>=.08&&eligible&&premiumProfessionalValue&&!pathResistance){
       grade="Best Angle";reason="model_and_material_professional_exact_target_value";gradeBasis="model_and_professional_value";

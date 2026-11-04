@@ -103,6 +103,20 @@ export function readCbbSourcePressure(args:{forecast:CbbForecast;rows:readonly C
     const ambiguous=new Set([...byNativeTime.values()].filter(group=>group.some(i=>!cbbSameNativePressureState(states[i],states[group[0]]))).flat());
     if(ambiguous.has(last))return {...reads[last],reaction:"unbound" as const,resolution:"unavailable" as const,
       baseline:null,current:null,reactionDirection:null,reactionDelta:null,latestDirection:null,reason:"ambiguous_source_pressure_frontier"};
+    // An identical later publication can be received after the actual price
+    // response and therefore bind only an unchanged tail. Preserve the real
+    // earlier response, re-evaluated against ALL current own-source prices,
+    // while retaining the newer observation separately. This supplies no new
+    // reaction clock and cannot survive changed pressure or a cancelled path.
+    if(reads[last].reaction==="held"){
+      const responded=[...indices].reverse().find(index=>index!==last&&!ambiguous.has(index)&&
+        ["toward_money","against_money"].includes(reads[index].reaction)&&
+        ["ongoing","resumed","reversed"].includes(reads[index].resolution)&&
+        reads[index].reactionDirection!==0&&reads[index].reactionDirection===reads[index].latestDirection&&
+        indices.slice(indices.indexOf(index)).every(i=>cbbSameNativePressureState(states[i],states[index])));
+      if(responded!==undefined)return {...reads[responded],latestObservation:{sourceAt:latest.observedAt,
+        availableBy:latest.availableBy,sourceEventId:latest.sourceEventId,line:latest.line}};
+    }
     if(reads[last].reaction!=="unbound")return reads[last];
     const previous=[...indices].reverse().find(index=>!ambiguous.has(index)&&reads[index].reaction!=="unbound"&&
       indices.slice(indices.indexOf(index)).every(i=>cbbSameNativePressureState(states[i],states[index])));
