@@ -1,5 +1,37 @@
 # Model change safety protocol
 
+## Owner-directed CBB Moneyline value eligibility and active reader correction — November 4
+
+The owner requested repair of rigid Moneyline eligibility, genuine strong
+market-supported picks receiving their appropriate tier, and the concrete CBB
+grading differences from other production models. The live28-game review found
+Charlotte ML at-850 held Watch solely by the-250 floor despite p92.318595% and
+EV+3.179606%. The scoped grade R20 removes that duplicate ML payout restriction;
+it does not loosen the3%/8% value reserves, professional-support or resistance
+rules, select a lower-probability side, or change a score, probability or price.
+Non-ML eligibility remains unchanged. Grade R20 /board R21 /publisher R31 /
+tracking R19 /adapter R20 use `moneyline_value_eligibility`; model R16 and
+receipt R12 are unchanged. Exact R19 locked decisions and writer stamps remain
+accepted, never promoted retrospectively.
+
+Actual-reader regressions must prove the Charlotte Lean, source-supported
+Moneyline Best beyond-250, mirrored sides, and payout-driven actionable
+demotion at unchanged p/score. Heavy source money cannot bypass negative EV,
+missing data remains Held, and non-ML boundaries remain exact. Report actual
+board promotion/demotion counts separately from synthetic coverage. The current
+fixture yields one actionable promotion and zero demotions. A normal adverse
+payout/EV guard supplies the paired tested demotion; no fabricated compensation.
+
+The active production board/reader used a separate primary-market helper from
+the previously tested fallback. It must honor the existing explicit price-only
+Watch marker on equal-Watch ties, so an informational ML cannot hide an existing
+price-supported Total Watch. Explicit user market selection and unflagged old
+locked DTOs retain prior behavior. This is not a shared forecast recomputation.
+Focused/full checks, same-input replay, independent review, clean latest-main
+protected publication and normal live writer/reader/lock proof remain mandatory.
+No added provider calls, paid AI service, poll schedule, writer, lease or stake
+policy. See `docs/model-audits/2026-11-04-cbb-moneyline-value-eligibility.json`.
+
 ## Owner-directed CBB contextual handoff and Watchlist repair — November 4
 
 The owner directed this chat to fix CBB's backend interpretation and its effect

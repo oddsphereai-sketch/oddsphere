@@ -52,8 +52,11 @@ for(const market of ['moneyline','spread','total'] as const){
   cases.push({name:`${market}-${state}-low`,decision:r.decision,reason:'edge_below_actionable_reserve'});
  }
  for(const state of ['agrees','opposes','mixed','neutral','unavailable'] as const){
-  const r=fixture(market,state,{steep:true});assert.equal(r.decision.grade,'Watchlist');assert.ok(r.decision.expectedValue!>=.03);
-  cases.push({name:`${market}-${state}-steep`,decision:r.decision,reason:'price_too_steep_for_actionable'});
+  const r=fixture(market,state,{steep:true}),mlValueLane=market==='moneyline'&&(state==='agrees'||state==='unavailable');
+  assert.equal(r.decision.grade,mlValueLane?'Lean':'Watchlist');assert.ok(r.decision.expectedValue!>=.03);
+  const reason=market!=='moneyline'?'price_too_steep_for_actionable':mlValueLane?'positive_model_value_without_qualified_action_confirmation':
+   state==='opposes'?'professional_opposition':`professional_reference_${state}`;
+  cases.push({name:`${market}-${state}-steep`,decision:r.decision,reason});
  }
  for(const state of ['agrees','unavailable'] as const){const r=fixture(market,state);assert.equal(r.decision.grade,'Lean');
   cases.push({name:`${market}-${state}-actionable`,decision:r.decision,reason:'positive_model_value_without_qualified_action_confirmation'});
@@ -140,7 +143,9 @@ for(const c of cases){assert.equal(c.decision.reason,c.reason,c.name);
  // Exactly the three valid negative-price-value cases now monitor rather
  // than disappear into No Play. Preserve the original frozen fingerprints
  // to prove probabilities, prices, EV and all other decisions did not move.
- const comparable=c.name.endsWith('-negative')?{...c.decision,grade:'No Play' as const,gradeBasis:'held_or_non_actionable'}:c.decision;
+ const valueEligibleMl=['moneyline-agrees-steep','moneyline-unavailable-steep'].includes(c.name);
+ const comparable=c.name.endsWith('-negative')?{...c.decision,grade:'No Play' as const,gradeBasis:'held_or_non_actionable'}:
+  valueEligibleMl?{...c.decision,grade:'Watchlist' as const,gradeBasis:'held_or_non_actionable'}:c.decision;
  assert.equal(decisionHash(comparable),BASELINE[c.name],`${c.name}: changed beyond the declared informational classification`);}
 // Relabeling same-direction unequal effects as unresolved retains every
 // cautious gate that conflicting previously supplied; no grade consequence.
@@ -150,4 +155,4 @@ conflicting.margin={...conflicting.margin,status:'conflicting',delta:0,sourceBoo
 unresolved.margin={...unresolved.margin,status:'unresolved',delta:0,sourceBook:null,sourceMarket:null} as CbbMarketBehaviorReceipt['margin'];
 const before=gradeCbbReceivedMarket(guarded.input,conflicting),after=gradeCbbReceivedMarket(guarded.input,unresolved);
 assert.equal(before.pathResistance,true);assert.equal(before.grade,'Lean');assert.deepEqual(after,before);
-console.log(`PASS ${cases.length} frozen decisions: three explicit No Play-to-Watchlist classifications; all other economics/decisions exact.`);
+console.log(`PASS ${cases.length} frozen decisions: three informational classifications and two value-eligible Moneyline Leans; all other economics/decisions exact.`);

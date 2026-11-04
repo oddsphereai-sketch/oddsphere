@@ -8,6 +8,7 @@ import {advanceCbbProvisionalSnapshot} from "../lib/cbb/provisionalLifecycle";
 import {adaptCbbProvisionalGame} from "../lib/services/cbb/adaptCbbProvisionalToDailyEdge";
 import {selectTopAvailableAngles} from "../app/lab/components/daily-edge/selectTopAvailableAngles";
 import {headlinePrimaryMarket} from "../app/lab/lib/perPickHeadline";
+import {primaryDailyEdgeMarket} from "../app/lab/lib/dailyEdgeReaderState";
 import {gradeNbaMarket} from "../lib/services/nba/nbaMarketReview";
 import type {CbbForecast,CbbQuote,CbbGame} from "../lib/cbb/types";
 
@@ -124,6 +125,7 @@ assert.ok(mixedBoard.rows.every(row=>row.grade==="Watchlist"));
 const mixedDto=dto(mixedRead.forecast,mixedBoard);
 assert.ok(mixedDto.markets.moneyline.reviewFlags?.includes("informational_non_actionable_price"));
 assert.equal(headlinePrimaryMarket(mixedDto),"total");
+assert.equal(primaryDailyEdgeMarket(mixedDto),"total","the active production reader must also preserve the value-supported Watch headline");
 assert.equal(selectTopAvailableAngles([mixedDto]).games.length,1,"retain the genuine price-supported watch when an informational ML watch is added");
 
 const absent=readCbbMarketBehavior({...args,targets:[],currentQuotes:[]});

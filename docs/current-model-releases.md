@@ -1,8 +1,30 @@
 # Current production model releases and qualified research candidates
 
-## CBB contextual handoff and informational Watchlist — November 4
+## CBB value-based Moneyline eligibility — November 4
 
-The authoritative CBB market model is
+The authoritative calibration/grade is
+`cbb_2026_11_04_r20_moneyline_value_eligibility`, with board R21, publisher R31,
+tracking R19 and adapter R20 `moneyline_value_eligibility`. Market model R16
+`contextual_authority_handoff`, receipt R12, independent R4 and path R5 remain
+unchanged. Reports must separate grade R20 from earlier locked R19 decisions.
+
+The current market reader no longer excludes a Moneyline solely because its
+American price is below -250. Actual payout/EV, the existing3%/8% tier reserves,
+professional-value/action support and unresolved-resistance rules still govern
+Lean and Best Angle. No new price cap, probability adjustment or stake rule is
+introduced. Non-Moneyline contract eligibility stays exact. In the frozen28-game
+board, only Charlotte ML at-850 changes Watchlist to Lean, at unchanged
+p92.318595% and EV+3.179606%. Existing R19 Watch/No Play locks remain exact.
+
+The active production reader now uses the same explicit price-only-Watch
+tiebreak as the stored DTO and fallback selector, preserving a positive-value
+Total Watch ahead of a price-only Moneyline Watch. Explicit market selection
+and all unflagged legacy precedence remain unchanged.
+Evidence: `docs/model-audits/2026-11-04-cbb-moneyline-value-eligibility.json`.
+
+## Prior CBB contextual handoff and informational Watchlist — November 4
+
+The preceding release uses CBB market model
 `cbb_candidate_2026_11_04_r16_contextual_authority_handoff`, with grade
 `cbb_2026_11_04_r19_informational_watchlist`, receipt R12
 `contextual_authority_handoff`, board R20, publisher R30, tracking R18 and
