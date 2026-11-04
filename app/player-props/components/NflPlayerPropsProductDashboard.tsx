@@ -229,29 +229,12 @@ function PropReader({ row, onClose }: { row: Row; onClose: () => void }) {
 function SportsbookMovement({ row, evidence }: { row: Row; evidence: NflPlayerPropsBookEvidence | null }) {
   if (!evidence || !evidence.openingObservedAt || evidence.openingAmericanPrice === null
     || !(Date.parse(evidence.openingObservedAt) < Date.parse(evidence.observedAt))) {
-    return <UnavailableEvidence title="Opening movement is not available yet" detail="A same-sportsbook opening quote is needed for a movement graph. The current quote is shown in the summary above." />;
+    return <UnavailableEvidence title="Opening movement is not available yet" detail="The current quote is shown in the summary above. An earlier same-sportsbook quote is needed to show movement." />;
   }
   const openingLine = evidence.openingLine ?? row.line;
-  const lineChanged = openingLine !== row.line;
-  const openingValue = lineChanged ? openingLine : impliedProbability(evidence.openingAmericanPrice) * 100;
-  const currentValue = lineChanged ? row.line : impliedProbability(evidence.americanPrice) * 100;
-  const range = lineChanged
-    ? Math.max(2, Math.abs(currentValue - openingValue) * 2)
-    : 100;
-  const midpoint = lineChanged ? (openingValue + currentValue) / 2 : 50;
-  const y = (value: number) => 55 - ((value - midpoint) / range) * 74;
-  const openingY = y(openingValue);
-  const currentY = y(currentValue);
   return <div className="rounded-lg border border-gray-800 bg-black/20 p-4">
-    <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-gray-500"><span><strong className="text-gray-200">{book(evidence.sportsbook)}</strong> · {provider(evidence.provider)} · same outcome</span><span>{lineChanged ? "Prop line" : "Book implied chance at the same line"}</span></div>
-    <svg viewBox="0 0 400 110" role="img" aria-label={`Sportsbook movement from ${selectionAtLine(row, openingLine)} at ${price(evidence.openingAmericanPrice)} to ${selection(row)} at ${price(evidence.americanPrice)}`} className="mt-2 h-24 w-full overflow-visible">
-      <line x1="20" y1="55" x2="380" y2="55" stroke="#374151" strokeDasharray="3 5" />
-      <line x1="40" y1={openingY} x2="360" y2={currentY} stroke="#7dd3fc" strokeWidth="2.5" />
-      <circle cx="40" cy={openingY} r="5" fill="#7dd3fc" />
-      <circle cx="360" cy={currentY} r="5" fill="#7dd3fc" />
-    </svg>
-    <div className="grid grid-cols-2 gap-3 border-t border-gray-800 pt-3 text-xs"><div><span className="block text-[9px] font-black uppercase tracking-wider text-gray-600">Opening</span><strong className="mt-1 block text-sm text-white">{selectionAtLine(row, openingLine)} · {price(evidence.openingAmericanPrice)}</strong><span className="block text-[10px] text-gray-500">{localTime(evidence.openingObservedAt)}</span></div><div className="text-right"><span className="block text-[9px] font-black uppercase tracking-wider text-gray-600">Current</span><strong className="mt-1 block text-sm text-white">{selection(row)} · {price(evidence.americanPrice)}</strong><span className="block text-[10px] text-gray-500">{localTime(evidence.observedAt)}</span></div></div>
-    <p className="mt-3 text-[10px] text-gray-600">Two recorded quotes only. The line connects those observations without implying intervening prices.</p>
+    <p className="text-[10px] text-gray-500"><strong className="text-gray-200">{book(evidence.sportsbook)}</strong> · {provider(evidence.provider)} · same outcome</p>
+    <div className="mt-3 grid grid-cols-2 gap-3 text-xs"><div><span className="block text-[9px] font-black uppercase tracking-wider text-gray-600">Opening</span><strong className="mt-1 block text-sm text-white">{selectionAtLine(row, openingLine)} · {price(evidence.openingAmericanPrice)}</strong><span className="block text-[10px] text-gray-500">{localTime(evidence.openingObservedAt)}</span></div><div className="text-right"><span className="block text-[9px] font-black uppercase tracking-wider text-gray-600">Current</span><strong className="mt-1 block text-sm text-white">{selection(row)} · {price(evidence.americanPrice)}</strong><span className="block text-[10px] text-gray-500">{localTime(evidence.observedAt)}</span></div></div>
   </div>;
 }
 
