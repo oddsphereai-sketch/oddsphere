@@ -1,5 +1,40 @@
 # Current production model releases and qualified research candidates
 
+## CBB contextual handoff and informational Watchlist — November 4
+
+The authoritative CBB market model is
+`cbb_candidate_2026_11_04_r16_contextual_authority_handoff`, with grade
+`cbb_2026_11_04_r19_informational_watchlist`, receipt R12
+`contextual_authority_handoff`, board R20, publisher R30, tracking R18 and
+adapter R19 `informational_watchlist`. Independent R4 and path R5 are unchanged.
+Release completion still requires protected deployment and normal-writer proof.
+
+An explicit, native-contract-bound `qualified_current_resistance` decision must
+survive current-level arbitration. It retains the input forecast and residual
+shape instead of silently applying an older net price stance. Current native
+joint consistency and opposite-winner resolution still run first. Plain static
+profiles, unbound splits and tiny juice changes do not acquire this exception.
+New decision receipts retain the upstream relative interpretation and its
+disposition, so current-level replacement is inspectable in future spot checks.
+
+A complete, priced prediction with insufficient current value is informational
+Watchlist, following the NBA product distinction. Negative EV cannot become
+Lean or Best Angle; all existing actionable value/source conditions remain.
+Incomplete forecasts or executable prices stay Held and render as unavailable
+No Play. This classification changes no score, outcome probability/confidence, pick,
+price or EV. New price-only Watchlists supply no recommendation confidence and
+carry an explicit non-actionable-price flag, so neither fallback ranking route
+can feature them as Top Available Angles. A price-only Watch also cannot
+displace an existing price-supported Watch on an equal-grade headline tie.
+Legacy locked DTOs are unstamped. It is not a sharp-confirmed Best Angle redefinition.
+
+Exact prior R15/R17/R11 stored locks and R11 anchors remain supported without
+relabeling or adding the new trace retrospectively. No grade threshold, fixed
+blend, new fitting, paid AI runtime, provider budget, schedule, lease or writer.
+This closes a reproduced handoff defect; it does not establish that the remaining
+current-source forecast policy completes the full conditional-inference vision.
+Evidence: `docs/model-audits/2026-11-04-cbb-contextual-authority-handoff.json`.
+
 
 
 ## CBB stored probability comparison presentation — November 4
@@ -42,9 +77,10 @@ were not archived before repair; prospective diagnostics count actual admitted
 pairs/books without claiming every returned quote was used. Evidence/rollback:
 `docs/model-audits/2026-11-04-nba-paid-consumer-book-coverage.json`.
 
-## CBB response frontier and source-law support — November 4
+## Prior CBB response frontier and source-law support — November 4
 
-The authoritative CBB runtime is independent prior
+The preceding CBB release, superseded by the contextual handoff release above,
+uses independent prior
 `cbb_candidate_2026_11_03_r4_verified_new_orleans_venue_prior`, market model
 `cbb_candidate_2026_11_04_r15_response_frontier_law_support`, grade
 `cbb_2026_11_04_r17_response_frontier_law_support`, receipt R11, path R5,

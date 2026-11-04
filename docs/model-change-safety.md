@@ -1,5 +1,49 @@
 # Model change safety protocol
 
+## Owner-directed CBB contextual handoff and Watchlist repair — November 4
+
+The owner directed this chat to fix CBB's backend interpretation and its effect
+on final scores, probabilities, predictions and grades, and challenged spot
+checks that verified agreement without checking the decision itself. This
+continues the functional-repair/forward-evaluation scope; it does not authorize
+invented score estimates, fitted forecast blends or another paid AI service.
+
+The scoped candidate is model R16 /receipt R12 `contextual_authority_handoff`,
+grade R19 /board R20 /publisher R30 /tracking R18 /adapter R19
+`informational_watchlist`.
+Independent R4 and path R5 stay unchanged. A valid explicit retained decision
+from current own-book pressure must not be overwritten by automatic adoption of
+an older net source stance. Native joint consistency and current opposite-winner
+opposition remain enforced before retention; static-only correction and tiny-
+juice continuity remain intact. This is one demonstrated authority defect,
+not approval to claim all market interpretations or their magnitudes correct.
+
+The owner additionally directed comparison with the other models to explain
+CBB No Play versus Watchlist. The NBA production path keeps a complete priced
+forecast informational when its current price lacks actionable value. CBB may
+adopt that distinction: finite negative-EV predictions become Watchlist with
+unchanged probabilities, prices, EV and zero stake. Missing forecasts/quotes
+remain Held/unavailable No Play. Invalid probability laws are rejected. New
+negative-EV Watchlists must not enter Top Available Angles through either a
+high raw win probability or positive no-vig gap: raw probability remains exact,
+recommendation confidence is unavailable and the new DTO has an explicit
+non-actionable-price marker. Unstamped locked DTOs retain old semantics.
+Lean/Best conditions, positive-value guards and
+resistance checks stay unchanged. This is classification, not permission to
+manufacture stronger picks or increase actionable counts. Existing locked
+No Play payloads must remain No Play under their exact stored grade release.
+
+Required proof includes a failing-before/fixed-after full reader-to-board test,
+paired actionable promotion and demotion at unchanged grade thresholds, mirror
+and invalid/late/unbound/opposed-evidence controls, exact R15 locked writer and
+reader precedence, original-anchor compatibility, same-input board counts and
+multiple independent code/board reviews. New receipts must expose the original
+relative interpretation and how the joint decision handled it. Mathematical
+coherence alone cannot be reported as semantic review. No source polling, budget,
+lease, cadence, writer or stake changes. Full model-change checks, fresh-main
+integration safety, protected PR/deployment and normal-cycle live proof remain
+mandatory. See `docs/model-audits/2026-11-04-cbb-contextual-authority-handoff.json`.
+
 ## Owner-directed CBB stored probability comparison repair — November 4
 
 The owner required probabilities, market interpretation and play grades be

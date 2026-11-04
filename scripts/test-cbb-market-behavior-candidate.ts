@@ -195,7 +195,7 @@ assert.equal(pricePromoted.grade,"Best Angle","material exact-target professiona
 assert.equal(pricePromoted.economicPathConfirmation,true);assert.equal(pricePromoted.actualActionConfirmation,false,"price action cannot invent identified native flow");
 const sourceVigRead=run([quote("spread",-3.5,-115,-105,"pinnacle",true)],{anchors:anchors([quote("spread",-3.5,-115,-105)])});
 const sourceVig=gradeCbbMarketBehavior({forecast:sourceVigRead.forecast,target:targets[1],references:[quote("spread",-3.5,-115,-105,"pinnacle",true)],asOf:at},sourceVigRead.receipt);
-assert.equal(sourceVig.grade,"No Play","a current-level correction removes the independent-only edge when the executable price has negative value");
+assert.equal(sourceVig.grade,"Watchlist","a current-level correction removes the independent-only edge when the executable price has negative value");
 assert.ok(sourceVig.professionalTargetEconomics[0].expectedValue<0);assert.equal(sourceVig.economicCorroboration,false);
 const valueTarget=quote("spread",-3.5,125,-145,"draftkings",true),valueRead=run([quote("spread",-3.5,-110,-110,"pinnacle",true)],{targets:[valueTarget],anchors:null});
 const valueGrade=gradeCbbMarketBehavior({forecast:valueRead.forecast,target:valueTarget,references:[quote("spread",-3.5,-110,-110,"pinnacle",true)],asOf:at},valueRead.receipt);
@@ -249,17 +249,17 @@ const offTargetGrade=gradeCbbMarketBehavior({forecast:offTarget.forecast,target:
 assert.equal(offTargetGrade.pathResistance,true,"native80/80 opposite concentration matters even at another source threshold");assert.equal(offTargetGrade.actualActionConfirmation,false);
 const priceBest=run([quote("spread",-3.5,-115,-105,"pinnacle",true)],{anchors:anchors([quote("spread",-3.5,-110,-110)])});
 const priceBestGrade=gradeCbbMarketBehavior({forecast:priceBest.forecast,target:targets[1],references:[quote("spread",-3.5,-115,-105,"pinnacle",true)],asOf:at},priceBest.receipt);
-assert.equal(priceBestGrade.grade,"No Play","price movement cannot preserve an unsupported independent edge at a vig-negative target");
+assert.equal(priceBestGrade.grade,"Watchlist","price movement cannot preserve an unsupported independent edge at a vig-negative target");
 assert.equal(priceBestGrade.economicCorroboration,false);assert.equal(priceBestGrade.economicPathConfirmation,true);assert.equal(priceBestGrade.actualActionConfirmation,false);
 const twoOpposed=run([quote("spread",-3.5,-115,-105,"pinnacle",true),quote("spread",-3.5,-115,-105,"circa",true)],{
  independent:forecast(12),anchors:anchors([quote("spread",-3.5,-150,130),quote("spread",-3.5,-150,130,"circa")]),
  flows:[flow(.1,.6),{...flow(.1,.6),sourceBook:"circa"}]});
 const twoOpposedGrade=gradeCbbMarketBehavior({forecast:twoOpposed.forecast,target:targets[1],references:[quote("spread",-3.5,-115,-105,"pinnacle",true),quote("spread",-3.5,-115,-105,"circa",true)],asOf:at},twoOpposed.receipt);
-assert.equal(twoOpposedGrade.grade,"No Play","equal adverse current laws do not preserve a stale independent edge at a vig-negative target");
+assert.equal(twoOpposedGrade.grade,"Watchlist","equal adverse current laws do not preserve a stale independent edge at a vig-negative target");
 assert.ok(twoOpposedGrade.expectedValue!<0);
 const twoPriceOnly=run([quote("spread",-3.5,-115,-105,"pinnacle",true),quote("spread",-3.5,-115,-105,"circa",true)],{
  independent:forecast(12),anchors:anchors([quote("spread",-3.5,-150,130),quote("spread",-3.5,-150,130,"circa")])});
-assert.equal(gradeCbbMarketBehavior({forecast:twoPriceOnly.forecast,target:targets[1],references:[quote("spread",-3.5,-115,-105,"pinnacle",true),quote("spread",-3.5,-115,-105,"circa",true)],asOf:at},twoPriceOnly.receipt).grade,"No Play","a real loss of final exact-price value is distinct from a duplicated path penalty");
+assert.equal(gradeCbbMarketBehavior({forecast:twoPriceOnly.forecast,target:targets[1],references:[quote("spread",-3.5,-115,-105,"pinnacle",true),quote("spread",-3.5,-115,-105,"circa",true)],asOf:at},twoPriceOnly.receipt).grade,"Watchlist","a real loss of final exact-price value is distinct from a duplicated path penalty");
 const midway={...quote("spread",-3.5,-140,120,"pinnacle",true),providerObservedAt:"2026-11-02T15:10:00Z",fetchedAt:"2026-11-02T15:11:00Z"};
 const boughtBack=run([quote("spread",-3.5,-110,-110,"pinnacle",true)],{historyQuotes:[midway],anchors:anchors([quote("spread",-3.5,-110,-110)])});
 assert.equal(boughtBack.receipt.margin.status,"applied");assert.ok(Math.abs(boughtBack.receipt.episodes[0].delta)<1e-8,"buyback keeps its zero historical net while the current source level is applied once");
@@ -403,10 +403,10 @@ for(const pickSign of [1,-1] as const){
  assert.equal(unresolved.receipt.margin.status,"applied");
  assert.equal(unresolved.receipt.margin.directionalEvidence,"aligned");
  assert.equal(unresolved.receipt.jointMarginDecision?.authority?.reason,"current_native_source_preference");
- assert.equal(gradeCbbMarketBehavior({forecast:unresolved.forecast,target,references:[],asOf:at},unresolved.receipt).grade,"No Play","the explicit native current-level choice must not retain stale independent value at a negative-EV target");
+ assert.equal(gradeCbbMarketBehavior({forecast:unresolved.forecast,target,references:[],asOf:at},unresolved.receipt).grade,"Watchlist","the explicit native current-level choice must not retain stale independent value at a negative-EV target");
  const equal=run([a,{...a,sportsbook:"circa"}],{independent,targets:[target],anchors:anchors([quote("spread",0,before[0],before[1],"pinnacle"),quote("spread",0,before[0],before[1],"circa")])});
  assert.equal(equal.receipt.margin.status,"applied");
- assert.equal(gradeCbbMarketBehavior({forecast:equal.forecast,target,references:[],asOf:at},equal.receipt).grade,"No Play","equivalent native current laws are applied once and the actual target still requires positive value");
+ assert.equal(gradeCbbMarketBehavior({forecast:equal.forecast,target,references:[],asOf:at},equal.receipt).grade,"Watchlist","equivalent native current laws are applied once and the actual target still requires positive value");
 }
 for(const market of ["spread","total"] as const)for(const pickSign of [1,-1] as const){
  const line=market==="spread"?0:150.5,independent=market==="spread"?forecast(7*pickSign):forecast(0,pickSign===1?166:134);

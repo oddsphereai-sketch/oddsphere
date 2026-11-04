@@ -17,15 +17,18 @@ const tuple=(q:CbbQuote)=>JSON.stringify([q.line,q.firstPrice,q.secondPrice]);
 const sign=(n:number):-1|0|1=>Math.abs(n)<1e-7?0:n>0?1:-1;
 const fair=(q:CbbQuote)=>cbbImpliedProbability(q.firstPrice)/(cbbImpliedProbability(q.firstPrice)+cbbImpliedProbability(q.secondPrice));
 export type CbbJointMarginDecision={
- status:"applied"|"confirmed"|"unresolved"|"unavailable";reason:string;sourceBook:string|null;
+ status:"applied"|"confirmed"|"retained"|"unresolved"|"unavailable";reason:string;sourceBook:string|null;
  sourceQuotes:CbbQuote[];authority:CbbSourceAuthority|null;
  impliedMargin:number|null;impliedMarginSd:number|null;
- numericAssumption:"same_book_current_joint_prices_or_single_contract_with_independent_shape";
+ numericAssumption:"same_book_current_joint_prices_or_single_contract_with_independent_shape"|"qualified_current_resistance_retains_forecast";
+ /** Present only on new decisions; never reconstruct this on stored locks. */
+ relativeInterpretation?:{read:Axis;disposition:"source_level_selected"|"independent_law_confirmed"|"current_resistance_retained"|"current_source_unresolved"|"no_current_profile"};
  candidates:Array<{book:string;status:string;reason:string;margin:number|null;marginSd:number|null}>;
 };
-/** Current state is an input in its own right. A genuine path confirmation can
- * retain the independent forecast; otherwise the selected professional source
- * owns its current law. Selection and mathematical inversion are separate. */
+/** Current state is evidence in its own right. Native current resistance may
+ * retain the forecast, and supported path confirmation may confirm its law.
+ * The remaining current-level policy is explicit; profile inversion alone is
+ * not evidence that all upstream interpretations were applied correctly. */
 export function decideCbbJointMargin(args:{base:CbbForecast;current:CbbQuote[];episodes:CbbBehaviorEpisode[];
  path:Path;pressure:CbbPressureDecision[];relative:Axis}){
  const {base,current,episodes,path,pressure}=args;
@@ -54,9 +57,12 @@ export function decideCbbJointMargin(args:{base:CbbForecast;current:CbbQuote[];e
  }
  const decision:CbbJointMarginDecision={status:"unavailable",reason:"no_current_professional_margin_contract",sourceBook:null,
   sourceQuotes:[],authority:null,impliedMargin:null,impliedMarginSd:null,
-  numericAssumption:"same_book_current_joint_prices_or_single_contract_with_independent_shape",candidates};
- const unchanged=()=>({decision,margin:decision.status==="unresolved"?{...args.relative,status:"unresolved" as const,delta:0,
-  sourceBook:null,sourceMarket:null,reason:decision.reason,authority:undefined}:args.relative,marginSd:base.uncertainty.marginSd});
+  numericAssumption:"same_book_current_joint_prices_or_single_contract_with_independent_shape",candidates,
+  relativeInterpretation:{read:structuredClone(args.relative),disposition:"no_current_profile"}};
+ const unchanged=()=>{decision.relativeInterpretation!.disposition=decision.status==="unresolved"?"current_source_unresolved":"no_current_profile";
+  return {decision,margin:decision.status==="unresolved"?{...args.relative,status:"unresolved" as const,delta:0,
+  sourceBook:null,sourceMarket:null,reason:decision.reason,authority:undefined}:args.relative,marginSd:base.uncertainty.marginSd};
+ };
  if(!profiles.length){if(candidates.length){decision.status="unresolved";decision.reason="current_source_constraints_inconsistent";}return unchanged();}
  // Inconsistent present source constraints are meaningful opposition, not a
  // permission to silently discard the source and promote another source.
@@ -125,6 +131,26 @@ export function decideCbbJointMargin(args:{base:CbbForecast;current:CbbQuote[];e
   }
   if(!chosen){decision.status="unresolved";decision.reason="current_physical_sources_not_resolved";decision.authority=authority;return unchanged();}
  }
+ // A retained decision is a positive interpretation of current own-book
+ // resistance, not missing history. Current profiles remain evidence, but
+ // cannot silently replace that decision with an older net price stance.
+ // Run this only after current-frame consistency and winner-opposition checks.
+ const retained=args.relative.authority;
+ const heldAuthorities=retained?.opposingIds??[];
+ const currentResistance=args.relative.status==="neutral"&&args.relative.delta===0&&
+  retained?.status==="retained"&&retained.reason==="qualified_current_resistance"&&heldAuthorities.length>0&&
+  heldAuthorities.every(id=>pressure.some(row=>row.sourceClass==="professional_adjacent_named_book"&&
+    `${row.book}:${row.market}`===id&&row.market!=="total"&&row.reaction==="held"&&row.resolution==="held"&&
+    row.moneyDirection!==null&&row.moneyDirection!==0&&row.current&&
+    episodes.some(e=>`${e.book}:${e.market}`===id&&e.direction===row.moneyDirection)&&
+    profiles.some(profile=>profile.book===row.book&&profile.quotes.some(q=>q.market===row.market&&
+      tuple(q)===tuple(row.current!)&&Date.parse(q.providerObservedAt)===Date.parse(row.current!.providerObservedAt)))));
+ if(currentResistance){
+  decision.status="retained";decision.reason="qualified_current_resistance_precedes_current_level";
+  decision.authority=structuredClone(retained);decision.numericAssumption="qualified_current_resistance_retains_forecast";
+  decision.relativeInterpretation!.disposition="current_resistance_retained";
+  return {decision,margin:structuredClone(args.relative),marginSd:base.uncertainty.marginSd};
+ }
  const ownEpisodes=episodes.filter(e=>e.book===chosen.book&&e.market!=="total"&&e.direction!==0);
  const confirmations=ownEpisodes.map(e=>e.market==="moneyline"?
   interpretCbbRelativeMarketMove(base.homeWinProbability,fair(e.anchor),fair(e.current)):
@@ -153,6 +179,7 @@ export function decideCbbJointMargin(args:{base:CbbForecast;current:CbbQuote[];e
  const finalAuthority: CbbSourceAuthority=authority?{...authority,authorIds:authority.status==="equivalent"?authority.authorIds:authors,
   selectedId:authors[0]}:{status:"selected",reason:"single_physical_source",selectedId:authors[0],authorIds:authors,followerIds:[],opposingIds:[]};
  decision.status=confirms?"confirmed":"applied";
+ decision.relativeInterpretation!.disposition=confirms?"independent_law_confirmed":"source_level_selected";
  decision.reason=confirms?"native_path_and_current_contract_confirm_independent":authority?.reason==="current_native_source_preference"?"current_source_consensus_reference_policy":"selected_current_native_source_law";
  const nativeDirection=ownEpisodes.length&&new Set(ownEpisodes.map(e=>e.direction)).size===1?ownEpisodes[0].direction:null;
  const nativeOwner=ownEpisodes.find(e=>e.market==="spread")??ownEpisodes[0];

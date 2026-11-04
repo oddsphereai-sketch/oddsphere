@@ -52,7 +52,7 @@ const GRADE_RANK: Record<Grade, number> = {
 };
 
 type Candidate = { market: HeadlineMarket; grade: Grade; precedence: number };
-type VerdictCandidate = { market: HeadlineMarket; verdict: Verdict; precedence: number };
+type VerdictCandidate = { market: HeadlineMarket; verdict: Verdict; precedence: number; priceOnlyWatch?: boolean };
 
 const VERDICT_RANK: Record<Verdict, number> = {
   best_angle: 50,
@@ -102,14 +102,17 @@ function rankedCandidates(g: DailyEdgeGameDto): Candidate[] {
 
 function rankedVerdictCandidates(g: DailyEdgeGameDto): VerdictCandidate[] {
   const candidates: VerdictCandidate[] = [
-    { market: "moneyline", verdict: g.markets.moneyline.verdict.key, precedence: 0 },
-    { market: "total", verdict: g.markets.total.verdict.key, precedence: 1 },
-    { market: "first_inning_total", verdict: g.markets.first_inning.verdict.key, precedence: 2 },
+    { market: "moneyline", verdict: g.markets.moneyline.verdict.key, precedence: 0, priceOnlyWatch:g.markets.moneyline.reviewFlags?.includes("informational_non_actionable_price") },
+    { market: "total", verdict: g.markets.total.verdict.key, precedence: 1, priceOnlyWatch:g.markets.total.reviewFlags?.includes("informational_non_actionable_price") },
+    { market: "first_inning_total", verdict: g.markets.first_inning.verdict.key, precedence: 2, priceOnlyWatch:g.markets.first_inning.reviewFlags?.includes("informational_non_actionable_price") },
   ];
   const out = candidates.filter((candidate) => candidate.verdict !== "no_play");
   out.sort((a, b) => {
     const r = VERDICT_RANK[b.verdict] - VERDICT_RANK[a.verdict];
     if (r !== 0) return r;
+    // Preserve the previous useful Watch headline when a newly informational
+    // price-only Watch would otherwise replace it through ML precedence.
+    if(a.verdict==="watchlist"&&Boolean(a.priceOnlyWatch)!==Boolean(b.priceOnlyWatch))return a.priceOnlyWatch?1:-1;
     return a.precedence - b.precedence;
   });
   return out;
