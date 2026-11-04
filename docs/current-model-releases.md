@@ -1,6 +1,26 @@
 # Current production model releases and qualified research candidates
 
 
+
+## CBB stored probability comparison presentation — November 4
+
+CBB publisher advances to `cbb_member_pipeline_2026_11_04_r28_stored_probability_comparison`
+and adapter to `cbb_member_adapter_2026_11_04_r17_stored_probability_comparison`.
+Independent R4, numerical market model R15, grade R17, receipt R11, path R5,
+board R18 and tracking R16 remain exact. This fixes the reader's comparison
+basis, not scores, probabilities, picks, grades, stakes or source interpretation.
+
+Newly published unlocked markets explicitly carry `stored_no_vig` and render
+the existing stored `marketFairProb` and `modelMarketGapPct`. Butler's actual
+-110/-110 pair has50% no-vig probability;52.38% is the unchanged raw price
+break-even field and cannot be displayed as no-vig. Missing stored comparison
+values remain unavailable rather than reconstructed. Future locks clone the
+new publication stamp. Legacy locked DTOs without it preserve their exact prior
+presentation; other sports do not acquire this stamp. No stored locked payload,
+model input, price, score, grade, writer, lease, cadence or provider call changes.
+Evidence: `docs/model-audits/2026-11-04-cbb-published-probability-comparison.json`.
+
+
 ## NBA paid consumer-book response reuse — November 4
 
 The authoritative NBA tuple is model

@@ -11,7 +11,7 @@ import { buildDailyEdgeMemberPresentation } from "@/app/lab/lib/dailyEdgeRespons
 import { CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE } from "@/lib/cbb/marketBehaviorCandidate";
 import {CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_JOINT_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_ALIGNED_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 
-export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_04_r16_response_frontier_law_support" as const;
+export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_04_r17_stored_probability_comparison" as const;
 type GradeLabel="Best Angle"|"Lean"|"Watchlist"|"No Play"|"Held";
 type BoardRow=CbbProvisionalSnapshot["board"]["rows"][number];
 type SplitEvidence=ReturnType<typeof cbbCurrentSplitEvidence>;
@@ -110,6 +110,11 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
   const ml=marketEdge(game,rows.get("moneyline")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability,preciseReason),
     spread=marketEdge(game,rows.get("spread")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability,preciseReason),
     total=marketEdge(game,rows.get("total")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability,preciseReason);
+  // Publish the display basis only on new unlocked DTOs. Legacy locked
+  // snapshots retain their exact presentation; future locks clone this flag.
+  if(snapshot.lockedAt===null)for(const market of [ml,spread,total]){
+    market.publishedProbabilityComparisonBasis="stored_no_vig";
+  }
   const cutoff=Date.parse(game.date)-60*60_000,locked=snapshot.lockedAt!==null;
   for(const [kind,market] of [["moneyline",ml],["spread",spread],["total",total]] as const){
     const boardRow=rows.get(kind)!;

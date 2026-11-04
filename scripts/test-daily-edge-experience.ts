@@ -1,3 +1,4 @@
+import { publishedProbabilityComparison } from "../app/lab/lib/publishedProbabilityComparison";
 import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto } from "../app/lab/lib/labTypes";
 import { readFileSync } from "node:fs";
 import {
@@ -1400,10 +1401,20 @@ check(
     candidateSource.includes("Market at publish") &&
     candidateSource.includes("latest observed price is shown separately"),
 );
+const storedComparisonFixture = { modelProb: 0.5022258825624357, marketImpliedPct: 52.38095238095239,
+  marketFairProb: 0.5, modelMarketGapPct: 0.22258825624357215 };
+const legacyComparison = publishedProbabilityComparison(storedComparisonFixture);
 check(
-  "displayed probability gap is derived from the displayed probability pair",
-  candidateSource.includes("function displayedProbabilityGap") &&
-    candidateSource.includes("modelPct - market.marketImpliedPct"),
+  "legacy displayed probability gap retains the original displayed raw probability pair",
+  candidateSource.includes("publishedProbabilityComparison(market)") &&
+    legacyComparison.marketProbabilityText === "52.4%" && legacyComparison.probabilityGap === -2.2,
+);
+const cbbStoredComparison = publishedProbabilityComparison({ ...storedComparisonFixture,
+  publishedProbabilityComparisonBasis: "stored_no_vig" });
+check(
+  "stamped CBB comparison renders stored no-vig probability and gap instead of raw break-even",
+  cbbStoredComparison.marketProbabilityText === "50.0%" &&
+    cbbStoredComparison.probabilityGap === storedComparisonFixture.modelMarketGapPct,
 );
 check(
   "mixed-time generated price/edge sentences are withheld",

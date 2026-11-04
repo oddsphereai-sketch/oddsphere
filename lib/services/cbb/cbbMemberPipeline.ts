@@ -35,7 +35,7 @@ import {cbbCanonicalBehaviorInputs} from "./cbbCanonicalBehaviorInputs";
 import {retainCbbLevelInput,cbbRetainedNormalizationQuarantine} from "@/lib/cbb/retainedLevelInput";
 import {cbbDecisionSplitContext} from "@/lib/cbb/decisionSplitContext";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_04_r27_response_frontier_law_support" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_04_r28_stored_probability_comparison" as const;
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
 
 /** The sole leased writer publishes the same exact locked/unlocked tuples the
