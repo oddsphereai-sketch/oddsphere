@@ -27,6 +27,14 @@ for (const mutate of [
   assert.equal(nflPlayerPropsTrackingIdentity({ decision, context: changed }).playerId, null, "wrong game/team/time or ambiguous identity fails closed");
 }
 assert.equal(JSON.stringify(decision), original, "identity capture cannot mutate the model decision");
+for (const [quoteName, rosterName] of [["Aaron Jones", "Aaron Jones Sr."], ["Michael Penix", "Michael Penix Jr."], ["Luther Burden", "Luther Burden III"]]) {
+  const suffixContext = structuredClone(context);
+  suffixContext.games[0]!.awayDepth.roster[0]!.name = rosterName!;
+  const suffixDecision = { ...decision, playerName: quoteName! };
+  assert.equal(nflPlayerPropsTrackingIdentity({ decision: suffixDecision, context: suffixContext }).playerId, "77");
+  suffixContext.games[0]!.awayDepth.roster.push({ ...suffixContext.games[0]!.awayDepth.roster[0]!, playerId: "99", name: `${quoteName} Jr.` });
+  assert.equal(nflPlayerPropsTrackingIdentity({ decision: suffixDecision, context: suffixContext }).playerId, null, "suffix normalization cannot guess between different same-name IDs");
+}
 
 async function main() {
   const stored = new Map<string, Record<string, unknown>>();

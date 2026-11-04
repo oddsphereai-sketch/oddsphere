@@ -7,7 +7,7 @@ import type { NflPlayerPropsInferenceContext } from "./nflPlayerPropsInferenceCo
 import { nflPlayerPropsTrackingIdentity } from "./nflPlayerPropsTrackingIdentity";
 
 export const NFL_PLAYER_PROPS_TRACKING_RELEASE =
-  "nfl_player_props_tracking_2026_11_04_r41_pregame_roster_identity" as const;
+  "nfl_player_props_tracking_2026_11_04_r42_suffix_roster_identity" as const;
 
 export async function writeLockedNflPlayerPropsTracking(args: {
   client: SupabaseClient;

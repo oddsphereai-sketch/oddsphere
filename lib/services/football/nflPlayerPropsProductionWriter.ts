@@ -44,6 +44,7 @@ import {
 } from "./nflPlayerPropsCurrentSeasonState";
 import {
   NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE,
+  NFL_PLAYER_PROPS_SETTLEMENT_MAX_SNAP_PAGES,
   NFL_PLAYER_PROPS_SETTLEMENT_RELEASE,
   settleNflPlayerPropsRecords,
   countNflPlayerPropsUnresolvedSettlementIdentities,
@@ -71,7 +72,7 @@ import {
 } from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_11_04_r67_settlement_identity_continuity" as const;
+  "nfl_player_props_writer_2026_11_04_r68_verified_participation" as const;
 export const NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES = 60 as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
@@ -85,8 +86,8 @@ export const NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM = (
   + NFL_PLAYER_PROPS_CURRENT_SEASON_GAMES_PAGE_MAXIMUM
   + NFL_PLAYER_PROPS_CURRENT_SEASON_STATS_PAGE_MAXIMUM
   + NFL_PLAYER_PROPS_CURRENT_SEASON_TEAM_STATS_PAGE_MAXIMUM
-  + NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE
-) as 96;
+  + NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE * (1 + NFL_PLAYER_PROPS_SETTLEMENT_MAX_SNAP_PAGES)
+) as 132;
 
 export type NflPlayerPropsForecastTelemetry = {
   forecastPolicy: "target_excluded_single_posterior_exact_price_downstream";
