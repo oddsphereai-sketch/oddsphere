@@ -1,3 +1,4 @@
+import "./test-soccer-forecast-reliability-display";
 import "./test-ucl-current-native-inputs";
 import {testUclOpponentStrengthScoreLaw} from "./test-ucl-opponent-strength-score-law";
 import {testUclConfidencePublication} from "./test-ucl-confidence-publication";
