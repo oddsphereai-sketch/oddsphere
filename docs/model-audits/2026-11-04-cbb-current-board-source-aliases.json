@@ -1,0 +1,68 @@
+{
+  "base": "23f140f8b7aaa89258e569f015dcd8c183767734",
+  "scope": "Observed provider institution alias correction found during all-current-game independent review",
+  "actualProviderReceipt": "2026-11-04T12:21:16.390Z",
+  "sourceAliases": {
+    "N Dakota St": "North Dakota State",
+    "CSU Northridge": "Cal State Northridge",
+    "CS Northridge": "Cal State Northridge",
+    "LMU": "Loyola Marymount"
+  },
+  "wrongSchoolPreserved": [
+    "North Dakota versus North Dakota State",
+    "Colorado State versus Cal State Northridge",
+    "Loyola Chicago/Maryland versus Loyola Marymount",
+    "Queens NY versus Queens University Royals",
+    "Actual Maryland@High Point rejected; not UMES"
+  ],
+  "sourceCoverage": {
+    "actualRows": 79,
+    "uniqueFixtureMatches": 76,
+    "wrongMarylandRowsRejected": 3,
+    "availableProfessionalContracts": 17,
+    "restoredProfessionalContracts": 6,
+    "restoredProfessionalGames": [
+      "Cal State Northridge@Wichita State",
+      "North Dakota State@Saint Marys"
+    ],
+    "retailOnlyRestored": "Queens University@Loyola Marymount"
+  },
+  "functionalImpact": {
+    "games": 11,
+    "markets": 33,
+    "promotions": 0,
+    "demotions": 1,
+    "actionablePromotions": 0,
+    "actionableDemotions": 1,
+    "sideChanges": 0,
+    "scoreChanges": 2,
+    "oldActionables": 13,
+    "newActionables": 12,
+    "restoredProfessionalContracts": 6
+  },
+  "methodsUnchanged": [
+    "IndependentR4",
+    "Joint source-law method",
+    "Grade price/EV reserves",
+    "Writer/lease/cadence/stakes"
+  ],
+  "preservation": [
+    "FrozenR13/R15/R9 writer/reader/tracking byte precedence",
+    "R9 original anchors",
+    "Original native provider prices/line/outcomes/time/books",
+    "No retrospective snapshot/source backdating"
+  ],
+  "tests": [
+    "test-cbb-current-board-aliases.ts",
+    "test-cbb-provider-identity-recovery.ts",
+    "test-cbb-market-identity-coverage.ts",
+    "test-cbb-market-behavior-locks.ts",
+    "Existing paired promotion/demotion suite"
+  ],
+  "independentReview": [
+    "All79rawrows/all11fixtures and outcome names verified",
+    "All60restoredquotes raw price/line/book/time verified",
+    "Actual3publishedpayloads simulatedlocked locally unchanged"
+  ],
+  "accuracyClaim": false
+}

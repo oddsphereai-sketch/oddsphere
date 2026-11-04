@@ -1,0 +1,2935 @@
+{
+  "source": "One retained actual Owls current response; exact raw relevant events and source market prices, no reconstructed quotes",
+  "capturedFileSha256": "9ecc2e85c81f6915401c59bed022ba18332db663be891ac69bc98c17d2f816ec",
+  "startedAt": "2026-11-04T12:21:15.897Z",
+  "fetchedAt": "2026-11-04T12:21:16.390Z",
+  "originalDecisionCutoff": "2026-11-04T12:02:37.428Z",
+  "availabilityWarning": "These later prices are NOT claimed available at original decision cutoff.",
+  "games": [
+    {
+      "id": 10882634,
+      "date": "2026-11-05T00:00:00.000Z",
+      "season": 2026,
+      "home_team": {
+        "id": 106,
+        "college": "High Point",
+        "full_name": "High Point Panthers"
+      },
+      "visitor_team": {
+        "id": 202,
+        "college": "Maryland Eastern Shore",
+        "full_name": "Maryland Eastern Shore Hawks"
+      }
+    },
+    {
+      "id": 10882641,
+      "date": "2026-11-05T00:30:00.000Z",
+      "season": 2026,
+      "home_team": {
+        "id": 52,
+        "college": "Wichita State",
+        "full_name": "Wichita State Shockers"
+      },
+      "visitor_team": {
+        "id": 134,
+        "college": "Cal State Northridge",
+        "full_name": "Cal State Northridge Matadors"
+      }
+    },
+    {
+      "id": 10882643,
+      "date": "2026-11-05T03:00:00.000Z",
+      "season": 2026,
+      "home_team": {
+        "id": 355,
+        "college": "Loyola Marymount",
+        "full_name": "Loyola Marymount Lions"
+      },
+      "visitor_team": {
+        "id": 28,
+        "college": "Queens University",
+        "full_name": "Queens University Royals"
+      }
+    },
+    {
+      "id": 10882644,
+      "date": "2026-11-05T03:00:00.000Z",
+      "season": 2026,
+      "home_team": {
+        "id": 360,
+        "college": "Saint Mary's",
+        "full_name": "Saint Mary's Gaels"
+      },
+      "visitor_team": {
+        "id": 327,
+        "college": "North Dakota State",
+        "full_name": "North Dakota State Bison"
+      }
+    }
+  ],
+  "events": [
+    {
+      "id": "1639668697",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T03:00:00Z",
+      "home_team": "Saint Mary's",
+      "away_team": "N Dakota St",
+      "bookmakers": [
+        {
+          "key": "pinnacle",
+          "title": "Pinnacle",
+          "last_update": "2026-11-04T12:20:36.842Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:20:36.842Z",
+              "outcomes": [
+                {
+                  "name": "Saint Mary's",
+                  "price": -1074
+                },
+                {
+                  "name": "N Dakota St",
+                  "price": 709
+                }
+              ],
+              "limits": [
+                {
+                  "amount": 1000,
+                  "type": "maxRiskStake"
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:20:36.842Z",
+              "outcomes": [
+                {
+                  "name": "Saint Mary's",
+                  "price": -109,
+                  "point": -13.5
+                },
+                {
+                  "name": "N Dakota St",
+                  "price": -107,
+                  "point": 13.5
+                }
+              ],
+              "limits": [
+                {
+                  "amount": 1000,
+                  "type": "maxRiskStake"
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:20:36.842Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -100,
+                  "point": 149
+                },
+                {
+                  "name": "Under",
+                  "price": -121,
+                  "point": 149
+                }
+              ],
+              "limits": [
+                {
+                  "amount": 500,
+                  "type": "maxRiskStake"
+                }
+              ]
+            }
+          ],
+          "event_link": "https://www.pinnacle.com/en/basketball/ncaa/state-vs-ca/1639668697/"
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA",
+      "eventId": "ncaab:N Dakota St@Saint Mary's-20261105",
+      "home_team_id": "saint-marys-gaels",
+      "away_team_id": "north-dakota-state-bison"
+    },
+    {
+      "id": "1639668659",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T00:30:00Z",
+      "home_team": "Wichita St",
+      "away_team": "CSU Northridge",
+      "bookmakers": [
+        {
+          "key": "pinnacle",
+          "title": "Pinnacle",
+          "last_update": "2026-11-04T12:20:36.843Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:20:36.843Z",
+              "outcomes": [
+                {
+                  "name": "Wichita St",
+                  "price": -1463
+                },
+                {
+                  "name": "CSU Northridge",
+                  "price": 876
+                }
+              ],
+              "limits": [
+                {
+                  "amount": 1000,
+                  "type": "maxRiskStake"
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:20:36.843Z",
+              "outcomes": [
+                {
+                  "name": "Wichita St",
+                  "price": -113,
+                  "point": -14.5
+                },
+                {
+                  "name": "CSU Northridge",
+                  "price": -103,
+                  "point": 14.5
+                }
+              ],
+              "limits": [
+                {
+                  "amount": 1000,
+                  "type": "maxRiskStake"
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:20:36.843Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -107,
+                  "point": 160.5
+                },
+                {
+                  "name": "Under",
+                  "price": -113,
+                  "point": 160.5
+                }
+              ],
+              "limits": [
+                {
+                  "amount": 500,
+                  "type": "maxRiskStake"
+                }
+              ]
+            }
+          ],
+          "event_link": "https://www.pinnacle.com/en/basketball/ncaa/northridge-vs-state/1639668659/"
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA",
+      "eventId": "ncaab:CSU Northridge@Wichita St-20261105",
+      "home_team_id": "wichita-state-shockers",
+      "away_team_id": "cal-state-northridge-matadors"
+    },
+    {
+      "id": "1639668697",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T03:00:00Z",
+      "home_team": "Saint Mary's",
+      "away_team": "N Dakota St",
+      "bookmakers": [
+        {
+          "key": "fanduel",
+          "title": "FanDuel",
+          "last_update": "2026-11-04T12:20:36.628Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:20:36.628Z",
+              "outcomes": [
+                {
+                  "name": "N Dakota St",
+                  "price": 760,
+                  "marketId": "734.195718860",
+                  "selectionId": 3755902,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195718860&selectionId=3755902"
+                },
+                {
+                  "name": "Saint Mary's",
+                  "price": -1300,
+                  "marketId": "734.195718860",
+                  "selectionId": 6109088,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195718860&selectionId=6109088"
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:20:36.628Z",
+              "outcomes": [
+                {
+                  "name": "N Dakota St",
+                  "price": -110,
+                  "point": 13.5,
+                  "marketId": "734.195718861",
+                  "selectionId": 3755902,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195718861&selectionId=3755902"
+                },
+                {
+                  "name": "Saint Mary's",
+                  "price": -110,
+                  "point": -13.5,
+                  "marketId": "734.195718861",
+                  "selectionId": 6109088,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195718861&selectionId=6109088"
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:20:36.628Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -115,
+                  "point": 148.5,
+                  "marketId": "734.195718862",
+                  "selectionId": 7017823,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195718862&selectionId=7017823"
+                },
+                {
+                  "name": "Under",
+                  "price": -105,
+                  "point": 148.5,
+                  "marketId": "734.195718862",
+                  "selectionId": 7017824,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195718862&selectionId=7017824"
+                }
+              ]
+            }
+          ],
+          "event_link": "https://sportsbook.fanduel.com/basketball/ncaab/n-dakota-st-@-saint-marys-36277723"
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA",
+      "eventId": "ncaab:N Dakota St@Saint Mary's-20261105",
+      "home_team_id": "saint-marys-gaels",
+      "away_team_id": "north-dakota-state-bison"
+    },
+    {
+      "id": "1639668659",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T00:30:00Z",
+      "home_team": "Wichita St",
+      "away_team": "CSU Northridge",
+      "bookmakers": [
+        {
+          "key": "fanduel",
+          "title": "FanDuel",
+          "last_update": "2026-11-04T12:20:58.836Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:20:58.836Z",
+              "outcomes": [
+                {
+                  "name": "CSU Northridge",
+                  "price": 890,
+                  "marketId": "734.195718160",
+                  "selectionId": 3530469,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195718160&selectionId=3530469"
+                },
+                {
+                  "name": "Wichita St",
+                  "price": -1700,
+                  "marketId": "734.195718160",
+                  "selectionId": 697639,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195718160&selectionId=697639"
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:20:58.836Z",
+              "outcomes": [
+                {
+                  "name": "CSU Northridge",
+                  "price": -110,
+                  "point": 14.5,
+                  "marketId": "734.195718165",
+                  "selectionId": 3530469,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195718165&selectionId=3530469"
+                },
+                {
+                  "name": "Wichita St",
+                  "price": -110,
+                  "point": -14.5,
+                  "marketId": "734.195718165",
+                  "selectionId": 697639,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195718165&selectionId=697639"
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:20:58.836Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -115,
+                  "point": 160.5,
+                  "marketId": "734.195718164",
+                  "selectionId": 7017823,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195718164&selectionId=7017823"
+                },
+                {
+                  "name": "Under",
+                  "price": -105,
+                  "point": 160.5,
+                  "marketId": "734.195718164",
+                  "selectionId": 7017824,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195718164&selectionId=7017824"
+                }
+              ]
+            }
+          ],
+          "event_link": "https://sportsbook.fanduel.com/basketball/ncaab/csu-northridge-@-wichita-st-36277718"
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA",
+      "eventId": "ncaab:CSU Northridge@Wichita St-20261105",
+      "home_team_id": "wichita-state-shockers",
+      "away_team_id": "cal-state-northridge-matadors"
+    },
+    {
+      "id": "36277988",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T00:00:00.000Z",
+      "home_team": "High Point",
+      "away_team": "MD Eastern",
+      "bookmakers": [
+        {
+          "key": "fanduel",
+          "title": "FanDuel",
+          "last_update": "2026-11-04T12:20:58.836Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:20:58.836Z",
+              "outcomes": [
+                {
+                  "name": "MD Eastern",
+                  "price": 8000,
+                  "marketId": "734.195748880",
+                  "selectionId": 5145594,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195748880&selectionId=5145594"
+                },
+                {
+                  "name": "High Point",
+                  "price": -100000,
+                  "marketId": "734.195748880",
+                  "selectionId": 713728,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195748880&selectionId=713728"
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:20:58.836Z",
+              "outcomes": [
+                {
+                  "name": "MD Eastern",
+                  "price": -110,
+                  "point": 30.5,
+                  "marketId": "734.195748883",
+                  "selectionId": 5145594,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195748883&selectionId=5145594"
+                },
+                {
+                  "name": "High Point",
+                  "price": -110,
+                  "point": -30.5,
+                  "marketId": "734.195748883",
+                  "selectionId": 713728,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195748883&selectionId=713728"
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:20:58.836Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -110,
+                  "point": 150.5,
+                  "marketId": "734.195748882",
+                  "selectionId": 7017823,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195748882&selectionId=7017823"
+                },
+                {
+                  "name": "Under",
+                  "price": -110,
+                  "point": 150.5,
+                  "marketId": "734.195748882",
+                  "selectionId": 7017824,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195748882&selectionId=7017824"
+                }
+              ]
+            }
+          ],
+          "event_link": "https://sportsbook.fanduel.com/basketball/ncaab/md-eastern-@-high-point-36277988"
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA Basketball Mens Games",
+      "eventId": "ncaab:MD Eastern@High Point-20261105",
+      "home_team_id": "high-point-panthers",
+      "away_team_id": "maryland-eastern-shore-hawks"
+    },
+    {
+      "id": "36277993",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T03:00:00.000Z",
+      "home_team": "LMU",
+      "away_team": "Queens University",
+      "bookmakers": [
+        {
+          "key": "fanduel",
+          "title": "FanDuel",
+          "last_update": "2026-11-04T12:20:58.836Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:20:58.836Z",
+              "outcomes": [
+                {
+                  "name": "Queens University",
+                  "price": 235,
+                  "marketId": "734.195749210",
+                  "selectionId": 50343690,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195749210&selectionId=50343690"
+                },
+                {
+                  "name": "LMU",
+                  "price": -295,
+                  "marketId": "734.195749210",
+                  "selectionId": 3558390,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195749210&selectionId=3558390"
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:20:58.836Z",
+              "outcomes": [
+                {
+                  "name": "Queens University",
+                  "price": -104,
+                  "point": 6.5,
+                  "marketId": "734.195749211",
+                  "selectionId": 50343690,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195749211&selectionId=50343690"
+                },
+                {
+                  "name": "LMU",
+                  "price": -118,
+                  "point": -6.5,
+                  "marketId": "734.195749211",
+                  "selectionId": 3558390,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195749211&selectionId=3558390"
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:20:58.836Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -115,
+                  "point": 157.5,
+                  "marketId": "734.195749212",
+                  "selectionId": 7017823,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195749212&selectionId=7017823"
+                },
+                {
+                  "name": "Under",
+                  "price": -105,
+                  "point": 157.5,
+                  "marketId": "734.195749212",
+                  "selectionId": 7017824,
+                  "deepLink": "https://nj.sportsbook.fanduel.com/addToBetslip?marketId=734.195749212&selectionId=7017824"
+                }
+              ]
+            }
+          ],
+          "event_link": "https://sportsbook.fanduel.com/basketball/ncaab/queens-university-@-lmu-36277993"
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA Basketball Mens Games",
+      "eventId": "ncaab:Queens University@LMU-20261105",
+      "home_team_id": "loyola-marymount-lions",
+      "away_team_id": "queens-royals"
+    },
+    {
+      "id": "1639668697",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T03:00:00Z",
+      "home_team": "Saint Mary's",
+      "away_team": "N Dakota St",
+      "bookmakers": [
+        {
+          "key": "draftkings",
+          "title": "DraftKings",
+          "last_update": "2026-11-04T12:20:32.024Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:20:32.024Z",
+              "outcomes": [
+                {
+                  "name": "N Dakota St",
+                  "price": 700,
+                  "marketId": "1_87082086",
+                  "selectionId": "0ML87082086_3",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34958195?outcomes=0ML87082086_3"
+                },
+                {
+                  "name": "Saint Mary's",
+                  "price": -1100,
+                  "marketId": "1_87082086",
+                  "selectionId": "0ML87082086_1",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34958195?outcomes=0ML87082086_1"
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:20:32.024Z",
+              "outcomes": [
+                {
+                  "name": "N Dakota St",
+                  "price": -110,
+                  "point": 13.5,
+                  "marketId": "2_87082086",
+                  "selectionId": "0HC87082086P1350_3",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34958195?outcomes=0HC87082086P1350_3"
+                },
+                {
+                  "name": "Saint Mary's",
+                  "price": -110,
+                  "point": -13.5,
+                  "marketId": "2_87082086",
+                  "selectionId": "0HC87082086N1350_1",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34958195?outcomes=0HC87082086N1350_1"
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:20:32.024Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -105,
+                  "point": 148.5,
+                  "marketId": "3_87082086",
+                  "selectionId": "0OU87082086O14850_1",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34958195?outcomes=0OU87082086O14850_1"
+                },
+                {
+                  "name": "Under",
+                  "price": -115,
+                  "point": 148.5,
+                  "marketId": "3_87082086",
+                  "selectionId": "0OU87082086U14850_3",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34958195?outcomes=0OU87082086U14850_3"
+                }
+              ]
+            }
+          ],
+          "event_link": "https://sportsbook.draftkings.com/event/34958195"
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA",
+      "eventId": "ncaab:N Dakota St@Saint Mary's-20261105",
+      "home_team_id": "saint-marys-gaels",
+      "away_team_id": "north-dakota-state-bison"
+    },
+    {
+      "id": "1639668659",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T00:30:00Z",
+      "home_team": "Wichita St",
+      "away_team": "CSU Northridge",
+      "bookmakers": [
+        {
+          "key": "draftkings",
+          "title": "DraftKings",
+          "last_update": "2026-11-04T12:20:32.024Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:20:32.024Z",
+              "outcomes": [
+                {
+                  "name": "CSU Northridge",
+                  "price": 900,
+                  "marketId": "1_87082088",
+                  "selectionId": "0ML87082088_3",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34958197?outcomes=0ML87082088_3"
+                },
+                {
+                  "name": "Wichita St",
+                  "price": -1600,
+                  "marketId": "1_87082088",
+                  "selectionId": "0ML87082088_1",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34958197?outcomes=0ML87082088_1"
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:20:32.024Z",
+              "outcomes": [
+                {
+                  "name": "CSU Northridge",
+                  "price": -110,
+                  "point": 14.5,
+                  "marketId": "2_87082088",
+                  "selectionId": "0HC87082088P1450_3",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34958197?outcomes=0HC87082088P1450_3"
+                },
+                {
+                  "name": "Wichita St",
+                  "price": -110,
+                  "point": -14.5,
+                  "marketId": "2_87082088",
+                  "selectionId": "0HC87082088N1450_1",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34958197?outcomes=0HC87082088N1450_1"
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:20:32.024Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -112,
+                  "point": 160.5,
+                  "marketId": "3_87082088",
+                  "selectionId": "0OU87082088O16050_1",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34958197?outcomes=0OU87082088O16050_1"
+                },
+                {
+                  "name": "Under",
+                  "price": -108,
+                  "point": 160.5,
+                  "marketId": "3_87082088",
+                  "selectionId": "0OU87082088U16050_3",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34958197?outcomes=0OU87082088U16050_3"
+                }
+              ]
+            }
+          ],
+          "event_link": "https://sportsbook.draftkings.com/event/34958197"
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA",
+      "eventId": "ncaab:CSU Northridge@Wichita St-20261105",
+      "home_team_id": "wichita-state-shockers",
+      "away_team_id": "cal-state-northridge-matadors"
+    },
+    {
+      "id": "36277993",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T03:00:00.000Z",
+      "home_team": "LMU",
+      "away_team": "Queens University",
+      "bookmakers": [
+        {
+          "key": "draftkings",
+          "title": "DraftKings",
+          "last_update": "2026-11-04T12:20:32.024Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:20:32.024Z",
+              "outcomes": [
+                {
+                  "name": "Queens University",
+                  "price": 220,
+                  "marketId": "1_87082225",
+                  "selectionId": "0ML87082225_3",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34958238?outcomes=0ML87082225_3"
+                },
+                {
+                  "name": "LMU",
+                  "price": -270,
+                  "marketId": "1_87082225",
+                  "selectionId": "0ML87082225_1",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34958238?outcomes=0ML87082225_1"
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:20:32.024Z",
+              "outcomes": [
+                {
+                  "name": "Queens University",
+                  "price": -105,
+                  "point": 6.5,
+                  "marketId": "2_87082225",
+                  "selectionId": "0HC87082225P650_3",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34958238?outcomes=0HC87082225P650_3"
+                },
+                {
+                  "name": "LMU",
+                  "price": -115,
+                  "point": -6.5,
+                  "marketId": "2_87082225",
+                  "selectionId": "0HC87082225N650_1",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34958238?outcomes=0HC87082225N650_1"
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:20:32.024Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -112,
+                  "point": 157.5,
+                  "marketId": "3_87082225",
+                  "selectionId": "0OU87082225O15750_1",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34958238?outcomes=0OU87082225O15750_1"
+                },
+                {
+                  "name": "Under",
+                  "price": -108,
+                  "point": 157.5,
+                  "marketId": "3_87082225",
+                  "selectionId": "0OU87082225U15750_3",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34958238?outcomes=0OU87082225U15750_3"
+                }
+              ]
+            }
+          ],
+          "event_link": "https://sportsbook.draftkings.com/event/34958238"
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA Basketball Mens Games",
+      "eventId": "ncaab:Queens University@LMU-20261105",
+      "home_team_id": "loyola-marymount-lions",
+      "away_team_id": "queens-royals"
+    },
+    {
+      "id": "34957967",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T00:00:00.0000000Z",
+      "home_team": "High Point",
+      "away_team": "Maryland",
+      "bookmakers": [
+        {
+          "key": "draftkings",
+          "title": "DraftKings",
+          "last_update": "2026-11-04T12:20:32.024Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:20:32.024Z",
+              "outcomes": [
+                {
+                  "name": "Maryland",
+                  "price": 5000,
+                  "marketId": "1_87081293",
+                  "selectionId": "0ML87081293_3",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34957967?outcomes=0ML87081293_3"
+                },
+                {
+                  "name": "High Point",
+                  "price": -100000,
+                  "marketId": "1_87081293",
+                  "selectionId": "0ML87081293_1",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34957967?outcomes=0ML87081293_1"
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:20:32.024Z",
+              "outcomes": [
+                {
+                  "name": "Maryland",
+                  "price": -110,
+                  "point": 30.5,
+                  "marketId": "2_87081293",
+                  "selectionId": "0HC87081293P3050_3",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34957967?outcomes=0HC87081293P3050_3"
+                },
+                {
+                  "name": "High Point",
+                  "price": -110,
+                  "point": -30.5,
+                  "marketId": "2_87081293",
+                  "selectionId": "0HC87081293N3050_1",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34957967?outcomes=0HC87081293N3050_1"
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:20:32.024Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -110,
+                  "point": 148.5,
+                  "marketId": "3_87081293",
+                  "selectionId": "0OU87081293O14850_1",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34957967?outcomes=0OU87081293O14850_1"
+                },
+                {
+                  "name": "Under",
+                  "price": -110,
+                  "point": 148.5,
+                  "marketId": "3_87081293",
+                  "selectionId": "0OU87081293U14850_3",
+                  "deepLink": "https://sportsbook.draftkings.com/event/34957967?outcomes=0OU87081293U14850_3"
+                }
+              ]
+            }
+          ],
+          "event_link": "https://sportsbook.draftkings.com/event/34957967"
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "eventId": "ncaab:Maryland@High Point-20261105",
+      "home_team_id": "high-point-panthers",
+      "away_team_id": "maryland-terrapins"
+    },
+    {
+      "id": "1639668697",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T03:00:00Z",
+      "home_team": "Saint Mary's",
+      "away_team": "N Dakota St",
+      "bookmakers": [
+        {
+          "key": "novig",
+          "title": "Novig",
+          "last_update": "2026-11-04T12:21:02.424Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:21:02.424Z",
+              "outcomes": [
+                {
+                  "name": "Saint Mary's",
+                  "price": -809,
+                  "liquidity": {
+                    "bids": [
+                      {
+                        "price": -770,
+                        "size": 24689
+                      },
+                      {
+                        "price": -770,
+                        "size": 7300
+                      },
+                      {
+                        "price": -770,
+                        "size": 180
+                      },
+                      {
+                        "price": -733,
+                        "size": 16477
+                      },
+                      {
+                        "price": -733,
+                        "size": 10000
+                      },
+                      {
+                        "price": -733,
+                        "size": 46872
+                      },
+                      {
+                        "price": -733,
+                        "size": 200000
+                      },
+                      {
+                        "price": -700,
+                        "size": 115000
+                      },
+                      {
+                        "price": -700,
+                        "size": 40900
+                      },
+                      {
+                        "price": -700,
+                        "size": 28571
+                      },
+                      {
+                        "price": -669,
+                        "size": 7126
+                      },
+                      {
+                        "price": -669,
+                        "size": 5226
+                      },
+                      {
+                        "price": -669,
+                        "size": 42866
+                      },
+                      {
+                        "price": -669,
+                        "size": 8000
+                      },
+                      {
+                        "price": -614,
+                        "size": 2500
+                      },
+                      {
+                        "price": -567,
+                        "size": 2500
+                      },
+                      {
+                        "price": -567,
+                        "size": 5349
+                      },
+                      {
+                        "price": -471,
+                        "size": 600
+                      },
+                      {
+                        "price": -471,
+                        "size": 100
+                      },
+                      {
+                        "price": -456,
+                        "size": 100
+                      },
+                      {
+                        "price": -376,
+                        "size": 4100
+                      },
+                      {
+                        "price": -335,
+                        "size": 8
+                      },
+                      {
+                        "price": 9900,
+                        "size": 246600
+                      }
+                    ],
+                    "asks": []
+                  },
+                  "deepLink": "https://novig.onelink.me/JHQQ?af_xp=custom&pid=novig_app_share&c=Novig%20App%20Order%20Share&deep_link_value=%2Fautofill%2F01a1a2fb-d925-7f43-b556-24d0737e8c3d%3Foutcome_id%3D01a1a2fb-d925-7f43-b556-24e6e09f0bc2"
+                },
+                {
+                  "name": "N Dakota St",
+                  "price": 770,
+                  "liquidity": {
+                    "bids": [
+                      {
+                        "price": 809,
+                        "size": 200
+                      },
+                      {
+                        "price": 809,
+                        "size": 6300
+                      },
+                      {
+                        "price": 852,
+                        "size": 400000
+                      },
+                      {
+                        "price": 852,
+                        "size": 74961
+                      },
+                      {
+                        "price": 900,
+                        "size": 17000
+                      },
+                      {
+                        "price": 900,
+                        "size": 10000
+                      },
+                      {
+                        "price": 900,
+                        "size": 4000
+                      },
+                      {
+                        "price": 953,
+                        "size": 50000
+                      },
+                      {
+                        "price": 1011,
+                        "size": 68888
+                      },
+                      {
+                        "price": 1011,
+                        "size": 2500
+                      },
+                      {
+                        "price": 1011,
+                        "size": 3128
+                      },
+                      {
+                        "price": 1076,
+                        "size": 99900
+                      },
+                      {
+                        "price": 1150,
+                        "size": 2500
+                      },
+                      {
+                        "price": 1233,
+                        "size": 42600
+                      },
+                      {
+                        "price": 1329,
+                        "size": 2500
+                      },
+                      {
+                        "price": 1329,
+                        "size": 4100
+                      },
+                      {
+                        "price": 1329,
+                        "size": 400
+                      },
+                      {
+                        "price": 1329,
+                        "size": 110000
+                      },
+                      {
+                        "price": 1567,
+                        "size": 75791
+                      },
+                      {
+                        "price": 1900,
+                        "size": 100
+                      },
+                      {
+                        "price": 1900,
+                        "size": 100
+                      },
+                      {
+                        "price": 2678,
+                        "size": 126318
+                      }
+                    ],
+                    "asks": []
+                  },
+                  "deepLink": "https://novig.onelink.me/JHQQ?af_xp=custom&pid=novig_app_share&c=Novig%20App%20Order%20Share&deep_link_value=%2Fautofill%2F01a1a2fb-d925-7f43-b556-24d0737e8c3d%3Foutcome_id%3D01a1a2fb-d925-7f43-b556-24f5f89d2124"
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:21:02.424Z",
+              "outcomes": [
+                {
+                  "name": "Saint Mary's",
+                  "price": -106,
+                  "point": -13.5,
+                  "liquidity": {
+                    "bids": [
+                      {
+                        "price": -100,
+                        "size": 176000
+                      },
+                      {
+                        "price": -100,
+                        "size": 50000
+                      },
+                      {
+                        "price": -100,
+                        "size": 2000
+                      },
+                      {
+                        "price": 102,
+                        "size": 11515
+                      },
+                      {
+                        "price": 102,
+                        "size": 7914
+                      },
+                      {
+                        "price": 104,
+                        "size": 24898
+                      },
+                      {
+                        "price": 104,
+                        "size": 67
+                      },
+                      {
+                        "price": 106,
+                        "size": 100000
+                      },
+                      {
+                        "price": 106,
+                        "size": 36082
+                      },
+                      {
+                        "price": 108,
+                        "size": 10416
+                      },
+                      {
+                        "price": 108,
+                        "size": 175000
+                      },
+                      {
+                        "price": 122,
+                        "size": 4200
+                      },
+                      {
+                        "price": 127,
+                        "size": 2100
+                      },
+                      {
+                        "price": 133,
+                        "size": 1100
+                      },
+                      {
+                        "price": 138,
+                        "size": 600
+                      },
+                      {
+                        "price": 144,
+                        "size": 300
+                      },
+                      {
+                        "price": 9900,
+                        "size": 246600
+                      }
+                    ],
+                    "asks": []
+                  },
+                  "deepLink": "https://novig.onelink.me/JHQQ?af_xp=custom&pid=novig_app_share&c=Novig%20App%20Order%20Share&deep_link_value=%2Fautofill%2F01a1a2e0-7ea2-7a90-8145-4e3c563fa9ff%3Foutcome_id%3D01a1a2e0-7ea2-7a90-8145-4e48fed991b3"
+                },
+                {
+                  "name": "N Dakota St",
+                  "price": -100,
+                  "point": 13.5,
+                  "liquidity": {
+                    "bids": [
+                      {
+                        "price": 106,
+                        "size": 20035
+                      },
+                      {
+                        "price": 106,
+                        "size": 4000
+                      },
+                      {
+                        "price": 108,
+                        "size": 12708
+                      },
+                      {
+                        "price": 108,
+                        "size": 42086
+                      },
+                      {
+                        "price": 108,
+                        "size": 20000
+                      },
+                      {
+                        "price": 120,
+                        "size": 155000
+                      },
+                      {
+                        "price": 122,
+                        "size": 4400
+                      },
+                      {
+                        "price": 127,
+                        "size": 2300
+                      },
+                      {
+                        "price": 133,
+                        "size": 1200
+                      },
+                      {
+                        "price": 138,
+                        "size": 600
+                      },
+                      {
+                        "price": 144,
+                        "size": 200
+                      },
+                      {
+                        "price": 144,
+                        "size": 100
+                      },
+                      {
+                        "price": 488,
+                        "size": 1000
+                      },
+                      {
+                        "price": 9900,
+                        "size": 246600
+                      }
+                    ],
+                    "asks": []
+                  },
+                  "deepLink": "https://novig.onelink.me/JHQQ?af_xp=custom&pid=novig_app_share&c=Novig%20App%20Order%20Share&deep_link_value=%2Fautofill%2F01a1a2e0-7ea2-7a90-8145-4e3c563fa9ff%3Foutcome_id%3D01a1a2e0-7ea2-7a90-8145-4e53990675be"
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:21:02.424Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": 102,
+                  "point": 148.5,
+                  "liquidity": {
+                    "bids": [
+                      {
+                        "price": 108,
+                        "size": 35559
+                      },
+                      {
+                        "price": 108,
+                        "size": 1200
+                      },
+                      {
+                        "price": 111,
+                        "size": 14105
+                      },
+                      {
+                        "price": 111,
+                        "size": 13052
+                      },
+                      {
+                        "price": 111,
+                        "size": 65
+                      },
+                      {
+                        "price": 120,
+                        "size": 90000
+                      },
+                      {
+                        "price": 122,
+                        "size": 20000
+                      },
+                      {
+                        "price": 9900,
+                        "size": 246600
+                      }
+                    ],
+                    "asks": []
+                  },
+                  "deepLink": "https://novig.onelink.me/JHQQ?af_xp=custom&pid=novig_app_share&c=Novig%20App%20Order%20Share&deep_link_value=%2Fautofill%2F01a1a2e0-7ea1-7b71-a8de-7db81494ff39%3Foutcome_id%3D01a1a2e0-7ea1-7b71-a8de-7dcb85008b96"
+                },
+                {
+                  "name": "Under",
+                  "price": -108,
+                  "point": 148.5,
+                  "liquidity": {
+                    "bids": [
+                      {
+                        "price": -102,
+                        "size": 13663
+                      },
+                      {
+                        "price": -100,
+                        "size": 10000
+                      },
+                      {
+                        "price": -100,
+                        "size": 2800
+                      },
+                      {
+                        "price": 106,
+                        "size": 65500
+                      },
+                      {
+                        "price": 108,
+                        "size": 20000
+                      },
+                      {
+                        "price": 117,
+                        "size": 85000
+                      },
+                      {
+                        "price": 9900,
+                        "size": 246600
+                      }
+                    ],
+                    "asks": []
+                  },
+                  "deepLink": "https://novig.onelink.me/JHQQ?af_xp=custom&pid=novig_app_share&c=Novig%20App%20Order%20Share&deep_link_value=%2Fautofill%2F01a1a2e0-7ea1-7b71-a8de-7db81494ff39%3Foutcome_id%3D01a1a2e0-7ea1-7b71-a8de-7dd95ab041ed"
+                }
+              ]
+            }
+          ],
+          "exchange": true
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA",
+      "eventId": "ncaab:N Dakota St@Saint Mary's-20261105",
+      "home_team_id": "saint-marys-gaels",
+      "away_team_id": "north-dakota-state-bison"
+    },
+    {
+      "id": "1639668659",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T00:30:00Z",
+      "home_team": "Wichita St",
+      "away_team": "CSU Northridge",
+      "bookmakers": [
+        {
+          "key": "novig",
+          "title": "Novig",
+          "last_update": "2026-11-04T12:21:02.424Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:21:02.424Z",
+              "outcomes": [
+                {
+                  "name": "Wichita St",
+                  "price": -1076,
+                  "liquidity": {
+                    "bids": [
+                      {
+                        "price": -1011,
+                        "size": 157020
+                      },
+                      {
+                        "price": -1011,
+                        "size": 10000
+                      },
+                      {
+                        "price": -1011,
+                        "size": 10000
+                      },
+                      {
+                        "price": -1011,
+                        "size": 18681
+                      },
+                      {
+                        "price": -953,
+                        "size": 19558
+                      },
+                      {
+                        "price": -953,
+                        "size": 400000
+                      },
+                      {
+                        "price": -953,
+                        "size": 7300
+                      },
+                      {
+                        "price": -900,
+                        "size": 6888
+                      },
+                      {
+                        "price": -900,
+                        "size": 110000
+                      },
+                      {
+                        "price": -900,
+                        "size": 8000
+                      },
+                      {
+                        "price": -852,
+                        "size": 93630
+                      },
+                      {
+                        "price": -809,
+                        "size": 2500
+                      },
+                      {
+                        "price": -809,
+                        "size": 112
+                      },
+                      {
+                        "price": -770,
+                        "size": 5138
+                      },
+                      {
+                        "price": -733,
+                        "size": 2500
+                      },
+                      {
+                        "price": -641,
+                        "size": 5257
+                      },
+                      {
+                        "price": 9900,
+                        "size": 246600
+                      }
+                    ],
+                    "asks": []
+                  },
+                  "deepLink": "https://novig.onelink.me/JHQQ?af_xp=custom&pid=novig_app_share&c=Novig%20App%20Order%20Share&deep_link_value=%2Fautofill%2F01a1a2fb-d823-7850-85d3-58e6a9e18bda%3Foutcome_id%3D01a1a2fb-d823-7850-85d3-58f9e6b3fc75"
+                },
+                {
+                  "name": "CSU Northridge",
+                  "price": 1011,
+                  "liquidity": {
+                    "bids": [
+                      {
+                        "price": 1076,
+                        "size": 5882
+                      },
+                      {
+                        "price": 1150,
+                        "size": 10000
+                      },
+                      {
+                        "price": 1233,
+                        "size": 17333
+                      },
+                      {
+                        "price": 1233,
+                        "size": 200000
+                      },
+                      {
+                        "price": 1329,
+                        "size": 17143
+                      },
+                      {
+                        "price": 1329,
+                        "size": 10000
+                      },
+                      {
+                        "price": 1438,
+                        "size": 99900
+                      },
+                      {
+                        "price": 1438,
+                        "size": 95384
+                      },
+                      {
+                        "price": 1900,
+                        "size": 2500
+                      },
+                      {
+                        "price": 1900,
+                        "size": 105000
+                      },
+                      {
+                        "price": 1941,
+                        "size": 92805
+                      },
+                      {
+                        "price": 2400,
+                        "size": 2500
+                      },
+                      {
+                        "price": 3604,
+                        "size": 168601
+                      }
+                    ],
+                    "asks": []
+                  },
+                  "deepLink": "https://novig.onelink.me/JHQQ?af_xp=custom&pid=novig_app_share&c=Novig%20App%20Order%20Share&deep_link_value=%2Fautofill%2F01a1a2fb-d823-7850-85d3-58e6a9e18bda%3Foutcome_id%3D01a1a2fb-d823-7850-85d3-590a1f42d12e"
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:21:02.424Z",
+              "outcomes": [
+                {
+                  "name": "Wichita St",
+                  "price": -113,
+                  "point": -14.5,
+                  "liquidity": {
+                    "bids": [
+                      {
+                        "price": -106,
+                        "size": 3281
+                      },
+                      {
+                        "price": -104,
+                        "size": 9618
+                      },
+                      {
+                        "price": -104,
+                        "size": 25098
+                      },
+                      {
+                        "price": -104,
+                        "size": 4000
+                      },
+                      {
+                        "price": -100,
+                        "size": 40000
+                      },
+                      {
+                        "price": 104,
+                        "size": 66000
+                      },
+                      {
+                        "price": 104,
+                        "size": 8000
+                      },
+                      {
+                        "price": 111,
+                        "size": 180000
+                      },
+                      {
+                        "price": 9900,
+                        "size": 246600
+                      }
+                    ],
+                    "asks": []
+                  },
+                  "deepLink": "https://novig.onelink.me/JHQQ?af_xp=custom&pid=novig_app_share&c=Novig%20App%20Order%20Share&deep_link_value=%2Fautofill%2F01a1a2e0-7d8b-7321-a860-c95249eca996%3Foutcome_id%3D01a1a2e0-7d8b-7321-a860-c964bad5529c"
+                },
+                {
+                  "name": "CSU Northridge",
+                  "price": 106,
+                  "point": 14.5,
+                  "liquidity": {
+                    "bids": [
+                      {
+                        "price": 113,
+                        "size": 13191
+                      },
+                      {
+                        "price": 115,
+                        "size": 13432
+                      },
+                      {
+                        "price": 117,
+                        "size": 25000
+                      },
+                      {
+                        "price": 117,
+                        "size": 4000
+                      },
+                      {
+                        "price": 120,
+                        "size": 150000
+                      },
+                      {
+                        "price": 122,
+                        "size": 100
+                      },
+                      {
+                        "price": 122,
+                        "size": 38400
+                      },
+                      {
+                        "price": 122,
+                        "size": 8000
+                      },
+                      {
+                        "price": 130,
+                        "size": 4300
+                      },
+                      {
+                        "price": 135,
+                        "size": 2200
+                      },
+                      {
+                        "price": 141,
+                        "size": 1200
+                      },
+                      {
+                        "price": 147,
+                        "size": 600
+                      },
+                      {
+                        "price": 153,
+                        "size": 200
+                      },
+                      {
+                        "price": 590,
+                        "size": 1000
+                      },
+                      {
+                        "price": 9900,
+                        "size": 246600
+                      }
+                    ],
+                    "asks": []
+                  },
+                  "deepLink": "https://novig.onelink.me/JHQQ?af_xp=custom&pid=novig_app_share&c=Novig%20App%20Order%20Share&deep_link_value=%2Fautofill%2F01a1a2e0-7d8b-7321-a860-c95249eca996%3Foutcome_id%3D01a1a2e0-7d8b-7321-a860-c97876de5be9"
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:21:02.424Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -106,
+                  "point": 160.5,
+                  "liquidity": {
+                    "bids": [
+                      {
+                        "price": 102,
+                        "size": 15556
+                      },
+                      {
+                        "price": 104,
+                        "size": 2000
+                      },
+                      {
+                        "price": 108,
+                        "size": 20000
+                      },
+                      {
+                        "price": 115,
+                        "size": 105000
+                      },
+                      {
+                        "price": 117,
+                        "size": 4100
+                      },
+                      {
+                        "price": 122,
+                        "size": 2100
+                      }
+                    ],
+                    "asks": []
+                  },
+                  "deepLink": "https://novig.onelink.me/JHQQ?af_xp=custom&pid=novig_app_share&c=Novig%20App%20Order%20Share&deep_link_value=%2Fautofill%2F01a1a2e0-7d8c-7db3-8985-e57a6a7ea690%3Foutcome_id%3D01a1a2e0-7d8c-7db3-8985-e5841d943971"
+                },
+                {
+                  "name": "Under",
+                  "price": -102,
+                  "point": 160.5,
+                  "liquidity": {
+                    "bids": [
+                      {
+                        "price": 106,
+                        "size": 12917
+                      },
+                      {
+                        "price": 106,
+                        "size": 4000
+                      },
+                      {
+                        "price": 108,
+                        "size": 12260
+                      },
+                      {
+                        "price": 111,
+                        "size": 65500
+                      },
+                      {
+                        "price": 117,
+                        "size": 95000
+                      },
+                      {
+                        "price": 122,
+                        "size": 4200
+                      },
+                      {
+                        "price": 127,
+                        "size": 2100
+                      },
+                      {
+                        "price": 133,
+                        "size": 1100
+                      },
+                      {
+                        "price": 138,
+                        "size": 600
+                      },
+                      {
+                        "price": 144,
+                        "size": 300
+                      }
+                    ],
+                    "asks": []
+                  },
+                  "deepLink": "https://novig.onelink.me/JHQQ?af_xp=custom&pid=novig_app_share&c=Novig%20App%20Order%20Share&deep_link_value=%2Fautofill%2F01a1a2e0-7d8c-7db3-8985-e57a6a7ea690%3Foutcome_id%3D01a1a2e0-7d8c-7db3-8985-e5938a375cfa"
+                }
+              ]
+            }
+          ],
+          "exchange": true
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA",
+      "eventId": "ncaab:CSU Northridge@Wichita St-20261105",
+      "home_team_id": "wichita-state-shockers",
+      "away_team_id": "cal-state-northridge-matadors"
+    },
+    {
+      "id": "36277993",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T03:00:00.000Z",
+      "home_team": "LMU",
+      "away_team": "Queens University",
+      "bookmakers": [
+        {
+          "key": "novig",
+          "title": "Novig",
+          "last_update": "2026-11-04T12:21:02.424Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:21:02.424Z",
+              "outcomes": [
+                {
+                  "name": "LMU",
+                  "price": -277,
+                  "liquidity": {
+                    "bids": [
+                      {
+                        "price": -233,
+                        "size": 10000
+                      },
+                      {
+                        "price": -233,
+                        "size": 99900
+                      },
+                      {
+                        "price": -233,
+                        "size": 25000
+                      },
+                      {
+                        "price": -233,
+                        "size": 142
+                      },
+                      {
+                        "price": -223,
+                        "size": 6590
+                      },
+                      {
+                        "price": -213,
+                        "size": 2500
+                      },
+                      {
+                        "price": -208,
+                        "size": 6736
+                      },
+                      {
+                        "price": 9900,
+                        "size": 246600
+                      }
+                    ],
+                    "asks": []
+                  },
+                  "deepLink": "https://novig.onelink.me/JHQQ?af_xp=custom&pid=novig_app_share&c=Novig%20App%20Order%20Share&deep_link_value=%2Fautofill%2F01a1a3d7-8707-71e1-9d71-1744d88cc129%3Foutcome_id%3D01a1a3d7-8707-71e1-9d71-175ca1ab87fe"
+                },
+                {
+                  "name": "Queens University",
+                  "price": 233,
+                  "liquidity": {
+                    "bids": [
+                      {
+                        "price": 277,
+                        "size": 99900
+                      },
+                      {
+                        "price": 277,
+                        "size": 9500
+                      },
+                      {
+                        "price": 292,
+                        "size": 7842
+                      },
+                      {
+                        "price": 317,
+                        "size": 2500
+                      },
+                      {
+                        "price": 317,
+                        "size": 25000
+                      },
+                      {
+                        "price": 317,
+                        "size": 18947
+                      },
+                      {
+                        "price": 335,
+                        "size": 2500
+                      },
+                      {
+                        "price": 344,
+                        "size": 20210
+                      }
+                    ],
+                    "asks": []
+                  },
+                  "deepLink": "https://novig.onelink.me/JHQQ?af_xp=custom&pid=novig_app_share&c=Novig%20App%20Order%20Share&deep_link_value=%2Fautofill%2F01a1a3d7-8707-71e1-9d71-1744d88cc129%3Foutcome_id%3D01a1a3d7-8707-71e1-9d71-1763b5ba5e05"
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:21:02.424Z",
+              "outcomes": [
+                {
+                  "name": "LMU",
+                  "price": -117,
+                  "point": -6.5,
+                  "liquidity": {
+                    "bids": [
+                      {
+                        "price": 102,
+                        "size": 2020
+                      },
+                      {
+                        "price": 102,
+                        "size": 101008
+                      },
+                      {
+                        "price": 104,
+                        "size": 2000
+                      },
+                      {
+                        "price": 104,
+                        "size": 20000
+                      },
+                      {
+                        "price": 115,
+                        "size": 35000
+                      },
+                      {
+                        "price": 117,
+                        "size": 4300
+                      },
+                      {
+                        "price": 122,
+                        "size": 2200
+                      },
+                      {
+                        "price": 127,
+                        "size": 1200
+                      },
+                      {
+                        "price": 133,
+                        "size": 600
+                      },
+                      {
+                        "price": 138,
+                        "size": 200
+                      },
+                      {
+                        "price": 138,
+                        "size": 100
+                      },
+                      {
+                        "price": 9900,
+                        "size": 246600
+                      }
+                    ],
+                    "asks": []
+                  },
+                  "deepLink": "https://novig.onelink.me/JHQQ?af_xp=custom&pid=novig_app_share&c=Novig%20App%20Order%20Share&deep_link_value=%2Fautofill%2F01a1a3d7-8709-7a30-9d02-0957f8827c7e%3Foutcome_id%3D01a1a3d7-8709-7a30-9d02-096e636644b1"
+                },
+                {
+                  "name": "Queens University",
+                  "price": -102,
+                  "point": 6.5,
+                  "liquidity": {
+                    "bids": [
+                      {
+                        "price": 117,
+                        "size": 5875
+                      },
+                      {
+                        "price": 117,
+                        "size": 3000
+                      },
+                      {
+                        "price": 120,
+                        "size": 3457
+                      },
+                      {
+                        "price": 122,
+                        "size": 20000
+                      },
+                      {
+                        "price": 130,
+                        "size": 35000
+                      },
+                      {
+                        "price": 228,
+                        "size": 1000
+                      },
+                      {
+                        "price": 9900,
+                        "size": 246600
+                      }
+                    ],
+                    "asks": []
+                  },
+                  "deepLink": "https://novig.onelink.me/JHQQ?af_xp=custom&pid=novig_app_share&c=Novig%20App%20Order%20Share&deep_link_value=%2Fautofill%2F01a1a3d7-8709-7a30-9d02-0957f8827c7e%3Foutcome_id%3D01a1a3d7-8709-7a30-9d02-09799e8f273b"
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:21:02.424Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -117,
+                  "point": 157.5,
+                  "liquidity": {
+                    "bids": [
+                      {
+                        "price": -100,
+                        "size": 10000
+                      },
+                      {
+                        "price": -100,
+                        "size": 10000
+                      },
+                      {
+                        "price": 104,
+                        "size": 204
+                      },
+                      {
+                        "price": 106,
+                        "size": 5154
+                      },
+                      {
+                        "price": 108,
+                        "size": 20000
+                      },
+                      {
+                        "price": 120,
+                        "size": 15000
+                      },
+                      {
+                        "price": 122,
+                        "size": 7100
+                      },
+                      {
+                        "price": 127,
+                        "size": 1500
+                      },
+                      {
+                        "price": 127,
+                        "size": 100
+                      }
+                    ],
+                    "asks": []
+                  },
+                  "deepLink": "https://novig.onelink.me/JHQQ?af_xp=custom&pid=novig_app_share&c=Novig%20App%20Order%20Share&deep_link_value=%2Fautofill%2F01a1a3d7-8707-71e1-9d71-17ab35734d6f%3Foutcome_id%3D01a1a3d7-8707-71e1-9d71-17b3cfc5e5c9"
+                },
+                {
+                  "name": "Under",
+                  "price": -100,
+                  "point": 157.5,
+                  "liquidity": {
+                    "bids": [
+                      {
+                        "price": 117,
+                        "size": 20000
+                      },
+                      {
+                        "price": 117,
+                        "size": 4700
+                      },
+                      {
+                        "price": 125,
+                        "size": 2247
+                      },
+                      {
+                        "price": 133,
+                        "size": 15000
+                      }
+                    ],
+                    "asks": []
+                  },
+                  "deepLink": "https://novig.onelink.me/JHQQ?af_xp=custom&pid=novig_app_share&c=Novig%20App%20Order%20Share&deep_link_value=%2Fautofill%2F01a1a3d7-8707-71e1-9d71-17ab35734d6f%3Foutcome_id%3D01a1a3d7-8707-71e1-9d71-17c8254b1b6c"
+                }
+              ]
+            }
+          ],
+          "exchange": true
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA Basketball Mens Games",
+      "eventId": "ncaab:Queens University@LMU-20261105",
+      "home_team_id": "loyola-marymount-lions",
+      "away_team_id": "queens-royals"
+    },
+    {
+      "id": "1639668697",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T03:00:00Z",
+      "home_team": "Saint Mary's",
+      "away_team": "N Dakota St",
+      "bookmakers": [
+        {
+          "key": "betmgm",
+          "title": "BetMGM",
+          "markets": [
+            {
+              "key": "h2h",
+              "outcomes": [
+                {
+                  "name": "N Dakota St",
+                  "price": 700
+                },
+                {
+                  "name": "Saint Mary's",
+                  "price": -1100
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "outcomes": [
+                {
+                  "name": "N Dakota St",
+                  "price": -110,
+                  "point": 13.5
+                },
+                {
+                  "name": "Saint Mary's",
+                  "price": -110,
+                  "point": -13.5
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -105,
+                  "point": 148.5
+                },
+                {
+                  "name": "Under",
+                  "price": -115,
+                  "point": 148.5
+                }
+              ]
+            }
+          ],
+          "last_update": "2026-11-04T12:20:32.702Z",
+          "event_link": "https://www.nj.betmgm.com/en/sports/events/20072822"
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA",
+      "eventId": "ncaab:N Dakota St@Saint Mary's-20261105",
+      "home_team_id": "saint-marys-gaels",
+      "away_team_id": "north-dakota-state-bison"
+    },
+    {
+      "id": "36277993",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T03:00:00.000Z",
+      "home_team": "LMU",
+      "away_team": "Queens University",
+      "bookmakers": [
+        {
+          "key": "betmgm",
+          "title": "BetMGM",
+          "markets": [
+            {
+              "key": "h2h",
+              "outcomes": [
+                {
+                  "name": "Queens University",
+                  "price": 230
+                },
+                {
+                  "name": "LMU",
+                  "price": -285
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "outcomes": [
+                {
+                  "name": "Queens University",
+                  "price": -118,
+                  "point": 7.5
+                },
+                {
+                  "name": "LMU",
+                  "price": -102,
+                  "point": -7.5
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -115,
+                  "point": 157.5
+                },
+                {
+                  "name": "Under",
+                  "price": -105,
+                  "point": 157.5
+                }
+              ]
+            }
+          ],
+          "last_update": "2026-11-04T12:20:45.529Z",
+          "event_link": "https://www.nj.betmgm.com/en/sports/events/20072828"
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA Basketball Mens Games",
+      "eventId": "ncaab:Queens University@LMU-20261105",
+      "home_team_id": "loyola-marymount-lions",
+      "away_team_id": "queens-royals"
+    },
+    {
+      "id": "20072819",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T00:30:00.000Z",
+      "home_team": "Wichita St",
+      "away_team": "CS Northridge",
+      "bookmakers": [
+        {
+          "key": "betmgm",
+          "title": "BetMGM",
+          "markets": [
+            {
+              "key": "h2h",
+              "outcomes": [
+                {
+                  "name": "CS Northridge",
+                  "price": 775
+                },
+                {
+                  "name": "Wichita St",
+                  "price": -1400
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "outcomes": [
+                {
+                  "name": "CS Northridge",
+                  "price": -110,
+                  "point": 14.5
+                },
+                {
+                  "name": "Wichita St",
+                  "price": -110,
+                  "point": -14.5
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -110,
+                  "point": 160.5
+                },
+                {
+                  "name": "Under",
+                  "price": -110,
+                  "point": 160.5
+                }
+              ]
+            }
+          ],
+          "last_update": "2026-11-04T12:20:32.702Z",
+          "event_link": "https://www.nj.betmgm.com/en/sports/events/20072819"
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "eventId": "ncaab:CS Northridge@Wichita St-20261105",
+      "home_team_id": "wichita-state-shockers"
+    },
+    {
+      "id": "1639668697",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T03:00:00Z",
+      "home_team": "Saint Mary's",
+      "away_team": "N Dakota St",
+      "bookmakers": [
+        {
+          "key": "hardrock",
+          "title": "Hard Rock",
+          "last_update": "2026-11-04T12:21:08.578Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "outcomes": [
+                {
+                  "name": "N Dakota St",
+                  "price": 650,
+                  "deepLink": "https://share.hardrock.bet/Pt0T/landing?deep_link_value=hardrock%3A%2F%2Fbetslip%2F2771019316869595536&af_web_dp=https%3A%2F%2Fapp.hardrock.bet%2F%3Fdeeplink%3Dbetslip-2771019316869595536"
+                },
+                {
+                  "name": "Saint Mary's",
+                  "price": -1100,
+                  "deepLink": "https://share.hardrock.bet/Pt0T/landing?deep_link_value=hardrock%3A%2F%2Fbetslip%2F8224878465615266192&af_web_dp=https%3A%2F%2Fapp.hardrock.bet%2F%3Fdeeplink%3Dbetslip-8224878465615266192"
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -110,
+                  "point": 148.5,
+                  "deepLink": "https://share.hardrock.bet/Pt0T/landing?deep_link_value=hardrock%3A%2F%2Fbetslip%2F2021983777504493991&af_web_dp=https%3A%2F%2Fapp.hardrock.bet%2F%3Fdeeplink%3Dbetslip-2021983777504493991"
+                },
+                {
+                  "name": "Under",
+                  "price": -110,
+                  "point": 148.5,
+                  "deepLink": "https://share.hardrock.bet/Pt0T/landing?deep_link_value=hardrock%3A%2F%2Fbetslip%2F6259871026860130727&af_web_dp=https%3A%2F%2Fapp.hardrock.bet%2F%3Fdeeplink%3Dbetslip-6259871026860130727"
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "outcomes": [
+                {
+                  "name": "N Dakota St",
+                  "price": 110,
+                  "point": 12.5,
+                  "deepLink": "https://share.hardrock.bet/Pt0T/landing?deep_link_value=hardrock%3A%2F%2Fbetslip%2F2246912910234354053&af_web_dp=https%3A%2F%2Fapp.hardrock.bet%2F%3Fdeeplink%3Dbetslip-2246912910234354053"
+                },
+                {
+                  "name": "Saint Mary's",
+                  "price": -135,
+                  "point": -12.5,
+                  "deepLink": "https://share.hardrock.bet/Pt0T/landing?deep_link_value=hardrock%3A%2F%2Fbetslip%2F4203726948326834565&af_web_dp=https%3A%2F%2Fapp.hardrock.bet%2F%3Fdeeplink%3Dbetslip-4203726948326834565"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA",
+      "eventId": "ncaab:N Dakota St@Saint Mary's-20261105",
+      "home_team_id": "saint-marys-gaels",
+      "away_team_id": "north-dakota-state-bison"
+    },
+    {
+      "id": "1639668659",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T00:30:00Z",
+      "home_team": "Wichita St",
+      "away_team": "CSU Northridge",
+      "bookmakers": [
+        {
+          "key": "hardrock",
+          "title": "Hard Rock",
+          "last_update": "2026-11-04T12:20:15.624Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "outcomes": [
+                {
+                  "name": "CSU Northridge",
+                  "price": 750,
+                  "deepLink": "https://share.hardrock.bet/Pt0T/landing?deep_link_value=hardrock%3A%2F%2Fbetslip%2F2393338558787223959&af_web_dp=https%3A%2F%2Fapp.hardrock.bet%2F%3Fdeeplink%3Dbetslip-2393338558787223959"
+                },
+                {
+                  "name": "Wichita St",
+                  "price": -1400,
+                  "deepLink": "https://share.hardrock.bet/Pt0T/landing?deep_link_value=hardrock%3A%2F%2Fbetslip%2F4217296407872274839&af_web_dp=https%3A%2F%2Fapp.hardrock.bet%2F%3Fdeeplink%3Dbetslip-4217296407872274839"
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "outcomes": [
+                {
+                  "name": "CSU Northridge",
+                  "price": -105,
+                  "point": 14.5,
+                  "deepLink": "https://share.hardrock.bet/Pt0T/landing?deep_link_value=hardrock%3A%2F%2Fbetslip%2F5458319580189557164&af_web_dp=https%3A%2F%2Fapp.hardrock.bet%2F%3Fdeeplink%3Dbetslip-5458319580189557164"
+                },
+                {
+                  "name": "Wichita St",
+                  "price": -110,
+                  "point": -14.5,
+                  "deepLink": "https://share.hardrock.bet/Pt0T/landing?deep_link_value=hardrock%3A%2F%2Fbetslip%2F5733039157459157420&af_web_dp=https%3A%2F%2Fapp.hardrock.bet%2F%3Fdeeplink%3Dbetslip-5733039157459157420"
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "outcomes": [
+                {
+                  "name": "Under",
+                  "price": -110,
+                  "point": 161.5,
+                  "deepLink": "https://share.hardrock.bet/Pt0T/landing?deep_link_value=hardrock%3A%2F%2Fbetslip%2F6058073486327415191&af_web_dp=https%3A%2F%2Fapp.hardrock.bet%2F%3Fdeeplink%3Dbetslip-6058073486327415191"
+                },
+                {
+                  "name": "Over",
+                  "price": -105,
+                  "point": 161.5,
+                  "deepLink": "https://share.hardrock.bet/Pt0T/landing?deep_link_value=hardrock%3A%2F%2Fbetslip%2F1422180619902910871&af_web_dp=https%3A%2F%2Fapp.hardrock.bet%2F%3Fdeeplink%3Dbetslip-1422180619902910871"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA",
+      "eventId": "ncaab:CSU Northridge@Wichita St-20261105",
+      "home_team_id": "wichita-state-shockers",
+      "away_team_id": "cal-state-northridge-matadors"
+    },
+    {
+      "id": "36277993",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T03:00:00.000Z",
+      "home_team": "LMU",
+      "away_team": "Queens University",
+      "bookmakers": [
+        {
+          "key": "hardrock",
+          "title": "Hard Rock",
+          "last_update": "2026-11-04T12:20:58.627Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "outcomes": [
+                {
+                  "name": "Queens University",
+                  "price": 240,
+                  "deepLink": "https://share.hardrock.bet/Pt0T/landing?deep_link_value=hardrock%3A%2F%2Fbetslip%2F6155426107719025064&af_web_dp=https%3A%2F%2Fapp.hardrock.bet%2F%3Fdeeplink%3Dbetslip-6155426107719025064"
+                },
+                {
+                  "name": "LMU",
+                  "price": -325,
+                  "deepLink": "https://share.hardrock.bet/Pt0T/landing?deep_link_value=hardrock%3A%2F%2Fbetslip%2F8886859281719230888&af_web_dp=https%3A%2F%2Fapp.hardrock.bet%2F%3Fdeeplink%3Dbetslip-8886859281719230888"
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "outcomes": [
+                {
+                  "name": "Under",
+                  "price": -110,
+                  "point": 157.5,
+                  "deepLink": "https://share.hardrock.bet/Pt0T/landing?deep_link_value=hardrock%3A%2F%2Fbetslip%2F4591999737858752936&af_web_dp=https%3A%2F%2Fapp.hardrock.bet%2F%3Fdeeplink%3Dbetslip-4591999737858752936"
+                },
+                {
+                  "name": "Over",
+                  "price": -110,
+                  "point": 157.5,
+                  "deepLink": "https://share.hardrock.bet/Pt0T/landing?deep_link_value=hardrock%3A%2F%2Fbetslip%2F5659352849545560488&af_web_dp=https%3A%2F%2Fapp.hardrock.bet%2F%3Fdeeplink%3Dbetslip-5659352849545560488"
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "outcomes": [
+                {
+                  "name": "Queens University",
+                  "price": -105,
+                  "point": 6.5,
+                  "deepLink": "https://share.hardrock.bet/Pt0T/landing?deep_link_value=hardrock%3A%2F%2Fbetslip%2F4874319139499540897&af_web_dp=https%3A%2F%2Fapp.hardrock.bet%2F%3Fdeeplink%3Dbetslip-4874319139499540897"
+                },
+                {
+                  "name": "LMU",
+                  "price": -115,
+                  "point": -6.5,
+                  "deepLink": "https://share.hardrock.bet/Pt0T/landing?deep_link_value=hardrock%3A%2F%2Fbetslip%2F6933590069114700193&af_web_dp=https%3A%2F%2Fapp.hardrock.bet%2F%3Fdeeplink%3Dbetslip-6933590069114700193"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA Basketball Mens Games",
+      "eventId": "ncaab:Queens University@LMU-20261105",
+      "home_team_id": "loyola-marymount-lions",
+      "away_team_id": "queens-royals"
+    },
+    {
+      "id": "1639668697",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T03:00:00Z",
+      "home_team": "Saint Mary's",
+      "away_team": "N Dakota St",
+      "bookmakers": [
+        {
+          "key": "betr",
+          "title": "Betr",
+          "last_update": "2026-11-04T12:20:58.343Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:20:58.343Z",
+              "outcomes": [
+                {
+                  "name": "N Dakota St",
+                  "price": 641
+                },
+                {
+                  "name": "Saint Mary's",
+                  "price": -1429
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:20:58.343Z",
+              "outcomes": [
+                {
+                  "name": "N Dakota St",
+                  "price": -119,
+                  "point": 14
+                },
+                {
+                  "name": "Saint Mary's",
+                  "price": -111,
+                  "point": -14
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:20:58.343Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -112,
+                  "point": 148.5
+                },
+                {
+                  "name": "Under",
+                  "price": -118,
+                  "point": 148.5
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA",
+      "eventId": "ncaab:N Dakota St@Saint Mary's-20261105",
+      "home_team_id": "saint-marys-gaels",
+      "away_team_id": "north-dakota-state-bison"
+    },
+    {
+      "id": "1639668659",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T00:30:00Z",
+      "home_team": "Wichita St",
+      "away_team": "CSU Northridge",
+      "bookmakers": [
+        {
+          "key": "betr",
+          "title": "Betr",
+          "last_update": "2026-11-04T12:20:45.679Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:20:45.679Z",
+              "outcomes": [
+                {
+                  "name": "CSU Northridge",
+                  "price": 663
+                },
+                {
+                  "name": "Wichita St",
+                  "price": -1667
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:20:45.679Z",
+              "outcomes": [
+                {
+                  "name": "CSU Northridge",
+                  "price": -118,
+                  "point": 14.5
+                },
+                {
+                  "name": "Wichita St",
+                  "price": -112,
+                  "point": -14.5
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:20:45.679Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -115,
+                  "point": 160.5
+                },
+                {
+                  "name": "Under",
+                  "price": -115,
+                  "point": 160.5
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA",
+      "eventId": "ncaab:CSU Northridge@Wichita St-20261105",
+      "home_team_id": "wichita-state-shockers",
+      "away_team_id": "cal-state-northridge-matadors"
+    },
+    {
+      "id": "36277993",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T03:00:00.000Z",
+      "home_team": "LMU",
+      "away_team": "Queens University",
+      "bookmakers": [
+        {
+          "key": "betr",
+          "title": "Betr",
+          "last_update": "2026-11-04T12:20:45.679Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:20:45.679Z",
+              "outcomes": [
+                {
+                  "name": "Queens University",
+                  "price": 213
+                },
+                {
+                  "name": "LMU",
+                  "price": -303
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:20:45.679Z",
+              "outcomes": [
+                {
+                  "name": "Queens University",
+                  "price": -116,
+                  "point": 7
+                },
+                {
+                  "name": "LMU",
+                  "price": -115,
+                  "point": -7
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:20:45.679Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -114,
+                  "point": 158
+                },
+                {
+                  "name": "Under",
+                  "price": -116,
+                  "point": 158
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA Basketball Mens Games",
+      "eventId": "ncaab:Queens University@LMU-20261105",
+      "home_team_id": "loyola-marymount-lions",
+      "away_team_id": "queens-royals"
+    },
+    {
+      "id": "1639668697",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T03:00:00Z",
+      "home_team": "Saint Mary's",
+      "away_team": "N Dakota St",
+      "bookmakers": [
+        {
+          "key": "bovada",
+          "title": "Bovada",
+          "last_update": "2026-11-04T12:20:37.831Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:20:37.831Z",
+              "outcomes": [
+                {
+                  "name": "N Dakota St",
+                  "price": 650
+                },
+                {
+                  "name": "Saint Mary's",
+                  "price": -1100
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:20:37.831Z",
+              "outcomes": [
+                {
+                  "name": "N Dakota St",
+                  "price": -110,
+                  "point": 13.5
+                },
+                {
+                  "name": "Saint Mary's",
+                  "price": -110,
+                  "point": -13.5
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:20:37.831Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -110,
+                  "point": 148
+                },
+                {
+                  "name": "Under",
+                  "price": -110,
+                  "point": 148
+                }
+              ]
+            }
+          ],
+          "event_link": "https://www.bovada.lv/basketball/college-basketball/north-dakota-state-saint-mary-s-ca-202611042200"
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA",
+      "eventId": "ncaab:N Dakota St@Saint Mary's-20261105",
+      "home_team_id": "saint-marys-gaels",
+      "away_team_id": "north-dakota-state-bison"
+    },
+    {
+      "id": "36277993",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T03:00:00.000Z",
+      "home_team": "LMU",
+      "away_team": "Queens University",
+      "bookmakers": [
+        {
+          "key": "bovada",
+          "title": "Bovada",
+          "last_update": "2026-11-04T12:20:37.831Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:20:37.831Z",
+              "outcomes": [
+                {
+                  "name": "Queens University",
+                  "price": 260
+                },
+                {
+                  "name": "LMU",
+                  "price": -320
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:20:37.831Z",
+              "outcomes": [
+                {
+                  "name": "Queens University",
+                  "price": -105,
+                  "point": 6.5
+                },
+                {
+                  "name": "LMU",
+                  "price": -115,
+                  "point": -6.5
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:20:37.831Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -110,
+                  "point": 157.5
+                },
+                {
+                  "name": "Under",
+                  "price": -110,
+                  "point": 157.5
+                }
+              ]
+            }
+          ],
+          "event_link": "https://www.bovada.lv/basketball/college-basketball/queens-nc-loyola-marymount-202611042200"
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "league": "NCAA Basketball Mens Games",
+      "eventId": "ncaab:Queens University@LMU-20261105",
+      "home_team_id": "loyola-marymount-lions",
+      "away_team_id": "queens-royals"
+    },
+    {
+      "id": "20072819",
+      "sport_key": "basketball_ncaab",
+      "sport_title": "NCAAB",
+      "commence_time": "2026-11-05T00:30:00.000Z",
+      "home_team": "Wichita St",
+      "away_team": "CS Northridge",
+      "bookmakers": [
+        {
+          "key": "bovada",
+          "title": "Bovada",
+          "last_update": "2026-11-04T12:20:37.831Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-04T12:20:37.831Z",
+              "outcomes": [
+                {
+                  "name": "CS Northridge",
+                  "price": 800
+                },
+                {
+                  "name": "Wichita St",
+                  "price": -1600
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-04T12:20:37.831Z",
+              "outcomes": [
+                {
+                  "name": "CS Northridge",
+                  "price": -105,
+                  "point": 14.5
+                },
+                {
+                  "name": "Wichita St",
+                  "price": -115,
+                  "point": -14.5
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-04T12:20:37.831Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -115,
+                  "point": 160
+                },
+                {
+                  "name": "Under",
+                  "price": -105,
+                  "point": 160
+                }
+              ]
+            }
+          ],
+          "event_link": "https://www.bovada.lv/basketball/college-basketball/cs-northridge-wichita-state-202611041930"
+        }
+      ],
+      "sport": "ncaab",
+      "status": "scheduled",
+      "eventId": "ncaab:CS Northridge@Wichita St-20261105",
+      "home_team_id": "wichita-state-shockers"
+    }
+  ]
+}
