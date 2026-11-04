@@ -32,7 +32,10 @@ original identities `/private/tmp/oddsphere-cbb-pending-identity-audit-20261104.
 Seed r7 writes only status, two team-mapped final scores and period on a
 conflicting locked fixture. The conditional update rechecks the exact stored
 canonical game ID, provider ID, original time, status and both team IDs. No
-canonical start/date/team, prediction record or member snapshot is updated.
+score is eligible until the original locked member payload independently agrees
+on the exact team names, orientation, start and lock; missing/conflicting member
+evidence remains held rather than using a newer canonical/provider interpretation.
+No canonical start/date/team, prediction record or member snapshot is updated.
 Unknown participants, wrong event/season, nonfinal/negative/fractional/tied
 scores, canceled/postponed fixtures, ET-slate changes, >18h shifts and conflicting
 already-recorded finals remain held. Ordinary live provider identity changes

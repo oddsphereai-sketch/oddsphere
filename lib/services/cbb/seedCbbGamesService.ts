@@ -127,6 +127,7 @@ export async function seedCbbGames(options: SeedOptions) {
     for (const row of data ?? []) existingById.set(Number(row.external_id), row as CbbExistingFixture);
   }
   const lockedDbIds = new Set<number>();
+  const lockedMemberIdentities = new Map<number,{home:string;away:string;start:string}>();
   const dbIds = [...existingById.values()].map(row => row.id);
   for (const batch of chunks(dbIds, 100)) {
     const { data, error } = await supabase.from("prediction_records")
@@ -143,7 +144,8 @@ export async function seedCbbGames(options: SeedOptions) {
     if (error) throw new Error(`CBB member lock lookup failed: ${error.message}`);
     for (const row of data ?? []) {
       const externalId = Number(String(row.snapshot_key).split("::").at(-1));
-      const payload = row.payload as { snapshot?: { gameId?: number; lockedAt?: string | null } } | null;
+      const payload = row.payload as { snapshot?: { gameId?: number; lockedAt?: string | null; startsAt?:string };
+        memberGame?:{homeTeamDisplayName?:string;awayTeamDisplayName?:string;gameStartAt?:string;lockedAt?:string|null} } | null;
       if (!Number.isSafeInteger(externalId) || payload?.snapshot?.gameId !== externalId) {
         throw new Error("CBB member lock receipt has inconsistent identity");
       }
@@ -151,6 +153,12 @@ export async function seedCbbGames(options: SeedOptions) {
         const prior = existingById.get(externalId);
         if (!prior) throw new Error(`CBB locked member game ${externalId} has no canonical fixture`);
         lockedDbIds.add(prior.id);
+        const member=payload.memberGame;
+        if(member?.homeTeamDisplayName&&member.awayTeamDisplayName&&member.gameStartAt
+          &&Date.parse(member.lockedAt??"")===Date.parse(payload.snapshot.lockedAt)
+          &&Date.parse(member.gameStartAt)===Date.parse(payload.snapshot.startsAt??"")) {
+          lockedMemberIdentities.set(prior.id,{home:member.homeTeamDisplayName,away:member.awayTeamDisplayName,start:member.gameStartAt});
+        }
       }
     }
   }
@@ -161,7 +169,12 @@ export async function seedCbbGames(options: SeedOptions) {
     const payload = cbbCanonicalGamePayload(game, homeDbId, awayDbId);
     const previous = existingById.get(game.id);
     if(previous&&lockedDbIds.has(previous.id)&&cbbFixtureIdentityWouldChange(previous,payload)){
-      const terminal = cbbLockedTerminalScore(previous,payload);
+      const member=lockedMemberIdentities.get(previous.id);
+      const originalHome=[...teams.values()].find(team=>teamDbIds.get(team.id)===previous.home_team_id);
+      const originalAway=[...teams.values()].find(team=>teamDbIds.get(team.id)===previous.away_team_id);
+      const memberIdentityVerified=member&&Date.parse(member.start)===Date.parse(previous.game_date)
+        &&member.home===originalHome?.full_name&&member.away===originalAway?.full_name;
+      const terminal = memberIdentityVerified?cbbLockedTerminalScore(previous,payload):null;
       if(terminal){
         terminalScoresMappedToLockedIdentity.push(game.id);
         if(previous.status!=="STATUS_FINAL")terminalUpdates.push({previous,values:terminal});

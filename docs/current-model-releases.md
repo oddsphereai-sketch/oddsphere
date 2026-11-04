@@ -7,7 +7,9 @@ The sole fixture seed advances to
 A verified final for the same provider event, season and exact two team IDs may
 fill terminal status/scores while preserving the locked start, slate, team
 orientation and all prediction/member fields. Scores are mapped by team ID when
-the provider reverses home/away labels. Unknown participants, changed event or
+the provider reverses home/away labels. The exact original locked member names,
+orientation and start must agree with the canonical identities first; a missing
+or conflicting receipt stays held. Unknown participants, changed event or
 season, nonfinal/tied/malformed scores, canceled/postponed fixtures, a different
 ET slate, >18-hour changes or a revised existing final remain held for review.
 The existing CBB leased cron seeds at most three additional pending slate dates
