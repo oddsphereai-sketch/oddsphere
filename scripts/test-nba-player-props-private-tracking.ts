@@ -12,7 +12,9 @@ import {
   settleNbaPlayerPropsPrivateTrackingRow,
   type NbaPlayerPropsPrivateTrackingHistory,
 } from "../lib/services/nba/nbaPlayerPropsPrivateTracking";
-import { buildNbaPlayerPropsSettlementRevision } from "../lib/services/nba/nbaPlayerPropsSettlementStore";
+import { buildNbaPlayerPropsSettlementRevision, planNbaPropsSettlementCatchup, settleNbaPlayerPropsTrackedSlates, NBA_PLAYER_PROPS_SETTLEMENT_RELEASE,hasNbaPropsUnsettledTrackedSlates } from "../lib/services/nba/nbaPlayerPropsSettlementStore";
+import { refreshNbaPlayerPropsPrivateCandidate } from "../lib/services/nba/nbaPlayerPropsPrivateWriter";
+import { encodeNbaPlayerPropsPrivatePayload,decodeNbaPlayerPropsPrivatePayload } from "../lib/services/nba/nbaPlayerPropsPrivateStore";
 import type { NbaPlayerPropsCurrentState } from "../lib/services/nba/nbaPlayerPropsCurrentState";
 
 const lockedAt = "2026-10-20T22:00:00.000Z";
@@ -193,3 +195,38 @@ assert.equal(preservedRevision.status, "preserved");
 assert.deepEqual(preservedRevision.revision, correctedRevision.revision);
 
 console.log("NBA player props private tracking tests passed.");
+
+async function testOldSlateCatchup(){
+  const catalog=[1,2,3,4,5].map(day=>({date:`2026-10-${String(day).padStart(2,"0")}`,sourceVersion:`hash-${day}`}));
+  assert.deepEqual(planNbaPropsSettlementCatchup({requested:[],catalog,receipts:{}}),["2026-10-01","2026-10-02","2026-10-03"]);
+  assert.deepEqual(planNbaPropsSettlementCatchup({requested:["2026-10-02"],catalog,receipts:{"2026-10-01":{sourceVersion:"hash-1",rows:1}}}),["2026-10-03","2026-10-04","2026-10-05"]);
+  assert.deepEqual(planNbaPropsSettlementCatchup({requested:[],catalog:catalog.slice(0,1),receipts:{"2026-10-01":{sourceVersion:"old-hash",rows:1}}}),["2026-10-01"],"a changed tracking checksum reopens a previously completed slate");
+  assert.throws(()=>planNbaPropsSettlementCatchup({requested:[],catalog:[...catalog,catalog[0]],receipts:{}}),/Invalid/);
+  assert.throws(()=>planNbaPropsSettlementCatchup({requested:[],catalog:Array.from({length:401},()=>catalog[0]),receipts:{}}),/bound/);
+  const oldHistory={kind:"nba_player_props_private_tracking_history_v2" as const,schema:NBA_PLAYER_PROPS_PRIVATE_TRACKING_SCHEMA,captureRelease:NBA_PLAYER_PROPS_PRIVATE_TRACKING_RELEASE,season:2026,slateDate:"2026-10-20",createdAt:lockedAt,updatedAt:lockedAt,rows:[row]};
+  const trackingPayload=encodeNbaPlayerPropsPrivateTrackingHistory(oldHistory);
+  const trackingBytes=JSON.stringify(trackingPayload);
+  const priorRevision={...preservedRevision.revision,rowKey:"previous-locked-row"};
+  let payload:unknown=encodeNbaPlayerPropsPrivatePayload({release:"nba_player_props_private_settlement_2026_10_21_r1_official_box_revisions",publicEnabled:false,season:2026,createdAt:lockedAt,updatedAt:lockedAt,revisions:[priorRevision]},"tracking_history");
+  let writes=0;
+  const db={from:(table:string)=>{assert.equal(table,"lab_response_snapshots");return{select:()=>{let key="";const q={eq:(_field:string,value:string)=>{key=value;return q;},like:()=>q,order:()=>q,limit:async()=>({error:null,data:[{slate_date:"2026-10-20",source_checksum:trackingPayload.checksum,generated_at:lockedAt}]}),maybeSingle:async()=>({error:null,data:key.includes("settlement")?{payload}:key.endsWith("2026-10-20")?{payload:trackingPayload}:null})};return q;},upsert:async(value:{payload:unknown})=>{writes++;payload=value.payload;return{error:null};}};}} as unknown as Parameters<typeof settleNbaPlayerPropsTrackedSlates>[0]["client"];
+  const state={games:[{gameId:1}],boxes:[officialBox]} as unknown as NbaPlayerPropsCurrentState;
+  assert.equal(await hasNbaPropsUnsettledTrackedSlates(db,2026),true,"legacy incomplete dates remain discoverable on rest days");
+  await assert.rejects(refreshNbaPlayerPropsPrivateCandidate({client:db,season:2026,slateDate:"2026-11-04",schedule:[],ballDontLieApiKey:"fixture",fullRefresh:true,now:"2026-11-04T10:00:00Z",fetchImpl:async(url)=>{assert.ok(String(url).includes("/games"),"a pending rest day fetches official stats, never market quotes");throw Error("pending_rest_day_stat_refresh");}}),/pending_rest_day_stat_refresh/);
+  assert.equal(writes,0,"an official-stat failure on a rest day cannot publish a guessed outcome");
+  const pending=await settleNbaPlayerPropsTrackedSlates({client:db,season:2026,slateDates:["2026-11-04"],state:{...state,games:[]},observedAt:"2026-11-04T10:00:00Z"});
+  assert.equal(pending.written,false);assert.equal(writes,0,"a missing final game cannot produce a completion receipt or guessed outcome");
+  const first=await settleNbaPlayerPropsTrackedSlates({client:db,season:2026,slateDates:["2026-11-04"],state,observedAt:"2026-11-04T11:00:00Z"});
+  assert.deepEqual(first.catchupDates,["2026-10-20"]);assert.equal(first.added,1);
+  const after=decodeNbaPlayerPropsPrivatePayload<{release:string;revisions:unknown[];slateReceipts:Record<string,{rows:number}>}>(payload,"tracking_history")!;
+  assert.equal(after.release,NBA_PLAYER_PROPS_SETTLEMENT_RELEASE);assert.deepEqual(after.revisions[0],priorRevision,"all prior outcome revisions remain exact");
+  assert.equal(after.slateReceipts["2026-10-20"].rows,1);
+  const second=await settleNbaPlayerPropsTrackedSlates({client:db,season:2026,slateDates:["2026-11-04"],state,observedAt:"2026-11-04T12:00:00Z"});
+  assert.deepEqual(second.catchupDates,[]);assert.equal(second.written,false);assert.equal(writes,1);
+  assert.equal(await hasNbaPropsUnsettledTrackedSlates(db,2026),false);
+  const offday=await refreshNbaPlayerPropsPrivateCandidate({client:db,season:2026,slateDate:"2026-11-04",schedule:[],ballDontLieApiKey:"fixture",fullRefresh:true,now:"2026-11-04T12:00:00Z",fetchImpl:async()=>{throw Error("completed rest day must not call providers");}});
+  assert.equal(offday.status,"no_games");assert.equal(offday.providerRequests,0);assert.equal(writes,1);
+  assert.equal(JSON.stringify(trackingPayload),trackingBytes,"settlement cannot change original locked tracking payload");
+  console.log("NBA props settlement: bounded old-slate catch-up, checksum reopening, legacy precedence and idempotence passed.");
+}
+void testOldSlateCatchup();

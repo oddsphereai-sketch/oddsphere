@@ -8,8 +8,36 @@ import { readNbaPlayerPropsPrivateTracking } from "./nbaPlayerPropsPrivateTracki
 import type { NbaPlayerPropsPrivateTrackingRow } from "./nbaPlayerPropsPrivateTracking";
 
 export const NBA_PLAYER_PROPS_SETTLEMENT_RELEASE =
-  "nba_player_props_private_settlement_2026_10_21_r1_official_box_revisions" as const;
+  "nba_player_props_private_settlement_2026_11_04_r2_bounded_old_slate_catchup" as const;
+const LEGACY_SETTLEMENT_RELEASE="nba_player_props_private_settlement_2026_10_21_r1_official_box_revisions" as const;
+export const NBA_PROPS_SETTLEMENT_CATCHUP_MAX_DATES=3;
+const MAX_TRACKED_SLATES=400;
 const RETENTION_DAYS = 550;
+type SlateReceipt=Readonly<{sourceVersion:string;rows:number}>;
+async function readTrackingCatalog(client:SupabaseClient,season:number){
+  const read=await client.from("lab_response_snapshots")
+    .select("slate_date,generated_at,source_checksum:payload->>checksum")
+    .like("snapshot_key",`nba::player-props-private-tracking::${season}::%`)
+    .order("slate_date").limit(MAX_TRACKED_SLATES+1);
+  if(read.error)throw new Error(`NBA props tracking catalog failed: ${read.error.message}`);
+  const catalog=(read.data??[]).map(r=>({date:String(r.slate_date??""),sourceVersion:String(r.source_checksum??r.generated_at??"")}));
+  planNbaPropsSettlementCatchup({requested:[],catalog,receipts:{}});
+  return catalog;
+}
+
+export async function hasNbaPropsUnsettledTrackedSlates(client:SupabaseClient,season:number):Promise<boolean>{
+  const previous=await readSettlement(client,season);
+  const catalog=await readTrackingCatalog(client,season);
+  return catalog.some(r=>previous?.slateReceipts?.[r.date]?.sourceVersion!==r.sourceVersion);
+}
+
+export function planNbaPropsSettlementCatchup(args:{requested:readonly string[];catalog:readonly {date:string;sourceVersion:string}[];receipts:Readonly<Record<string,SlateReceipt>>}):string[]{
+  if(args.catalog.length>MAX_TRACKED_SLATES||args.requested.length>14)throw new Error("NBA props settlement date bound exceeded");
+  if(new Set(args.catalog.map(r=>r.date)).size!==args.catalog.length||args.catalog.some(r=>!/^\d{4}-\d{2}-\d{2}$/.test(r.date)||!r.sourceVersion))throw new Error("Invalid NBA props tracking catalog");
+  const requested=new Set(args.requested);
+  return args.catalog.filter(r=>!requested.has(r.date)&&args.receipts[r.date]?.sourceVersion!==r.sourceVersion)
+    .map(r=>r.date).sort().slice(0,NBA_PROPS_SETTLEMENT_CATCHUP_MAX_DATES);
+}
 
 export type NbaPlayerPropsSettlementRevision = Readonly<{
   rowKey: string;
@@ -21,12 +49,13 @@ export type NbaPlayerPropsSettlementRevision = Readonly<{
 }>;
 
 export type NbaPlayerPropsSettlementHistory = Readonly<{
-  release: typeof NBA_PLAYER_PROPS_SETTLEMENT_RELEASE;
+  release: typeof NBA_PLAYER_PROPS_SETTLEMENT_RELEASE | typeof LEGACY_SETTLEMENT_RELEASE;
   publicEnabled: false;
   season: number;
   createdAt: string;
   updatedAt: string;
   revisions: readonly NbaPlayerPropsSettlementRevision[];
+  slateReceipts?:Readonly<Record<string,SlateReceipt>>;
 }>;
 
 export function buildNbaPlayerPropsSettlementRevision(args: {
@@ -68,12 +97,17 @@ export async function settleNbaPlayerPropsTrackedSlates(args: {
   slateDates: readonly string[];
   state: NbaPlayerPropsCurrentState;
   observedAt: string;
-}): Promise<{ written: boolean; added: number; corrected: number; preserved: number; total: number }> {
+}): Promise<{ written: boolean; added: number; corrected: number; preserved: number; total: number; catchupDates:readonly string[] }> {
   const previous = await readSettlement(args.client, args.season);
+  const catalog=await readTrackingCatalog(args.client,args.season);
+  const receipts={...previous?.slateReceipts};
+  const catchupDates=planNbaPropsSettlementCatchup({requested:args.slateDates,catalog,receipts});
   const rows: NbaPlayerPropsPrivateTrackingRow[] = [];
-  for (const slateDate of [...new Set(args.slateDates)]) {
+  const loaded=new Map<string,readonly NbaPlayerPropsPrivateTrackingRow[]>();
+  for (const slateDate of [...new Set([...args.slateDates,...catchupDates])]) {
     const history = await readNbaPlayerPropsPrivateTracking({ client: args.client, season: args.season, slateDate });
     rows.push(...(history?.rows ?? []));
+    if(history)loaded.set(slateDate,history.rows);
   }
   const latestByRow = new Map<string, NbaPlayerPropsSettlementRevision>();
   for (const revision of previous?.revisions ?? []) {
@@ -96,7 +130,11 @@ export async function settleNbaPlayerPropsTrackedSlates(args: {
     if (settlement.status === "corrected") corrected += 1;
     additions.push(settlement.revision);
   }
-  if (additions.length === 0) return { written: false, added: 0, corrected, preserved, total: previous?.revisions.length ?? 0 };
+  for(const[date,tracked]of loaded){
+    const source=catalog.find(r=>r.date===date);
+    if(source&&tracked.every(row=>gameIds.has(Number(row.gameId.replace(/^.*:/,"")))))receipts[date]={sourceVersion:source.sourceVersion,rows:tracked.length};
+  }
+  if (additions.length === 0&&JSON.stringify(receipts)===JSON.stringify(previous?.slateReceipts??{})) return { written: false, added: 0, corrected, preserved, total: previous?.revisions.length ?? 0,catchupDates };
   const history: NbaPlayerPropsSettlementHistory = {
     release: NBA_PLAYER_PROPS_SETTLEMENT_RELEASE,
     publicEnabled: false,
@@ -104,6 +142,7 @@ export async function settleNbaPlayerPropsTrackedSlates(args: {
     createdAt: previous?.createdAt ?? args.observedAt,
     updatedAt: args.observedAt,
     revisions: [...(previous?.revisions ?? []), ...additions],
+    slateReceipts:receipts,
   };
   const payload = encodeNbaPlayerPropsPrivatePayload(history, "tracking_history");
   const retention = new Date(Date.parse(args.observedAt) + RETENTION_DAYS * 86_400_000).toISOString();
@@ -121,7 +160,7 @@ export async function settleNbaPlayerPropsTrackedSlates(args: {
     updated_at: args.observedAt,
   }, { onConflict: "snapshot_key" });
   if (error) throw new Error(`NBA props settlement write failed: ${error.message}`);
-  return { written: true, added: additions.length, corrected, preserved, total: history.revisions.length };
+  return { written: true, added: additions.length, corrected, preserved, total: history.revisions.length,catchupDates };
 }
 
 async function readSettlement(client: SupabaseClient, season: number): Promise<NbaPlayerPropsSettlementHistory | null> {
@@ -130,7 +169,7 @@ async function readSettlement(client: SupabaseClient, season: number): Promise<N
   if (error) throw new Error(`NBA props settlement read failed: ${error.message}`);
   const history = decodeNbaPlayerPropsPrivatePayload<NbaPlayerPropsSettlementHistory>(data?.payload, "tracking_history");
   if (!history) return null;
-  if (history.release !== NBA_PLAYER_PROPS_SETTLEMENT_RELEASE || history.publicEnabled !== false || history.season !== season) {
+  if (![NBA_PLAYER_PROPS_SETTLEMENT_RELEASE,LEGACY_SETTLEMENT_RELEASE].includes(history.release) || history.publicEnabled !== false || history.season !== season) {
     throw new Error("NBA props settlement payload is corrupt or unsupported.");
   }
   return history;

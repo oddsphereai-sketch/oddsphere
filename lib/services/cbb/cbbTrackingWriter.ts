@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { supabase } from "@/lib/db/supabase";
 import type { PredictionRecordRow } from "@/lib/types/domain/Tracking";
 import { computeSlateDate } from "@/lib/dates/slateDate";
@@ -12,7 +13,14 @@ import {CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_GR
 import { CBB_PROVISIONAL_GRADE_RELEASE, CBB_LEGACY_PROVISIONAL_GRADE_RELEASE } from "@/lib/cbb/provisionalGradePolicy";
 import type { CbbStoredMemberGame } from "./cbbMemberGameStore";
 
-export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_04_r14_current_board_source_aliases" as const;
+export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_04_r15_original_member_evidence_hash" as const;
+/** Hash stored JSON independently of PostgreSQL jsonb object-key ordering. */
+export function cbbTrackingEvidenceSha256(record:CbbStoredMemberGame):string {
+  const sorted=(value:unknown):unknown=>Array.isArray(value)?value.map(sorted)
+    :value!==null&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort()
+      .map(key=>[key,sorted((value as Record<string,unknown>)[key])])):value;
+  return createHash("sha256").update(JSON.stringify(sorted(JSON.parse(JSON.stringify(record))))).digest("hex");
+}
 const receivedMarketGradeReleases:readonly string[]=[CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_JOINT_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_ALIGNED_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_OLDER_MARKET_BEHAVIOR_GRADE_RELEASE];
 
 /** Never relabel an earlier public lock with the current score model. */
@@ -72,6 +80,7 @@ export async function writeLockedCbbTracking(record: CbbStoredMemberGame, db?: t
     existing.set(row.market, [row]);
   }
   let inserted = 0;
+  const evidenceSha256=cbbTrackingEvidenceSha256(record);
   for (const row of snapshot.board.rows) {
     if (row.selection === null || row.price === null || row.probability === null) continue;
     const side = row.market === "total" ? row.selection === "first" ? "over" : "under"
@@ -116,6 +125,8 @@ export async function writeLockedCbbTracking(record: CbbStoredMemberGame, db?: t
       provisional: true, held: false, hold_reason: null, launch_day: false,
       manual_outcome_expected: false, locked_at: lock, published_at: snapshot.capturedAt,
       snapshot_json: { release: CBB_TRACKING_WRITER_RELEASE, memberStoreRelease: record.release,
+        evidence_payload_sha256:evidenceSha256,evidence_payload_hash_format:"sha256_sorted_json_v1",
+        evidence_snapshot_key:`cbb::member-game::${snapshot.gameId}`,
         boardRelease: snapshot.board.release, modelRelease, gradeRelease,
         lockedMemberGameId: snapshot.gameId, selectedBook: row.targetBook,
         selectedLine: line, selectedPrice: row.price, selectedGrade: grade,
