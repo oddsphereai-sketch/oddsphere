@@ -1,7 +1,8 @@
 import { nbaResidualCdf, nbaResidualQuantile, type NbaPriceCoordinateLaw } from "./nbaPricedMarketMovement";
 import type { NbaReaderPriceRow, NbaReaderSplitRow } from "./nbaProfessionalMarketReader";
 
-export const NBA_MARKET_CONSEQUENCE_RELEASE = "nba_market_consequence_2026_11_02_r6_off_contract_static_coordinate" as const;
+export const NBA_MARKET_CONSEQUENCE_RELEASE = "nba_market_consequence_2026_11_04_r7_own_book_pressure" as const;
+export const NBA_PREVIOUS_MARKET_CONSEQUENCE_RELEASE = "nba_market_consequence_2026_11_02_r6_off_contract_static_coordinate" as const;
 export const NBA_MARKET_CONSEQUENCE_COEFFICIENTS = {
   margin: 1.813,
   total: 1,
@@ -12,7 +13,7 @@ type ConsumptionReceipt = { at: string; coordinates: readonly Coordinate[]; evid
 type Frame = { book: string; provider: string; market: Market; captureAt: string; sourceAt: string;
   run: string; event: string; threshold: number; fair: number; fairLow: number; fairHigh: number };
 export type NbaMarketKnowledgeState = {
-  release: typeof NBA_MARKET_CONSEQUENCE_RELEASE;
+  release: typeof NBA_MARKET_CONSEQUENCE_RELEASE | typeof NBA_PREVIOUS_MARKET_CONSEQUENCE_RELEASE;
   eventId: string;
   inputFingerprint: string;
   knowledgeAt: string;
@@ -96,7 +97,7 @@ function innovationInterval(independent: number, anchor: Frame, current: Frame, 
 export function isNbaMarketKnowledgeState(value: unknown): value is NbaMarketKnowledgeState {
   if (!value || typeof value !== "object") return false;
   const v = value as NbaMarketKnowledgeState;
-  if (v.release !== NBA_MARKET_CONSEQUENCE_RELEASE || typeof v.eventId !== "string" || typeof v.inputFingerprint !== "string" ||
+  if (![NBA_MARKET_CONSEQUENCE_RELEASE, NBA_PREVIOUS_MARKET_CONSEQUENCE_RELEASE].includes(v.release) || typeof v.eventId !== "string" || typeof v.inputFingerprint !== "string" ||
       !Number.isFinite(Date.parse(v.knowledgeAt)) || !v.anchors || typeof v.anchors !== "object" || Array.isArray(v.anchors) ||
       !v.retiredBefore || typeof v.retiredBefore !== "object" || Array.isArray(v.retiredBefore) ||
       !v.independentInput || ![v.independentInput.margin, v.independentInput.total, v.independentInput.marginSigma, v.independentInput.totalSigma].every(Number.isFinite) ||
@@ -540,7 +541,7 @@ export function reconcileNbaMarketConsequence(args: {
     const linked = [...causalLanes.values()].flatMap(sequence => {
       const current = sequence.at(-1);
       if (!current) return [];
-      if (!context.pricesTrusted || !names.has(current.book) || (current.book !== source && source !== "consensus") ||
+      if (!context.pricesTrusted || !names.has(current.book) || current.book !== source || split.sourceType !== "sharp_adjacent_book" ||
           current.market !== split.market || Date.parse(current.captureAt) <= observed || Date.parse(current.captureAt) < capture ||
           evaluated - Date.parse(current.captureAt) > 120 * 60_000) return [];
       const before = sequence.filter(f => Date.parse(f.captureAt) <= observed && Date.parse(f.sourceAt) <= observed).at(-1);
@@ -553,8 +554,9 @@ export function reconcileNbaMarketConsequence(args: {
       differentialSide: !differential ? null : gap! > 0 ? firstSide : secondSide,
       basis: !differential ? "handle_concentration" as const : "handle_ticket_differential" as const,
       gapPp: gap === null ? null : 100 * gap };
-    // Public consensus is explicitly NOT called the sharp book's handle.
-    // Unmatched pressure remains context, never a fabricated quote reaction.
+    // Aggregate public flow does not identify money placed at any individual
+    // book. Retain it as context, without assigning that book a causal hold,
+    // confirmation or opposition. Only its own named-book flow binds here.
     if (!linked.length) pressure.push({ ...common, reactionBook: null, reaction: "unmatched_quote_context" });
     const seen = new Set<string>();
     for (const p of linked) {

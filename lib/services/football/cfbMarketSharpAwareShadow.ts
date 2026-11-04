@@ -576,9 +576,11 @@ export function applyCfbBalancedPositiveValueRule(args: {
     };
   }
 
+  const noResistance = args.sharpDirection !== "resistance" && args.publicDirection !== "resistance" && args.movementDirection !== "resistance";
   const marketConfirmedFavoriteLean =
     args.finalGrade === "Watchlist" &&
     args.market === "moneyline" &&
+    noResistance &&
     args.evaluatedPrice >= CFB_MONEYLINE_PARLAY_LEAN_MIN_PRICE &&
     args.evaluatedPrice <= CFB_MONEYLINE_PARLAY_LEAN_MAX_PRICE &&
     args.modelProbability >= CFB_MONEYLINE_PARLAY_LEAN_MIN_MODEL_PROBABILITY &&
@@ -593,7 +595,6 @@ export function applyCfbBalancedPositiveValueRule(args: {
     };
   }
 
-  const noResistance = args.sharpDirection !== "resistance" && args.publicDirection !== "resistance" && args.movementDirection !== "resistance";
   const priceEligible = args.evaluatedPrice >= CFB_PROVISIONAL_ACTIONABLE_MIN_PRICE && args.evaluatedPrice <= CFB_PROVISIONAL_ACTIONABLE_MAX_PRICE;
   const probabilityEligible = args.probabilityGrade === "Best Angle" || args.probabilityGrade === "Lean";
   const promotionEligible = args.finalGrade === "Watchlist" && args.executionStatus === "bet" && probabilityEligible && noResistance && priceEligible && (

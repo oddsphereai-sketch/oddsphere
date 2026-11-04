@@ -100,6 +100,8 @@ import {
   type NhlReaderSplitReceipt,
 } from "./nhlReaderReceipt";
 import type { NhlMarketEpisodeDecision } from "./nhlMarketEpisodeArbiter";
+import { canonicalNhlSportsbookFamily } from "./nhlSportsbookFamily";
+import { priceNhlModelWithReaderReceipt, resolveNhlMoneylineBestVerdict } from "./nhlMoneylineBestConfirmation";
 
 const LOCK_MINUTES_BEFORE_PUCK_DROP = 60;
 
@@ -236,7 +238,7 @@ type ReaderLineRow = {
   source_timestamp?: string | null;
 };
 
-function buildReaderReceiptForWrite(args: {
+export function buildReaderReceiptForWrite(args: {
   gameId: number;
   externalId: number;
   slateDate: string;
@@ -414,6 +416,24 @@ function buildReaderReceiptForWrite(args: {
       preservePreferredBook: true,
     });
     const episode = episodeFor(market);
+    // The current author pair is frozen separately from the execution trail.
+    // An economic coordinate alone cannot prove the exact professional payout.
+    let confirmationQuotePair: NhlReaderMarketReceipt["confirmationQuotePair"] = null;
+    if (market === "moneyline" && episode?.author) {
+      const author = episode.author;
+      const rows = args.currentRows.filter(row => row.market_type === "moneyline" && row.line_value === null
+        && canonicalNhlSportsbookFamily(row.sportsbook) === canonicalNhlSportsbookFamily(author.sportsbook)
+        && (row.observed_at ?? row.source_timestamp) === author.currentObservedAt);
+      const side = (name: "home" | "away") => rows.filter(row => row.side === name);
+      const home = side("home"), away = side("away");
+      if (rows.length === 2 && home.length === 1 && away.length === 1
+        && home[0].odds_american !== null && away[0].odds_american !== null) {
+        const stop = (row: ReaderLineRow, side: "home" | "away"): NhlReaderQuoteStop => ({
+          sportsbook: row.sportsbook, side, line: null, american: row.odds_american!, clock: clock(author.currentObservedAt),
+        });
+        confirmationQuotePair = { home: stop(home[0], "home"), away: stop(away[0], "away") };
+      }
+    }
     const rejectedByFamily = new Map((episode?.rejectedPaths ?? []).map((path) => [path.sportsbookFamily, path.reason]));
     const selectedFamily = episode?.author?.sportsbookFamily ?? null;
     const consideredPaths = (args.snapshot.market.market_episode_paths ?? [])
@@ -477,6 +497,7 @@ function buildReaderReceiptForWrite(args: {
         ? homeCoverProbability(args.finalModel) - homeCoverProbability(args.seedModel)
         : args.finalModel.expected_total_goals - args.seedModel.expected_total_goals;
     return {
+      ...(market === "moneyline" ? { confirmationQuotePair, confirmationSourcePaths: structuredClone((args.snapshot.market.market_episode_paths ?? []).filter(path => path.market === "moneyline" && path.sourceClass === "named")) } : {}),
       evaluatedQuote: quoteStop(evaluatedQuote, selectedSide),
       opposingQuote: quoteStop(opposingQuote, opposingSide),
       selectedTrail: trail.selected.flatMap((stop) => trailStop(selectedSide, stop) ?? []),
@@ -858,50 +879,23 @@ export async function writeNhlPredictionRecords(
         if (spreadIsPass) recordsSkippedPass += 1;
       }
 
-      const pricedModel: NhlModelOutput = {
-        ...model,
-        moneyline: {
-          ...model.moneyline,
-          verdict: resolveNhlPriceAwareVerdict(
-            "moneyline",
-            model.moneyline.verdict,
-            marketsToWrite[0]?.priceAmerican ?? null,
-            model.moneyline.probability,
-          ),
-        },
-        total: {
-          ...model.total,
-          verdict: resolveNhlPriceAwareVerdict(
-            "total",
-            model.total.verdict,
-            marketsToWrite[1]?.priceAmerican ?? null,
-            model.total.probability,
-          ),
-        },
-        puck_line: {
-          ...model.puck_line,
-          verdict: resolveNhlPriceAwareVerdict(
-            "spread",
-            model.puck_line.verdict,
-            marketsToWrite[2]?.priceAmerican ?? null,
-            model.puck_line.probability,
-          ),
-        },
-      };
       const evaluatedQuotes = {
         moneyline: marketsToWrite.find((entry) => entry.market === "moneyline")?.quote ?? null,
         total: marketsToWrite.find((entry) => entry.market === "total")?.quote ?? null,
         spread: marketsToWrite.find((entry) => entry.market === "spread")?.quote ?? null,
       } satisfies Record<NhlReaderMarket, NhlSelectedPriceQuote | null>;
       const capturedAt = now.toISOString();
-      const readerReceipt = buildReaderReceiptForWrite({
+      const expectedReceiptIdentity = { gameId: g.id, externalId: g.external_id, slateDate: opts.slateDate,
+        gameStartAt: g.game_date, awayAbbr, homeAbbr, lockBoundaryAt: g.game_date,
+        modelVersion: NHL_REGULAR_MODEL_RELEASE, calibrationVersion: NHL_REGULAR_CALIBRATION_RELEASE, decisionVersion: NHL_REGULAR_DECISION_RELEASE };
+      const unpricedReceipt = buildReaderReceiptForWrite({
         gameId: g.id,
         externalId: g.external_id,
         slateDate: opts.slateDate,
         gameStartAt: g.game_date,
         snapshot,
         seedModel: marketAware.seedModel,
-        finalModel: pricedModel,
+        finalModel: model,
         currentRows: lines,
         historyRows: meta.market_history_lines,
         evaluatedQuotes,
@@ -910,6 +904,9 @@ export async function writeNhlPredictionRecords(
         capturedAt,
         homeAbbr,
         awayAbbr,
+      });
+      const { model: pricedModel, receipt: readerReceipt } = priceNhlModelWithReaderReceipt({
+        model, receipt: unpricedReceipt, expected: expectedReceiptIdentity, quotes: evaluatedQuotes,
       });
       const snapshotJson = buildSnapshotJson({
         model: pricedModel,
@@ -959,7 +956,10 @@ export async function writeNhlPredictionRecords(
         const priceComplete = m.priceAmerican !== null
           && (m.market === "moneyline" || m.lineValue !== null);
         const effectiveVerdict = priceComplete
-          ? resolveNhlPriceAwareVerdict(m.market, m.modelMarket.verdict, m.priceAmerican, m.modelMarket.probability)
+          ? m.market === "moneyline"
+            ? resolveNhlMoneylineBestVerdict({ verdict: m.modelMarket.verdict, probability: m.modelMarket.probability,
+              quote: m.quote, receipt: readerReceipt, expected: expectedReceiptIdentity })
+            : resolveNhlPriceAwareVerdict(m.market, m.modelMarket.verdict, m.priceAmerican, m.modelMarket.probability)
           : "pass";
         const row: Omit<PredictionRecordRow, "id" | "created_at"> = {
           game_prediction_id: null, // v18: nullable for non-MLB

@@ -15,7 +15,7 @@ import {
 } from "./sharpApiNflSplits";
 
 export const NFL_OWLS_SPLITS_RELEASE =
-  "nfl_owls_splits_2026_11_02_r3_unique_canonical_game_claims" as const;
+  "nfl_owls_splits_2026_11_04_r4_named_pressure_availability" as const;
 
 const SOURCE_BOOK_PRIORITY = ["circa", "draftkings", "betmgm"] as const;
 
@@ -197,6 +197,7 @@ export type NflSourceContractReactionFlow = {
   sourceEventId: string;
   providerGameId: string;
   observedAt: string;
+  availableAt?: string;
   pairedQuoteObservedAt: string;
   /** Latest complete same-book paired quote before flow, across contracts; never borrow an older handicap for reaction economics. */
   reactionBaselineObservedAt: string;
@@ -280,7 +281,7 @@ export function qualifyNflOwlsSplitsForSourceReaction(args: {
     if (!pressure) { reject(publishedPressure.rounded ? "ambiguous_rounded_source_pressure" : "balanced_source_pressure"); continue; }
     result.flows[market] = [{ market, book, sourceLine: sourceLine ?? null,
       sourceEventId: row.sourceEventId, providerGameId: args.providerGameId,
-      observedAt: row.providerFetchedAt!, pairedQuoteObservedAt: paired[0].marketObservedAt?.[market] ?? paired[0].observedAt,
+      observedAt: row.providerFetchedAt!, availableAt: row.capturedAt, pairedQuoteObservedAt: paired[0].marketObservedAt?.[market] ?? paired[0].observedAt,
       reactionBaselineObservedAt: baseline.marketObservedAt?.[market] ?? baseline.observedAt,
       direction: pressure > 0 ? 1 : -1, moneyPct, ticketPct, moneyTicketDifferencePp: gap,
       authority: "source_contract_reaction_context_only" }];

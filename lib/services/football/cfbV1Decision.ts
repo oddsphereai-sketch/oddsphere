@@ -26,8 +26,10 @@ export const CFB_V1_PROBABILITY_RELEASE =
   "cfb_v1_professional_joint_probability_2026_10_27_r28_near_tie_pmf_winner_coherence" as const;
 export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
   "cfb_v1_professional_reachable_score_2026_10_27_r24_near_tie_pmf_winner_coherence" as const;
-export const CFB_V1_CALIBRATION_RELEASE =
+export const CFB_V1_RESISTANCE_PREVIOUS_CALIBRATION_RELEASE =
   "cfb_v1_exact_price_calibration_2026_10_31_r31_market_evidence_integrity" as const;
+export const CFB_V1_CALIBRATION_RELEASE =
+  "cfb_v1_exact_price_calibration_2026_11_04_r32_moneyline_resistance_guard" as const;
 export const CFB_V1_MARKET_EVIDENCE_PREVIOUS_CALIBRATION_RELEASE =
   "cfb_v1_exact_price_calibration_2026_10_30_r30_paired_price_context" as const;
 export const CFB_V1_PRICE_CONTEXT_PREVIOUS_CALIBRATION_RELEASE =
@@ -46,14 +48,18 @@ export const CFB_V1_PMF_COHERENCE_PREVIOUS_PROBABILITY_RELEASE =
   "cfb_v1_professional_joint_probability_2026_10_15_r27_full_product_coordinator_compatibility" as const;
 export const CFB_V1_PMF_COHERENCE_PREVIOUS_CALIBRATION_RELEASE =
   "cfb_v1_exact_price_calibration_2026_10_15_r26_full_product_coordinator_compatibility" as const;
-export const CFB_V1_GRADE_POLICY_RELEASE =
+export const CFB_V1_RESISTANCE_PREVIOUS_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_10_30_r29_paired_price_context" as const;
+export const CFB_V1_GRADE_POLICY_RELEASE =
+  "cfb_v1_composite_grade_policy_2026_11_04_r30_moneyline_resistance_guard" as const;
 export const CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_10_13_r28_exact_price_actionability" as const;
 export const CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_10_12_r27_provider_team_identity_consensus_authority_split_specialization" as const;
-export const CFB_V1_DECISION_RELEASE =
+export const CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_10_31_r58_market_evidence_integrity" as const;
+export const CFB_V1_DECISION_RELEASE =
+  "cfb_v1_daily_edge_decision_2026_11_04_r59_moneyline_resistance_guard" as const;
 export const CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_10_30_r57_paired_price_context" as const;
 export const CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE =

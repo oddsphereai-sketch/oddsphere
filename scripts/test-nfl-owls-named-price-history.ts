@@ -84,3 +84,12 @@ assert.equal(pairNflOwlsNamedPriceRows(crossRun).rejectedPairs, 2,
   "sides from different receipts cannot be stitched into a fabricated market");
 
 console.log("NFL Owl's named-price exact pairing and chronology tests passed.");
+
+// Native quote clocks and fetched_at run-start never impersonate durable availability.
+const insertedPair=cycle("circa","inserted-proof",late,105,-125).map((r,i)=>({...r,
+  inserted_at:i===0?"2026-10-31T13:00:01.000Z":"2026-10-31T13:00:02.000Z"}));
+const insertedBook=pairNflOwlsNamedPriceRows(insertedPair).historyByGame[gameId]![0]!.books[0]!;
+assert.equal(insertedBook.availableAt,"2026-10-31T13:00:02.000Z","both sides must have arrived before the source pair was available");
+assert.equal(insertedBook.observedAt,late,"availability cannot overwrite original source time");
+const noInsertion=pairNflOwlsNamedPriceRows(cycle("circa","no-insertion",late,105,-125)).historyByGame[gameId]![0]!.books[0]!;
+assert.equal(noInsertion.availableAt,undefined,"missing durable arrival bound stays unknown");

@@ -16,6 +16,87 @@ Model/calibration/runtime/decision releases, grades, actionables, source prices,
 provider requests, cadence, lease and settlement remain unchanged. Evidence:
 `docs/model-audits/2026-11-04-nfl-props-verified-alias-display.md`.
 
+## Daily Edge moneyline evidence and strongest-tier repair — November 4
+
+The owner directed a review and correction of moneyline restrictions that block a
+strong, genuinely market-supported Best Angle, without loosening policy to fill
+play counts. This release changes grade evidence and eligibility only; no new
+score, side, probability, forecast coefficient, stake, provider cadence, writer or
+lease is introduced. Existing locked payloads keep exact prior semantics.
+
+- NBA model R34 /market marriage R36 /grade R25 use `2026_11_04` and
+  `own_book_pressure`; consequence R7 /posture R9 use that suffix. Aggregate public
+  money stays context and cannot identify money placed at Circa/Pinnacle or
+  manufacture a same-book hold/support/opposition. Exact own-book professional
+  evidence retains authority. R33/R6 unlocked knowledge carries forward with its
+  original anchors and clocks; current state wins. Existing confidence, value,
+  injury and steep-price requirements are unchanged.
+- NFL writer107 /model51 /calibration50 /decision59 /grade59 /member56 /runtime17
+  /innovation4 /posture4 /fixture72 /snapshot64 use `2026_11_04` and
+  `unchanged_ml_confirmation`. Named history R2 records durable paired availability;
+  Owls splits R4 retains pressure availability. A fallible but unchanged full law
+  can earn premium confirmation from identified opposite own-book pressure met by
+  an actual held professional pair, followed by a fresh independent executable
+  offer. Source economics, exact identity/causal clocks, existing probability/EV/
+  price requirements and every unresolved-opposition check remain mandatory. No
+  probability increase or fabricated score nudge is required. Prior R63 locks and
+  compact snapshots retain exact compatibility.
+- NHL model/calibration/decision R28 use `exact_price_professional_best`; reader
+  receipt R3 freezes the exact professional current ML pair. An already-qualified
+  Moneyline Best may survive the ordinary 70%/−200 tier walls only with a valid
+  identity/hash/quote-bound professional confirmation, positive source EV at the
+  exact offer and the existing five-point model-versus-implied reserve. The −900
+  rejection and all non-ML behavior remain. R27/R2 locked receipts are unchanged.
+- CFB decision59 /calibration32 /grade30 /fixture101 /snapshot61 /reader46
+  /writer149 use `moneyline_resistance_guard`. An expensive-favorite Watchlist→Lean
+  branch now checks the same real resistance veto as its clean paired promotion.
+  Forecast production41 and the independent/coordinator law remain unchanged;
+  no new source ballot, split migration or numerical threshold is introduced.
+
+Frozen-input functional checks are distinct from prediction-accuracy evidence.
+The saved NBA fourteen-game/42-market comparison promotes only NO ML from Lean to
+Best Angle, with no actionable count, score, side, probability or price change.
+The saved CFB106-open-game branch audit finds zero promotions and zero demotions.
+Functional tests exercise eligible promotion and genuine-resistance demotion,
+source/clock/price failures and writer/reader legacy precedence. CBB, EPL, UCL,
+MLB and WNBA grading are unchanged by this repair. No outcome-performance claim
+or minimum Best Angle quota is made. Evidence, exact identifiers, live checks and
+rollback are recorded in `docs/model-audits/2026-11-04-moneyline-market-confirmation.json`.
+
+Exact active identifiers for this correction:
+
+- `nba_professional_unified_2026_11_04_r34_own_book_pressure`
+- `nba_market_marriage_2026_11_04_r36_own_book_pressure`
+- `nba_grade_policy_2026_11_04_r25_own_book_pressure`
+- `nba_market_consequence_2026_11_04_r7_own_book_pressure`
+- `nba_named_book_posture_2026_11_04_r9_own_book_pressure`
+- `nfl_forward_evidence_writer_2026_11_04_r107_unchanged_ml_confirmation`
+- `nfl_v1_daily_edge_model_2026_11_04_r51_unchanged_ml_confirmation`
+- `nfl_v1_daily_edge_calibration_2026_11_04_r50_unchanged_ml_confirmation`
+- `nfl_v1_daily_edge_decision_2026_11_04_r59_unchanged_ml_confirmation`
+- `nfl_v1_grade_policy_2026_11_04_r59_unchanged_ml_confirmation`
+- `nfl_v1_member_release_2026_11_04_r56_unchanged_ml_confirmation`
+- `nfl_full_game_evidence_runtime_2026_11_04_r17_unchanged_ml_confirmation`
+- `nfl_market_innovation_2026_11_04_r4_unchanged_ml_confirmation`
+- `nfl_market_innovation_posture_2026_11_04_r4_unchanged_ml_confirmation`
+- `nfl_weekly_member_fixture_2026_11_04_r72_unchanged_ml_confirmation`
+- `nfl_forward_member_snapshot_2026_11_04_r64_unchanged_ml_confirmation`
+- `nfl_owls_named_price_history_2026_11_04_r2_moneyline_availability_bound`
+- `nfl_owls_splits_2026_11_04_r4_named_pressure_availability`
+- `cfb_v1_exact_price_calibration_2026_11_04_r32_moneyline_resistance_guard`
+- `cfb_v1_composite_grade_policy_2026_11_04_r30_moneyline_resistance_guard`
+- `cfb_v1_daily_edge_decision_2026_11_04_r59_moneyline_resistance_guard`
+- `cfb_forward_evidence_writer_2026_11_04_r149_moneyline_resistance_guard`
+- `cfb_forward_member_snapshot_2026_11_04_r61_moneyline_resistance_guard`
+- `cfb_member_snapshot_reader_2026_11_04_r46_moneyline_resistance_guard`
+- `cfb_v1_member_fixture_2026_11_04_r101_moneyline_resistance_guard`
+- `nhl_regular_2026_r28_exact_price_professional_best`
+- `nhl_regular_calibration_2026_r28_exact_price_professional_best`
+- `nhl_regular_decision_2026_r28_exact_price_professional_best`
+- `nhl_reader_receipt_2026_11_04_r2_identity_bound_market_evidence`
+- `nhl_reader_receipt_2026_11_04_r3_exact_price_professional_best`
+
+
 ## NFL player-props settlement identity continuity — November 4
 
 Sole writer /tracking capture /settlement are

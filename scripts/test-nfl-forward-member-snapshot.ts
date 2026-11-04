@@ -302,6 +302,21 @@ async function main() {
     now: "2026-08-27T12:02:00.000Z" }), convictionPredecessor,
     "r62/r70/member54/decision57 remains exact until rounded-input publication replaces only unlocked rows");
   assert.equal(JSON.stringify(storedPayload), convictionBefore);
+  const roundingPredecessor = { ...convictionPredecessor,
+    snapshotRelease: "nfl_forward_member_snapshot_2026_11_02_r63_published_rounding_pressure",
+    fixtureRelease: "nfl_weekly_member_fixture_2026_11_02_r71_published_rounding_pressure",
+    memberRelease: "nfl_v1_member_release_2026_11_02_r55_published_rounding_pressure",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_11_02_r58_published_rounding_pressure",
+    fixture: { ...convictionPredecessor.fixture,
+      heldMemberFixtureRelease: "nfl_weekly_member_fixture_2026_11_02_r71_published_rounding_pressure" } };
+  storedKey = ["nfl", "daily-edge", 2026, 1, roundingPredecessor.snapshotRelease,
+    roundingPredecessor.fixtureRelease, roundingPredecessor.memberRelease, roundingPredecessor.decisionRelease].join("::");
+  storedPayload = roundingPredecessor;
+  const roundingBefore = JSON.stringify(roundingPredecessor);
+  assert.deepEqual(await readNflForwardMemberSnapshot({ client, season: 2026, week: 1,
+    now: "2026-08-27T12:02:00.000Z" }), roundingPredecessor,
+    "r63/r71/member55/decision58 retains exact prior locked reader payload and precedence");
+  assert.equal(JSON.stringify(storedPayload),roundingBefore,"unchanged-law confirmation never rewrites historical locked projections, probabilities, prices, grades or evidence");
   storedKey = ["nfl", "daily-edge", 2026, 1, sourceQualifiedPredecessor.snapshotRelease,
     sourceQualifiedPredecessor.fixtureRelease, sourceQualifiedPredecessor.memberRelease,
     sourceQualifiedPredecessor.decisionRelease].join("::");

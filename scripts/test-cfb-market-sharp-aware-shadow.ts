@@ -54,6 +54,28 @@ const positiveFavoritePromotion = applyCfbBalancedPositiveValueRule({
 });
 assert.equal(positiveFavoritePromotion.finalGrade, "Lean", "a positive-value market-confirmed favorite retains the paired Lean path");
 assert.equal(positiveFavoritePromotion.reasonCodes.includes("moneyline_market_confirmed_favorite_lean"), true);
+// The expensive-favorite lane must respect the same opposition veto as the
+// ordinary promotion lane, without removing its clean positive-value path.
+const resistanceFavoriteInput = {
+  market: "moneyline" as const, finalGrade: "Watchlist" as const,
+  probabilityGrade: "Watchlist" as const, executionStatus: "bet" as const,
+  expectedValue: 0.05, modelProbability: 0.75, marketFairProbability: 0.70,
+  evaluatedPrice: -250, evaluatedLine: null,
+  sharpDirection: "support" as const, publicDirection: "support" as const,
+  movementDirection: "neutral" as const, reasonCodes: ["retained_watch"],
+};
+assert.equal(applyCfbBalancedPositiveValueRule(resistanceFavoriteInput).finalGrade, "Lean");
+for (const channel of ["sharpDirection", "publicDirection", "movementDirection"] as const) {
+  const opposed = applyCfbBalancedPositiveValueRule({ ...resistanceFavoriteInput, [channel]: "resistance" });
+  assert.equal(opposed.finalGrade, "Watchlist", `${channel} resistance prevents the expensive-favorite promotion`);
+  assert.deepEqual(opposed.reasonCodes, ["retained_watch"]);
+}
+assert.equal(applyCfbBalancedPositiveValueRule({ ...resistanceFavoriteInput,
+  sharpDirection: "resistance", publicDirection: "resistance", movementDirection: "resistance",
+}).finalGrade, "Watchlist", "three opposing channels cannot manufacture a market-confirmed favorite Lean");
+assert.equal(applyCfbBalancedPositiveValueRule({ ...resistanceFavoriteInput,
+  expectedValue: -0.001,
+}).finalGrade, "Watchlist", "clean confirmation does not override negative exact-price value");
 const books = [
   book("draftkings", -4, 48.5),
   book("fanduel", -4, 48.5),

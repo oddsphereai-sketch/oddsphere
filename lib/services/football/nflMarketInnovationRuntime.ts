@@ -14,7 +14,7 @@ import { readNflMarketPathAdjudication, type NflMarketPathAdjudication } from ".
 import { buildNflMarketQualification, type NflMarketQualificationReceipt } from "./nflMarketQualification";
 import type { NflPreviewBookOdds } from "./balldontlieNflPreviewSlate";
 
-export const NFL_MARKET_INNOVATION_RELEASE = "nfl_market_innovation_2026_11_02_r3_market_conviction_grades" as const;
+export const NFL_MARKET_INNOVATION_RELEASE = "nfl_market_innovation_2026_11_04_r4_unchanged_ml_confirmation" as const;
 type Market = "moneyline" | "spread" | "total";
 type Book = "circa" | "pinnacle";
 type Episode = NflNamedMoneylineEpisode | NflPricedLineEpisode;
@@ -23,7 +23,7 @@ type Candidate = { book: Book; market: Market; episode: Episode; direction: -1 |
   path: NflMarketPathAdjudication };
 export type NflInnovationReactionContext = Partial<Record<Market, {
   flows: Array<{ observedAt: string; direction: -1 | 1; book?: string; sourceLine?: number | null;
-    sourceEventId?: string; providerGameId?: string; authority?: string; moneyPct?: number; ticketPct?: number;
+    sourceEventId?: string; providerGameId?: string; authority?: string; availableAt?: string; moneyPct?: number; ticketPct?: number;
     pairedQuoteObservedAt?: string; reactionBaselineObservedAt?: string;
     contractAttestations?: Array<{ book: string; observedAt: string; reactionBaselineObservedAt?: string }> }>;
   books: Array<{ book: string; lastEconomicMoveAt: string | null; lastEconomicDirection: -1 | 1 | null }>;
@@ -322,6 +322,7 @@ export function applyNflMarketInnovationRuntime(args: Parameters<typeof applyNfl
     creatingNewLock: !args.existingLockedRecord && args.shadowMoneyline.decisionStage === "t60_locked",
     promotionContext: { independentForecast: args.releasedForecast, finalForecast: outcome,
       marketQualification: qualification, books: args.comparableCurrentBooks, referenceBooks: args.referenceBooks,
+      sourceHistory: args.history,
       executionAvailableAt: args.executionAvailableAt ?? "" } });
   const innovation = args.existingLockedRecord ? { ...read.receipt, selectedSources: {}, episodes: [], constraints: [],
     finalHomeMargin: margin, finalTotal: total } : { ...read.receipt, qualification, posture: posture.posture };
