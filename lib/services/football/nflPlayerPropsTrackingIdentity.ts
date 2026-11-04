@@ -1,10 +1,5 @@
 import type { NflPlayerPropsInferenceContext } from "./nflPlayerPropsInferenceContext";
-
-const nameKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
-const teamKey = (value: string) => {
-  const team = value.trim().toUpperCase();
-  return ({ LAR: "LA", WSH: "WAS", OAK: "LV", SD: "LAC", STL: "LA" } as Record<string, string>)[team] ?? team;
-};
+import { nflPlayerPropsSettlementNameKey as nameKey, nflPlayerPropsSettlementTeamKey as teamKey } from "./nflPlayerPropsSettlementIdentity";
 
 /** Only enrich a new tracking insert from already captured pre-lock identity.
  * Never update a decision, infer a player from outcomes, or guess on ambiguity. */

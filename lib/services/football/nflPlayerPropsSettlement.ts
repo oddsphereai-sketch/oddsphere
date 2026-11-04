@@ -1,10 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { nflPlayerPropsSettlementNameKey, nflPlayerPropsSettlementTeamKey } from "./nflPlayerPropsSettlementIdentity";
 
 export const NFL_PLAYER_PROPS_SETTLEMENT_RELEASE =
-  "nfl_player_props_settlement_2026_11_04_r4_identity_queue_isolation" as const;
+  "nfl_player_props_settlement_2026_11_04_r5_verified_participation" as const;
 export const NFL_PLAYER_PROPS_SETTLEMENT_MINIMUM_HOURS_AFTER_LOCK = 5 as const;
 export const NFL_PLAYER_PROPS_SETTLEMENT_MAX_RECORDS_PER_CYCLE = 1_000 as const;
 export const NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE = 18 as const;
+export const NFL_PLAYER_PROPS_SETTLEMENT_MAX_SNAP_PAGES = 2 as const;
+const ZERO_ELIGIBLE_MARKETS = new Set(["passing_attempts", "passing_completions", "passing_yards", "rushing_attempts", "rushing_yards", "receptions", "receiving_yards", "anytime_td"]);
 
 type Pending = { id: number; provider_game_id: string; provider_player_id: string | null; player_name?: string; team?: string | null; market: string; line: number; side: "over" | "under" | "yes"; locked_at: string };
 export type NflPropsSettlementProposal = { id: number; gameId: string; resolvedPlayerId: string; actual: number; result: "win" | "loss" | "push" };
@@ -81,17 +84,57 @@ export async function settleNflPlayerPropsRecords(args: {
     for (const value of body.data) {
       if (!value || typeof value !== "object") continue;
       const stat = value as Record<string, unknown>; const player = stat.player as Record<string, unknown> | undefined; const game = stat.game as Record<string, unknown> | undefined;
-      if (game?.status_state === "final") final = true;
+      if (String(game?.id) !== gameId || game?.status_state !== "final") continue;
+      final = true;
       if (typeof player?.id === "number") stats.set(String(player.id), stat);
     }
     if (!final) continue;
+    // Stats omit some players who participated but recorded no box-score stat.
+    // A missing row alone is never zero: require an independently returned
+    // exact-game final snap record with positive, valid participation.
+    let snaps: Map<string, Record<string, unknown>> | null = null;
+    const needsSnaps = rows.some(row => ZERO_ELIGIBLE_MARKETS.has(row.market) && (!row.provider_player_id || !stats.has(row.provider_player_id))
+      && !(recoveryIds && exactFinalGamePlayer(stats, row)));
+    if (needsSnaps) {
+      snaps = new Map();
+      let cursor: string | null = null;
+      for (let page = 0; page < NFL_PLAYER_PROPS_SETTLEMENT_MAX_SNAP_PAGES; page += 1) {
+        const snapUrl = new URL("https://api.balldontlie.io/nfl/v1/snap_counts");
+        snapUrl.searchParams.append("game_ids[]", gameId); snapUrl.searchParams.set("per_page", "100");
+        if (cursor) snapUrl.searchParams.set("cursor", cursor);
+        const snapResponse = await (args.fetchImpl ?? fetch)(snapUrl, { headers: { Authorization: args.apiKey, accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(20_000) });
+        apiCalls += 1;
+        if (!snapResponse.ok) throw new Error(`BALLDONTLIE NFL settlement participation failed with HTTP ${snapResponse.status}.`);
+        const snapBody = await snapResponse.json() as { data?: unknown; meta?: { next_cursor?: unknown } };
+        if (!Array.isArray(snapBody.data)) throw new Error("NFL settlement participation payload is invalid.");
+        for (const value of snapBody.data) {
+          if (!value || typeof value !== "object") continue;
+          const snap = value as Record<string, unknown>;
+          const player = snap.player as Record<string, unknown> | undefined;
+          const game = snap.game as Record<string, unknown> | undefined;
+          if (String(game?.id) !== gameId || game?.status_state !== "final" || typeof player?.id !== "number") continue;
+          const phases = [snap.offense_snaps, snap.defense_snaps, snap.special_teams_snaps];
+          if (!phases.every(value => typeof value === "number" && Number.isSafeInteger(value) && value >= 0)
+            || !phases.some(value => Number(value) > 0)) continue;
+          if (snaps.has(String(player.id))) throw new Error("Duplicate NFL settlement participation identity.");
+          snaps.set(String(player.id), snap);
+        }
+        cursor = snapBody.meta?.next_cursor == null ? null : String(snapBody.meta.next_cursor);
+        if (!cursor) break;
+        if (page === NFL_PLAYER_PROPS_SETTLEMENT_MAX_SNAP_PAGES - 1) throw new Error("NFL settlement participation exceeded its exact-game page bound.");
+      }
+    }
     for (const row of rows) {
       const recovered = !row.provider_player_id && recoveryIds
-        ? exactFinalGamePlayer(stats, row) : null;
+        ? exactFinalGamePlayer(stats, row) ?? (snaps && exactFinalGamePlayer(snaps, row)) : null;
       const playerId = row.provider_player_id ?? recovered?.playerId;
       if (!playerId) continue;
-      const stat = stats.get(playerId); if (!stat) continue;
-      const actual = actualValue(row.market, stat); if (actual === null) continue;
+      const stat = stats.get(playerId);
+      const snap = snaps?.get(playerId);
+      const identity = stat ?? snap;
+      if (!identity || row.team && nflPlayerPropsSettlementTeamKey(String((identity.team as Record<string, unknown> | undefined)?.abbreviation ?? "")) !== nflPlayerPropsSettlementTeamKey(row.team)) continue;
+      const actual = stat ? actualValue(row.market, stat) : snap && ZERO_ELIGIBLE_MARKETS.has(row.market) ? 0 : null;
+      if (actual === null) continue;
       const result = row.side === "yes" ? (actual >= 1 ? "win" : "loss") : actual === Number(row.line) ? "push" : row.side === "over" ? (actual > Number(row.line) ? "win" : "loss") : (actual < Number(row.line) ? "win" : "loss");
       args.onProposal?.({ id: row.id, gameId, resolvedPlayerId: playerId, actual, result });
       if (args.apply === false) continue;
@@ -114,25 +157,22 @@ export async function settleNflPlayerPropsRecords(args: {
 
 function exactFinalGamePlayer(stats: ReadonlyMap<string, Record<string, unknown>>, row: Pending): { playerId: string } | null {
   if (!row.player_name || !row.team) return null;
-  const normalizeName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const normalizeTeam = (value: string) => {
-    const team = value.trim().toUpperCase();
-    return ({ LAR: "LA", WSH: "WAS", OAK: "LV", SD: "LAC", STL: "LA" } as Record<string, string>)[team] ?? team;
-  };
   const ids = [...stats.entries()].filter(([, stat]) => {
     const player = stat.player as Record<string, unknown> | undefined;
     const team = stat.team as Record<string, unknown> | undefined;
     const game = stat.game as Record<string, unknown> | undefined;
     const name = `${typeof player?.first_name === "string" ? player.first_name : ""} ${typeof player?.last_name === "string" ? player.last_name : ""}`;
     return String(game?.id) === row.provider_game_id && game?.status_state === "final"
-      && normalizeName(name) === normalizeName(row.player_name!)
-      && typeof team?.abbreviation === "string" && normalizeTeam(team.abbreviation) === normalizeTeam(row.team!);
+      && nflPlayerPropsSettlementNameKey(name) === nflPlayerPropsSettlementNameKey(row.player_name!)
+      && typeof team?.abbreviation === "string" && nflPlayerPropsSettlementTeamKey(team.abbreviation) === nflPlayerPropsSettlementTeamKey(row.team!);
   }).map(([playerId]) => playerId);
   return ids.length === 1 ? { playerId: ids[0]! } : null;
 }
 
 function actualValue(market: string, stat: Record<string, unknown>): number | null {
+  if (!ZERO_ELIGIBLE_MARKETS.has(market)) return null;
   if (market === "anytime_td") return sum(stat, ["rushing_touchdowns", "receiving_touchdowns", "kick_return_touchdowns", "punt_return_touchdowns", "fumbles_touchdowns"]);
-  const value = stat[market]; return typeof value === "number" && Number.isFinite(value) ? value : 0;
+  const value = stat[market];
+  return value == null ? 0 : typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 function sum(row: Record<string, unknown>, fields: string[]): number { return fields.reduce((total, field) => total + (typeof row[field] === "number" ? Number(row[field]) : 0), 0); }

@@ -197,13 +197,13 @@ assert.deepEqual(lockedAliasWriter.board.decisions.find(row => row.playerName ==
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_11_04_r53_verified_alias_duplicates");
 assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_11_04_r69_verified_alias_display");
 assert.equal(NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES, 60);
-assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_11_04_r41_pregame_roster_identity");
-assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_11_04_r4_identity_queue_isolation");
+assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_11_04_r42_suffix_roster_identity");
+assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_11_04_r5_verified_participation");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM, 46, "slate/current+opening props/player identity and the one-request Owls lane are explicitly bounded");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE, 18);
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_MAX_RECORDS_PER_CYCLE, 1_000);
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM, 96, "collection, current-season state, settlement, and Owls reference capture have one declared incremental-call ceiling");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM, 132, "collection, current-season state, bounded settlement participation, and Owls reference capture have one declared incremental-call ceiling");
 const freshRetainedReferenceOffers = [
   { market: "receptions" as const, observedAt: "2026-10-15T12:00:00.000Z" },
 ];
