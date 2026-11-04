@@ -828,5 +828,14 @@
       "Root reviewed source/clock boundaries and validated639-row locked baseline"
     ]
   },
-  "rollback": "Complete prior sport tuple NBA R33/R35/R24/R6/postureR8; NFL R50/R49/R58/memberR55/fixtureR71/snapshotR63; NHL R27/receiptR2; CFB decisionR58/calR31/policyR29/fixtureR100/snapshotR60/readerR45/writerR148. Preserve records locked under either release."
+  "rollback": "Complete prior sport tuple NBA R33/R35/R24/R6/postureR8; NFL R50/R49/R58/memberR55/fixtureR71/snapshotR63; NHL R27/receiptR2; CFB decisionR58/calR31/policyR29/fixtureR100/snapshotR60/readerR45/writerR148. Preserve records locked under either release.",
+  "integration": {
+    "latestBase": "bb78dbe41c5e4ee4dc18d168162d5d53fbd97752",
+    "incomingRelease": "UCL PR987 multibook/presentation",
+    "overlappingFiles": [
+      "docs/current-model-releases.md",
+      "docs/model-change-safety.md"
+    ],
+    "resolution": "Both scoped release entries retained intact; no runtime overlap. Full model gate/types rerun on combined tree before publishing."
+  }
 }

@@ -321,7 +321,7 @@ const noPathOutcome = deriveUclCoherentMarketOutcome({
 });
 assert.deepEqual(noPathOutcome.joint, noPathPrior, "missing market paths preserve the exact independent law");
 assert.equal("bttsShadow" in noPathOutcome.audit, false, "UCL persists one authoritative forecast");
-assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_04_r22_opponent_strength_score_law");
+assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_04_r23_multibook_full_pregame_paths");
 assert.deepEqual(
   { train: UCL_CHRONOLOGICAL_MANIFEST.train, calibration: UCL_CHRONOLOGICAL_MANIFEST.calibration, holdout: UCL_CHRONOLOGICAL_MANIFEST.holdout, cutoff: UCL_CHRONOLOGICAL_MANIFEST.cutoff },
   { train: 185, calibration: 126, holdout: 63, cutoff: "2026-01-28T20:00:00.000Z" },
@@ -365,7 +365,7 @@ assert.equal(uclTeamsMatch("Sabah Masazir", "Sabah Baku FK"), true);
 assert.equal(uclTeamsMatch("FC Sabah Masazir", "Sabah"), true);
 assert.equal(uclTeamsMatch("Bodø/Glimt", "Bodo/Glimt"), true);
 assert.equal(UCL_SHARP_MARKET_IDENTITY_RELEASE, "ucl_sharp_market_identity_2026_10_22_r6_exact_diacritic_club_identity");
-assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_11_04_r11_opponent_strength_score_law");
+assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_11_04_r12_shared_joint_scenario");
 const romaExpectedGoalsCard = {
   lockState: "open",
   projected: { away: 1.1, home: 3.3 },
@@ -399,6 +399,24 @@ const alreadyCoherentCard = {
     goalOutlookProbabilities: { home: 0.50, draw: 0.27, away: 0.23, over25: 0.55, under25: 0.45, bttsYes: 0.59, bttsNo: 0.41 },
   },
 } as const;
+const borderlineOverNoCard = {
+  ...romaExpectedGoalsCard,
+  projected: { away: 2, home: 0.8 },
+  soccerProjection: {
+    expectedGoals: { away: 2, home: 0.8 },
+    representativeScore: { away: 3, home: 0 },
+    goalOutlookProbabilities: { home: 0.1, draw: 0.2, away: 0.7, over25: 0.504, under25: 0.496, bttsYes: 0.38, bttsNo: 0.62 },
+  },
+} as const;
+const beforePresentation = JSON.stringify(borderlineOverNoCard);
+const roundedOverNo = uclCoherentProjectedScore(borderlineOverNoCard as never);
+assert.ok(Math.round(roundedOverNo.away) + Math.round(roundedOverNo.home) >= 3,
+  "a decimal Over/No scenario must not round to the contradictory 2-0 final");
+assert.equal(Math.round(roundedOverNo.home), 0);
+assert.equal(JSON.stringify(borderlineOverNoCard), beforePresentation, "presentation cannot edit means, sides or probabilities");
+const impossiblePresentation = { ...borderlineOverNoCard, soccerProjection: { ...borderlineOverNoCard.soccerProjection, representativeScore: null } };
+assert.deepEqual(uclCoherentProjectedScore(impossiblePresentation as never), impossiblePresentation.projected,
+  "no shared score scenario means no fabricated presentation or forced market direction");
 assert.deepEqual(
   uclCoherentProjectedScore(alreadyCoherentCard as never),
   alreadyCoherentCard.projected,
@@ -704,7 +722,7 @@ assert.doesNotMatch(uclReaderBranch, /buildUclSlate|SharpApi|BallDontLie/);
 assert.ok(uclReaderBranch.indexOf("resolveUclFeatureFlags") < uclReaderBranch.indexOf("readCurrentUclMemberSnapshot"));
 assert.doesNotMatch(uclModelSource, /fitEplShadowModel|predictEplMatch|joinEplMatchStats|EPL_SHADOW_DEFAULT_CONFIG/);
 assert.match(uclPreviewSource, /deriveUclCoherentMarketOutcome/);
-assert.match(uclPreviewSource, /projected:\s*uclCoherentProjectedScore\(game\)/, "unlocked UCL cards publish the minimum coherent decimal projection from the final PMF");
+assert.match(uclPreviewSource, /const projected = uclCoherentProjectedScore\(game\)/, "unlocked UCL cards and saved reader presentation share one coherent decimal projection");
 assert.match(uclPreviewSource, /projectedScoreRelease:\s*UCL_PROJECTED_SCORE_RELEASE/, "the member snapshot identifies the primary score semantic");
 assert.match(uclPreviewSource, /deriveUclMatchResultDecision/);
 assert.match(uclPreviewSource, /deriveUclPreviewGrade/);
