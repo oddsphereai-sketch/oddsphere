@@ -12,7 +12,8 @@ import {
   settleNbaPlayerPropsPrivateTrackingRow,
   type NbaPlayerPropsPrivateTrackingHistory,
 } from "../lib/services/nba/nbaPlayerPropsPrivateTracking";
-import { buildNbaPlayerPropsSettlementRevision, planNbaPropsSettlementCatchup, settleNbaPlayerPropsTrackedSlates, NBA_PLAYER_PROPS_SETTLEMENT_RELEASE } from "../lib/services/nba/nbaPlayerPropsSettlementStore";
+import { buildNbaPlayerPropsSettlementRevision, planNbaPropsSettlementCatchup, settleNbaPlayerPropsTrackedSlates, NBA_PLAYER_PROPS_SETTLEMENT_RELEASE,hasNbaPropsUnsettledTrackedSlates } from "../lib/services/nba/nbaPlayerPropsSettlementStore";
+import { refreshNbaPlayerPropsPrivateCandidate } from "../lib/services/nba/nbaPlayerPropsPrivateWriter";
 import { encodeNbaPlayerPropsPrivatePayload,decodeNbaPlayerPropsPrivatePayload } from "../lib/services/nba/nbaPlayerPropsPrivateStore";
 import type { NbaPlayerPropsCurrentState } from "../lib/services/nba/nbaPlayerPropsCurrentState";
 
@@ -210,6 +211,9 @@ async function testOldSlateCatchup(){
   let writes=0;
   const db={from:(table:string)=>{assert.equal(table,"lab_response_snapshots");return{select:()=>{let key="";const q={eq:(_field:string,value:string)=>{key=value;return q;},like:()=>q,order:()=>q,limit:async()=>({error:null,data:[{slate_date:"2026-10-20",source_checksum:trackingPayload.checksum,generated_at:lockedAt}]}),maybeSingle:async()=>({error:null,data:key.includes("settlement")?{payload}:key.endsWith("2026-10-20")?{payload:trackingPayload}:null})};return q;},upsert:async(value:{payload:unknown})=>{writes++;payload=value.payload;return{error:null};}};}} as unknown as Parameters<typeof settleNbaPlayerPropsTrackedSlates>[0]["client"];
   const state={games:[{gameId:1}],boxes:[officialBox]} as unknown as NbaPlayerPropsCurrentState;
+  assert.equal(await hasNbaPropsUnsettledTrackedSlates(db,2026),true,"legacy incomplete dates remain discoverable on rest days");
+  await assert.rejects(refreshNbaPlayerPropsPrivateCandidate({client:db,season:2026,slateDate:"2026-11-04",schedule:[],ballDontLieApiKey:"fixture",fullRefresh:true,now:"2026-11-04T10:00:00Z",fetchImpl:async(url)=>{assert.ok(String(url).includes("/games"),"a pending rest day fetches official stats, never market quotes");throw Error("pending_rest_day_stat_refresh");}}),/pending_rest_day_stat_refresh/);
+  assert.equal(writes,0,"an official-stat failure on a rest day cannot publish a guessed outcome");
   const pending=await settleNbaPlayerPropsTrackedSlates({client:db,season:2026,slateDates:["2026-11-04"],state:{...state,games:[]},observedAt:"2026-11-04T10:00:00Z"});
   assert.equal(pending.written,false);assert.equal(writes,0,"a missing final game cannot produce a completion receipt or guessed outcome");
   const first=await settleNbaPlayerPropsTrackedSlates({client:db,season:2026,slateDates:["2026-11-04"],state,observedAt:"2026-11-04T11:00:00Z"});
@@ -219,6 +223,9 @@ async function testOldSlateCatchup(){
   assert.equal(after.slateReceipts["2026-10-20"].rows,1);
   const second=await settleNbaPlayerPropsTrackedSlates({client:db,season:2026,slateDates:["2026-11-04"],state,observedAt:"2026-11-04T12:00:00Z"});
   assert.deepEqual(second.catchupDates,[]);assert.equal(second.written,false);assert.equal(writes,1);
+  assert.equal(await hasNbaPropsUnsettledTrackedSlates(db,2026),false);
+  const offday=await refreshNbaPlayerPropsPrivateCandidate({client:db,season:2026,slateDate:"2026-11-04",schedule:[],ballDontLieApiKey:"fixture",fullRefresh:true,now:"2026-11-04T12:00:00Z",fetchImpl:async()=>{throw Error("completed rest day must not call providers");}});
+  assert.equal(offday.status,"no_games");assert.equal(offday.providerRequests,0);assert.equal(writes,1);
   assert.equal(JSON.stringify(trackingPayload),trackingBytes,"settlement cannot change original locked tracking payload");
   console.log("NBA props settlement: bounded old-slate catch-up, checksum reopening, legacy precedence and idempotence passed.");
 }

@@ -5,7 +5,11 @@ Scope: settlement date selection and completion metadata within the existing
 NBA full-refresh writer and prediction_pipeline:nba lease. Writer R11→R12,
 settlement R1→R2. All model, calibration, decision, grade, lifecycle, price and
 tracking capture releases remain exact. Board impact:0 promotions,0 demotions,
-0 side changes,0 actionable change. No provider-call or schedule increase.
+0 side changes,0 actionable change. No market-provider or schedule increase.
+Pending rest-day settlement reuses the existing bounded seven-date official-stat
+collector within the same full-refresh job; its per-cycle request bound stays
+unchanged, but these necessary rest-day stat calls previously did not occur.
+A clear ledger or intraday rest-day run performs zero provider calls.
 
 A read-only join of all11 retained private tracking slates found6962 tracked
 rows and157 without outcome revisions across games21717860 and21717861.
@@ -22,6 +26,12 @@ count only once all rows belong to official completed games in current state.
 Changed source checksums reopen the date, so late materialization is retried.
 Incomplete dates remain pending rather than being stamped complete.
 
+The previous no-games early return also bypassed settlement on rest days.
+R12 checks the same metadata catalog before that return on full refreshes.
+Incomplete tracking triggers only official-stat collection and settlement;
+market collection, prediction generation and member publication are skipped.
+Completed receipts immediately restore the zero-provider-call rest-day return.
+
 The original tracking payloads never change. The R1 settlement history is read
 without reinterpretation; all old outcome revisions are preserved as an exact
 prefix and new revisions append through the unchanged official-stat grading
@@ -31,7 +41,7 @@ Tests exercise the actual database-backed settlement function: legacy history,
 an older date outside the seven-day window, unchanged prior revisions and
 tracking bytes, checksum reopening, three-date and400-slate bounds, and an
 idempotent second run. Focused writer/readiness tests, types, lint, full model
-verification and protected fresh-base publication are required. Operational
-recovery follows production deployment, with before/after protected hashes and
+verification and protected fresh-base publication are required. Historical
+recovery uses the already-deployed R1 settlement function, with protected hashes and
 an exact missing-outcome audit. Natural new full refresh must show R12 and
 release-coherent source/member data; existing locks remain authoritative.

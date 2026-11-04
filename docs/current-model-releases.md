@@ -8,9 +8,11 @@ to `nba_player_props_private_settlement_2026_11_04_r2_bounded_old_slate_catchup`
 The existing full refresh still rechecks its recent seven dates for official
 stat revisions. It also discovers at most three older tracking slates not yet
 fully represented in settlement, using a bounded400-row checksum-only catalog.
+Full runs on rest days also refresh official stats and settle while incomplete
+tracking receipts exist; a clear ledger makes zero provider calls on a rest day.
 Completed source checksums are receipted; changed tracking checksums reopen the
 slate. Legacy outcome revisions remain exact and new outcomes append normally.
-No extra provider call, independent writer, lease, timer, frozen prediction,
+No extra market-provider call, independent writer, lease, timer, frozen prediction,
 probability, grade, price, side, model input or actionable-board change.
 Audit found157 missing private outcomes across two older games outside the
 seven-day window. Evidence:

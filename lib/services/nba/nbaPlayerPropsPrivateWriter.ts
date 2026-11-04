@@ -29,7 +29,7 @@ import {
 import { buildNbaPlayerPropsMemberSnapshot, type NbaPlayerPropsMemberDecision } from "./nbaPlayerPropsProductContract";
 import { buildNbaPlayerPropsReaderEvidence } from "./nbaPlayerPropsReaderContract";
 import { captureNbaPlayerPropsPrivateTracking } from "./nbaPlayerPropsPrivateTrackingStore";
-import { settleNbaPlayerPropsTrackedSlates } from "./nbaPlayerPropsSettlementStore";
+import { settleNbaPlayerPropsTrackedSlates,hasNbaPropsUnsettledTrackedSlates } from "./nbaPlayerPropsSettlementStore";
 import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
 import { buildNbaPlayerPropsMemberPrices } from "./nbaPlayerPropsMemberPrices";
 
@@ -75,11 +75,12 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
 }): Promise<NbaPlayerPropsPrivateWriterResult> {
   const now = args.now ?? new Date().toISOString();
   const slateSchedule = args.schedule.filter((game) => game.slateDate === args.slateDate);
-  if (slateSchedule.length === 0) return result("no_games");
+  if (slateSchedule.length === 0 && (!args.fullRefresh
+    ||!await hasNbaPropsUnsettledTrackedSlates(args.client,args.season))) return result("no_games");
 
   const previousState = await readNbaPlayerPropsCurrentState({ client: args.client, season: args.season });
-  const priorState = await readNbaPlayerPropsCurrentState({ client: args.client, season: args.season - 1 });
-  if (!priorState || priorState.games.length < 100 || priorState.boxes.length < 500) {
+  const priorState = slateSchedule.length ? await readNbaPlayerPropsCurrentState({ client: args.client, season: args.season - 1 }):null;
+  if (slateSchedule.length&&(!priorState || priorState.games.length < 100 || priorState.boxes.length < 500)) {
     return { ...result("bootstrap_required"), findings: ["prior_season_player_state_missing"] };
   }
   let currentState = previousState;
@@ -98,6 +99,16 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     stateCorrections = collected.corrected;
     await writeNbaPlayerPropsCurrentState({ client: args.client, state: collected.state });
   }
+
+  // A rest day cannot strand yesterday's locks. Reuse the same bounded stats
+  // collector and settlement path only while tracking receipts are incomplete.
+  // No market-provider request or prediction publication is needed here.
+  if(slateSchedule.length===0){
+    const settlement=currentState?await settleNbaPlayerPropsTrackedSlates({client:args.client,season:args.season,
+      slateDates:recentDates(now,7),state:currentState,observedAt:now}):null;
+    return{...result("no_games"),providerRequests:stateRequests,settlement};
+  }
+  if(!priorState)throw new Error("NBA props prior state missing after readiness check");
 
   const players = new Map([...priorState.players, ...(currentState?.players ?? [])].map((row) => [row.playerId, row]));
   const canonicalPlayersByName = Object.fromEntries([...players.values()].flatMap((player) => player.playerName

@@ -14,6 +14,22 @@ export const NBA_PROPS_SETTLEMENT_CATCHUP_MAX_DATES=3;
 const MAX_TRACKED_SLATES=400;
 const RETENTION_DAYS = 550;
 type SlateReceipt=Readonly<{sourceVersion:string;rows:number}>;
+async function readTrackingCatalog(client:SupabaseClient,season:number){
+  const read=await client.from("lab_response_snapshots")
+    .select("slate_date,generated_at,source_checksum:payload->>checksum")
+    .like("snapshot_key",`nba::player-props-private-tracking::${season}::%`)
+    .order("slate_date").limit(MAX_TRACKED_SLATES+1);
+  if(read.error)throw new Error(`NBA props tracking catalog failed: ${read.error.message}`);
+  const catalog=(read.data??[]).map(r=>({date:String(r.slate_date??""),sourceVersion:String(r.source_checksum??r.generated_at??"")}));
+  planNbaPropsSettlementCatchup({requested:[],catalog,receipts:{}});
+  return catalog;
+}
+
+export async function hasNbaPropsUnsettledTrackedSlates(client:SupabaseClient,season:number):Promise<boolean>{
+  const previous=await readSettlement(client,season);
+  const catalog=await readTrackingCatalog(client,season);
+  return catalog.some(r=>previous?.slateReceipts?.[r.date]?.sourceVersion!==r.sourceVersion);
+}
 
 export function planNbaPropsSettlementCatchup(args:{requested:readonly string[];catalog:readonly {date:string;sourceVersion:string}[];receipts:Readonly<Record<string,SlateReceipt>>}):string[]{
   if(args.catalog.length>MAX_TRACKED_SLATES||args.requested.length>14)throw new Error("NBA props settlement date bound exceeded");
@@ -83,12 +99,7 @@ export async function settleNbaPlayerPropsTrackedSlates(args: {
   observedAt: string;
 }): Promise<{ written: boolean; added: number; corrected: number; preserved: number; total: number; catchupDates:readonly string[] }> {
   const previous = await readSettlement(args.client, args.season);
-  const catalogRead=await args.client.from("lab_response_snapshots")
-    .select("slate_date,generated_at,source_checksum:payload->>checksum")
-    .like("snapshot_key",`nba::player-props-private-tracking::${args.season}::%`)
-    .order("slate_date").limit(MAX_TRACKED_SLATES+1);
-  if(catalogRead.error)throw new Error(`NBA props tracking catalog failed: ${catalogRead.error.message}`);
-  const catalog=(catalogRead.data??[]).map(r=>({date:String(r.slate_date??""),sourceVersion:String(r.source_checksum??r.generated_at??"")}));
+  const catalog=await readTrackingCatalog(args.client,args.season);
   const receipts={...previous?.slateReceipts};
   const catchupDates=planNbaPropsSettlementCatchup({requested:args.slateDates,catalog,receipts});
   const rows: NbaPlayerPropsPrivateTrackingRow[] = [];
