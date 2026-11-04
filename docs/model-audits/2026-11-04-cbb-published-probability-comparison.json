@@ -1,0 +1,33 @@
+{
+  "scope": "CBB presentation-only repair; no forecast, probability, price, grade, stake, provider, cadence, writer or inference change.",
+  "startingBase": "e8014fbd6aba6c74211755d8f85d65f8f097624b",
+  "adapterRelease": "cbb_member_adapter_2026_11_04_r17_stored_probability_comparison",
+  "publisherRelease": "cbb_member_pipeline_2026_11_04_r28_stored_probability_comparison",
+  "unchangedNumericalTuple": "Model R15 / grade R17 / receipt R11 / independent prior R4",
+  "problem": "ActualDailyEdgePreview preferred raw marketImpliedPct and recomputed model-minus-raw gap while labeling the probability no-vig. A published Butler -110/-110 target has stored no-vig probability0.5 and stored gap+0.22258825624357215pp, but the old UI displayed52.4% and-2.2pp.",
+  "repair": "A new optional publishedProbabilityComparisonBasis=stored_no_vig flag is stored only on newly adapted unlocked CBB markets. The shared UI selector uses their existing stored marketFairProb and modelMarketGapPct; it performs no probability or gap reconstruction. Raw break-even remains intact. Missing or invalid fair/gap fields display unavailable instead of falling back to raw break-even under a no-vig label.",
+  "legacyLocks": "Unflagged stored DTOs retain the exact prior raw-first probability and rounded calculated-gap presentation. Other sports do not receive the flag. Existing locked writers return the original payload, readers retain it, direct legacy locked adaptation adds no flag, and new future locks clone their already published flag. No legacy migration or reinterpretation.",
+  "sameInputEvidence": {
+    "source": "/private/tmp/cbb-history-law-live-final-raw-20261104.json",
+    "replay": "/private/tmp/cbb-stored-comparison-display-impact-20261104.json",
+    "unlockedGames": 13,
+    "markets": 39,
+    "numericalDecisionChanges": 0,
+    "scoreChanges": 0,
+    "gradeChanges": 0,
+    "promotions": 0,
+    "demotions": 0,
+    "legacyLockedPayloadsUnchangedInSavedInput": 138,
+    "providerRequests": 0,
+    "databaseWrites": 0
+  },
+  "tests": [
+    "Actual production DecisionMetricGrid server-rendered with the precise Butler tuple:50.0%,+0.2pp; legacy tuple remains52.4%,-2.2pp.",
+    "Stored integer-spread -39 evidence with2.2465% push and31.457031220550007pp gap is used verbatim for the new contract; its actual unflagged legacy presentation remains29.2pp.",
+    "Missing/invalid flagged fair or gap never falls back to raw odds or a new subtraction; unavailable market does not show a no-vig source label.",
+    "Adapter fields for probabilities, fair values, raw break-even, gap, line, price and grade remain unchanged. No flag on direct legacy locked adaptation.",
+    "Existing member-store test imports the new suite: real new publication stores the flag; future lock retains it; legacy locked write returns without mutation or a new write; reader cannot backfill the flag.",
+    "Existing CBB member-store, market-behavior-lock, member-pipeline and pipeline-clock suites pass. TypeScript, full model gate and latest-main integration remain required before publication."
+  ],
+  "publication": "Root owns shared registry/safety updates, fresh-main integration, full gate, intentional commit, protected PR and live normal-refresh/render verification. No commit or deployment performed by this implementation agent."
+}
