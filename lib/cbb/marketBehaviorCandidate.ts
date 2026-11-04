@@ -34,7 +34,7 @@ export const CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE="cbb_candidate_2026_11
 export const CBB_CONTINUITY_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_04_r17_response_frontier_law_support" as const;
 export const CBB_CONTINUITY_MARKET_BEHAVIOR_RECEIPT_RELEASE="cbb_market_behavior_2026_11_04_r11_response_frontier_law_support" as const;
 export const CBB_MARKET_BEHAVIOR_MODEL_RELEASE="cbb_candidate_2026_11_04_r16_contextual_authority_handoff" as const;
-export const CBB_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_04_r18_contextual_authority_handoff" as const;
+export const CBB_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_04_r19_informational_watchlist" as const;
 export const CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_03_r8_new_orleans_prior_input" as const;
 export const CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_03_r7_verified_action_or_professional_value_best" as const;
 export const CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_03_r6_exact_decision_gate_reasons" as const;
@@ -87,6 +87,8 @@ export type CbbMarketBehaviorReceipt={release:typeof CBB_MARKET_BEHAVIOR_RECEIPT
 const direction=(n:number):-1|0|1=>Math.abs(n)<=1e-7?0:n>0?1:-1;
 const fair=(q:CbbQuote)=>cbbImpliedProbability(q.firstPrice)/(cbbImpliedProbability(q.firstPrice)+cbbImpliedProbability(q.secondPrice));
 const tuple=(q:CbbQuote)=>JSON.stringify([q.line,q.firstPrice,q.secondPrice]);
+const validUncertainty=(f:CbbForecast)=>[f.uncertainty.marginSd,f.uncertainty.totalSd,f.uncertainty.marginTotalCorrelation].every(Number.isFinite)&&
+  f.uncertainty.marginSd>0&&f.uncertainty.totalSd>0&&Math.abs(f.uncertainty.marginTotalCorrelation)<1;
 function validQuote(q:AttestedQuote,base:CbbForecast,at:number,excluded:Set<string>,fresh=true):boolean{
   const observed=Date.parse(q.providerObservedAt),received=cbbEvidenceAvailableAt(q);
   if(q.gameId!==base.gameId||q.phase!=="current"||q.orientationVerified!==true||
@@ -243,7 +245,7 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
     throw new Error("CBB split context identity/cutoff mismatch");
   const independentZero=normalCdf((.5-base.margin)/base.uncertainty.marginSd)-normalCdf((-.5-base.margin)/base.uncertainty.marginSd);
   const independentWinner=(1-normalCdf((.5-base.margin)/base.uncertainty.marginSd))/(1-independentZero);
-  if(base.inputStatus==="complete"&&(![base.homeScore,base.awayScore,base.margin,base.total,base.homeWinProbability,independentWinner].every(Number.isFinite)||
+  if(base.inputStatus==="complete"&&(!validUncertainty(base)||![base.homeScore,base.awayScore,base.margin,base.total,base.homeWinProbability,independentWinner].every(Number.isFinite)||
     base.homeScore<=0||base.awayScore<=0||Math.abs(base.homeScore-base.awayScore-base.margin)>1e-8||Math.abs(base.homeScore+base.awayScore-base.total)>1e-8||
     Math.abs(base.homeWinProbability-independentWinner)>1e-8))throw new Error("CBB independent forecast coherence mismatch");
   const excludedFamilies=[...new Set(args.targets.map(q=>cbbBookFamily(q.sportsbook)))].sort(),excluded=new Set(excludedFamilies);
@@ -387,6 +389,9 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
   return {forecast,receipt};
 }
 export function assertCbbMarketBehaviorGradeReceipt(input:Parameters<typeof gradeCbbProvisional>[0],receipt:CbbMarketBehaviorReceipt){
+  if(input.forecast.inputStatus==="complete"&&(!validUncertainty(input.forecast)||
+    ![input.forecast.homeScore,input.forecast.awayScore,input.forecast.margin,input.forecast.total,input.forecast.homeWinProbability].every(Number.isFinite)))
+    throw new Error("CBB invalid forecast probability law");
   if(semanticKey(forecastIdentity(input.forecast))!==semanticKey(receipt.forecastIdentity)||
     semanticKey(input.forecast.uncertainty)!==semanticKey(receipt.frozenUncertainty)||
     input.forecast.release!==receipt.modelRelease||input.forecast.gameId!==receipt.anchors.gameId||

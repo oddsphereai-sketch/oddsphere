@@ -45,7 +45,7 @@ function fixture(line: number, firstPrice: number, secondPrice: number) {
 // that substitutes a desired receipt/forecast after the reader has run.
 for (const [name, args, expectedGrade] of [
   ["promotion", fixture(-3.5, -230, 200), "Lean"],
-  ["demotion", fixture(-1.5, 150, -170), "No Play"],
+  ["demotion", fixture(-1.5, 150, -170), "Watchlist"],
 ] as const) {
   const result = readCbbMarketBehavior(args);
   const held = result.receipt.pressureDecisions.find(p => p.book === "circa");

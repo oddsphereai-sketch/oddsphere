@@ -38,7 +38,9 @@ async function main(){
  assert.equal(initial.record.memberGame.markets.first_inning.writerMovementDirection,undefined,"current winner arbitration is not recorded market movement");
  assert.ok(!initial.record.memberGame.breakdown?.modelBreakdown?.startsWith("Independent projection"),"final market-conditioned forecast cannot masquerade as independent");
  assert.equal(initial.record.memberGame.markets.first_inning.line,-2.5,"the DTO renders the final selected side after the coherent score correction");
- assert.equal(initial.record.memberGame.markets.first_inning.verdict.key,"no_play","a changed prediction does not invent value at a vig-negative target");
+ assert.equal(initial.record.memberGame.markets.first_inning.verdict.key,"watchlist","the new complete negative-EV forecast remains informational");
+ assert.ok(candidate.rows.find(row=>row.market==="spread")!.expectedValue!<0);
+ assert.equal(initial.record.memberGame.markets.first_inning.recommendationConfidence,null,"an informational negative-EV watch has no actionable recommendation confidence");
  assert.notEqual(initial.record.memberGame.markets.first_inning.sharpStatus,"confirm");
  assert.notEqual(initial.record.memberGame.markets.first_inning.marketSignal,"market_confirmed");
  assert.notEqual(initial.record.memberGame.markets.first_inning.guidedWatchOut,"Professional books disagree with this side.","the corrected final side must not inherit obsolete opposition to the original independent side");
@@ -266,14 +268,26 @@ async function main(){
  delete continuityReceipt.jointMarginDecision?.relativeInterpretation;
  assert.ok(continuityReceipt.jointMarginDecision);
  assert.equal(Object.hasOwn(continuityReceipt.jointMarginDecision,"relativeInterpretation"),false);
+ // The old R15 payload actually classified negative exact-price value as
+ // No Play. Freeze that historical classification before invoking R19.
+ const historicalNoPlay=continuityPublic.snapshot.board.rows.find(row=>row.market==="spread")!;
+ assert.ok(historicalNoPlay.expectedValue!<0);
+ historicalNoPlay.grade="No Play";historicalNoPlay.reason="non_positive_exact_price_value";
+ const historicalNoPlayDto=continuityPublic.memberGame.markets.first_inning;
+ historicalNoPlayDto.grade=null;historicalNoPlayDto.verdict={key:"no_play",label:"No Play"};
+ historicalNoPlayDto.whyLine="non positive exact price value";
+ historicalNoPlayDto.recommendationConfidence=historicalNoPlay.probability!*100;
  const continuityBytes=JSON.stringify(continuityPublic),continuityWrites=writes;stored=continuityPublic;
  assert.equal(cbbLockedModelRelease(continuityPublic.snapshot.board),CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE);
  assert.equal(cbbLockedGradeRelease(continuityPublic.snapshot.board),CBB_CONTINUITY_MARKET_BEHAVIOR_GRADE_RELEASE);
  const continuityWrite=await writeCbbMemberGame({game,candidate:newR6,homeLogo:null,awayLogo:null,now:"2026-11-02T19:09:50Z"},db);
  assert.equal(continuityWrite.written,false);assert.equal(continuityWrite.record,continuityPublic);assert.equal(writes,continuityWrites);
+ assert.equal(continuityWrite.record.snapshot.board.rows.find(row=>row.market==="spread")!.grade,"No Play");
  assert.equal(readCbbProvisionalSnapshot({locked:continuityPublic.snapshot,unlocked:initial.record.snapshot}),continuityPublic.snapshot);
  assert.deepEqual(cbbMemberGameForReader(continuityPublic,game),continuityPublic.memberGame,
   "stored R15 DTO takes precedence over R16 retained-current-resistance semantics");
+ assert.equal(cbbMemberGameForReader(continuityPublic,game).markets.first_inning.verdict.key,"no_play",
+  "R19 informational Watchlist semantics never promote an existing R15 No Play");
  const continuityResult=cbbMemberGameForReader(continuityPublic,{...game,status:"post",status_state:"final",home_score:80,away_score:85});
  const {result:continuityOfficialResult,...continuityReaderFields}=continuityResult;
  const {result:continuityStoredResult,...continuityStoredFields}=continuityPublic.memberGame;
@@ -282,6 +296,7 @@ async function main(){
  priorTracked.length=0;assert.equal(await writeLockedCbbTracking(continuityPublic,priorTrackingDb),3);
  assert.ok(priorTracked.every(row=>row.model_version===CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE&&
   row.calibration_version===CBB_CONTINUITY_MARKET_BEHAVIOR_GRADE_RELEASE&&row.model_used==="cbb_r15_response_frontier_law_support"));
+ assert.equal(priorTracked.find(row=>row.market==="spread")!.play_grade,"no_play");
  for(const trackedRow of priorTracked){
   const row=continuityPublic.snapshot.board.rows.find(row=>row.market===trackedRow.market)!;
   assert.equal(trackedRow.model_probability,row.probability);assert.equal(trackedRow.expected_value,row.expectedValue);assert.equal(trackedRow.odds_american,row.price);

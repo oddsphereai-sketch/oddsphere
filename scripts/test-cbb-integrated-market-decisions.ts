@@ -88,7 +88,7 @@ assert.equal(aggregate.row.actualActionConfirmation,false);assert.equal(aggregat
 assert.equal(aggregate.read.forecast.margin,noFlow.read.forecast.margin);
 const changedPrice=run(7,0,3.5,7.5,[context(.8)],7);
 assert.ok(changedPrice.row.expectedValue!<0,"moving the executable threshold to the model center removes the prior price advantage");
-assert.equal(changedPrice.row.grade,"No Play","the same signal cannot retain a premium after losing value at a different executable contract");
+assert.equal(changedPrice.row.grade,"Watchlist","the same signal cannot retain a premium after losing value at a different executable contract");
 const stillOpposite=run(7,-4.5,-1.5,0);
 assert.equal(stillOpposite.read.receipt.margin.status,"applied","movement toward the independent score is not confirmation while the actual current winner remains opposite");
 assert.ok(stillOpposite.read.forecast.margin<0&&stillOpposite.read.forecast.homeWinProbability<.5);

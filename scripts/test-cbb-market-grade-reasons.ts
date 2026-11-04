@@ -5,6 +5,7 @@ import {readCbbMarketBehavior,type CbbMarketBehaviorReceipt} from '../lib/cbb/ma
 import {CBB_CURRENT_SCORE_RELEASE} from '../lib/cbb/currentScoreRuntime';
 import {cbbThresholdProbabilities,normalCdf} from '../lib/cbb/model';
 import type {CbbForecast,CbbMarket,CbbQuote} from '../lib/cbb/types';
+import type {CbbProvisionalGrade} from '../lib/cbb/provisionalGradePolicy';
 const at='2026-11-03T15:30:00.000Z',start='2026-11-03T19:00:00.000Z';
 const quote=(market:CbbMarket,book='draftkings',firstPrice=-110,secondPrice=-110):CbbQuote=>({gameId:777,market,
  line:market==='spread'?-3.5:market==='total'?150.5:null,firstPrice,secondPrice,sportsbook:book,provider:'owls',phase:'current',
@@ -57,8 +58,8 @@ for(const market of ['moneyline','spread','total'] as const){
  for(const state of ['agrees','unavailable'] as const){const r=fixture(market,state);assert.equal(r.decision.grade,'Lean');
   cases.push({name:`${market}-${state}-actionable`,decision:r.decision,reason:'positive_model_value_without_qualified_action_confirmation'});
  }
- const negative=fixture(market,'neutral',{ev:-.01});assert.equal(negative.decision.grade,'No Play');
- cases.push({name:`${market}-negative`,decision:negative.decision,reason:'non_positive_exact_price_value'});
+ const negative=fixture(market,'neutral',{ev:-.01});assert.equal(negative.decision.grade,'Watchlist');
+ cases.push({name:`${market}-negative`,decision:negative.decision,reason:'forecast_available_price_not_actionable'});
  const held=fixture(market,'unavailable',{incomplete:true});assert.equal(held.decision.grade,'Held');
  cases.push({name:`${market}-held`,decision:held.decision,reason:'incomplete_forecast_or_executable_quote'});
 }
@@ -77,7 +78,7 @@ resisted.receipt.pathPosture=resisted.receipt.pathPosture.map(s=>({...s,status:'
 const resistanceDecision=gradeCbbReceivedMarket(resisted.input,resisted.receipt);assert.equal(resistanceDecision.grade,'Watchlist');
 cases.push({name:'corroborated-resistance',decision:resistanceDecision,reason:'corroborated_unresolved_source_resistance'});
 const canon=(v:unknown):unknown=>Array.isArray(v)?v.map(canon):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>[k,canon(x)])):v;
-function decisionHash(decision:ReturnType<typeof gradeCbbReceivedMarket>){const {reason,release,splitRead,contextualResistance,contrarianSupport,...unchanged}=decision;void reason;void release;
+function decisionHash(decision:Omit<ReturnType<typeof gradeCbbReceivedMarket>,"grade">&{grade:CbbProvisionalGrade}){const {reason,release,splitRead,contextualResistance,contrarianSupport,...unchanged}=decision;void reason;void release;
  assert.deepEqual(splitRead,[],"a fixture with no split input must not invent source pressure");
  if(contextualResistance!==undefined)assert.equal(contextualResistance,false);
  if(contrarianSupport!==undefined)assert.equal(contrarianSupport,false);
@@ -136,7 +137,11 @@ const BASELINE:Record<string,string>={
   "corroborated-resistance": "9499a053d9290678961c63e13bbc803b484ab8fcdac5c22fd8ee420d8e28e0be"
 };
 for(const c of cases){assert.equal(c.decision.reason,c.reason,c.name);
- assert.equal(decisionHash(c.decision),BASELINE[c.name],`${c.name}: full decision changed beyond declared candidate decision`);}
+ // Exactly the three valid negative-price-value cases now monitor rather
+ // than disappear into No Play. Preserve the original frozen fingerprints
+ // to prove probabilities, prices, EV and all other decisions did not move.
+ const comparable=c.name.endsWith('-negative')?{...c.decision,grade:'No Play' as const,gradeBasis:'held_or_non_actionable'}:c.decision;
+ assert.equal(decisionHash(comparable),BASELINE[c.name],`${c.name}: changed beyond the declared informational classification`);}
 // Relabeling same-direction unequal effects as unresolved retains every
 // cautious gate that conflicting previously supplied; no grade consequence.
 const guarded=fixture('spread','agrees');
@@ -145,4 +150,4 @@ conflicting.margin={...conflicting.margin,status:'conflicting',delta:0,sourceBoo
 unresolved.margin={...unresolved.margin,status:'unresolved',delta:0,sourceBook:null,sourceMarket:null} as CbbMarketBehaviorReceipt['margin'];
 const before=gradeCbbReceivedMarket(guarded.input,conflicting),after=gradeCbbReceivedMarket(guarded.input,unresolved);
 assert.equal(before.pathResistance,true);assert.equal(before.grade,'Lean');assert.deepEqual(after,before);
-console.log(`PASS ${cases.length} full frozen decisions unchanged except truthful reason/release; unresolved retains conflicting resistance gates.`);
+console.log(`PASS ${cases.length} frozen decisions: three explicit No Play-to-Watchlist classifications; all other economics/decisions exact.`);

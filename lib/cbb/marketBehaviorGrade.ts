@@ -137,8 +137,13 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
   let grade:CbbProvisionalGrade=base.grade,reason=base.reason,gradeBasis="held_or_non_actionable";
   if(modelExpectedValue!==null){
     // A source's vig-negative implied EV is not a veto on independent value.
-    grade=modelExpectedValue<0?"No Play":"Watchlist";
-    reason=modelExpectedValue<0?"non_positive_exact_price_value":
+    // Match the product's informational Watchlist lane: a complete priced
+    // forecast remains readable even when its selected price is not a bet.
+    // Positive-value/action requirements below remain unchanged. Held data
+    // stays held; this must never turn missing analysis into a Watchlist.
+    grade="Watchlist";
+    gradeBasis=modelExpectedValue<0?"forecast_monitoring":"held_or_non_actionable";
+    reason=modelExpectedValue<0?"forecast_available_price_not_actionable":
       modelExpectedValue<.03?"edge_below_actionable_reserve":
       !eligible?"price_too_steep_for_actionable":
       base.referenceState==="opposes"?"professional_opposition":

@@ -67,6 +67,10 @@ function isCleanlyActionable(game: DailyEdgeGameDto): boolean {
   const headlineMarket = headlinePrimaryMarket(game);
   const headline = headlineMarketDto(game, headlineMarket);
   if (headline.held) return false;
+  // New informational watches may have a positive no-vig gap while still
+  // losing at the executable price. Neither ranking route may promote that
+  // explicit state. Unstamped legacy locked DTOs retain their prior behavior.
+  if (headline.reviewFlags?.includes("informational_non_actionable_price")) return false;
   if (headline.pick === null) return false;
   if (headline.grade === null) return false;
   if (headline.modelProb === null) return false;
