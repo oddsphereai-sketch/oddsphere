@@ -57,7 +57,7 @@ assert.equal(
 );
 assert.equal(
   NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE,
-  "nba_player_props_private_writer_2026_10_28_r10_invalid_row_isolation",
+  "nba_player_props_private_writer_2026_11_04_r11_member_quote_authority",
 );
 assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: 18.2, finalProjection: 18.8 }), true);
 assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: 0, finalProjection: 18.8 }), false);
@@ -279,7 +279,8 @@ const rerankFixture = [
     probability: 0.80, targetExcludedProbability: 0.80 },
 ].map((row) => ({ ...row, projectionStandardDeviation: 5, playerGamesPrior: 20,
   minutesStandardDeviation10: 2, teamBackToBack: false }));
-const rerankedFixture = applyNbaPlayerPropsAccuracyRerankForAudit(rerankFixture as any, artifact);
+const rerankedFixture = applyNbaPlayerPropsAccuracyRerankForAudit(
+  rerankFixture as unknown as Parameters<typeof applyNbaPlayerPropsAccuracyRerankForAudit>[0], artifact);
 assert.equal(rerankedFixture.filter((row) => row.grade === "Best Angle" || row.grade === "Lean").length, 2,
   "the accuracy rerank must preserve the exact actionable count");
 assert.equal(rerankedFixture.filter((row) => row.grade === "Best Angle").length, 1,

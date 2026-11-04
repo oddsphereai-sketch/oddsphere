@@ -82,7 +82,13 @@ export async function GET(request: Request): Promise<Response> {
   const boards: Record<string, unknown> = {};
 
   await Promise.all(DAILY_EDGE_DEEP_AUDIT_SPORTS.map(async (sport) => {
-    boards[sport] = await loadAuditBoard(sport, origin);
+    try {
+      boards[sport] = await loadAuditBoard(sport, origin);
+    } catch {
+      // Keep the other sport reports available, but never certify a failed
+      // reader as a healthy empty board. No provider error text is returned.
+      boards[sport] = { ok: false, error: "member_board_read_failed" };
+    }
   }));
 
   const result = auditDailyEdgeBoards(boards as Record<string, Record<string, unknown>>);

@@ -1,5 +1,18 @@
 # Current production model releases and qualified research candidates
 
+## NBA player-props member quote authority — November 4
+
+Sole writer is `nba_player_props_private_writer_2026_11_04_r11_member_quote_authority`.
+The expanded comparison ladder now uses only the captured current provider cycle,
+retains the runtime's existing retail-primary/Owls-reference precedence, and
+preserves the actual evaluated quote in its own book/side slot. Historical,
+opening, live and one-way Yes rows cannot be advertised as current Over/Under
+prices. The model, calibration, forward decision, projection, probability,
+selected book/line/price, grade, stake, cadence and lease are unchanged. Existing
+locked member and tracking payloads retain exact precedence. This supersedes
+the r10 writer, not the r13 frozen runtime or r14 forward decision.
+Evidence: `docs/model-audits/2026-11-04-product-refresh-health.md`.
+
 ## CBB joint native decision release — November 3
 
 The sole independent runtime remains
@@ -1929,7 +1942,7 @@ No prediction or locked member game was written by the failed refresh.
   `nba_player_props_model_tournament_2026_10_28_r16_owls_sharp_market_reader` /
   `nba_player_props_exact_price_grade_2026_10_28_r15_owls_sharp_market_reader`.
   The sole private writer is
-  `nba_player_props_private_writer_2026_10_28_r10_invalid_row_isolation`; it
+  `nba_player_props_private_writer_2026_11_04_r11_member_quote_authority`; it
   canonicalizes ESPN schedule abbreviations (`GS`, `NO`, `UTAH`, `WSH`) before
   exact provider-game coverage checks, while retaining the same fail-closed
   behavior for a genuinely missing scheduled game. Its private store release is

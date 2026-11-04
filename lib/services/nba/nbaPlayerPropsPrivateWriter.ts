@@ -31,9 +31,10 @@ import { buildNbaPlayerPropsReaderEvidence } from "./nbaPlayerPropsReaderContrac
 import { captureNbaPlayerPropsPrivateTracking } from "./nbaPlayerPropsPrivateTrackingStore";
 import { settleNbaPlayerPropsTrackedSlates } from "./nbaPlayerPropsSettlementStore";
 import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
+import { buildNbaPlayerPropsMemberPrices } from "./nbaPlayerPropsMemberPrices";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_10_28_r10_invalid_row_isolation" as const;
+  "nba_player_props_private_writer_2026_11_04_r11_member_quote_authority" as const;
 
 export function nbaPlayerPropsForecastIsPublishable(
   row: Pick<NbaPlayerPropsForwardDecision, "independentProjection" | "finalProjection">,
@@ -269,13 +270,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       marketEvidenceMode: row.marketEvidenceMode,
       gradePolicySource: row.gradePolicySource,
       ...reader,
-      priceLadder: freshestByBookSide(exactObservations).map((observation) => ({
-        sportsbook: observation.sportsbook,
-        side: observation.side as "over" | "under",
-        line: observation.line,
-        americanPrice: observation.americanPrice,
-        observedAt: observation.observedAt,
-      })),
+      priceLadder: buildNbaPlayerPropsMemberPrices({ current: live.observations, target }),
       movement,
       evaluatedAt: now,
       lockedAt: null,
@@ -394,14 +389,4 @@ function playerIdFromObservation(observation: { canonicalPlayerId: string | null
   const value = observation.canonicalPlayerId?.match(/^nba-bdl-player:(\d+)$/)?.[1] ?? observation.providerPlayerId;
   const number = Number(value);
   return Number.isInteger(number) ? number : null;
-}
-
-function freshestByBookSide<T extends { sportsbook: string; side: string; observedAt: string }>(rows: readonly T[]): T[] {
-  const selected = new Map<string, T>();
-  for (const row of rows) {
-    const key = `${normalize(row.sportsbook)}|${row.side}`;
-    const prior = selected.get(key);
-    if (!prior || Date.parse(row.observedAt) > Date.parse(prior.observedAt)) selected.set(key, row);
-  }
-  return [...selected.values()];
 }

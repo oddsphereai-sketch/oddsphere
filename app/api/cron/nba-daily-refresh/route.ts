@@ -49,6 +49,7 @@
 import { cronHandler } from "@/lib/cron/runCron";
 import { supabase } from "@/lib/db/supabase";
 import { currentSlateDate } from "@/lib/dates/slateDate";
+import { nbaPlayerPropsRefreshFailure } from "@/lib/cron/playerPropsRefreshTelemetry";
 import {
   seedNbaGames,
   type SeedNbaGamesResult,
@@ -453,6 +454,7 @@ export async function GET(request: Request): Promise<Response> {
       // second timer or member-request fetch. Failure preserves the previous
       // private last-known-good snapshot and cannot suppress Daily Edge.
       let privatePlayerPropsWrites = 0;
+      let privatePlayerPropsError: string | null = null;
       if (process.env[NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV] === "true") {
         try {
           const rollingSchedule = await loadNbaRollingSchedule(etDateDashed);
@@ -468,9 +470,12 @@ export async function GET(request: Request): Promise<Response> {
             now: now.toISOString(),
           });
           stepDetails.player_props_private_candidate = privatePlayerProps;
+          privatePlayerPropsError = nbaPlayerPropsRefreshFailure(privatePlayerProps);
+          if (privatePlayerPropsError) partial = true;
           privatePlayerPropsWrites = privatePlayerProps.status === "published_private" ? 1 : 0;
         } catch (error) {
           partial = true;
+          privatePlayerPropsError = "NBA player props refresh failed; last-known-good preserved";
           console.error("NBA private player-props candidate refresh failed", error);
           stepDetails.player_props_private_candidate = {
             public_enabled: false,
@@ -522,13 +527,13 @@ export async function GET(request: Request): Promise<Response> {
       return {
         records_updated: recordsUpdated,
         partial,
-        error_message: responseSnapshot?.ok === false
+        error_message: [responseSnapshot?.ok === false
           ? `NBA response snapshot publish failed: ${responseSnapshot.error ?? "unknown error"}`
           : lineError !== null
             ? `NBA line refresh partial: ${lineError}`
-            : partial
+            : partial && privatePlayerPropsError === null
               ? "NBA refresh completed with an incomplete source cycle"
-              : null,
+              : null, privatePlayerPropsError].filter(Boolean).join(" | ") || null,
         details: stepDetails,
       };
     },
