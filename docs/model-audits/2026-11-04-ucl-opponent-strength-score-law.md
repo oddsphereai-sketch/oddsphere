@@ -1,6 +1,8 @@
 # UCL opponent-strength scoring and joint market-path repair
 
 Starting base: `23f140f8b7aaa89258e569f015dcd8c183767734`.
+Publication integration base: `2217d2c77abf1212192d9a3b77bf1892961d8ab0`;
+both newer CBB documentation sections and all CBB code remain intact.
 Owner authorization: November 4, repair the identified independent scoring and
 market interaction defects before today's games; no forced No/Under picks.
 Scope: UCL only, unlocked forecasts and future locks. No historical outcome

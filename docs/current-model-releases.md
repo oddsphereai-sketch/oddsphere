@@ -44,17 +44,33 @@ are required. Evidence:
 `docs/model-audits/2026-11-04-ucl-opponent-strength-score-law.md` and paired
 `2026-11-04-ucl-opponent-strength-score-law-comparison.json`.
 
-## CBB joint native decision release — November 3
+## CBB current-board source identity release — November 4
 
 The sole independent runtime remains
 `cbb_candidate_2026_11_03_r4_verified_new_orleans_venue_prior` (candidate-r4).
 The sole market path is now
-`cbb_candidate_2026_11_03_r13_joint_native_market_decision`, grade
-`cbb_2026_11_03_r15_joint_native_market_decision`, receipt R9, path R4,
-board R16, publisher R25, tracking R13 and adapter R14. Canonical history R2,
+`cbb_candidate_2026_11_04_r14_current_board_source_aliases`, grade
+`cbb_2026_11_04_r16_current_board_source_aliases`, receipt R10, path R4,
+board R17, publisher R26, tracking R14 and adapter R15. Canonical history R2,
 evidence R4 and reader evidence R11 retain their bounded native contracts.
 
-This supersedes R12/R14/R8 inference, not its locked public records. The owner's
+Source identity R5 /split mapping R4 admits exact observed labels N Dakota St,
+CSU Northridge, CS Northridge and LMU. These restore North Dakota State,
+Cal State Northridge and Loyola Marymount, including six supplied Pinnacle
+contracts previously dropped for two games. Raw High Point/Maryland rows remain
+rejected; Maryland is never aliased to Maryland Eastern Shore. A fresh retained
+79-row response has76 unique fixture matches and all17 supplied professional
+contracts admitted, with no source time, price, line, book or outcome rewrite.
+
+This input-only follow-up preserves the R13 joint decision method below. Its
+same-source11-game/33-market comparison has2 score changes, no side changes,
+0 promotions and1 demotion (13→12 actionables); Wichita -14.5 becomes No Play
+at the refreshed price. New7:21 AM quotes are evaluated at their actual receipt,
+not backdated into the7:02 AM board. Earlier published R13/R15/R9 locks and R9
+anchors retain exact precedence. No provider cadence, writer or stake changes.
+Evidence: `docs/model-audits/2026-11-04-cbb-current-board-source-aliases.json`.
+
+The R13 joint method superseded R12/R14/R8 inference, not its locked public records. The owner's
 three-gap repair explicitly makes the independent forecast a fallible input:
 current professional price levels can correct an opposite winner or a large
 same-winner margin disagreement without requiring a prior captured move.
@@ -91,7 +107,7 @@ DraftKings own-contract split or fabricate a price response. Per-page freshness
 and one physical-family deduplication remain enforced. R11's retail journal
 response-completion clock repair remains active.
 
-All prior R12/R14/R8, R11/R13/R7 and earlier locks retain exact writer, reader,
+All prior R13/R15/R9, R12/R14/R8, R11/R13/R7 and earlier locks retain exact writer, reader,
 tracking, price and evidence precedence. Original R3/R4 market anchors persist.
 The verified New Orleans prior/venue repair remains prospective; no missed or
 locked historical card is reconstructed. One leased sport-scoped writer,
