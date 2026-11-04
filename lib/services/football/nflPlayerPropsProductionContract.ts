@@ -12,11 +12,12 @@ import {
 } from "./nflPlayerPropsMarketEvidenceCapture";
 import { addDaysToSlate, computeSlateDate } from "@/lib/dates/slateDate";
 import { selectNflPlayerPropsCanonicalLines } from "./nflPlayerPropsCanonicalLine";
+import { withoutUnresolvedNflPlayerAliasDuplicates } from "./nflPlayerPropsMemberAliasIdentity";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_10_28_r52_owls_reference_prices" as const;
+  "nfl_player_props_member_2026_11_04_r53_verified_alias_duplicates" as const;
 export const NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE =
-  "nfl_player_props_member_lifecycle_2026_10_28_r34_owls_reference_prices" as const;
+  "nfl_player_props_member_lifecycle_2026_11_04_r35_verified_alias_duplicates" as const;
 const NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE =
   "nfl_player_props_decision_2026_10_27_r38_passing_yards_direction" as const;
 export const NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET = 2 as const;
@@ -60,7 +61,7 @@ export type NflPlayerPropsMemberSnapshot = {
 export function deriveNflPlayerPropsMemberDecisions(
   board: Pick<NflPlayerPropsRuntimeBoard, "decisions">,
 ): NflPlayerPropsStoredMemberDecision[] {
-  return board.decisions.map((row): NflPlayerPropsStoredMemberDecision => {
+  return withoutUnresolvedNflPlayerAliasDuplicates(board.decisions).map((row): NflPlayerPropsStoredMemberDecision => {
     if (row.grade === "Held") return { ...row, grade: "No Play" };
     return row as NflPlayerPropsStoredMemberDecision;
   });
@@ -210,7 +211,7 @@ export function buildNflPlayerPropsMemberSnapshot(
   const asOfMs = Date.parse(asOf);
   if (!Number.isFinite(asOfMs)) throw new Error("NFL props member snapshot asOf is invalid.");
   const boardDate = currentNflPlayerPropsBoardDate(new Date(asOfMs));
-  const eligibleMemberDecisions = snapshot.memberDecisions
+  const eligibleMemberDecisions = withoutUnresolvedNflPlayerAliasDuplicates(snapshot.memberDecisions)
     .filter(isMemberDecision)
     .filter((row) => {
       try {

@@ -15,7 +15,7 @@ CFB, default callers and exact prior locked records retain their semantics.
 The full NFL release tuple advances with exact R64 and R63 legacy snapshot
 compatibility. Same-input stored-tuple replay, explicit skew/false-probability/
 push/identity tests, locked writer/reader tests, independent review, the mandatory
-model gate, fresh-main protected PR and live15/15 source/member proof are required.
+model gate, fresh-main protected PR and live 15/15 source/member proof are required.
 If those checks fail, reject publication and retain only offline audit evidence.
 Evidence: `docs/model-audits/2026-11-04-nfl-pmf-mean-coherence.json`.
 
