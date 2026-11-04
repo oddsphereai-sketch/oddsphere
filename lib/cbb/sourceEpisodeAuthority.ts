@@ -15,7 +15,7 @@ export type CbbSourceAuthority = {
   status:"selected"|"equivalent"|"retained"|"unresolved";
   reason:"single_physical_source"|"equivalent_source_effects"|"observed_leader_with_followers"|
     "later_episode_supersedes_old_observations"|"qualified_source_response"|"qualified_contrarian_hold"|
-    "latest_observed_repricing"|"qualified_current_resistance"|"current_source_opposition"|"overlapping_source_windows";
+    "latest_observed_repricing"|"current_native_source_preference"|"qualified_current_resistance"|"current_source_opposition"|"overlapping_source_windows";
   selectedId:string|null; authorIds:string[]; followerIds:string[]; opposingIds:string[];
 };
 const same=(a:number,b:number)=>Math.abs(a-b)<=1e-7;

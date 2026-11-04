@@ -6,6 +6,8 @@ import {normalCdf,cbbThresholdProbabilities} from "../lib/cbb/model";
 import type {CbbDecisionSplitContext} from "../lib/cbb/decisionSplitContext";
 import type {CbbForecast,CbbQuote} from "../lib/cbb/types";
 import {normalizeCbbOwlsCurrent} from "../lib/cbb/owlsMarketEvidence";
+import {cbbImpliedProbability} from "../lib/cbb/marketEvidence";
+import {cbbExactMarketCenter} from "../lib/cbb/marketReaderResearch";
 const at="2026-11-03T18:30:00Z",start="2026-11-03T22:00:00Z";
 function independent(margin:number):CbbForecast{
  const zero=normalCdf((.5-margin)/11)-normalCdf((-.5-margin)/11);
@@ -59,22 +61,28 @@ const holdRead=readCbbMarketBehavior({independent:independent(20),independentInp
  splitContext:[{...context(.24),line:-31.5}],
  anchors:{release:CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,gameId:1,startsAt:start,independentRelease:CBB_CURRENT_SCORE_RELEASE,independentInputKey:"hold",capturedAt:"2026-11-03T18:01:00Z",quotes:[quote(28.5),quote(28,"pinnacle")]}});
 assert.equal(holdRead.receipt.margin.authority?.reason,"qualified_contrarian_hold");
-assert.equal(holdRead.receipt.margin.sourceBook,"circa");assert.ok(holdRead.forecast.margin>22.9&&holdRead.forecast.margin<23.2,"held native stance transports its actual three-point episode once");
+assert.equal(holdRead.receipt.margin.sourceBook,"circa");
+assert.ok(Math.abs(holdRead.forecast.margin-cbbExactMarketCenter(independent(20),quote(31.5,"circa",true),.5))<1e-8,
+ "held native authority applies its actual current source law once, without adding the historical three-point move again");
 const duplicateClockRead=readCbbMarketBehavior({independent:independent(20),independentInputKey:"hold",startsAt:start,targets:[alignedTarget],
  currentQuotes:[quote(31.5,"circa",true),quote(32,"pinnacle",true)],historyQuotes:[heldNative,
  {...quote(31.5,"circa",true),providerObservedAt:"2026-11-03T18:20:00+00:00",fetchedAt:"2026-11-03T18:21:30Z"}],
  splitContext:[{...context(.24),line:-31.5}],anchors:holdRead.receipt.anchors});
 assert.equal(duplicateClockRead.receipt.margin.authority?.reason,"qualified_contrarian_hold","equal native instants retain the hold selector across original timestamp formats");
-const oppositeHeld=run(7,0,0,3.5,[context(.2)]);
+const oppositeHeld=run(7,0,0,-2,[context(.2)]);
 assert.equal(oppositeHeld.row.grade,"Lean","book holding against opposite money can promote a positive-value Watchlist");
 assert.equal(oppositeHeld.row.pathResistance,false);
-const towardHeld=run(7,0,0,3.5,[context(.8)]);
+const towardHeld=run(7,0,0,-2,[context(.8)]);
 assert.equal(towardHeld.row.pathResistance,true);assert.notEqual(towardHeld.row.grade,"Best Angle");
 const aggregate=run(7,0,3.5,3.5,[{...context(.2),sourceClass:"multi_book_consensus",sourceBook:"consensus",physicalFamily:"playbook_consensus",line:null}]);
 assert.equal(aggregate.row.actualActionConfirmation,false);assert.equal(aggregate.row.pathResistance,false,"public majority without an own-book response cannot veto a qualified price interpretation");
 assert.equal(aggregate.read.forecast.margin,noFlow.read.forecast.margin);
 const changedPrice=run(7,0,3.5,10.5,[context(.8)]);
 assert.notEqual(changedPrice.row.grade,"Best Angle","the same signal cannot retain a premium after losing value at a different executable contract");
+const stillOpposite=run(7,-4.5,-1.5,0);
+assert.equal(stillOpposite.read.receipt.margin.status,"applied","movement toward the independent score is not confirmation while the actual current winner remains opposite");
+assert.ok(stillOpposite.read.forecast.margin<0&&stillOpposite.read.forecast.homeWinProbability<.5);
+assert.equal(stillOpposite.row.selection,"second");
 const original=quote(0),current=quote(8.5,"circa",true),target=quote(1.5,"fanduel",true);
 const common={independent:independent(0),independentInputKey:"same",startsAt:start,targets:[target],currentQuotes:[current],
  anchors:{release:CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,gameId:1,startsAt:start,independentRelease:CBB_CURRENT_SCORE_RELEASE,
@@ -88,16 +96,44 @@ const recovered=readCbbMarketBehavior({...common,anchors:badSpread.receipt.ancho
 assert.equal(recovered.receipt.margin.status,"applied","a later valid response recovers without deleting immutable anchors");
 const converging=readCbbMarketBehavior({...common,independent:independent(7),currentQuotes:[quote(5,"circa",true),quote(9,"pinnacle",true)],
  anchors:{...common.anchors,quotes:[quote(3),quote(10,"pinnacle")]}});
-assert.equal(converging.receipt.margin.status,"confirming");assert.equal(converging.receipt.margin.directionalEvidence,"converging");
-assert.equal(converging.receipt.margin.sourceDirection,null);assert.equal(converging.forecast.margin,7,"opposite raw moves can both confirm a model between the sources");
+assert.equal(converging.receipt.margin.status,"confirming");
+assert.equal(converging.forecast.margin,7,"opposite raw moves can confirm the independent law when the explicitly selected current source agrees on winner and cover");
+assert.equal(converging.receipt.jointMarginDecision?.status,"confirmed");
+assert.equal(converging.receipt.jointMarginDecision?.authority?.reason,"current_native_source_preference");
 const ml=(current:boolean):CbbQuote=>({...quote(0,"circa",current),market:"moneyline",line:null,
  firstPrice:current?-170:-150,secondPrice:current?145:130});
-const flatSpread=readCbbMarketBehavior({...common,currentQuotes:[ml(true),quote(0,"circa",true)],
+const flatSpread=readCbbMarketBehavior({...common,independent:independent(1),currentQuotes:[ml(true),quote(3.5,"circa",true)],
+ anchors:{...common.anchors,quotes:[ml(false),quote(3.5)]}});
+assert.equal(flatSpread.receipt.margin.status,"applied");
+assert.equal(flatSpread.receipt.jointMarginDecision?.status,"applied");
+assert.notEqual(flatSpread.forecast.margin,1,"a flat spread no longer vetoes the coherent native moneyline update");
+assert.notEqual(flatSpread.forecast.uncertainty.marginSd,11,"the two native contracts identify a new dispersion rather than contradicting one another under a fixed law");
+const fairMl=cbbImpliedProbability(ml(true).firstPrice)/(cbbImpliedProbability(ml(true).firstPrice)+cbbImpliedProbability(ml(true).secondPrice));
+assert.ok(Math.abs(flatSpread.forecast.homeWinProbability-fairMl)<1e-8);
+const exactCover=cbbThresholdProbabilities(flatSpread.forecast,"spread",-3.5);
+assert.ok(Math.abs(exactCover.first/(exactCover.first+exactCover.second)-.5)<1e-8);
+assert.deepEqual(flatSpread.receipt.originalIndependentUncertainty,independent(1).uncertainty);
+assert.deepEqual(flatSpread.receipt.frozenUncertainty,flatSpread.forecast.uncertainty);
+const badFinalLaw={...flatSpread.forecast,uncertainty:{...flatSpread.forecast.uncertainty,marginSd:11}};
+assert.throws(()=>buildCbbProvisionalBoard(badFinalLaw,[target,...flatSpread.receipt.currentProfessionalQuotes],{marketBehavior:flatSpread.receipt}),/receipt mismatch/);
+const redundantConflict=readCbbMarketBehavior({...common,currentQuotes:[ml(true),quote(0,"circa",true)],
  anchors:{...common.anchors,quotes:[ml(false),quote(0)]}});
-assert.equal(flatSpread.receipt.margin.status,"neutral");assert.equal(flatSpread.forecast.margin,0);
-assert.equal(flatSpread.receipt.margin.crossMarketDisagreement,true,"moving ML with a verified flat Spread is shape context, not permission to overwrite the direct mean");
+assert.equal(redundantConflict.receipt.jointMarginDecision?.status,"unresolved","spread zero and ML are the same event; incompatible source prices cannot invent a shape");
+assert.equal(redundantConflict.forecast.margin,0);
+const withheldMlCurrent={...ml(true),providerObservedAt:"2026-11-03T18:23:00Z",fetchedAt:"2026-11-03T18:24:00Z"};
+const withheldJointSource=readCbbMarketBehavior({...common,currentQuotes:[current,quote(12.5,"pinnacle",true),withheldMlCurrent],
+ currentSourceProblems:[{book:"circa",market:"moneyline",reason:"incoherent_current_frame"}],
+ anchors:{...common.anchors,quotes:[original,quote(0,"pinnacle"),ml(false)]}});
+assert.equal(withheldJointSource.receipt.currentProfessionalQuotes.some(q=>q.sportsbook==="circa"&&q.market==="moneyline"),false,
+ "a withheld current ML must not be resurrected by source selection from its older path stream");
 const absentSpread=readCbbMarketBehavior({...common,currentQuotes:[ml(true)],anchors:{...common.anchors,quotes:[ml(false)]}});
 assert.notEqual(absentSpread.forecast.margin,0,"genuinely absent Spread retains the priced moneyline fallback");
+const impossibleFinal=readCbbMarketBehavior({...common,currentQuotes:[quote(140.5,"circa",true),{...quote(0,"circa",true),market:"total",line:100.5}],
+ anchors:{...common.anchors,quotes:[original,{...quote(0),market:"total",line:150.5}]}});
+assert.equal(impossibleFinal.receipt.margin.reason,"incoherent_score_consequence");
+assert.equal(impossibleFinal.forecast.margin,0);assert.equal(impossibleFinal.forecast.total,150);
+assert.equal(impossibleFinal.receipt.jointMarginDecision?.status,"unresolved");
+assert.notEqual(impossibleFinal.receipt.winnerArbitration.status,"applied","a failed final score law must not retain a receipt claiming the source winner was applied");
 const moneylineTarget={...target,market:"moneyline" as const,line:null,fetchedAt:"2026-11-03T18:26:00Z",providerObservedAt:"2026-11-03T18:24:00Z"};
 const jointRead=readCbbMarketBehavior({...common,independent:independent(-3),targets:[moneylineTarget,target],
  currentQuotes:[quote(12.5,"circa",true)],anchors:{...common.anchors,quotes:[quote(-4.5)]},splitContext:[{...context(.8),line:4.5}]});

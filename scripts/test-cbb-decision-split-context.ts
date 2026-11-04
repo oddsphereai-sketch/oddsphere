@@ -35,8 +35,19 @@ assert.equal(stale.length,0,"old retail split context cannot revive at a later d
 const networkOnly=cbbDecisionSplitContext({game,allGames:[game],asOf:at,direct:{...direct,rows:[]},canonical:[],publicRows:[],
  draftKings:{...feed,games:feed.games.map(row=>({...row,markets:{spread:{...row.markets.spread!,observedAt:"2026-11-03T19:28:00Z"}}}))}});
 assert.equal(networkOnly.length,1);assert.equal(networkOnly[0].sourceClass,"retail_network");
-assert.equal(networkOnly[0].line,null);assert.equal(networkOnly[0].observedAt,"2026-11-03T19:28:00Z");
-assert.equal(networkOnly[0].availableBy,feed.fetchedAt,"provider observation cannot be substituted for network capture availability");
+assert.equal(networkOnly[0].line,null);assert.equal(networkOnly[0].observedAt,null,"HTTP page capture is not a verified sportsbook observation");
+assert.equal(networkOnly[0].availableBy,feed.fetchedAt,"the actual overall feed availability remains explicit");
+assert.equal(networkOnly[0].receiptEarliest,"2026-11-03T19:28:00.000Z","retain the separate original page-capture bound");
+const newerNetwork={...feed,fetchedAt:"2026-11-03T19:31:25Z",games:feed.games.map(row=>({...row,
+ markets:{spread:{...row.markets.spread!,observedAt:"2026-11-03T19:31:25Z",sides:[
+  {...row.markets.spread!.sides[0],moneyPct:10,betsPct:20},
+  {...row.markets.spread!.sides[1],moneyPct:90,betsPct:80},
+ ] as NonNullable<typeof row.markets.spread>["sides"]}}}))};
+const withNewerNetwork=cbbDecisionSplitContext({game,allGames:[game],asOf:at,direct,canonical:[],publicRows:[],draftKings:newerNetwork});
+assert.equal(withNewerNetwork.length,1,"network and native DraftKings still constitute one physical family");
+assert.equal(withNewerNetwork[0].provider,"owls","a newer HTTP capture cannot erase an available verified native contract");
+assert.equal(withNewerNetwork[0].line,-32.5);assert.equal(withNewerNetwork[0].firstMoney,.69);
+assert.equal(withNewerNetwork[0].observedAt,direct.rows[0].observedAt,"do not restamp the retained native observation as the newer network capture");
 const futureNetwork=cbbDecisionSplitContext({game,allGames:[game],asOf:at,direct:{...direct,rows:[]},canonical:[],publicRows:[],
  draftKings:{...feed,games:feed.games.map(row=>({...row,markets:{spread:{...row.markets.spread!,observedAt:"2026-11-03T19:34:00Z"}}}))}});
 assert.equal(futureNetwork.length,0,"a market clock later than feed capture is not a usable decision input");

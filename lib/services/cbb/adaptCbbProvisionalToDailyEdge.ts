@@ -9,9 +9,9 @@ import type { CbbGame, CbbMarket, CbbQuote } from "@/lib/cbb/types";
 import type { cbbCurrentSplitEvidence } from "@/lib/cbb/owlsSplitEvidence";
 import { buildDailyEdgeMemberPresentation } from "@/app/lab/lib/dailyEdgeResponseCoherence";
 import { CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE } from "@/lib/cbb/marketBehaviorCandidate";
-import {CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
+import {CBB_ALIGNED_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 
-export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_03_r13_aligned_native_reactions" as const;
+export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_03_r14_joint_native_market_decision" as const;
 type GradeLabel="Best Angle"|"Lean"|"Watchlist"|"No Play"|"Held";
 type BoardRow=CbbProvisionalSnapshot["board"]["rows"][number];
 type SplitEvidence=ReturnType<typeof cbbCurrentSplitEvidence>;
@@ -100,6 +100,7 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
   // reason contract distinguishes path uncertainty from actual opposition.
   const preciseReason=snapshot.board.gradeRelease===CBB_MARKET_BEHAVIOR_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE||
+    snapshot.board.gradeRelease===CBB_ALIGNED_MARKET_BEHAVIOR_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE||
@@ -113,8 +114,8 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
     const read=snapshot.board.marketContext.verifiedMarketRead;
     if(read){
       const axis=kind==="total"?read.total:read.margin,sign=boardRow.selection==="first"?1:-1;
-      if((axis.status==="applied"||axis.status==="confirming")&&
-        ["observed_same_book_relative_economics","observed_move_corrects_independent","observed_move_crosses_independent",
+      if((axis.status==="applied"||axis.status==="confirming")&&axis.sourceDirection!==null&&
+        ["observed_same_book_relative_economics","observed_move_corrects_independent","observed_move_crosses_independent","joint_current_state_confirms_independent","joint_current_state_corrects_independent",
           "observed_move_confirms_independent_without_score_shift"].includes(axis.reason)&&axis.sourceMarket===kind){
         const pressure=(axis.sourceDirection??0)*sign;
         market.writerMovementDirection=pressure>1e-7?"support":pressure< -1e-7?"resistance":"neutral";

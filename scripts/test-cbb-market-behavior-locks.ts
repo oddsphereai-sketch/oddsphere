@@ -3,6 +3,7 @@ import {normalCdf} from "../lib/cbb/model";
 import {CBB_RETAIL_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_RECEIPT_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
 import {CBB_PREVIOUS_CURRENT_SCORE_RELEASE} from "../lib/cbb/currentScoreRuntime";
 import {CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_RECEIPT_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
+import {CBB_ALIGNED_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_ALIGNED_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_ALIGNED_MARKET_BEHAVIOR_RECEIPT_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
 import {CBB_CURRENT_SCORE_RELEASE} from "../lib/cbb/currentScoreRuntime";
 import {readCbbMarketBehavior,gradeCbbMarketBehavior,CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_OLDER_MARKET_BEHAVIOR_GRADE_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
 import {gradeCbbProvisional} from "../lib/cbb/provisionalGradePolicy";
@@ -24,20 +25,20 @@ const targets:CbbQuote[]=[{...base,market:"moneyline",line:null,firstPrice:130,s
 const refs:CbbQuote[]=targets.map(q=>({...q,sportsbook:"pinnacle",line:q.market==="spread"?3:q.line}));
 const read=readCbbMarketBehavior({independent,independentInputKey:"frozen-source",startsAt:start,targets,currentQuotes:refs,anchors:null});
 const candidate=buildCbbProvisionalBoard(read.forecast,[...targets,...refs],{marketBehavior:read.receipt});
-assert.equal(candidate.score.margin,independent.margin);assert.equal(candidate.rows[0].selection,"first");
-assert.equal(read.receipt.winnerArbitration.status,"context_only");
+assert.ok(candidate.score.margin<0,"verified opposite current ML/spread jointly correct the independent winner");assert.equal(candidate.rows[0].selection,"second");
+assert.equal(read.receipt.winnerArbitration.status,"applied");
 let stored:CbbStoredMemberGame|null=null,writes=0;
 const db={from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:stored?{payload:stored}:null,error:null})})}),upsert:async(row:{payload:CbbStoredMemberGame})=>{stored=structuredClone(row.payload);writes++;return {error:null};}})} as unknown as Parameters<typeof writeCbbMemberGame>[1];
 async function main(){
  const initial=await writeCbbMemberGame({game,candidate,homeLogo:null,awayLogo:null,now:at,marketQuotes:[...targets,...refs]},db);
- assert.equal(initial.record.memberGame.projected.home,candidate.score.home);assert.equal(initial.record.memberGame.markets.moneyline.pick,"COR ML");
+ assert.equal(initial.record.memberGame.projected.home,candidate.score.home);assert.equal(initial.record.memberGame.markets.moneyline.pick,"PEPP ML");
  assert.equal(initial.record.memberGame.markets.first_inning.writerMovementDirection,undefined,"current winner arbitration is not recorded market movement");
  assert.ok(!initial.record.memberGame.breakdown?.modelBreakdown?.startsWith("Independent projection"),"final market-conditioned forecast cannot masquerade as independent");
- assert.equal(initial.record.memberGame.markets.first_inning.line,2.5,"static opposition cannot synthesize a side flip");
- assert.equal(initial.record.memberGame.markets.first_inning.grade,"market_watch","static professional opposition remains distinct from model value");
+ assert.equal(initial.record.memberGame.markets.first_inning.line,-2.5,"the DTO renders the final selected side after the coherent score correction");
+ assert.equal(initial.record.memberGame.markets.first_inning.verdict.key,"no_play","a changed prediction does not invent value at a vig-negative target");
  assert.notEqual(initial.record.memberGame.markets.first_inning.sharpStatus,"confirm");
  assert.notEqual(initial.record.memberGame.markets.first_inning.marketSignal,"market_confirmed");
- assert.equal(initial.record.memberGame.markets.first_inning.guidedWatchOut,"Professional books disagree with this side.","actual opposing reference retains the opposition explanation");
+ assert.notEqual(initial.record.memberGame.markets.first_inning.guidedWatchOut,"Professional books disagree with this side.","the corrected final side must not inherit obsolete opposition to the original independent side");
  const frozen=await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:lock},db);
  const bytes=JSON.stringify(stored);assert.equal(writes,2);
  const malformed={...candidate,score:{...candidate.score,home:Number.NaN}};
@@ -50,18 +51,18 @@ async function main(){
  assert.equal(await writeLockedCbbTracking(frozen.record,trackingDb),3);
  assert.ok(tracked.every(row=>row.model_version===CBB_MARKET_BEHAVIOR_MODEL_RELEASE&&row.calibration_version===CBB_MARKET_BEHAVIOR_GRADE_RELEASE));
  const trackingBytes=JSON.stringify(tracked);assert.equal(await writeLockedCbbTracking(frozen.record,trackingDb),0);assert.equal(JSON.stringify(tracked),trackingBytes);
- assert.equal(tracked.find(row=>row.market==="spread")?.line_value,2.5);
+ assert.equal(tracked.find(row=>row.market==="spread")?.line_value,-2.5);
  const corrupt=structuredClone(frozen.record);corrupt.snapshot.board.score.home+=1;
  await assert.rejects(writeLockedCbbTracking(corrupt,trackingDb),/receipt differs/);
- const alignedSources=["pinnacle","circa"].map(sportsbook=>({...targets[1],sportsbook,line:-20.5,firstPrice:-140,secondPrice:120}));
+ const alignedSources=["pinnacle","circa"].map((sportsbook,i)=>({...targets[1],sportsbook,line:i===0?-20.5:20.5,firstPrice:-140,secondPrice:120}));
  const alignedAnchors=alignedSources.map((q,i)=>({...q,line:-14.5-i,firstPrice:-110,secondPrice:-110,providerObservedAt:"2026-11-02T15:00:00Z",fetchedAt:"2026-11-02T15:01:00Z",requestedAt:undefined}));
  const alignedRead=readCbbMarketBehavior({independent,independentInputKey:"aligned-magnitude-fixture",startsAt:start,targets,currentQuotes:alignedSources,
   anchors:{release:CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,gameId:777,startsAt:start,independentRelease:CBB_CURRENT_SCORE_RELEASE,
    independentInputKey:"aligned-magnitude-fixture",capturedAt:"2026-11-02T15:01:00Z",quotes:alignedAnchors}});
- assert.equal(alignedRead.receipt.margin.status,"unresolved");assert.equal(alignedRead.receipt.margin.directionalEvidence,"aligned");
+ assert.equal(alignedRead.receipt.margin.status,"unresolved");assert.equal(alignedRead.receipt.margin.directionalEvidence,"opposed");
  const alignedBoard=buildCbbProvisionalBoard(alignedRead.forecast,[...targets,...alignedSources],{marketBehavior:alignedRead.receipt});
  const alignedRow=alignedBoard.rows.find(row=>row.market==="spread")!;
- assert.equal(alignedRow.referenceState,"agrees");assert.equal(alignedRow.pathResistance,true);assert.equal(alignedRow.grade,"Lean");
+ assert.equal(alignedRow.referenceState,"mixed");assert.equal(alignedRow.pathResistance,true);assert.equal(alignedRow.grade,"Watchlist");
  assert.equal(alignedRead.forecast.margin,independent.margin);assert.equal(alignedRead.forecast.homeWinProbability,independent.homeWinProbability);
  const alignedSnapshot={...initial.record.snapshot,board:alignedBoard};
  const alignedDto=adaptCbbProvisionalGame({game,snapshot:alignedSnapshot,homeLogo:null,awayLogo:null,now:at});
@@ -194,6 +195,24 @@ async function main(){
  priorTracked.length=0;assert.equal(await writeLockedCbbTracking(retailPublic,priorTrackingDb),3);
  assert.ok(priorTracked.every(row=>row.model_version===CBB_RETAIL_MARKET_BEHAVIOR_MODEL_RELEASE&&row.calibration_version===CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE&&row.model_used==="cbb_r11_retail_response_receipts"));
  assert.equal(await writeLockedCbbTracking(retailPublic,priorTrackingDb),0);assert.equal(JSON.stringify(retailPublic),retailBytes);
+ const alignedPublic=structuredClone(retailPublic);
+ Object.assign(alignedPublic.snapshot.board,{release:"cbb_candidate_2026_11_03_r15_aligned_native_reactions",
+  modelRelease:CBB_ALIGNED_MARKET_BEHAVIOR_MODEL_RELEASE,gradeRelease:CBB_ALIGNED_MARKET_BEHAVIOR_GRADE_RELEASE});
+ const alignedReceipt=alignedPublic.snapshot.board.marketContext.verifiedMarketRead!;
+ Object.assign(alignedReceipt,{release:CBB_ALIGNED_MARKET_BEHAVIOR_RECEIPT_RELEASE,modelRelease:CBB_ALIGNED_MARKET_BEHAVIOR_MODEL_RELEASE});
+ Object.assign(alignedReceipt.forecastIdentity,{release:CBB_ALIGNED_MARKET_BEHAVIOR_MODEL_RELEASE});
+ alignedReceipt.anchors.release=CBB_ALIGNED_MARKET_BEHAVIOR_RECEIPT_RELEASE;
+ delete alignedReceipt.jointMarginDecision;delete alignedReceipt.originalIndependentUncertainty;
+ const alignedBytes=JSON.stringify(alignedPublic),alignedWrites=writes;stored=alignedPublic;
+ assert.equal((await writeCbbMemberGame({game,candidate:newR6,homeLogo:null,awayLogo:null,now:"2026-11-02T19:09:00Z"},db)).written,false);
+ assert.equal(writes,alignedWrites);
+ assert.equal(readCbbProvisionalSnapshot({locked:alignedPublic.snapshot,unlocked:initial.record.snapshot}),alignedPublic.snapshot);
+ assert.deepEqual(cbbMemberGameForReader(alignedPublic,game),alignedPublic.memberGame,"the R12 stored member DTO takes precedence over the new joint-law semantics");
+ priorTracked.length=0;assert.equal(await writeLockedCbbTracking(alignedPublic,priorTrackingDb),3);
+ assert.ok(priorTracked.every(row=>row.model_version===CBB_ALIGNED_MARKET_BEHAVIOR_MODEL_RELEASE&&
+  row.calibration_version===CBB_ALIGNED_MARKET_BEHAVIOR_GRADE_RELEASE&&row.model_used==="cbb_r12_aligned_native_reactions"));
+ assert.equal(await writeLockedCbbTracking(alignedPublic,priorTrackingDb),0);
+ assert.equal(JSON.stringify(alignedPublic),alignedBytes,"R12 score, probability, pick, grade, price, evidence and old uncertainty remain byte exact without new joint-law fields");
  const migratedPrior=readCbbMarketBehavior({independent,independentInputKey:"new-r4-input",startsAt:start,targets,currentQuotes:refs,anchors:retailReceipt.anchors});
  assert.deepEqual(migratedPrior.receipt.anchors.quotes,retailReceipt.anchors.quotes,"new verified prior cannot erase original R3 market anchors");
  assert.equal(migratedPrior.receipt.anchors.independentRelease,CBB_PREVIOUS_CURRENT_SCORE_RELEASE);
@@ -205,9 +224,9 @@ async function main(){
  assert.equal(flows.length,1);assert.equal(flows[0].sourceIdentity,"independent_named_fixture_join");assert.equal(flows[0].sourceEventId,splits.data[0].event_id);assert.equal(flows[0].line,3.5);assert.equal(flows[0].firstMoney,.1);
  assert.equal(cbbBehaviorFlows(cbbCurrentSplitEvidence(game,{success:true,data:[]},splits,at,at)).length,0,"an unverified participant/time event cannot create model pressure from labels");
  const confirmingSplits=structuredClone(splits);
- Object.assign(confirmingSplits.data[0].splits[0].spread,{home_bets_pct:40,away_bets_pct:60,home_handle_pct:80,away_handle_pct:20});
+ Object.assign(confirmingSplits.data[0].splits[0].spread,{home_line:-3.5,away_line:3.5,home_bets_pct:40,away_bets_pct:60,home_handle_pct:80,away_handle_pct:20});
  const realNamedFlow=cbbBehaviorFlows(cbbCurrentSplitEvidence(game,odds,confirmingSplits,"2026-11-02T15:11:00Z",at));
- const target={...targets[1],line:3.5},current={...target,sportsbook:"circa"},anchor={...current,firstPrice:120,secondPrice:-140,providerObservedAt:"2026-11-02T15:00:00Z",fetchedAt:"2026-11-02T15:01:00Z"};
+ const target={...targets[1],line:-3.5},current={...target,sportsbook:"circa"},anchor={...current,firstPrice:120,secondPrice:-140,providerObservedAt:"2026-11-02T15:00:00Z",fetchedAt:"2026-11-02T15:01:00Z"};
  const confirmingRead=readCbbMarketBehavior({independent,independentInputKey:"frozen-source",startsAt:start,targets:[target],currentQuotes:[current],flows:realNamedFlow,
    anchors:{release:CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,gameId:777,startsAt:start,independentRelease:CBB_CURRENT_SCORE_RELEASE,independentInputKey:"frozen-source",capturedAt:"2026-11-02T15:01:00Z",quotes:[anchor]}});
  const confirmingInput={forecast:confirmingRead.forecast,target,references:[current],asOf:at};
@@ -216,9 +235,8 @@ async function main(){
  const qualifiedBoard=buildCbbProvisionalBoard(confirmingRead.forecast,[target,current],{marketBehavior:confirmingRead.receipt});
  const qualifiedDto=adaptCbbProvisionalGame({game,snapshot:{...initial.record.snapshot,board:qualifiedBoard},homeLogo:null,awayLogo:null,now:at,marketQuotes:[target,current]});
  assert.equal(qualifiedDto.markets.first_inning.sharpStatus,"confirm");assert.equal(qualifiedDto.markets.first_inning.grade,"best_signal");
- assert.equal(qualifiedDto.markets.first_inning.writerMovementDirection,
-  (confirmingRead.receipt.margin.sourceDirection??0)*(qualifiedBoard.rows.find(row=>row.market==="spread")!.selection==="first"?1:-1)>0?"support":"resistance",
-  "the new independent-relative receipt must still carry the actual professional price direction into the reader");
+ assert.equal(qualifiedDto.markets.first_inning.writerMovementDirection,"support",
+  "genuine observed professional movement toward the final pick must survive the new joint-law explanation without being confused with the model-to-source level difference");
  assert.equal(qualifiedDto.markets.first_inning.readerMovementSource,"writer_market_anchor");
  const priceOnlyRead=readCbbMarketBehavior({independent,independentInputKey:"frozen-source",startsAt:start,targets:[target],currentQuotes:[current],
    anchors:{release:CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,gameId:777,startsAt:start,independentRelease:CBB_CURRENT_SCORE_RELEASE,independentInputKey:"frozen-source",capturedAt:"2026-11-02T15:01:00Z",quotes:[anchor]}});
@@ -228,6 +246,6 @@ async function main(){
  assert.notEqual(priceDto.markets.first_inning.sharpStatus,"confirm","price-only promotion cannot imply identified sharp flow");
  const history=[{date:"2026-11-02T09:29:59Z"},{date:"2026-11-02T09:30:00Z"},{date:"2026-11-02T09:30:01Z"}] as Parameters<typeof cbbHistoryAtDecision>[0];
  assert.deepEqual(cbbHistoryAtDecision(history,at),history.slice(0,2),"old independent replay uses its own six-hour availability cutoff");
- console.log("PASS CBB market behavior lock path: static disagreement without invented side change, T-60 freezes last public law, legacy R5 writer/reader/tracking immutability under R6, exact current model/grade tracking and independent source-flow join.");
+ console.log("PASS CBB joint market lock path: coherent current-source winner correction, exact grade/DTO, T-60 freezing, legacy R5/R10/R11/R12 writer-reader-tracking immutability and genuine native movement labels.");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

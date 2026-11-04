@@ -22,6 +22,13 @@ assert.equal(resumption.resolution,"resumed");assert.equal(resumption.latestDire
 assert.equal(run([context],[before]).reaction,"unbound","no later quote is not a hold");
 assert.equal(run([{...context,sourceClass:"multi_book_consensus",physicalFamily:"playbook_consensus",line:null}]).reaction,"unbound","public aggregate cannot borrow Circa's reaction");
 assert.equal(run([{...context,sourceBook:"draftkings",physicalFamily:"draftkings",sourceClass:"retail_named_book"}]).reaction,"unbound","different source histories cannot be matched");
+const mlQuotes=[before,after].map(q=>({...q,market:"moneyline" as const,line:null,sportsbook:"draftkings",firstPrice:-200,secondPrice:170}));
+const networkMoneyline:CbbDecisionSplitContext={...context,market:"moneyline",line:null,sourceBook:"draftkings_network",physicalFamily:"draftkings",
+ sourceClass:"retail_network",provider:"draftkings_network",clockBasis:"capture_upper_bound"};
+assert.equal(run([networkMoneyline],mlQuotes).reaction,"unbound","even a populated legacy network observedAt is a capture clock, not moneyline pressure chronology");
+assert.equal(run([{...networkMoneyline,observedAt:null}],mlQuotes).reaction,"unbound","network-only moneyline remains usable context without inventing a hold");
+assert.equal(run([{...networkMoneyline,sourceBook:"draftkings",sourceClass:"retail_named_book",provider:"owls",
+ clockBasis:"verified_provider_observation"}],mlQuotes).reaction,"held","genuine native moneyline chronology still establishes its actual hold");
 assert.equal(run([{...context,line:-2.5}]).reaction,"unbound","flow's own contract must be genuine");
 assert.equal(run([context],[before,{...before,line:-2.5,providerObservedAt:"2026-11-03T18:05:00Z",fetchedAt:"2026-11-03T18:06:00Z"},after]).reaction,"unbound","cannot skip an intervening changed native contract");
 assert.equal(run([context],[before,{...after,providerObservedAt:"2026-11-03T18:09:00Z"}]).reaction,"unbound","pre-flow move is not a response");

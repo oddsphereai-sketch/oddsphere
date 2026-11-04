@@ -30,7 +30,10 @@ export function readCbbSourcePressure(args:{forecast:CbbForecast;rows:readonly C
       sourceAt:row.observedAt,availableBy:row.availableBy,reaction:"unbound",reactionDirection:null,reactionDelta:null,
       latestDirection:null,resolution:"unavailable",
       baseline:null,current:null,reason:"source_contract_or_response_unavailable"};
-    if(row.sourceClass==="multi_book_consensus"||row.observedAt===null||row.market!=="moneyline"&&row.line===null||quarantined.has(`${book}:${row.market}`))return read;
+    // A table/page capture is context, including moneyline where no numeric
+    // line is needed. It cannot establish when sportsbook pressure occurred.
+    if(row.sourceClass==="multi_book_consensus"||row.sourceClass==="retail_network"||row.clockBasis==="capture_upper_bound"||
+      row.observedAt===null||row.market!=="moneyline"&&row.line===null||quarantined.has(`${book}:${row.market}`))return read;
     const observed=Date.parse(row.observedAt),earliest=Date.parse(row.receiptEarliest??row.availableBy),available=Date.parse(row.availableBy);
     if(![observed,earliest,available].every(Number.isFinite)||earliest>available||observed>available||available>at)return read;
     const quotes=args.quotes.filter(q=>q.gameId===row.gameId&&family(q.sportsbook)===book&&q.market===row.market&&q.phase==="current"&&
