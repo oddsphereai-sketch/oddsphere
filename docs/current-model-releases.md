@@ -8277,3 +8277,20 @@ Before calling a later change live:
 5. Compare current board counts and market mix against the approved paired replay.
 6. Verify the deployed commit, cron health, response freshness, and member reader after both a
    scheduled refresh and the next lock sweep.
+
+
+## Club soccer member historical-evidence display — November 4, 2026
+
+The final R22 browser check found a fixed legacy r2 outcome-reliability table
+rendered beside current UCL and EPL probabilities without release/cohort binding.
+Club-soccer readers now omit that globally hardcoded historical-result paragraph;
+no replacement accuracy claim or qualifier is added. The actual probabilities,
+forecast labels, picks, scores, prices and play grades remain unchanged. The r2 figures were never stored in any locked payload or per-release evidence.
+All actual captured locked forecast markup and source DTO fields remain exact
+after removing only that unsupported paragraph. A new real lock never gains it.
+`app/lab/components/SoccerThreeWayForecast.tsx` owns the extracted presentation;
+`test-soccer-forecast-reliability-display.tsx` runs through the existing UCL
+production suite and proves current-release suppression plus legacy markup hashes.
+Model/outcome/grade/presentation payload/member identifiers remain the complete
+R22/R25/R15/R13/R24 tuple. No source, writer, lease, schedule, refresh, record or
+tracking changes are made by this presentation correction.
