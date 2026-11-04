@@ -58,7 +58,7 @@ import {
   NBA_TEAM_RATINGS_REFRESH_RELEASE,
   refreshNbaTeamRatings,
 } from "@/lib/services/nba/refreshNbaTeamRatingsService";
-import { refreshNbaLines } from "@/lib/services/nba/refreshNbaLinesService";
+import { refreshNbaLines, refreshNbaLineDates } from "@/lib/services/nba/refreshNbaLinesService";
 import { fetchNbaTheOddsApiCurrentBoard, nbaTheOddsApiSafeDiagnosticError } from "@/lib/services/nba/nbaTheOddsApiCurrentOdds";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 import { upsertLabResponseSnapshot } from "@/lib/services/labResponseSnapshots";
@@ -72,7 +72,7 @@ import { nbaPlayerPropsSlateDate } from "@/lib/services/nba/nbaPlayerPropsLifecy
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
 const NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV = "NBA_PLAYER_PROPS_PRIVATE_WRITER_ENABLED";
-const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_11_04_r23_native_consumer_pairs";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_11_04_r24_paid_consumer_book_coverage";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year
@@ -347,33 +347,22 @@ export async function GET(request: Request): Promise<Response> {
           throw error;
         }
       } : undefined;
-      for (const lineDate of lineDates) {
-        console.log(`[nba-daily-refresh] step=lines  slateDate=${lineDate}`);
-        try {
-          lineResults.push({
-            date: lineDate,
-            result: await refreshNbaLines({
-              slateDate: lineDate,
-              owlsApiKey,
-              ballDontLieApiKey: balldontlieApiKey,
-              getTheOddsApiCurrentBoard,
-              dryRun: false,
-              logger: stepLog(`lines:${lineDate}`),
-            }),
-          });
-        } catch (error) {
+      const preparedLines = await refreshNbaLineDates({ dates: lineDates,
+        optionsForDate: (lineDate) => {
+          console.log(`[nba-daily-refresh] step=lines  slateDate=${lineDate}`);
+          return { slateDate: lineDate, owlsApiKey, ballDontLieApiKey: balldontlieApiKey,
+            getTheOddsApiCurrentBoard, dryRun: false, logger: stepLog(`lines:${lineDate}`) };
+        },
+        onFailure: (lineDate) => {
           partial = true;
-          lineFailures.push({
-            date: lineDate,
-            error: error instanceof Error ? error.message : String(error),
-          });
-          if (lineDate === etDateDashed) {
-            snapshotBlockers.push("current_lines_refresh_failed");
-          }
-        }
-      }
+          if (lineDate === etDateDashed) snapshotBlockers.push("current_lines_refresh_failed");
+        },
+      });
+      lineResults.push(...preparedLines.results);
+      lineFailures.push(...preparedLines.failures);
       stepDetails.the_odds_api_current = theOddsApiCurrentBoard ? {
         release: theOddsApiCurrentBoard.release,
+        availableAt: theOddsApiCurrentBoard.availableAt,
         requests: theOddsApiCurrentBoard.requests,
         creditsUsed: theOddsApiCurrentBoard.creditsUsed,
         creditsRemaining: theOddsApiCurrentBoard.creditsRemaining,
@@ -440,6 +429,7 @@ export async function GET(request: Request): Promise<Response> {
       stepDetails.lines = {
         dates: lineResults.map(({ date, result }) => ({
           date,
+          consumerSourceCoverage: result.consumerSourceCoverage ?? null,
           mode: result.mode,
           gamesInDb: result.gamesInDb,
           oddsRowsFetched: result.oddsRowsFetched,

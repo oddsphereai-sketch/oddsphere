@@ -82,7 +82,7 @@ async function main() {
   assert.equal((route.match(/fetchNbaTheOddsApiCurrentBoard\(\{ apiKey: theOddsApiKey \}\)/g) ?? []).length, 1);
   assert.match(route, /getTheOddsApiCurrentBoard,/);
   assert.match(route, /theOddsApiCurrentPromise \?\?=/);
-  assert.match(route, /nba_daily_refresh_schedule_2026_11_04_r23_native_consumer_pairs/);
+  assert.match(route, /nba_daily_refresh_schedule_2026_11_04_r24_paid_consumer_book_coverage/);
 
   const splitSource = readFileSync(new URL("../lib/providers/real_api/sharpApiCurrentSplits.ts", import.meta.url), "utf8");
   assert.match(splitSource, /revalidateTag\("owls-current-splits", \{ expire: 0 \}\)/);

@@ -1,5 +1,36 @@
 # Model change safety protocol
 
+## Owner-directed NBA reuse of available paid consumer contracts — November 4
+
+The owner explicitly requested all available market data affect projections and
+play grades and confirmed The Odds API remains active. After authenticated normal
+refresh proof, review found that the existing paid response discarded complete
+additional consumer-book pairs in game/markets another book already covered. An
+earlier date could finish before a later date triggered the shared league call.
+
+R36 model /R38 marriage /R27 grade /R24 cron preserve one authoritative leased
+writer: prepare the same bounded dates, acquire at most the existing one optional
+lazy paid response when any prepared date lacks consumer-market coverage, then
+finalize every prepared date against that same completed response. Complete BDL
+book/market pairs retain priority; eligible complete missing physical-book pairs
+from The Odds API fill next, followed by already-fetched Owls consumer pairs.
+
+No source, market/book roster, polling, request, writer, schedule, lease, stake or
+grade-threshold expansion is authorized. Exact fixture, book-family, two-sided
+native contract, source clock and actual response availability bind every pair.
+R3 paid receipt records original completion time, never request start or reuse
+time. R36/R35/R34 compatible unlocked knowledge retains original anchors with
+current-first precedence; all actual locked payloads remain exact.
+
+This functional correction adds no demotion rule. Tests must preserve genuine
+eligible promotions/demotions and exact existing same-book priorities. The saved
+630-quote production aggregate does not prove which additional pairs were offered,
+so do not invent a retrospective board-impact count. Existing-run per-date pair/
+book diagnostics and actual normal live grades/coverage must be reported. Focused
+coverage/clock/knowledge/lock tests, the full model gate, independent reviews,
+fresh-main protected PR and normal production writer/reader/lock verification are
+required. Evidence: `docs/model-audits/2026-11-04-nba-paid-consumer-book-coverage.json`.
+
 ## Owner-directed NFL/NBA available-source repair and all-game review — November 4
 
 The owner directed: "fix the NFL split-qualification and NBA future-game price

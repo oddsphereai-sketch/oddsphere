@@ -1,3 +1,5 @@
+import "./test-nba-paid-coverage-knowledge-continuity";
+import "./test-nba-paid-consumer-book-coverage";
 import "./test-nba-owls-consumer-gap";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
