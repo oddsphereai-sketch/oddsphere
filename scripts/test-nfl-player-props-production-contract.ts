@@ -177,6 +177,7 @@ for (const other of [
   { ...resolvedAliasDecision, healthHolds: ["historical_identity_unmatched"] },
   { ...resolvedAliasDecision, healthHolds: ["independent_same_line_confirmation_missing"] },
   { ...resolvedAliasDecision, grade: "Held" as const },
+  { ...resolvedAliasDecision, provider: "owls" as const },
 ]) {
   const negative = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 9, evaluatedAt: "2026-11-04T13:00:00Z",
     nextBoard: boardRows([other, unresolvedAliasDecision]) });
