@@ -4,6 +4,7 @@ on:
     paths:
       - 'lib/services/football/cfbForwardEvidenceStore.ts'
       - 'lib/db/schema-migration-v58-cfb-bounded-history-page.sql'
+      - 'lib/db/schema-migration-v59-cfb-history-scalar-aggregation.sql'
       - 'scripts/test-cfb-bounded-history*'
       - '.github/workflows/cfb-history-memory-proof.yml'
   merge_group:
