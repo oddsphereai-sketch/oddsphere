@@ -182,21 +182,23 @@ function PropReader({ row, onClose }: { row: Row; onClose: () => void }) {
           <Metric title="Model projection" value={row.projection.toFixed(1)} /><Metric title="Pick confidence" value={percent(row.probability)} /><Metric title="Other-book market" value={row.targetExcludedProbability === null ? "—" : percent(row.targetExcludedProbability)} />
         </div>
       </div>
+      {row.movement ? <SameBookMovement row={row} /> : null}
       <FeaturedEvidence row={row} />
       <section className="mt-5 overflow-hidden rounded-xl border border-sky-400/20 bg-[linear-gradient(145deg,rgba(14,165,233,.07),rgba(0,0,0,.20)_62%)] p-4 sm:p-5">
         <div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-[10px] font-black uppercase tracking-wider text-sky-300">Market check</p><h4 className="mt-1 text-lg font-black text-white">Price and confirmation</h4></div><p className="text-[10px] text-gray-500">{row.targetExcludedBooks} other books · {row.targetExcludedReferenceBooks} reference books</p></div>
         <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1.15fr]">
-          <div className="grid grid-cols-2 gap-2">
-            {bestPickQuote ? <PriceChoiceCard title={`Best ${capitalize(row.side)}`} quote={bestPickQuote} selected /> : null}
-            {bestOpposingQuote ? <PriceChoiceCard title={`Best ${capitalize(otherSide)}`} quote={bestOpposingQuote} /> : null}
+          <div className="min-w-0 space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              {bestPickQuote ? <PriceChoiceCard title={`Best ${capitalize(row.side)}`} quote={bestPickQuote} selected /> : null}
+              {bestOpposingQuote ? <PriceChoiceCard title={`Best ${capitalize(otherSide)}`} quote={bestOpposingQuote} /> : null}
+            </div>
+            <details className="rounded-lg border border-gray-800 bg-black/20">
+              <summary className="cursor-pointer list-none px-3 py-3 text-xs font-black text-violet-200">Compare all {row.priceLadder.length} available prices <span aria-hidden="true" className="float-right text-gray-600">＋</span></summary>
+              <div className="border-t border-gray-800 px-3 py-1">{row.priceLadder.map((quote, index) => <div key={`${quote.sportsbook}-${quote.side}-${index}`} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-gray-800 py-2 text-xs last:border-b-0"><strong className="text-gray-200">{book(quote.sportsbook)}</strong><span className={quote.side === row.side ? "text-emerald-300" : "text-gray-500"}>{capitalize(quote.side)} {quote.line}</span><strong className="text-white">{price(quote.americanPrice)}</strong></div>)}</div>
+            </details>
           </div>
           <div className="rounded-lg border border-gray-800 bg-black/25 p-4"><ProbabilityBar title="OddSphere forecast" value={row.probability} tone="bg-violet-400" />{row.targetExcludedProbability === null ? <div className="mt-4"><Metric title="Other-book market" value="—" /></div> : <div className="mt-4"><ProbabilityBar title="Other-book market" value={row.targetExcludedProbability} tone="bg-sky-400" /></div>}</div>
         </div>
-        {row.movement ? <SameBookMovement row={row} /> : null}
-        <details className="mt-3 rounded-lg border border-gray-800 bg-black/20">
-          <summary className="cursor-pointer list-none px-3 py-3 text-xs font-black text-violet-200">Compare all {row.priceLadder.length} available prices <span aria-hidden="true" className="float-right text-gray-600">＋</span></summary>
-          <div className="border-t border-gray-800 px-3 py-1">{row.priceLadder.map((quote, index) => <div key={`${quote.sportsbook}-${quote.side}-${index}`} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-gray-800 py-2 text-xs last:border-b-0"><strong className="text-gray-200">{book(quote.sportsbook)}</strong><span className={quote.side === row.side ? "text-emerald-300" : "text-gray-500"}>{capitalize(quote.side)} {quote.line}</span><strong className="text-white">{price(quote.americanPrice)}</strong></div>)}</div>
-        </details>
       </section>
       <details className="mt-5 rounded-xl border border-gray-800 bg-black/20">
         <summary className="cursor-pointer list-none px-4 py-4 text-sm font-black text-violet-200">View every model input <span aria-hidden="true" className="float-right text-gray-600">＋</span></summary>
@@ -236,13 +238,29 @@ function SameBookMovement({ row }: { row: Row }) {
   const supportsPick = movementSupportsSide(row);
   const directionTone = supportsPick ? "text-emerald-300" : "text-amber-300";
   const currentTone = supportsPick ? "emerald" : "amber";
-  return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3" aria-label={`${book(movement.sportsbook)} same-book market movement`}>
+  const lineMoved = movement.openingLine !== movement.currentLine || (movement.priorLine !== null && movement.priorLine !== movement.openingLine);
+  const values = lineMoved
+    ? [movement.openingLine, movement.priorLine, movement.currentLine]
+    : [impliedProbability(movement.openingPrice) * 100, movement.priorPrice === null ? null : impliedProbability(movement.priorPrice) * 100, impliedProbability(movement.currentPrice) * 100];
+  const points = values.flatMap((value, index) => value === null ? [] : [{ x: index * 160 + 40, value }]);
+  const low = lineMoved ? Math.min(...points.map((point) => point.value)) - 1 : 0;
+  const high = lineMoved ? Math.max(...points.map((point) => point.value)) + 1 : 100;
+  const coordinates = points.map((point) => `${point.x},${82 - (point.value - low) / (high - low) * 54}`).join(" ");
+  return <section className="mt-4 rounded-lg border border-white/[0.09] bg-black/25 p-3" aria-label={`${book(movement.sportsbook)} same-book market movement`}>
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div>
         <p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Same-book movement</p>
         <p className="mt-0.5 text-[7px] font-semibold text-gray-600">{book(movement.sportsbook)} · {capitalize(row.side)} {row.line}</p>
       </div>
       <span className={`text-[7px] font-black uppercase tracking-wider ${hasTrail ? directionTone : "text-gray-500"}`}>{hasTrail ? movementLabel(row) : "Current quote"}</span>
+    </div>
+    <div className="mt-3 rounded-lg border border-white/[0.07] bg-black/20 px-3 pt-2">
+      <p className="text-[9px] text-gray-500">{lineMoved ? "Prop line" : "Book implied chance at the same line"} · recorded states</p>
+      <svg viewBox="0 0 400 100" role="img" aria-label={`${book(movement.sportsbook)} ${lineMoved ? "line" : "implied chance"} at opening, prior when available, and current quote`} className="h-20 w-full">
+        <line x1="40" x2="360" y1="82" y2="82" stroke="#374151" strokeDasharray="3 5" />
+        <polyline points={coordinates} fill="none" stroke="#7dd3fc" strokeWidth="2.5" />
+        {points.map((point) => <circle key={point.x} cx={point.x} cy={82 - (point.value - low) / (high - low) * 54} r="4" fill="#7dd3fc" />)}
+      </svg>
     </div>
     <div className="mt-3 overflow-hidden rounded-lg border border-white/[0.07] bg-black/25">
       <div className="grid grid-cols-[3.25rem_repeat(3,minmax(0,1fr))] border-b border-white/[0.06] bg-white/[0.025]">
@@ -252,7 +270,8 @@ function SameBookMovement({ row }: { row: Row }) {
       <PropMovementTrack label="Line" values={[movement.openingLine, movement.priorLine, movement.currentLine]} currentTone={currentTone} />
       <PropMovementTrack label="Odds" values={[movement.openingPrice, movement.priorPrice, movement.currentPrice]} formatValue={price} currentTone={currentTone} />
     </div>
-    {!hasTrail ? <p className="mt-2 text-right text-[7px] leading-relaxed text-gray-600">No earlier different same-book quote is stored.</p> : null}
+    <p className="mt-2 text-[9px] leading-relaxed text-gray-600">Recorded opening, prior, and current states only; the line does not imply intervening quotes.</p>
+    {!hasTrail ? <p className="mt-1 text-[9px] leading-relaxed text-gray-600">No earlier different same-book quote is stored.</p> : null}
   </section>;
 }
 function PropMovementTrack({ label, values, formatValue = String, currentTone }: { label: "Line" | "Odds"; values: readonly (number | null)[]; formatValue?: (value: number) => string; currentTone: "emerald" | "amber" }) {
@@ -355,6 +374,7 @@ function teamColor(team: string): string { return TEAM_COLORS[team] ?? "#7c3aed"
 const TEAM_COLORS: Record<string, string> = { ATL: "#E03A3E", BOS: "#007A33", BKN: "#000000", CHA: "#1D1160", CHI: "#CE1141", CLE: "#860038", DAL: "#00538C", DEN: "#0E2240", DET: "#C8102E", GSW: "#1D428A", HOU: "#CE1141", IND: "#002D62", LAC: "#C8102E", LAL: "#552583", MEM: "#5D76A9", MIA: "#98002E", MIL: "#00471B", MIN: "#0C2340", NOP: "#0C2340", NYK: "#006BB6", OKC: "#007AC1", ORL: "#0077C0", PHI: "#006BB6", PHX: "#1D1160", POR: "#E03A3E", SAC: "#5A2D81", SAS: "#C4CED4", TOR: "#CE1141", UTA: "#002B5C", WAS: "#002B5C" };
 function book(value: string): string { const labels: Record<string, string> = { bet365: "bet365", betmgm: "BetMGM", betparx: "betPARX", betrivers: "BetRivers", caesars: "Caesars", draftkings: "DraftKings", fanduel: "FanDuel", novig: "NoVig", pinnacle: "Pinnacle", polymarket: "Polymarket" }; return labels[value.toLowerCase()] ?? value; }
 function price(value: number): string { return value > 0 ? `+${value}` : String(value); }
+function impliedProbability(value: number): number { return value > 0 ? 100 / (value + 100) : Math.abs(value) / (Math.abs(value) + 100); }
 function percent(value: number): string { return `${(value * 100).toFixed(1)}%`; }
 function movementLabel(row: Row): string {
   if (!row.movement) return "";
