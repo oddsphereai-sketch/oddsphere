@@ -132,10 +132,14 @@ per-market member signals.
 
 ## Current-board rehearsal
 
-The final live-input dry run and board-count comparison must be recorded after
-the candidate is integrated with the latest production base. A zero-effect
-snapshot is valid only when the stored episode receipts explain why no causal
-innovation qualified; no actionability quota is manufactured.
+The November 4 read-only rehearsal processed four games and twelve markets with
+zero errors. Against the r25 stored rows it produced one Total side change,
+zero promotions, one demotion and seven actionables instead of eight: zero Best
+Angle, seven Lean and five Watchlist. The current named-book episodes were flat
+or otherwise non-authoritative after exact execution-book exclusion, so no
+reader innovation changed a score on this snapshot. The changed Total is the
+coherent final-distribution result rather than an invented market consequence.
+No actionability quota was used.
 
 ## Remaining boundary
 

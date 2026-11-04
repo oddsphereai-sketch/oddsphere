@@ -1,0 +1,116 @@
+{
+  "base": "8042a567281c3e96ff651ac50b8aeece774925f5",
+  "scope": "Owner-directed three-gap functional correction for forward evaluation",
+  "release": {
+    "independent": "cbb_candidate_2026_11_03_r4_verified_new_orleans_venue_prior",
+    "market": "cbb_candidate_2026_11_03_r13_joint_native_market_decision",
+    "grade": "cbb_2026_11_03_r15_joint_native_market_decision",
+    "receipt": "R9",
+    "path": "R4",
+    "board": "R16",
+    "publisher": "R25",
+    "tracking": "R13",
+    "adapter": "R14"
+  },
+  "fixes": [
+    {
+      "id": "CBB-REVIEW-01",
+      "implementation": "Native source observation/contract outranks capture-only webpage; per-page freshness retained; network cannot claim price response",
+      "tests": [
+        "test-cbb-decision-split-context.ts",
+        "test-cbb-source-pressure-decision.ts"
+      ]
+    },
+    {
+      "id": "CBB-REVIEW-02",
+      "implementation": "Current source-owned law may replace numerical independent default; genuine confirmation retained only with current winner/contract consistency",
+      "tests": [
+        "test-cbb-integrated-market-decisions.ts",
+        "test-cbb-joint-decision-integrity.ts"
+      ]
+    },
+    {
+      "id": "CBB-REVIEW-03",
+      "implementation": "Current ML and Spread jointly constrain exact margin/dispersion; no flatSpread numerical veto",
+      "tests": [
+        "test-cbb-joint-market-law.ts",
+        "test-cbb-integrated-market-decisions.ts"
+      ]
+    }
+  ],
+  "assumptions": [
+    "Same physical source/current state frame; exact no-tie/push conditional inversion",
+    "No-history coherent current professional reference is actionable; complete profile then Circa/Pinnacle/Bookmaker if observed authority cannot distinguish agreeing winners",
+    "Single/redundant contract retains independent shape explicitly",
+    "Current law adopted once; no double episode correction",
+    "Unresolved current constraints yield explicit retention, not old hidden relative correction",
+    "Existing3%/8% grade reserves and executable price eligibility unchanged"
+  ],
+  "preservation": [
+    "IndependentR4 artifact/training unchanged",
+    "PriorR12/R14/R8 and earlier locked payloads exact",
+    "Original independent uncertainty stored separately from final source-implied uncertainty",
+    "No extra provider source/cadence/stakes/writer",
+    "NewOrleans future-only; T60 immutability"
+  ],
+  "sameInputImpact": {
+    "games": 14,
+    "markets": 42,
+    "beforeActionable": 19,
+    "afterActionable": 17,
+    "promotions": 0,
+    "demotions": 2,
+    "sideChanges": 1,
+    "changes": [
+      {
+        "gameId": 10882600,
+        "market": "moneyline",
+        "beforeGrade": "Watchlist",
+        "afterGrade": "No Play",
+        "beforeSelection": "first",
+        "afterSelection": "first"
+      },
+      {
+        "gameId": 10882600,
+        "market": "spread",
+        "beforeGrade": "Lean",
+        "afterGrade": "No Play",
+        "beforeSelection": "first",
+        "afterSelection": "first"
+      },
+      {
+        "gameId": 10882617,
+        "market": "spread",
+        "beforeGrade": "No Play",
+        "afterGrade": "No Play",
+        "beforeSelection": "second",
+        "afterSelection": "first"
+      },
+      {
+        "gameId": 10882618,
+        "market": "moneyline",
+        "beforeGrade": "Watchlist",
+        "afterGrade": "No Play",
+        "beforeSelection": "first",
+        "afterSelection": "first"
+      },
+      {
+        "gameId": 10882618,
+        "market": "spread",
+        "beforeGrade": "Lean",
+        "afterGrade": "No Play",
+        "beforeSelection": "first",
+        "afterSelection": "first"
+      }
+    ]
+  },
+  "reviewCoverage": [
+    "Sourceclocknativecontract",
+    "Exactsolver, duplicate/impossible/incoherentlaw",
+    "Freshoppositewinner vs samemovement",
+    "Static agreeingwinner correction",
+    "Actual promotion/demotion and largeflips",
+    "Legacy lock writer/reader precedence"
+  ],
+  "outcomeAccuracyClaim": false
+}

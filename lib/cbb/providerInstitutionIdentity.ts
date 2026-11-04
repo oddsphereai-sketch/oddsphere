@@ -1,6 +1,6 @@
 import { canonicalCbbTeamName } from "./dataset";
 
-export const CBB_PROVIDER_IDENTITY_RELEASE = "cbb_provider_identity_2026_11_03_r4_complete_cached_source_aliases" as const;
+export const CBB_PROVIDER_IDENTITY_RELEASE = "cbb_provider_identity_2026_11_04_r5_current_board_source_aliases" as const;
 
 // Provider spellings of named institutions, never mascot or substring guesses.
 // Keep State and Saint distinct and preserve ambiguous schools (USC, Miami).
@@ -22,6 +22,10 @@ for (const [source, institution] of [
   // IPFW/Purdue FW both identify Purdue Fort Wayne; State stays distinct.
   ["IPFW", "Purdue Fort Wayne"], ["Purdue FW", "Purdue Fort Wayne"],
   ["S Dakota St", "South Dakota State"],
+  // Exact participant labels in the retained November 4 Owls response.
+  ["N Dakota St", "North Dakota State"],
+  ["CSU Northridge", "Cal State Northridge"], ["CS Northridge", "Cal State Northridge"],
+  ["LMU", "Loyola Marymount"],
   ["AR-Pine Bluff", "Arkansas-Pine Bluff"], ["CA Baptist", "California Baptist"],
   ["Cal Baptist", "California Baptist"],
   ["N Arizona", "Northern Arizona"], ["Fullerton", "Cal State Fullerton"],

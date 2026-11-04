@@ -131,8 +131,10 @@ async function main(){
   assert.equal(firstInput.independent.release,CBB_CURRENT_SCORE_RELEASE);
   assert.equal(firstInput.independent.margin,firstReceipt.independentScore.margin);
   assert.ok(firstInput.sourceQuotes.every(q=>q.sportsbook==="pinnacle"));
-  assert.equal(firstMarket.owlsCalls,2);assert.equal(firstReceipt.winnerArbitration.status,"context_only");
-  assert.deepEqual(firstReceipt.finalScore,firstReceipt.independentScore,"a static starting-level disagreement does not invent a winner replacement");
+  assert.equal(firstMarket.owlsCalls,2);assert.equal(firstReceipt.winnerArbitration.status,"applied");
+  assert.notDeepEqual(firstReceipt.finalScore,firstReceipt.independentScore,"a current native price law can correct a static independent disagreement");
+  assert.ok(firstReceipt.finalScore.margin<0,"both actual current professional contracts favor the visitor");
+  assert.ok(firstReceipt.originalIndependentUncertainty&&firstReceipt.frozenUncertainty,"original and final laws are retained separately");
   assert.ok(Math.abs(firstRead.memberGame.projected.home-firstRead.memberGame.projected.away-firstRead.snapshot.board.score.margin)<1e-10);
   assert.equal(firstRead.memberGame.markets.first_inning.writerMovementDirection,undefined,"current opposition alone cannot become movement");
   await referenceRefresh("2026-10-29T22:10:00Z",4.5,150,-170);

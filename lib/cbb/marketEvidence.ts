@@ -85,7 +85,15 @@ export function cbbPriceObservations(quotes: CbbQuote[]): MarketBrainObservation
 /** Review economics on the forecast side; never choose a different winner for a larger EV. */
 export function reviewCbbQuote(forecast: CbbForecast, quote: CbbQuote) {
   const probabilities = cbbThresholdProbabilities(forecast, quote.market, quote.line);
-  const selection = probabilities.first >= probabilities.second ? "first" : "second";
+  // An exact inversion can leave a fair 50/50 contract a few ulps either
+  // side of equality. At that numerical tie, use the better executable payout
+  // rather than let floating point noise choose a worse prediction/grade.
+  const payout=(price:number)=>price>0?price/100:100/-price;
+  const tied=Math.abs(probabilities.first-probabilities.second)<=1e-12;
+  const firstValue=probabilities.first*payout(quote.firstPrice)-probabilities.second;
+  const secondValue=probabilities.second*payout(quote.secondPrice)-probabilities.first;
+  const selection = tied?(firstValue>=secondValue?"first":"second"):
+    probabilities.first >= probabilities.second ? "first" : "second";
   const price = selection === "first" ? quote.firstPrice : quote.secondPrice;
   const p = selection === "first" ? probabilities.first : probabilities.second;
   const lose = selection === "first" ? probabilities.second : probabilities.first;

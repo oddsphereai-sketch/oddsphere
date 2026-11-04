@@ -42,7 +42,59 @@ This is functional product qualification followed by forward evaluation, not a
 future betting-accuracy guarantee. It adds no provider request, writer, cron,
 lease, stake or locked-record mutation. Evidence and rollback:
 `docs/model-audits/2026-11-04-nhl-external-audited-sharp-reader-r27.md`.
+## Current-board CBB source identity correction — November 4
 
+The owner's standing instruction is to publish the reviewed functional reader,
+spot-check actual games and fix anything that needs fixing. The latest request
+asks independent AI reviewers to read every current game's market and confirm
+its projections/predictions/grades make sense. One bounded actual provider read
+revealed available Pinnacle contracts dropped for exact institution spelling,
+not genuinely unavailable data. This narrow source-identity repair continues
+that authorized functional scope: independent R4 unchanged; market R14 /grade
+R16 /receipt R10 /board R17 /publisher R26 /tracking R14 /adapter R15, with
+provider identity R5 and split mapping R4.
+
+No numerical algorithm, grade threshold, stake, source preference, provider
+cadence or writer changes. Only four observed aliases are added; wrong-school
+Maryland/High Point, North Dakota versus North Dakota State, Colorado State
+versus Northridge and other Loyola/Queens institutions remain distinct.
+The same actual response /11-game/33-market comparison restores6 professional
+contracts and changes2 scores,0 sides and1 actionable demotion (13→12), with
+existing paired promotion/demotion functionality tested and no replacement quota.
+All quotes retain their genuine post-discovery availability, not historical
+backdating. Locked R13/R15/R9 and earlier records remain exact; original R9
+anchors continue. Full/focused checks, independent source/legacy review,
+fresh-main protected PR and post-deployment release/data/reader/lock proof
+remain mandatory. No outcome-accuracy claim. Evidence:
+`docs/model-audits/2026-11-04-cbb-current-board-source-aliases.json`.
+
+## Owner-directed three-gap CBB joint decision repair — November 3
+
+After three independent reviewers reproduced the remaining native/network clock
+bug, static market/model numerical veto and flat-Spread/ML numerical veto, the
+owner explicitly instructed: "please fix all three gaps, get the reader actually
+interpreting everything properly, run a focused external review, and get the
+corrections live." This authorizes the reviewed functional repair and forward
+outcome evaluation: independent R4 unchanged; market R13 /grade R15 /receipt R9
+/path R4 /board R16 /publisher R25 /tracking R13 /adapter R14.
+
+The selected current professional source can identify both margin and dispersion
+from its own ML/Spread law; source selection, genuine confirmation/fade and
+current-source opposition remain explicit. No fitted blend, point cap, market
+average or retroactive outcome qualification is introduced. This scoped
+permission covers the documented current-source reference default and original
+versus final uncertainty contract. The current14-game/42-market functional
+comparison has0 promotions,2 demotions and1 side change, actionables19→17;
+paired functional promotions and demotions remain required, with no quota.
+
+Existing grade reserves/price policy, independent training, provider cadence,
+stakes, sole prediction_pipeline:cbb lease and T60 first-admission rule remain
+unchanged. All existing R12/R14/R8 and earlier locked public payloads and
+tracking retain exact semantics. Do not reinterpret an old lock under the new
+joint law. Full/focused checks, independent source/consequence review,
+fresh-main protected PR, exact tree and actual live release/source/lock/reader
+verification remain mandatory. This is not a win-rate or exhaustive-future-case
+claim. Evidence: `docs/model-audits/2026-11-03-cbb-joint-native-decision-repair.json`.
 ## Owner-directed aligned CBB decisions and prospective New Orleans repair — November 3
 
 After the live R11/R13 repair, the owner explicitly instructed: "Fix that issue

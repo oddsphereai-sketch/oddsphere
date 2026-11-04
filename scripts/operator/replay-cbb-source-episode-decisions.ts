@@ -22,7 +22,7 @@ for(const stored of rows){
  if(!old.forecastIdentity||!old.frozenUncertainty||![CBB_CURRENT_SCORE_RELEASE,CBB_PREVIOUS_CURRENT_SCORE_RELEASE].includes(old.independentRelease)){refused.push({gameId:board.gameId,reason:"missing_exact_independent_input"});continue;}
  let independent:CbbForecast={...retained?.independent,...old.forecastIdentity,release:old.independentRelease,asOf:old.evaluatedAt,
   margin:old.independentScore.margin,total:old.independentScore.total,homeScore:old.independentScore.home,awayScore:old.independentScore.away,
-  homeWinProbability:old.independentScore.homeWinProbability,uncertainty:old.frozenUncertainty};
+  homeWinProbability:old.independentScore.homeWinProbability,uncertainty:old.originalIndependentUncertainty??old.frozenUncertainty};
  let independentInputKey=old.independentInputKey;
  if(process.argv.includes("--current-independent")){
   if(!input.training||Date.parse(input.training.updatedAt)>Date.parse(old.evaluatedAt))throw new Error("Original training availability is not attested");
