@@ -192,11 +192,18 @@ export default async function CandidateDailyEdgePage({
     snapshot = emptyPreviewSnapshot(sport, "temporarily_unavailable");
   }
   if (cbbPublicationEnabled) {
-    // The member board contains the sole writer's published, tracked games.
-    // Unmodeled fixtures remain ingestion inputs, not empty betting cards.
+    // Keep published/locked forecasts authoritative. Eligible schedule-only
+    // fixtures have a separate pending presentation, without betting outputs.
+    const scheduledRead = snapshotUnavailable ? {value:snapshot} : await readMemberDataWithDeadline({
+      label: "cbb-member-schedule",
+      fallback: snapshot,
+      read: async () => (await import("@/lib/services/cbb/cbbMemberSchedule"))
+        .attachCbbMemberSchedule(snapshot),
+    });
+    snapshot = scheduledRead.value;
     const {isOwnerApprovedCbbMemberExclusion}=await import("@/lib/cbb/memberBoardScope");
     const games=snapshot.games.filter(game=>!isOwnerApprovedCbbMemberExclusion(game));
-    snapshot = { ...snapshot, games, memberPresentation:buildDailyEdgeMemberPresentation({games}), cbbRollingSchedule: undefined };
+    snapshot = { ...snapshot, games, memberPresentation:buildDailyEdgeMemberPresentation({games}) };
   }
 
   if (nflFixture) {

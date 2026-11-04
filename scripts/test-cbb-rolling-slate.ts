@@ -59,8 +59,9 @@ const memberPage = readFileSync(new URL("../app/lab/daily-edge/CandidateDailyEdg
 const privatePage = readFileSync(new URL("../app/dev/experience-preview/page.tsx", import.meta.url), "utf8");
 const cardView = readFileSync(new URL("../app/dev/experience-preview/ActualDailyEdgePreview.tsx", import.meta.url), "utf8");
 assert.match(memberPage, /CBB_ACTIVATION\.memberPublication/);
-assert.match(memberPage, /cbbRollingSchedule: undefined/);
-assert.doesNotMatch(memberPage, /loadCbbRollingSchedule/,"unmodeled fixtures remain internal ingestion inputs, not empty member betting cards");
+assert.match(memberPage, /attachCbbMemberSchedule/);
+assert.doesNotMatch(memberPage, /cbbRollingSchedule: undefined/, "the active route must retain eligible pending schedule identity");
+assert.doesNotMatch(memberPage, /loadCbbRollingSchedule/,"the active page uses the cached, scoped attachment rather than uncached provider or prediction work");
 assert.match(privatePage, /snapshot\.cbbRollingSchedule = await loadCbbRollingSchedule/);
 assert.match(privatePage, /sport === "cbb" && process\.env\.NODE_ENV === "production"\) notFound\(\)/);
 assert.match(cardView, /function CbbScheduledCard/);
