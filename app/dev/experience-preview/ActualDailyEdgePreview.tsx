@@ -2,6 +2,7 @@
 
 import { startTransition, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import {SoccerThreeWayForecast} from "@/app/lab/components/SoccerThreeWayForecast";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -1260,25 +1261,6 @@ function SoccerBttsForecast({ market, projection, game }: { market: MarketEdgeDt
   return <section className="mt-3 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.025] p-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-emerald-200">Both teams to score forecast</p><p className="mt-1 text-[11px] font-black text-white">Dedicated Yes/No probabilities</p></div><div className="mt-3 grid grid-cols-2 gap-2">{outcome("Yes", context.yes_p, context.displayed_side === "yes")}{outcome("No", context.no_p, context.displayed_side === "no")}</div><div className="mt-2 grid grid-cols-2 gap-2 text-[8px]"><p className="rounded-md border border-white/[0.06] bg-black/20 px-2 py-1.5 text-gray-500"><strong className="text-gray-200">{game.awayTeam}</strong> goal-outlook score chance · {(awayScores * 100).toFixed(0)}%</p><p className="rounded-md border border-white/[0.06] bg-black/20 px-2 py-1.5 text-gray-500"><strong className="text-gray-200">{game.homeTeam}</strong> goal-outlook score chance · {(homeScores * 100).toFixed(0)}%</p></div><p className="mt-2 text-[8px] leading-relaxed text-gray-500">{projection.coherentScorePresentation ? "BTTS and each team’s scoring chance come from the same final score distribution." : "The Yes/No probabilities above set the BTTS pick. Team scoring chances are separate goal-outlook context."}</p></section>;
 }
 
-function soccerForecastReliability(probability: number): { label: string; actual: number; sample: number; caution?: string } {
-  if (probability >= 0.6) return { label: "Strong model favorite", actual: 57.1, sample: 14, caution: "Small final-quarter sample" };
-  if (probability >= 0.5) return { label: "Model favorite", actual: 68.2, sample: 22 };
-  if (probability >= 0.4) return { label: "Open three-way", actual: 29.7, sample: 37 };
-  return { label: "Very open three-way", actual: 31.8, sample: 22 };
-}
-
-function SoccerThreeWayForecast({ game, market }: { game: DailyEdgeGameDto; market: MarketEdgeDto }) {
-  const context = market.soccerMatchResultContext;
-  if (!context) return null;
-  const outcomes = [
-    { key: "away" as const, label: game.awayTeam },
-    { key: "draw" as const, label: "Draw" },
-    { key: "home" as const, label: game.homeTeam },
-  ];
-  const favoriteProbability = context.model[context.displayed_side];
-  const reliability = soccerForecastReliability(favoriteProbability);
-  return <section className="mt-3 rounded-lg border border-sky-400/15 bg-sky-400/[0.035] p-3"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-sky-200">Outcome confidence · three-way win outlook</p><p className="mt-1 text-[11px] font-black text-white">{reliability.label}</p></div><span className="rounded-full border border-white/[0.08] px-2 py-1 text-[7px] font-black uppercase tracking-wider text-gray-400">Separate from Bet grade</span></div><div className="mt-3 grid grid-cols-3 gap-2">{outcomes.map((outcome) => { const selected = outcome.key === context.displayed_side; return <div key={outcome.key} className={`rounded-lg border p-2 text-center ${selected ? "border-sky-300/30 bg-sky-400/[0.09]" : "border-white/[0.07] bg-black/20"}`}><p className="truncate text-[8px] font-black text-gray-400">{outcome.label}</p><p className={`mt-1 font-mono text-base font-black ${selected ? "text-sky-200" : "text-white"}`}>{(context.model[outcome.key] * 100).toFixed(1)}%</p><p className="mt-0.5 text-[7px] text-gray-600">Market {context.market ? `${(context.market[outcome.key] * 100).toFixed(1)}%` : "—"}</p></div>; })}</div><p className="mt-2 text-[8px] leading-relaxed text-gray-500">In the untouched final quarter, this r2 model-probability band won {reliability.actual.toFixed(1)}% of {reliability.sample} matches. {reliability.caution ?? "That supports a forecast label, not a guarantee or parlay recommendation."}</p></section>;
-}
 
 function SoccerDoubleChancePanel({ game }: { game: DailyEdgeGameDto }) {
   const market = game.soccerDoubleChanceMarket;
