@@ -14,7 +14,7 @@ export function withoutUnresolvedNflPlayerAliasDuplicates<T extends {
     const resolved = rows.filter(other => other.gameId === row.gameId
       && key(other.playerName) === "chigokonkwo" && other.team === "WAS"
       && Number.isFinite(other.projection) && other.projection !== null
-      && !other.healthHolds.some(hold => /identity/.test(hold)));
+      && other.grade !== "Held" && other.healthHolds.length === 0);
     const ids = new Set(resolved.map(other => other.providerPlayerId).filter(Boolean));
     if (ids.size !== 1 || !ids.has("734")) return true;
     return !resolved.some(other => other.market === row.market && other.line === row.line && other.side === row.side);
