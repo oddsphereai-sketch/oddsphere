@@ -135,6 +135,9 @@ import {
   CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE,
   CFB_V1_DECISION_RELEASE,
   CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE,
+  CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE,
+  CFB_V1_RESISTANCE_PREVIOUS_CALIBRATION_RELEASE,
+  CFB_V1_RESISTANCE_PREVIOUS_GRADE_POLICY_RELEASE,
   CFB_V1_MARKET_EVIDENCE_PREVIOUS_CALIBRATION_RELEASE,
   CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE,
   CFB_V1_PRICE_CONTEXT_PREVIOUS_CALIBRATION_RELEASE,
@@ -659,8 +662,14 @@ const positiveMarketConfirmedFavoriteLean = applyCfbBalancedPositiveValueRule({
   expectedValue: 0.03, modelProbability: 0.72, marketFairProbability: 0.68, evaluatedPrice: -250,
   evaluatedLine: null, sharpDirection: "unknown", publicDirection: "neutral", movementDirection: "resistance", reasonCodes: [],
 });
-assert.equal(positiveMarketConfirmedFavoriteLean.finalGrade, "Lean", "a positive-value market-confirmed favorite retains the paired promotion path");
-assert.equal(positiveMarketConfirmedFavoriteLean.reasonCodes.includes("moneyline_market_confirmed_favorite_lean"), true);
+assert.equal(positiveMarketConfirmedFavoriteLean.finalGrade, "Watchlist", "positive value cannot bypass observed movement resistance in the expensive-favorite lane");
+assert.equal(positiveMarketConfirmedFavoriteLean.reasonCodes.includes("moneyline_market_confirmed_favorite_lean"), false);
+const cleanMarketConfirmedFavoriteLean = applyCfbBalancedPositiveValueRule({
+  market: "moneyline", finalGrade: "Watchlist", probabilityGrade: "Best Angle", executionStatus: "bet",
+  expectedValue: 0.03, modelProbability: 0.72, marketFairProbability: 0.68, evaluatedPrice: -250,
+  evaluatedLine: null, sharpDirection: "support", publicDirection: "neutral", movementDirection: "support", reasonCodes: [],
+});
+assert.equal(cleanMarketConfirmedFavoriteLean.finalGrade, "Lean", "the clean corresponding expensive-favorite promotion remains reachable");
 const prohibitiveFavorite = applyCfbBalancedPositiveValueRule({
   market: "moneyline", finalGrade: "Watchlist", probabilityGrade: "Best Angle", executionStatus: "shop",
   expectedValue: -0.08, modelProbability: 0.82, marketFairProbability: 0.78, evaluatedPrice: -800,
@@ -989,13 +998,14 @@ function releaseTransitionPayload(args: {
   }
   if (next.authoritativeForecast) next.authoritativeForecast.release = args.forecastRelease;
   if (args.decisionRelease !== CFB_V1_DECISION_RELEASE) {
-    const policy = args.decisionRelease === CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE
-      ? next.decisions.policyRelease : CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE;
+    const policy = args.decisionRelease === CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE || args.decisionRelease === CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE
+      ? CFB_V1_RESISTANCE_PREVIOUS_GRADE_POLICY_RELEASE : CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE;
     next.decisions.policyRelease = policy as typeof next.decisions.policyRelease;
     next.decisions.evaluatedBets = next.decisions.evaluatedBets.map(decision => ({
       ...decision,
       policyRelease: policy as typeof decision.policyRelease,
-      calibrationRelease: (args.decisionRelease === CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE
+      calibrationRelease: (args.decisionRelease === CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE ? CFB_V1_RESISTANCE_PREVIOUS_CALIBRATION_RELEASE
+        : args.decisionRelease === CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE
         ? CFB_V1_PRICE_CONTEXT_PREVIOUS_CALIBRATION_RELEASE
         : args.decisionRelease === CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE
           ? CFB_V1_MARKET_EVIDENCE_PREVIOUS_CALIBRATION_RELEASE
@@ -1137,6 +1147,25 @@ assert.deepEqual(cfbLockPlanningEvidence([marketEvidenceOldLock]), [marketEviden
   "r58 writer must not plan a replacement for an r57 T-60 lock");
 assert.equal(marketEvidenceTransition.find((row) => row.providerGameId === "same-schema-unlocked")?.id,
   "r58-same-schema-unlocked");
+
+const resistancePreviousRows = sameSchemaPreviousRows.map(row => {
+  const previous = releaseTransitionPayload({ providerGameId: row.providerGameId, gameStartsAt: row.gameStartAt,
+    capturedAt: row.capturedAt, stage: row.stage === "t60" ? "t60" : "unlocked",
+    schemaRelease: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, memberRelease: CFB_FORWARD_MEMBER_RELEASE,
+    decisionRelease: CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE, forecastRelease: CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE });
+  return { ...row, id: `r58-${row.providerGameId}`, payload: previous, payloadSha256: hashCfbForwardEvidencePayload(previous) };
+});
+const resistancePreviousLock = resistancePreviousRows.find(row => row.stage === "t60")!;
+const resistancePreviousBytes = JSON.stringify(resistancePreviousLock);
+const resistanceTransition = selectLatestCfbMemberEvidenceRows([...resistancePreviousRows, {
+  ...evidence, id: "resistance-current-unlocked", providerGameId: "same-schema-unlocked", stage: "unlocked",
+  capturedAt: sameSchemaCurrentPayload.capturedAt, gameStartAt: sameSchemaCurrentPayload.game.scheduledStart,
+  payloadSha256: hashCfbForwardEvidencePayload(sameSchemaCurrentPayload), payload: sameSchemaCurrentPayload,
+}], "2026-10-24T17:05:00Z");
+assert.deepEqual(resistanceTransition.find(row => row.providerGameId === resistancePreviousLock.providerGameId), resistancePreviousLock,
+  "reader preserves the prior locked probabilities, prices, evidence and grades before resistance semantics change");
+assert.equal(JSON.stringify(resistancePreviousLock), resistancePreviousBytes);
+assert.deepEqual(cfbLockPlanningEvidence([resistancePreviousLock]), [resistancePreviousLock], "writer retains the existing lock and cannot replace it");
 
 // Production rollout: the intermediate r55 wave failed one unlocked game but
 // created a valid lock. That exact lock must bridge to current r56 without
@@ -1327,6 +1356,37 @@ assert.equal(
   null,
   "transport byte-length corruption fails closed",
 );
+// The immediately previous public snapshot remains readable without rerunning
+// the new resistance guard on its stored locked picks or evidence.
+const resistancePreviousSnapshot = {
+  ...structuredClone(compactMemberSnapshot),
+  snapshotRelease: "cfb_forward_member_snapshot_2026_10_31_r60_market_evidence_integrity",
+  fixtureRelease: "cfb_v1_member_fixture_2026_10_31_r100_market_evidence_integrity",
+  fixture: { ...structuredClone(member), fixtureRelease: "cfb_v1_member_fixture_2026_10_31_r100_market_evidence_integrity" },
+};
+const resistanceSnapshotJson = JSON.stringify(resistancePreviousSnapshot);
+const resistanceSnapshotCompressed = gzipSync(Buffer.from(resistanceSnapshotJson));
+const resistancePreviousEnvelope = {
+  ...compactMemberEnvelope,
+  envelopeRelease: resistancePreviousSnapshot.snapshotRelease,
+  snapshotRelease: resistancePreviousSnapshot.snapshotRelease,
+  checksum: createHash("sha256").update(resistanceSnapshotJson).digest("hex"),
+  uncompressedBytes: Buffer.byteLength(resistanceSnapshotJson),
+  compressedBytes: resistanceSnapshotCompressed.byteLength,
+  payload: resistanceSnapshotCompressed.toString("base64"),
+};
+let resistanceSnapshotQueries = 0;
+const resistanceSnapshotClient = { from() {
+  const current = ++resistanceSnapshotQueries === 1;
+  const query = { select() { return query; }, eq() { return query; }, like() { return query; }, order() { return query; },
+    maybeSingle() { return Promise.resolve({ data: null, error: null }); },
+    limit() { return Promise.resolve({ data: current ? [] : [{ payload: resistancePreviousEnvelope }], error: null }); } };
+  return query;
+} } as unknown as SupabaseClient;
+const resistanceSnapshotRead = await readCfbForwardMemberSnapshot({ client: resistanceSnapshotClient, season: 2026, now: lockedAt });
+assert.deepEqual(resistanceSnapshotRead?.fixture, resistancePreviousSnapshot.fixture,
+  "prior snapshot reader preserves the exact legacy locked payload before new grade semantics");
+assert.equal(JSON.stringify(resistancePreviousSnapshot), resistanceSnapshotJson, "snapshot read does not mutate the legacy record");
 const previousFixture = structuredClone(member) as unknown as Record<string, unknown>;
 previousFixture.fixtureRelease = CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE;
 const previousSnapshot = {
