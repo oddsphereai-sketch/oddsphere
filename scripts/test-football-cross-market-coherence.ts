@@ -643,3 +643,79 @@ function decision(args: {
 function profitOne(price: number): number {
   return price > 0 ? price / 100 : 100 / -price;
 }
+
+// Prospective NFL policy: preserve a skewed distribution's mean, exact PMF
+// probabilities and picks. The 1.8859 point gap is an illustration of the live
+// ARI/SEA rejection, not a reconstructed provider forecast or a new tolerance.
+const skewTotalMean = 41.5 + 1.8859;
+const skewUnderProbability = (50 - skewTotalMean) / (50 - 39);
+const skewForecast: FootballCoherenceForecast = {
+  expectedAwayPoints: (skewTotalMean - .6) / 2,
+  expectedHomePoints: (skewTotalMean + .6) / 2,
+  representativeScore: { away: 20, home: 23 },
+  awayWinProbability: .4, homeWinProbability: .6,
+  marginDistribution: { values: [-3, 3], probabilities: [.4, .6] },
+  totalDistribution: { values: [39, 50], probabilities: [skewUnderProbability, 1 - skewUnderProbability] },
+};
+const skewDecision = decision({ market: "total", side: "Under 41.5", probability: skewUnderProbability,
+  fair: .55, price: -110, line: 41.5, grade: "Lean" });
+const skewArgs: Parameters<typeof auditFootballCrossMarketCoherence>[0] = {
+  sport: "nfl", providerGameId: "nfl-prospective-skew", awayTeam: "AWY", homeTeam: "HME",
+  forecast: skewForecast, decisions: [skewDecision], unavailableMarkets: ["moneyline", "spread"],
+  requireDecisionSideFromForecast: true, decisionSideProbabilityConvention: "exclude_push",
+  publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
+};
+const skewBytes = JSON.stringify(skewArgs);
+const prospectiveSkew = auditFootballCrossMarketCoherence({ ...skewArgs, nflPmfSideAuthority: true });
+assert.equal(prospectiveSkew.passed, true, "PMF Under and mean Over can be valid consequences of the same skewed NFL law");
+const skewExplanation = prospectiveSkew.explanations.find(row => row.code === "pmf_mean_direction_divergence");
+assert.equal(skewExplanation?.code, "pmf_mean_direction_divergence");
+if (skewExplanation?.code === "pmf_mean_direction_divergence") {
+  assert.equal(skewExplanation.metadata.pmfSide, "under");
+  assert.equal(skewExplanation.metadata.meanSide, "over");
+  assert.ok(Math.abs(skewExplanation.metadata.meanDistance - 1.8859) < 1e-10);
+  assert.equal(skewExplanation.metadata.selectedProbability, skewUnderProbability);
+}
+assert.equal(JSON.stringify(skewArgs), skewBytes, "the audit cannot change source scores, PMF, pick, grade, prices or locked evidence");
+assert.equal(auditFootballCrossMarketCoherence(skewArgs).passed, false, "default and legacy NFL contracts remain strict");
+assert.equal(auditFootballCrossMarketCoherence({ ...skewArgs, sport: "cfb", nflPmfSideAuthority: true }).passed, false,
+  "the NFL opt cannot weaken CFB coherence");
+const newPolicyAudit = (overrides: Partial<Parameters<typeof auditFootballCrossMarketCoherence>[0]>) =>
+  auditFootballCrossMarketCoherence({ ...skewArgs, nflPmfSideAuthority: true, ...overrides });
+const oppositeSkewDecision = decision({ market: "total", side: "Over 41.5", probability: 1 - skewUnderProbability,
+  fair: .5, price: -110, line: 41.5, grade: "No Play" });
+assert.ok(newPolicyAudit({ decisions: [oppositeSkewDecision] }).fatalIssues.some(row => row.code === "decision_forecast_side_disagreement"),
+  "a pick actually opposed by its PMF remains fatal");
+const wrongProbability = decision({ market: "total", side: "Under 41.5", probability: skewUnderProbability + .02,
+  fair: .55, price: -110, line: 41.5, grade: "Lean" });
+assert.ok(newPolicyAudit({ decisions: [wrongProbability] }).fatalIssues.some(row => row.code === "decision_pmf_probability_mismatch"),
+  "even self-consistent EV cannot justify a probability different from the released PMF");
+assert.ok(newPolicyAudit({ requireDecisionSideFromForecast: false, decisions: [wrongProbability] }).fatalIssues.some(row => row.code === "decision_pmf_probability_mismatch"),
+  "the prospective policy always verifies the PMF regardless of the older side-check flag");
+assert.ok(newPolicyAudit({ decisions: [{ ...wrongProbability, calibrationFamily: "test_family" }],
+  allowForecastSideCalibrationFamilies: ["test_family"] }).fatalIssues.some(row => row.code === "decision_pmf_probability_mismatch"),
+  "an old calibration exemption cannot skip new-policy PMF verification");
+assert.ok(newPolicyAudit({ forecast: { ...skewForecast, totalDistribution: undefined } }).fatalIssues.some(row => row.code === "decision_forecast_side_disagreement"),
+  "unverifiable PMF remains fatal");
+assert.ok(newPolicyAudit({ forecast: { ...skewForecast, expectedHomePoints: skewForecast.expectedHomePoints + .01 } }).fatalIssues.some(row => row.code === "forecast_expected_score_identity"),
+  "expected scores must remain the actual means of the released law");
+assert.ok(newPolicyAudit({ forecast: { ...skewForecast, totalDistribution: { values: [39,50], probabilities: [.7,.4] } } }).fatalIssues.some(row => row.code === "forecast_distribution_mass"),
+  "distribution mass validation remains fatal");
+const refundForecast: FootballCoherenceForecast = { ...skewForecast,
+  expectedAwayPoints: (41.55 - .6) / 2, expectedHomePoints: (41.55 + .6) / 2,
+  totalDistribution: { values: [39,42,50], probabilities: [.55,.3,.15] } };
+const refundDecision = { ...decision({ market: "total", side: "Under 42", probability: .55/.7,
+  fair: .6, price: -110, line: 42, grade: "Lean" }), pushProbability: .3,
+  expectedValue: .55 * profitOne(-110) - .15 };
+assert.equal(newPolicyAudit({ forecast: refundForecast, decisions: [refundDecision] }).passed, true,
+  "conditional NFL probability plus actual refund mass binds to the same whole-number contract");
+const falseRefund = { ...refundDecision, pushProbability: .1,
+  expectedValue: .9 * (refundDecision.modelProbability * profitOne(-110) - (1-refundDecision.modelProbability)) };
+assert.ok(newPolicyAudit({ forecast: refundForecast, decisions: [falseRefund] }).fatalIssues.some(row => row.code === "decision_pmf_push_mismatch"),
+  "self-consistent EV using the wrong refund mass remains fatal");
+const mlTieForecast: FootballCoherenceForecast = { ...skewForecast, homeWinProbability: .625, awayWinProbability: .375,
+  marginDistribution: { values: [-3,0,3], probabilities: [.3,.2,.5] } };
+const mlTieDecision = decision({ market: "moneyline", side: "HME", probability: .625, fair: .55, price: -110, grade: "Lean" });
+assert.equal(newPolicyAudit({ forecast: mlTieForecast, decisions: [mlTieDecision], unavailableMarkets: ["spread","total"] }).passed, true,
+  "NFL ML retains decided-game probability and its existing zero-refund tuple contract despite distribution tie mass");
+console.log("NFL PMF-side authority: truthful mean diagnostic, exact selected probability/refund binding, default/legacy/CFB and immutable-input guards passed.");

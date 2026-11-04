@@ -162,7 +162,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_04_r107_unchanged_ml_confirmation" as const;
+  "nfl_forward_evidence_writer_2026_11_04_r108_pmf_mean_direction_diagnostic" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -1184,6 +1184,7 @@ export async function runNflForwardEvidenceWriter(args: {
       decisions: production.evaluatedBets,
       allowWholeGameOperationalHold: holds.length > 0 && production.evaluatedBets.length === 0,
       requireDecisionSideFromForecast: true,
+      nflPmfSideAuthority: true,
       publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
       decisionSideProbabilityConvention: "exclude_push",
     });

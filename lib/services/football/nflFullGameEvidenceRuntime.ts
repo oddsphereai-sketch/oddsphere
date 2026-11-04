@@ -23,7 +23,7 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_FULL_GAME_EVIDENCE_RUNTIME_RELEASE =
-  "nfl_full_game_evidence_runtime_2026_11_04_r17_unchanged_ml_confirmation" as const;
+  "nfl_full_game_evidence_runtime_2026_11_04_r18_pmf_mean_direction_diagnostic" as const;
 
 type Market = "moneyline" | "spread" | "total";
 

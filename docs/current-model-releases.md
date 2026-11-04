@@ -1,5 +1,46 @@
 # Current production model releases and qualified research candidates
 
+## NFL full-distribution authority and mean-direction diagnostics — November 4
+
+This supersedes the NFL tuple in the moneyline repair below. Live verification
+found that ARI–SEA's PMF and selected Total both favored Under, while its
+unconditional expected total was 43.3859 against 41.5. A skewed distribution can
+legitimately have its mean above the line and most probability below it. The
+old public-score direction guard blocked that game and consequently the entire
+new 15-game member snapshot. Raising a point tolerance would not repair the
+semantic error.
+
+The new NFL-only contract keeps the complete distribution authoritative. It
+requires exact selected-side probability and refund mass from that distribution,
+and retains fatal checks for a wrong PMF side, malformed mass, forged means,
+invalid value, identity, or chronology. A verified mean/median difference becomes
+a diagnostic. Means, representative scores, probabilities, picks, thresholds and
+stakes are not changed to manufacture agreement. CFB, default callers and prior
+locked NFL payloads retain their existing coherence contract. Exact R64/R72/R56/R59
+and R63/R71/R55/R58 snapshot compatibility remains byte-preserving; unlocked
+preceding-release games cannot be mixed into a new release.
+
+Sole writer, source budgets, ordinary schedules and the shared NFL
+`prediction_pipeline` lease are unchanged. This is a functional publication repair,
+not a claim of increased accuracy or permission to override genuine contradictions.
+
+Current exact runtime identifiers:
+
+- `football_cross_market_coherence_2026_11_04_r15_nfl_pmf_mean_diagnostic`
+- `nfl_forward_evidence_writer_2026_11_04_r108_pmf_mean_direction_diagnostic`
+- `nfl_forward_member_snapshot_2026_11_04_r65_pmf_mean_direction_diagnostic`
+- `nfl_full_game_evidence_runtime_2026_11_04_r18_pmf_mean_direction_diagnostic`
+- `nfl_market_innovation_2026_11_04_r5_pmf_mean_direction_diagnostic`
+- `nfl_market_innovation_posture_2026_11_04_r5_pmf_mean_direction_diagnostic`
+- `nfl_v1_daily_edge_calibration_2026_11_04_r51_pmf_mean_direction_diagnostic`
+- `nfl_v1_daily_edge_decision_2026_11_04_r60_pmf_mean_direction_diagnostic`
+- `nfl_v1_daily_edge_model_2026_11_04_r52_pmf_mean_direction_diagnostic`
+- `nfl_v1_grade_policy_2026_11_04_r60_pmf_mean_direction_diagnostic`
+- `nfl_v1_member_release_2026_11_04_r57_pmf_mean_direction_diagnostic`
+- `nfl_weekly_member_fixture_2026_11_04_r73_pmf_mean_direction_diagnostic`
+
+Evidence: `docs/model-audits/2026-11-04-nfl-pmf-mean-coherence.json`.
+
 ## NFL props verified alias display — November 4
 
 Writer r69 `nfl_player_props_writer_2026_11_04_r69_verified_alias_display`,

@@ -14,15 +14,15 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_V1_PRODUCTION_MODEL_RELEASE =
-  "nfl_v1_daily_edge_model_2026_11_04_r51_unchanged_ml_confirmation" as const;
+  "nfl_v1_daily_edge_model_2026_11_04_r52_pmf_mean_direction_diagnostic" as const;
 export const NFL_V1_PRODUCTION_CALIBRATION_RELEASE =
-  "nfl_v1_daily_edge_calibration_2026_11_04_r50_unchanged_ml_confirmation" as const;
+  "nfl_v1_daily_edge_calibration_2026_11_04_r51_pmf_mean_direction_diagnostic" as const;
 export const NFL_V1_PRODUCTION_DECISION_RELEASE =
-  "nfl_v1_daily_edge_decision_2026_11_04_r59_unchanged_ml_confirmation" as const;
+  "nfl_v1_daily_edge_decision_2026_11_04_r60_pmf_mean_direction_diagnostic" as const;
 export const NFL_V1_GRADE_POLICY_RELEASE =
-  "nfl_v1_grade_policy_2026_11_04_r59_unchanged_ml_confirmation" as const;
+  "nfl_v1_grade_policy_2026_11_04_r60_pmf_mean_direction_diagnostic" as const;
 export const NFL_V1_MEMBER_RELEASE =
-  "nfl_v1_member_release_2026_11_04_r56_unchanged_ml_confirmation" as const;
+  "nfl_v1_member_release_2026_11_04_r57_pmf_mean_direction_diagnostic" as const;
 
 /** Product tier semantics shared by ML, Spread and Total; not an empirically calibrated win-rate claim. */
 export const NFL_V1_BEST_ANGLE_MINIMUM_MODELED_WIN_PROBABILITY = 0.59 as const;

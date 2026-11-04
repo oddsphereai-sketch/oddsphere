@@ -33,7 +33,7 @@ import {
   NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
   NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
 } from "../lib/services/football/nflV1ActionableGradeCandidate";
-import { getNflV1WeekOneOutcomeForecast } from "../lib/services/football/nflV1WeekOneOutcome";
+import { getNflV1WeekOneOutcomeForecast, nflV1WeekOneLineProbabilities } from "../lib/services/football/nflV1WeekOneOutcome";
 
 const capturedAt = "2026-09-09T23:30:00.000Z";
 const gameStartsAt = "2026-09-10T00:20:00.000Z";
@@ -42,6 +42,10 @@ const outcomeForecast = getNflV1WeekOneOutcomeForecast({
   awayTeam: "NE",
   homeTeam: "SEA",
 });
+const exactMarketProbabilities = nflV1WeekOneLineProbabilities({ forecast: outcomeForecast, homeSpread: -2.5, totalLine: 44.5 });
+const moneylineProbability = outcomeForecast.homeWinProbability;
+const spreadProbability = exactMarketProbabilities.spread.awayCoverProbability;
+const totalProbability = exactMarketProbabilities.total.overProbability;
 const common = {
   providerGameId: "1392216",
   stage: "t60_locked" as const,
@@ -57,7 +61,7 @@ const decisions = [
     modelRelease: NFL_V1_ACTIONABLE_GRADE_MODEL_RELEASE,
     calibrationRelease: NFL_V1_ACTIONABLE_GRADE_CALIBRATION_RELEASE,
     side: "SEA",
-    modelProbability: 0.57,
+    modelProbability: moneylineProbability,
     marketFairProbability: 0.52,
     evaluatedQuote: { sportsbook: "fanduel", line: null, price: -110, observedAt: capturedAt },
     grade: "Best Angle",
@@ -68,7 +72,8 @@ const decisions = [
     modelRelease: NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE,
     calibrationRelease: NFL_V1_ACTIONABLE_GRADE_CALIBRATION_RELEASE,
     side: "NE",
-    modelProbability: 0.54,
+    modelProbability: spreadProbability,
+    pushProbability: exactMarketProbabilities.spread.pushProbability,
     marketFairProbability: 0.51,
     evaluatedQuote: { sportsbook: "draftkings", line: 2.5, price: -105, observedAt: capturedAt },
     grade: "Lean",
@@ -79,16 +84,17 @@ const decisions = [
     modelRelease: NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
     calibrationRelease: NFL_V1_ACTIONABLE_GRADE_CALIBRATION_RELEASE,
     side: "Over 44.5",
-    modelProbability: 0.53,
+    modelProbability: totalProbability,
+    pushProbability: exactMarketProbabilities.total.pushProbability,
     marketFairProbability: 0.52,
     evaluatedQuote: { sportsbook: "caesars", line: 44.5, price: -108, observedAt: capturedAt },
     grade: "Watchlist",
   }),
 ];
 const outcomeConfidence = [
-  buildNflRegularOutcomeConfidence({ market: "moneyline", likelySide: "SEA", probability: 0.57, evaluatedAt: capturedAt, modelRelease: NFL_V1_ACTIONABLE_GRADE_MODEL_RELEASE }),
-  buildNflRegularOutcomeConfidence({ market: "spread", likelySide: "NE", probability: 0.54, evaluatedAt: capturedAt, modelRelease: NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE }),
-  buildNflRegularOutcomeConfidence({ market: "total", likelySide: "Over 44.5", probability: 0.53, evaluatedAt: capturedAt, modelRelease: NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE }),
+  buildNflRegularOutcomeConfidence({ market: "moneyline", likelySide: "SEA", probability: moneylineProbability, evaluatedAt: capturedAt, modelRelease: NFL_V1_ACTIONABLE_GRADE_MODEL_RELEASE }),
+  buildNflRegularOutcomeConfidence({ market: "spread", likelySide: "NE", probability: spreadProbability, evaluatedAt: capturedAt, modelRelease: NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE }),
+  buildNflRegularOutcomeConfidence({ market: "total", likelySide: "Over 44.5", probability: totalProbability, evaluatedAt: capturedAt, modelRelease: NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE }),
 ];
 
 assert.equal(isPublicallyTracked("nfl", "2026-09-08"), false);
@@ -345,6 +351,7 @@ const contradictoryPayload = {
   ...payload,
   decisions: {
     ...payload.decisions,
+    modelPromotionStatus: "nfl_v1_member_release_2026_11_04_r56_unchanged_ml_confirmation",
     evaluatedBets: [decisions[0]!, decisions[1]!, contradictoryTotal],
     outcomeConfidence: [
       outcomeConfidence[0]!,
@@ -364,6 +371,7 @@ assert.throws(
   /decision_forecast_side_disagreement/,
   "the normal tracking path must continue rejecting a directionally contradictory tuple",
 );
+const legacyContradictionBytes = JSON.stringify(contradictoryPayload);
 const recoveredContradiction = buildNflImmutableT60RecoveryRecords({
   payload: contradictoryPayload,
   gameId: 5003,
@@ -378,6 +386,40 @@ assert.equal(
   true,
   "recovery provenance must remain internal to tracking metadata",
 );
+assert.equal(JSON.stringify(contradictoryPayload), legacyContradictionBytes, "the current tracking rollout does not mutate a legacy locked payload");
+assert.equal(recoveredTotal?.snapshot_json?.decision_tuple &&
+  (recoveredTotal.snapshot_json.decision_tuple as { modelProbability: number }).modelProbability, 0.52,
+  "legacy recovery retains its literal stored probability rather than deriving a replacement from the PMF");
+
+const replaceCurrentTotal = (decision: typeof trackingBoundaryTotal) => ({
+  ...trackingBoundaryPayload,
+  decisions: { ...trackingBoundaryPayload.decisions,
+    evaluatedBets: trackingBoundaryPayload.decisions.evaluatedBets.map(row => row.market === "total" ? decision : row) },
+});
+const wrongCurrentProbability = { ...trackingBoundaryTotal, modelProbability: 0.7,
+  expectedValue: 0.7 * (100 / 110) - 0.3 };
+assert.throws(() => buildNflOfficialTrackingRecords({ payload: replaceCurrentTotal(wrongCurrentProbability), gameId: 5004 }),
+  /decision_pmf_probability_mismatch/, "current R57 tracking rejects a same-side false probability even when its EV is self-consistent");
+const wrongCurrentPush = { ...trackingBoundaryTotal, pushProbability: 0.1,
+  expectedValue: 0.9 * trackingBoundaryTotal.expectedValue };
+assert.throws(() => buildNflOfficialTrackingRecords({ payload: replaceCurrentTotal(wrongCurrentPush), gameId: 5004 }),
+  /decision_pmf_push_mismatch/, "current R57 tracking rejects a false refund mass even when its EV is self-consistent");
+const skewExpectedTotal = 48;
+const skewCurrentPayload = {
+  ...trackingBoundaryPayload,
+  outcomeForecast: { ...trackingBoundaryPayload.outcomeForecast,
+    expectedAwayScore: (skewExpectedTotal - expectedMargin) / 2,
+    expectedHomeScore: (skewExpectedTotal + expectedMargin) / 2,
+    totalDistribution: { values: [44, 54], probabilities: [0.6, 0.4] } },
+};
+assert.equal(buildNflOfficialTrackingRecords({ payload: skewCurrentPayload, gameId: 5005 })
+  .find(record => record.market === "total")?.side, "under",
+  "current tracking preserves the PMF-preferred Under when a skewed mean is more than one point above its line");
+const skewLegacyPayload = { ...skewCurrentPayload,
+  decisions: { ...skewCurrentPayload.decisions,
+    modelPromotionStatus: "nfl_v1_member_release_2026_11_04_r56_unchanged_ml_confirmation" } } as NflForwardEvidencePayload;
+assert.throws(() => buildNflOfficialTrackingRecords({ payload: skewLegacyPayload, gameId: 5005 }),
+  /decision_forecast_side_disagreement/, "the exact preceding member release retains its original mean-direction validation");
 const correctionPayload = {
   ...payload,
   market: {
