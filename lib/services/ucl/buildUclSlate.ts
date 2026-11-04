@@ -18,11 +18,9 @@ import { readUclHistoricalFoundation, writeUclHistoricalFoundation } from "./ucl
 import { resolveUclFeatureFlags } from "./uclFeatureFlags";
 import { assertFrozenUclHistoricalInputs } from "./uclChronologicalManifest";
 import { computeSlateDate } from "@/lib/dates/slateDate";
-import {
-  loadUclEloStrengthFoundation,
-  uclEloPair,
-  type UclEloStrengthFoundationPayload,
-} from "./uclEloStrengthFoundation";
+import { loadUclOfficialStrength } from "./uclOfficialStrengthSource";
+import { buildUclCurrentStrengthPrior, normalizeUclStrengthClub, type UclCurrentStrengthPrior } from "./uclCurrentStrengthPrior";
+import { fitAndPredictUclBaseline } from "./uclModel";
 
 export const UCL_CURRENT_SEASON = 2026;
 const UCL_TRAINING_SEASONS = [2024, 2025] as const;
@@ -37,7 +35,7 @@ type Foundation = {
   teamStats: BdlUclTeamMatchStats[];
   statsCoverage: number;
   providerHistory: UclHistoryProviderHealth;
-  eloStrength: UclEloStrengthFoundationPayload;
+  strengthPrior: UclCurrentStrengthPrior;
 };
 
 export type UclHistoryProviderHealth = {
@@ -112,11 +110,19 @@ async function loadFoundation(provider: BallDontLieUclProvider): Promise<Foundat
     const trainingMatches = [...prior.trainingMatches, ...joinUclMatchStats(completed, currentStats)];
     const teamStats = [...prior.teamStats, ...currentStats];
     const teamNames = new Map(teams.map((team) => [team.id, team.name]));
-    const eloStrength = await loadUclEloStrengthFoundation({
-      uclMatches: [...prior.historyMatches, ...completed],
-      teamNames,
-      allowWrite: resolveUclFeatureFlags().foundationWrites,
-    });
+    // Provider fixture names use exact "Away at Home" orientation. Extend
+    // current-team names to historical IDs without fuzzy school/club matches.
+    for (const m of [...prior.historyMatches,...completed]) {
+      const parts=m.name.split(" at ");
+      if(parts.length!==2)throw Error(`Unparsed UCL strength fixture ${m.id}`);
+      for(const [id,name] of [[m.away_team_id,parts[0]!],[m.home_team_id,parts[1]!]] as const){
+        const previous=teamNames.get(id);
+        if(previous && normalizeUclStrengthClub(previous)!==normalizeUclStrengthClub(name))throw Error(`Conflicting UCL team identity ${id}`);
+        if(!previous)teamNames.set(id,name);
+      }
+    }
+    const strengthPrior = buildUclCurrentStrengthPrior(
+      await loadUclOfficialStrength(resolveUclFeatureFlags().foundationWrites),teamNames,teams.map(t=>t.id));
     const xgMatches = trainingMatches.filter((match) => match.home_xg !== null && match.away_xg !== null).length;
     return {
       teams,
@@ -126,7 +132,7 @@ async function loadFoundation(provider: BallDontLieUclProvider): Promise<Foundat
       teamStats,
       statsCoverage: trainingMatches.length ? xgMatches / trainingMatches.length : 0,
       providerHistory: prior.providerHistory,
-      eloStrength,
+      strengthPrior,
     };
   })().catch((error) => { if (foundationCache?.promise === promise) foundationCache = null; throw error; });
   foundationCache = { expiresAt: Date.now() + CURRENT_FOUNDATION_TTL_MS, promise };
@@ -275,6 +281,13 @@ async function buildUclSlateUncached(requestedMatchweek?: number, selectionNow =
     const context = contextById.get(match.id);
     if (!homeTeam || !awayTeam || !context) return [];
     const score = regulationScore(match).score;
+    const predictionInput={training:foundation.trainingMatches,match,history:foundation.historyMatches,context};
+    // A current rating is never backdated into a historical forecast. Elapsed
+    // rows are display scaffolding only: the member/lock path must restore the
+    // exact stored lock. The legacy comparator retains its own release.
+    const prediction=Date.parse(foundation.strengthPrior.source.capturedAt)<Date.parse(match.date)
+      ? fitAndPredictUcl({...predictionInput,strengthPrior:foundation.strengthPrior})
+      : fitAndPredictUclBaseline(predictionInput);
     return [{
       id: match.id,
       round: selected,
@@ -286,16 +299,10 @@ async function buildUclSlateUncached(requestedMatchweek?: number, selectionNow =
       homeScore: score?.home ?? null,
       awayScore: score?.away ?? null,
       venue: match.venue_name,
-      prediction: fitAndPredictUcl({
-        training: foundation.trainingMatches,
-        match,
-        history: foundation.historyMatches,
-        context,
-        elo: uclEloPair(foundation.eloStrength, homeTeam.name, awayTeam.name),
-      }),
+      prediction,
       currentMoneylineOdds: currentByMatch.get(match.id) ?? [],
       openingOdds: openingByMatch.get(match.id) ?? [],
-      modelUncertainty: { homeEffectiveMatches: 0, awayEffectiveMatches: 0 },
+      modelUncertainty: {homeEffectiveMatches:prediction.adjustment.effectiveMatches.home,awayEffectiveMatches:prediction.adjustment.effectiveMatches.away},
       evidence: {
         home: evidence({ teamId: match.home_team_id, matches: foundation.trainingMatches, stats: foundation.teamStats, standing: standingsByTeam.get(match.home_team_id) ?? null, providerForm: formsByMatchTeam.get(`${match.id}:${match.home_team_id}`) ?? null, injuries: injuriesByTeam.get(match.home_team_id) ?? [], startersPosted: startersByMatchTeam.get(`${match.id}:${match.home_team_id}`) ?? 0 }),
         away: evidence({ teamId: match.away_team_id, matches: foundation.trainingMatches, stats: foundation.teamStats, standing: standingsByTeam.get(match.away_team_id) ?? null, providerForm: formsByMatchTeam.get(`${match.id}:${match.away_team_id}`) ?? null, injuries: injuriesByTeam.get(match.away_team_id) ?? [], startersPosted: startersByMatchTeam.get(`${match.id}:${match.away_team_id}`) ?? 0 }),

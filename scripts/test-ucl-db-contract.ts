@@ -1,3 +1,4 @@
+import type {UclSlate} from "../lib/services/ucl/buildUclSlate";
 import assert from "node:assert/strict";
 import { preserveLockedEplGames } from "../lib/services/epl/eplLockedSnapshot";
 import { verifyUclRefreshAllMarketLocks, writeUclPredictionRecords, verifyUclAllMarketLocks } from "../lib/services/ucl/uclProductionPipeline";
@@ -74,7 +75,7 @@ const kickoff = "2026-09-08T17:45:00Z";
 const slate = {
   season: 2026, round: 1, modelRelease: UCL_MODEL_RELEASE, calibrationRelease: UCL_CALIBRATION_RELEASE,
   competitionContexts: { 34: { stage: "league_phase", regulationTime: true } },
-  matches: [{ id: 34, kickoff, homeTeam: { id: 1 }, awayTeam: { id: 2 } }],
+  matches: [{ id: 34, kickoff, prediction: {release:UCL_MODEL_RELEASE,calibrationRelease:UCL_CALIBRATION_RELEASE}, homeTeam: { id: 1 }, awayTeam: { id: 2 } }],
 } as never;
 const frozenProjection = {
   expectedGoals: { away: 2.1466406123, home: 0.7067270992 },
@@ -92,6 +93,17 @@ const response = {
     soccerDoubleChanceMarket: market("home_or_draw", -120),
   }],
 } as never;
+
+// Request-start before kickoff cannot license a current-strength receipt
+// completed after kickoff to write historical R7 scaffolding under R22.
+const raceSlate=structuredClone(slate) as unknown as UclSlate;
+raceSlate.matches=[{...raceSlate.matches[0]!,prediction:{release:"ucl_goals_coherent_2026_10_06_r7_target_excluded_opening_market_score",calibrationRelease:UCL_CALIBRATION_RELEASE} as never},
+  {...raceSlate.matches[0]!,id:35,kickoff:"2026-09-08T20:00:00Z",prediction:{release:UCL_MODEL_RELEASE,calibrationRelease:UCL_CALIBRATION_RELEASE} as never}];
+const raceResponse=structuredClone(response) as DailyEdgeResponse;
+raceResponse.games.push({...raceResponse.games[0]!,external_id:35,gameStartAt:"2026-09-08T20:00:00Z"});
+const raceWrite=await writeUclPredictionRecords({slate:raceSlate,response:raceResponse,apply:false,now:new Date("2026-09-08T17:44:55Z")});
+assert.equal(raceWrite.proposed.length,4,"same-board future forecast still publishes");
+assert(raceWrite.proposed.every(r=>r.external_id===30_000_035),"no new historical/scaffold record can be stamped R22");
 
 const operations: Operation[] = [];
 const frozenPublicSplits = { label: "DraftKings Splits", sourceBook: "draftkings_network", sourceObservedAt: "2026-09-08T16:40:00Z", memberCapturedAt: "2026-09-08T16:41:00Z", captureRelease: "ucl_public_split_source_2026_11_03_r2_capture_before_lock", rows: [{side:"home",moneyPct:60,betsPct:55},{side:"away",moneyPct:40,betsPct:45}], signal:null,lastUpdated:null } as const;
@@ -145,6 +157,13 @@ assert.deepEqual(soccerPublishedScorePresentation(verified.lockedResponse.games[
   "reader uses the exact captured scenario presentation, never rounds unconditional means into a conflicting final");
 assert.deepEqual(verified.lockedResponse.games[0]?.soccerProjection?.expectedGoals, frozenProjection.expectedGoals,
   "presentation cannot replace the underlying expected-goal means used by probabilities");
+const existingCurrent=await verifyUclAllMarketLocks({...lockInput,expectedRows:[],writerLockedRecordIds:[]},lockVerificationClient(four));
+assert.deepEqual(existingCurrent.completeProviderIds,[34],"post-kickoff current-release immutable cohort restores without a new writer proposal");
+assert.deepEqual(existingCurrent.lockedResponse.games[0]!.soccerProjection,frozenProjection);
+assert.deepEqual(existingCurrent.lockedResponse.games[0]!.markets.moneyline.sportsbookSplits,frozenPublicSplits);
+const contradictoryExpected=write.proposed.map(r=>({...r,pick:"contradictory"}));
+const mismatch=await verifyUclAllMarketLocks({...lockInput,expectedRows:contradictoryExpected,writerLockedRecordIds:[]},lockVerificationClient(four));
+assert.deepEqual(mismatch.completeProviderIds,[],"self-authority cannot excuse a mismatching new proposed tuple");
 const incomplete = await verifyUclAllMarketLocks(lockInput, lockVerificationClient(four.slice(0, 3)));
 assert.deepEqual({ completeProviderIds: incomplete.completeProviderIds, incompleteProviderIds: incomplete.incompleteProviderIds }, { completeProviderIds: [], incompleteProviderIds: [34] });
 const partialRefreshLock = await verifyUclRefreshAllMarketLocks({

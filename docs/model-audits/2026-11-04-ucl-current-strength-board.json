@@ -1,0 +1,716 @@
+{
+  "at": "2026-11-04T14:47:49.896Z",
+  "mode": "offline_same_inputs_no_outcome_tuning",
+  "providerRequests": 0,
+  "writes": 0,
+  "statisticsCapturedAt": "2026-11-04T12:21:21.977Z",
+  "marketSnapshotAt": "2026-11-04T14:47:49.896+00:00",
+  "sourceBasis": "actual_stored_complete_quote_families_with_original_clocks",
+  "strengthSource": {
+    "release": "ucl_official_strength_2026_11_04_r1_dated_original_source",
+    "sourceUrl": "https://clubelo.com/",
+    "asOfDay": "2026-11-04",
+    "capturedAt": "2026-11-04T14:33:00Z",
+    "sourceHash": "3cddd29ed3ed2d06e2c59f682995b369aaf1c2b61e459f66b6d4a2e21a33bd48"
+  },
+  "independentModelInputs": "same frozen goals/xG; current strength source captured before this market snapshot; no outcomes or provider calls",
+  "before": {
+    "moneyline": {
+      "watchlist": 9
+    },
+    "total": {
+      "watchlist": 5,
+      "lean": 3,
+      "no_play": 1
+    },
+    "first_inning": {
+      "lean": 8,
+      "watchlist": 1
+    }
+  },
+  "after": {
+    "moneyline": {
+      "watchlist": 7,
+      "lean": 2
+    },
+    "total": {
+      "watchlist": 5,
+      "lean": 4
+    },
+    "first_inning": {
+      "lean": 6,
+      "watchlist": 3
+    }
+  },
+  "coverage": {
+    "activeFixtures": 9,
+    "responseFixtures": 9,
+    "selectedCurrent": 36,
+    "selectedExpected": 36,
+    "outcomeCurrent": 90,
+    "outcomeExpected": 90,
+    "heldMarkets": 0,
+    "nonpositiveEvActionables": 3,
+    "qualifiedConfidenceLeans": 3,
+    "unqualifiedActionables": 0,
+    "priceCollapse": false,
+    "unlockedPriceRegressions": 0,
+    "hardErrors": [],
+    "errors": [],
+    "warnings": []
+  },
+  "promotions": 3,
+  "demotions": 2,
+  "netActionable": 1,
+  "sideChanges": 0,
+  "changes": [
+    {
+      "fixture": "Real Madrid at AEK Athens",
+      "market": "moneyline",
+      "before": {
+        "score": {
+          "away": 2.4890292276404793,
+          "home": 1.4135098641272195
+        },
+        "pick": "RMA",
+        "p": 0.6179918411607626,
+        "grade": "watchlist",
+        "price": -437
+      },
+      "after": {
+        "score": {
+          "away": 3.077173255519873,
+          "home": 1.0641145724077388
+        },
+        "pick": "RMA",
+        "p": 0.7823914536154135,
+        "grade": "watchlist",
+        "price": -437
+      }
+    },
+    {
+      "fixture": "Real Madrid at AEK Athens",
+      "market": "total",
+      "before": {
+        "score": {
+          "away": 2.4890292276404793,
+          "home": 1.4135098641272195
+        },
+        "pick": "Over",
+        "p": 0.745129645607974,
+        "grade": "watchlist",
+        "price": -361
+      },
+      "after": {
+        "score": {
+          "away": 3.077173255519873,
+          "home": 1.0641145724077388
+        },
+        "pick": "Over",
+        "p": 0.781832823670348,
+        "grade": "watchlist",
+        "price": -361
+      }
+    },
+    {
+      "fixture": "Real Madrid at AEK Athens",
+      "market": "first_inning",
+      "before": {
+        "score": {
+          "away": 2.4890292276404793,
+          "home": 1.4135098641272195
+        },
+        "pick": "Yes",
+        "p": 0.6924519237499767,
+        "grade": "lean",
+        "price": -140
+      },
+      "after": {
+        "score": {
+          "away": 3.077173255519873,
+          "home": 1.0641145724077388
+        },
+        "pick": "Yes",
+        "p": 0.6270042213046779,
+        "grade": "lean",
+        "price": -140
+      }
+    },
+    {
+      "fixture": "Liverpool at Fenerbahce",
+      "market": "moneyline",
+      "before": {
+        "score": {
+          "away": 2.5168665056653747,
+          "home": 1.3531685294954598
+        },
+        "pick": "LIV",
+        "p": 0.6305488349747203,
+        "grade": "watchlist",
+        "price": -211
+      },
+      "after": {
+        "score": {
+          "away": 2.85572017069367,
+          "home": 1.1148448423832942
+        },
+        "pick": "LIV",
+        "p": 0.7349940073323386,
+        "grade": "lean",
+        "price": -211
+      }
+    },
+    {
+      "fixture": "Liverpool at Fenerbahce",
+      "market": "total",
+      "before": {
+        "score": {
+          "away": 2.5168665056653747,
+          "home": 1.3531685294954598
+        },
+        "pick": "Over",
+        "p": 0.7417538664419948,
+        "grade": "watchlist",
+        "price": -293
+      },
+      "after": {
+        "score": {
+          "away": 2.85572017069367,
+          "home": 1.1148448423832942
+        },
+        "pick": "Over",
+        "p": 0.7574212736783859,
+        "grade": "lean",
+        "price": -293
+      }
+    },
+    {
+      "fixture": "Liverpool at Fenerbahce",
+      "market": "first_inning",
+      "before": {
+        "score": {
+          "away": 2.5168665056653747,
+          "home": 1.3531685294954598
+        },
+        "pick": "Yes",
+        "p": 0.6890995153868742,
+        "grade": "lean",
+        "price": -203
+      },
+      "after": {
+        "score": {
+          "away": 2.85572017069367,
+          "home": 1.1148448423832942
+        },
+        "pick": "Yes",
+        "p": 0.6426962097629632,
+        "grade": "lean",
+        "price": -203
+      }
+    },
+    {
+      "fixture": "Real Betis at Borussia Dortmund",
+      "market": "moneyline",
+      "before": {
+        "score": {
+          "away": 1.4219874607606533,
+          "home": 2.1466372945265038
+        },
+        "pick": "DOR",
+        "p": 0.537446844347481,
+        "grade": "watchlist",
+        "price": -144
+      },
+      "after": {
+        "score": {
+          "away": 1.3632058146485606,
+          "home": 2.158670079017911
+        },
+        "pick": "DOR",
+        "p": 0.5521173816889864,
+        "grade": "watchlist",
+        "price": -144
+      }
+    },
+    {
+      "fixture": "Real Betis at Borussia Dortmund",
+      "market": "total",
+      "before": {
+        "score": {
+          "away": 1.4219874607606533,
+          "home": 2.1466372945265038
+        },
+        "pick": "Over",
+        "p": 0.6912343850118285,
+        "grade": "lean",
+        "price": -199
+      },
+      "after": {
+        "score": {
+          "away": 1.3632058146485606,
+          "home": 2.158670079017911
+        },
+        "pick": "Over",
+        "p": 0.6824826802539566,
+        "grade": "lean",
+        "price": -199
+      }
+    },
+    {
+      "fixture": "Real Betis at Borussia Dortmund",
+      "market": "first_inning",
+      "before": {
+        "score": {
+          "away": 1.4219874607606533,
+          "home": 2.1466372945265038
+        },
+        "pick": "Yes",
+        "p": 0.6752732145613648,
+        "grade": "lean",
+        "price": -184
+      },
+      "after": {
+        "score": {
+          "away": 1.3632058146485606,
+          "home": 2.158670079017911
+        },
+        "pick": "Yes",
+        "p": 0.6635918412592668,
+        "grade": "lean",
+        "price": -184
+      }
+    },
+    {
+      "fixture": "Napoli at FC Porto",
+      "market": "moneyline",
+      "before": {
+        "score": {
+          "away": 1.155704176651382,
+          "home": 1.79026856088616
+        },
+        "pick": "FCP",
+        "p": 0.5287135761815781,
+        "grade": "watchlist",
+        "price": -120
+      },
+      "after": {
+        "score": {
+          "away": 1.1224340298774347,
+          "home": 1.7713966503041039
+        },
+        "pick": "FCP",
+        "p": 0.5318041203519089,
+        "grade": "watchlist",
+        "price": -120
+      }
+    },
+    {
+      "fixture": "Napoli at FC Porto",
+      "market": "total",
+      "before": {
+        "score": {
+          "away": 1.155704176651382,
+          "home": 1.79026856088616
+        },
+        "pick": "Over",
+        "p": 0.5633981551082055,
+        "grade": "watchlist",
+        "price": -140
+      },
+      "after": {
+        "score": {
+          "away": 1.1224340298774347,
+          "home": 1.7713966503041039
+        },
+        "pick": "Over",
+        "p": 0.551481693459551,
+        "grade": "watchlist",
+        "price": -140
+      }
+    },
+    {
+      "fixture": "Napoli at FC Porto",
+      "market": "first_inning",
+      "before": {
+        "score": {
+          "away": 1.155704176651382,
+          "home": 1.79026856088616
+        },
+        "pick": "Yes",
+        "p": 0.5782800983354177,
+        "grade": "lean",
+        "price": -135
+      },
+      "after": {
+        "score": {
+          "away": 1.1224340298774347,
+          "home": 1.7713966503041039
+        },
+        "pick": "Yes",
+        "p": 0.5678414085870245,
+        "grade": "watchlist",
+        "price": -135
+      }
+    },
+    {
+      "fixture": "Como at Lens",
+      "market": "moneyline",
+      "before": {
+        "score": {
+          "away": 2,
+          "home": 1.4
+        },
+        "pick": "COMO",
+        "p": 0.4795368825490095,
+        "grade": "watchlist",
+        "price": -108
+      },
+      "after": {
+        "score": {
+          "away": 2,
+          "home": 1.4
+        },
+        "pick": "COMO",
+        "p": 0.5150200037596201,
+        "grade": "watchlist",
+        "price": -108
+      }
+    },
+    {
+      "fixture": "Como at Lens",
+      "market": "total",
+      "before": {
+        "score": {
+          "away": 2,
+          "home": 1.4
+        },
+        "pick": "Over",
+        "p": 0.6933873942144906,
+        "grade": "lean",
+        "price": -181
+      },
+      "after": {
+        "score": {
+          "away": 2,
+          "home": 1.4
+        },
+        "pick": "Over",
+        "p": 0.6817068481156531,
+        "grade": "lean",
+        "price": -181
+      }
+    },
+    {
+      "fixture": "Como at Lens",
+      "market": "first_inning",
+      "before": {
+        "score": {
+          "away": 2,
+          "home": 1.4
+        },
+        "pick": "Yes",
+        "p": 0.692577625678115,
+        "grade": "lean",
+        "price": -190
+      },
+      "after": {
+        "score": {
+          "away": 2,
+          "home": 1.4
+        },
+        "pick": "Yes",
+        "p": 0.6783706930860972,
+        "grade": "lean",
+        "price": -190
+      }
+    },
+    {
+      "fixture": "Club Brugge at PSV Eindhoven",
+      "market": "moneyline",
+      "before": {
+        "score": {
+          "away": 1.4,
+          "home": 2.2
+        },
+        "pick": "PSV",
+        "p": 0.5115875269339287,
+        "grade": "watchlist",
+        "price": -101
+      },
+      "after": {
+        "score": {
+          "away": 1.4,
+          "home": 2.1
+        },
+        "pick": "PSV",
+        "p": 0.4793013716058136,
+        "grade": "watchlist",
+        "price": -101
+      }
+    },
+    {
+      "fixture": "Club Brugge at PSV Eindhoven",
+      "market": "total",
+      "before": {
+        "score": {
+          "away": 1.4,
+          "home": 2.2
+        },
+        "pick": "Over",
+        "p": 0.7540471143828228,
+        "grade": "lean",
+        "price": -271
+      },
+      "after": {
+        "score": {
+          "away": 1.4,
+          "home": 2.1
+        },
+        "pick": "Over",
+        "p": 0.7436417698601365,
+        "grade": "lean",
+        "price": -271
+      }
+    },
+    {
+      "fixture": "Club Brugge at PSV Eindhoven",
+      "market": "first_inning",
+      "before": {
+        "score": {
+          "away": 1.4,
+          "home": 2.2
+        },
+        "pick": "Yes",
+        "p": 0.7397663767317155,
+        "grade": "watchlist",
+        "price": -310
+      },
+      "after": {
+        "score": {
+          "away": 1.4,
+          "home": 2.1
+        },
+        "pick": "Yes",
+        "p": 0.7366147420512383,
+        "grade": "watchlist",
+        "price": -310
+      }
+    },
+    {
+      "fixture": "Manchester City at RB Leipzig",
+      "market": "moneyline",
+      "before": {
+        "score": {
+          "away": 1.9,
+          "home": 1.4
+        },
+        "pick": "MNC",
+        "p": 0.45503438579808375,
+        "grade": "watchlist",
+        "price": -185
+      },
+      "after": {
+        "score": {
+          "away": 1.9697319993540257,
+          "home": 1.4144443685527959
+        },
+        "pick": "MNC",
+        "p": 0.49556342528146646,
+        "grade": "watchlist",
+        "price": -185
+      }
+    },
+    {
+      "fixture": "Manchester City at RB Leipzig",
+      "market": "total",
+      "before": {
+        "score": {
+          "away": 1.9,
+          "home": 1.4
+        },
+        "pick": "Over",
+        "p": 0.6708245126319708,
+        "grade": "watchlist",
+        "price": -324
+      },
+      "after": {
+        "score": {
+          "away": 1.9697319993540257,
+          "home": 1.4144443685527959
+        },
+        "pick": "Over",
+        "p": 0.6606161807609261,
+        "grade": "watchlist",
+        "price": -324
+      }
+    },
+    {
+      "fixture": "Manchester City at RB Leipzig",
+      "market": "first_inning",
+      "before": {
+        "score": {
+          "away": 1.9,
+          "home": 1.4
+        },
+        "pick": "Yes",
+        "p": 0.6927484283014249,
+        "grade": "lean",
+        "price": -255
+      },
+      "after": {
+        "score": {
+          "away": 1.9697319993540257,
+          "home": 1.4144443685527959
+        },
+        "pick": "Yes",
+        "p": 0.6768871139577063,
+        "grade": "lean",
+        "price": -255
+      }
+    },
+    {
+      "fixture": "Arsenal at Slavia Prague",
+      "market": "moneyline",
+      "before": {
+        "score": {
+          "away": 2.5,
+          "home": 0.4
+        },
+        "pick": "ARS",
+        "p": 0.7307390018866274,
+        "grade": "watchlist",
+        "price": -400
+      },
+      "after": {
+        "score": {
+          "away": 2.5,
+          "home": 0.4
+        },
+        "pick": "ARS",
+        "p": 0.8157419322393017,
+        "grade": "watchlist",
+        "price": -400
+      }
+    },
+    {
+      "fixture": "Arsenal at Slavia Prague",
+      "market": "total",
+      "before": {
+        "score": {
+          "away": 2.5,
+          "home": 0.4
+        },
+        "pick": "Over",
+        "p": 0.5053471837355552,
+        "grade": "no_play",
+        "price": -150
+      },
+      "after": {
+        "score": {
+          "away": 2.5,
+          "home": 0.4
+        },
+        "pick": "Over",
+        "p": 0.5589914822721699,
+        "grade": "watchlist",
+        "price": -150
+      }
+    },
+    {
+      "fixture": "Arsenal at Slavia Prague",
+      "market": "first_inning",
+      "before": {
+        "score": {
+          "away": 2.5,
+          "home": 0.4
+        },
+        "pick": "No",
+        "p": 0.6184280457574618,
+        "grade": "lean",
+        "price": -125
+      },
+      "after": {
+        "score": {
+          "away": 2.5,
+          "home": 0.4
+        },
+        "pick": "No",
+        "p": 0.6640750270113487,
+        "grade": "lean",
+        "price": -125
+      }
+    },
+    {
+      "fixture": "Sabah FK at Viking FK",
+      "market": "moneyline",
+      "before": {
+        "score": {
+          "away": 1.4661167609774006,
+          "home": 2.520130884021906
+        },
+        "pick": "VFK",
+        "p": 0.6070046248198797,
+        "grade": "watchlist",
+        "price": -281
+      },
+      "after": {
+        "score": {
+          "away": 1.1218108072487554,
+          "home": 2.8400147683361148
+        },
+        "pick": "VFK",
+        "p": 0.729540295540829,
+        "grade": "lean",
+        "price": -281
+      }
+    },
+    {
+      "fixture": "Sabah FK at Viking FK",
+      "market": "total",
+      "before": {
+        "score": {
+          "away": 1.4661167609774006,
+          "home": 2.520130884021906
+        },
+        "pick": "Over",
+        "p": 0.7548499075703651,
+        "grade": "watchlist",
+        "price": -312
+      },
+      "after": {
+        "score": {
+          "away": 1.1218108072487554,
+          "home": 2.8400147683361148
+        },
+        "pick": "Over",
+        "p": 0.7529035223873662,
+        "grade": "watchlist",
+        "price": -312
+      }
+    },
+    {
+      "fixture": "Sabah FK at Viking FK",
+      "market": "first_inning",
+      "before": {
+        "score": {
+          "away": 1.4661167609774006,
+          "home": 2.520130884021906
+        },
+        "pick": "Yes",
+        "p": 0.7018124668467397,
+        "grade": "lean",
+        "price": -185
+      },
+      "after": {
+        "score": {
+          "away": 1.1218108072487554,
+          "home": 2.8400147683361148
+        },
+        "pick": "Yes",
+        "p": 0.6339082088570657,
+        "grade": "watchlist",
+        "price": -185
+      }
+    }
+  ]
+}

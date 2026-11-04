@@ -1,0 +1,3785 @@
+{
+  "release": "ucl_official_strength_2026_11_04_r1_dated_original_source",
+  "sourceUrl": "https://clubelo.com/",
+  "asOfDay": "2026-11-04",
+  "capturedAt": "2026-11-04T14:33:00Z",
+  "sourceHash": "3cddd29ed3ed2d06e2c59f682995b369aaf1c2b61e459f66b6d4a2e21a33bd48",
+  "clubs": [
+    {
+      "name": "Arsenal",
+      "slug": "Arsenal",
+      "elo": 2045
+    },
+    {
+      "name": "Man City",
+      "slug": "ManCity",
+      "elo": 2011
+    },
+    {
+      "name": "Liverpool",
+      "slug": "Liverpool",
+      "elo": 1939
+    },
+    {
+      "name": "Brighton",
+      "slug": "Brighton",
+      "elo": 1903
+    },
+    {
+      "name": "Aston Villa",
+      "slug": "AstonVilla",
+      "elo": 1898
+    },
+    {
+      "name": "Chelsea",
+      "slug": "Chelsea",
+      "elo": 1893
+    },
+    {
+      "name": "Bournemouth",
+      "slug": "Bournemouth",
+      "elo": 1887
+    },
+    {
+      "name": "Brentford",
+      "slug": "Brentford",
+      "elo": 1854
+    },
+    {
+      "name": "Newcastle",
+      "slug": "Newcastle",
+      "elo": 1854
+    },
+    {
+      "name": "Man United",
+      "slug": "ManUnited",
+      "elo": 1852
+    },
+    {
+      "name": "Everton",
+      "slug": "Everton",
+      "elo": 1828
+    },
+    {
+      "name": "Tottenham",
+      "slug": "Tottenham",
+      "elo": 1819
+    },
+    {
+      "name": "Crystal Palace",
+      "slug": "CrystalPalace",
+      "elo": 1810
+    },
+    {
+      "name": "Leeds",
+      "slug": "Leeds",
+      "elo": 1808
+    },
+    {
+      "name": "Fulham",
+      "slug": "Fulham",
+      "elo": 1801
+    },
+    {
+      "name": "Forest",
+      "slug": "Forest",
+      "elo": 1789
+    },
+    {
+      "name": "Sunderland",
+      "slug": "Sunderland",
+      "elo": 1732
+    },
+    {
+      "name": "Coventry",
+      "slug": "Coventry",
+      "elo": 1705
+    },
+    {
+      "name": "Ipswich",
+      "slug": "Ipswich",
+      "elo": 1702
+    },
+    {
+      "name": "Hull",
+      "slug": "Hull",
+      "elo": 1642
+    },
+    {
+      "name": "West Ham",
+      "slug": "WestHam",
+      "elo": 1758
+    },
+    {
+      "name": "Southampton",
+      "slug": "Southampton",
+      "elo": 1718
+    },
+    {
+      "name": "Wolves",
+      "slug": "Wolves",
+      "elo": 1714
+    },
+    {
+      "name": "Middlesbrough",
+      "slug": "Middlesbrough",
+      "elo": 1672
+    },
+    {
+      "name": "Birmingham",
+      "slug": "Birmingham",
+      "elo": 1652
+    },
+    {
+      "name": "Burnley",
+      "slug": "Burnley",
+      "elo": 1635
+    },
+    {
+      "name": "Millwall",
+      "slug": "Millwall",
+      "elo": 1633
+    },
+    {
+      "name": "Sheffield United",
+      "slug": "SheffieldUnited",
+      "elo": 1627
+    },
+    {
+      "name": "Norwich",
+      "slug": "Norwich",
+      "elo": 1620
+    },
+    {
+      "name": "Swansea",
+      "slug": "Swansea",
+      "elo": 1614
+    },
+    {
+      "name": "West Brom",
+      "slug": "WestBrom",
+      "elo": 1612
+    },
+    {
+      "name": "Wrexham",
+      "slug": "Wrexham",
+      "elo": 1607
+    },
+    {
+      "name": "Lincoln City",
+      "slug": "LincolnCity",
+      "elo": 1594
+    },
+    {
+      "name": "QPR",
+      "slug": "QPR",
+      "elo": 1588
+    },
+    {
+      "name": "Portsmouth",
+      "slug": "Portsmouth",
+      "elo": 1586
+    },
+    {
+      "name": "Bristol City",
+      "slug": "BristolCity",
+      "elo": 1580
+    },
+    {
+      "name": "Blackburn",
+      "slug": "Blackburn",
+      "elo": 1579
+    },
+    {
+      "name": "Cardiff",
+      "slug": "Cardiff",
+      "elo": 1578
+    },
+    {
+      "name": "Derby",
+      "slug": "Derby",
+      "elo": 1544
+    },
+    {
+      "name": "Leicester",
+      "slug": "Leicester",
+      "elo": 1578
+    },
+    {
+      "name": "Luton",
+      "slug": "Luton",
+      "elo": 1570
+    },
+    {
+      "name": "Bayern M\u00fcnchen",
+      "slug": "Bayern",
+      "elo": 2044
+    },
+    {
+      "name": "Dortmund",
+      "slug": "Dortmund",
+      "elo": 1894
+    },
+    {
+      "name": "Leverkusen",
+      "slug": "Leverkusen",
+      "elo": 1865
+    },
+    {
+      "name": "RB Leipzig",
+      "slug": "RBLeipzig",
+      "elo": 1831
+    },
+    {
+      "name": "Stuttgart",
+      "slug": "Stuttgart",
+      "elo": 1816
+    },
+    {
+      "name": "Freiburg",
+      "slug": "Freiburg",
+      "elo": 1786
+    },
+    {
+      "name": "Frankfurt",
+      "slug": "Frankfurt",
+      "elo": 1738
+    },
+    {
+      "name": "Hoffenheim",
+      "slug": "Hoffenheim",
+      "elo": 1734
+    },
+    {
+      "name": "Mainz",
+      "slug": "Mainz",
+      "elo": 1725
+    },
+    {
+      "name": "Werder",
+      "slug": "Werder",
+      "elo": 1714
+    },
+    {
+      "name": "Augsburg",
+      "slug": "Augsburg",
+      "elo": 1711
+    },
+    {
+      "name": "Union Berlin",
+      "slug": "UnionBerlin",
+      "elo": 1685
+    },
+    {
+      "name": "Elversberg",
+      "slug": "Elversberg",
+      "elo": 1683
+    },
+    {
+      "name": "Hamburg",
+      "slug": "Hamburg",
+      "elo": 1677
+    },
+    {
+      "name": "Gladbach",
+      "slug": "Gladbach",
+      "elo": 1671
+    },
+    {
+      "name": "Paderborn",
+      "slug": "Paderborn",
+      "elo": 1669
+    },
+    {
+      "name": "K\u00f6ln",
+      "slug": "Koeln",
+      "elo": 1656
+    },
+    {
+      "name": "Schalke",
+      "slug": "Schalke",
+      "elo": 1637
+    },
+    {
+      "name": "Wolfsburg",
+      "slug": "Wolfsburg",
+      "elo": 1686
+    },
+    {
+      "name": "Hertha",
+      "slug": "Hertha",
+      "elo": 1673
+    },
+    {
+      "name": "Heidenheim",
+      "slug": "Heidenheim",
+      "elo": 1624
+    },
+    {
+      "name": "N\u00fcrnberg",
+      "slug": "Nuernberg",
+      "elo": 1621
+    },
+    {
+      "name": "Hannover",
+      "slug": "Hannover",
+      "elo": 1614
+    },
+    {
+      "name": "Lautern",
+      "slug": "Lautern",
+      "elo": 1614
+    },
+    {
+      "name": "St Pauli",
+      "slug": "StPauli",
+      "elo": 1609
+    },
+    {
+      "name": "Bochum",
+      "slug": "Bochum",
+      "elo": 1595
+    },
+    {
+      "name": "Magdeburg",
+      "slug": "Magdeburg",
+      "elo": 1595
+    },
+    {
+      "name": "Bielefeld",
+      "slug": "Bielefeld",
+      "elo": 1586
+    },
+    {
+      "name": "Holstein",
+      "slug": "Holstein",
+      "elo": 1583
+    },
+    {
+      "name": "Darmstadt",
+      "slug": "Darmstadt",
+      "elo": 1578
+    },
+    {
+      "name": "Karlsruhe",
+      "slug": "Karlsruhe",
+      "elo": 1568
+    },
+    {
+      "name": "Osnabr\u00fcck",
+      "slug": "Osnabrueck",
+      "elo": 1554
+    },
+    {
+      "name": "Dresden",
+      "slug": "Dresden",
+      "elo": 1554
+    },
+    {
+      "name": "Cottbus",
+      "slug": "Cottbus",
+      "elo": 1541
+    },
+    {
+      "name": "F\u00fcrth",
+      "slug": "Fuerth",
+      "elo": 1530
+    },
+    {
+      "name": "Braunschweig",
+      "slug": "Braunschweig",
+      "elo": 1518
+    },
+    {
+      "name": "D\u00fcsseldorf",
+      "slug": "Duesseldorf",
+      "elo": 1558
+    },
+    {
+      "name": "Essen",
+      "slug": "Essen",
+      "elo": 1531
+    },
+    {
+      "name": "Barcelona",
+      "slug": "Barcelona",
+      "elo": 2030
+    },
+    {
+      "name": "Real Madrid",
+      "slug": "realmadrid",
+      "elo": 1995
+    },
+    {
+      "name": "Atl\u00e9tico",
+      "slug": "atletico",
+      "elo": 1915
+    },
+    {
+      "name": "Betis",
+      "slug": "Betis",
+      "elo": 1827
+    },
+    {
+      "name": "Real Sociedad",
+      "slug": "Sociedad",
+      "elo": 1789
+    },
+    {
+      "name": "Villarreal",
+      "slug": "Villarreal",
+      "elo": 1786
+    },
+    {
+      "name": "Athletic Club",
+      "slug": "athletic-club",
+      "elo": 1769
+    },
+    {
+      "name": "Celta",
+      "slug": "rc-celta",
+      "elo": 1746
+    },
+    {
+      "name": "Valencia",
+      "slug": "Valencia",
+      "elo": 1742
+    },
+    {
+      "name": "Rayo Vallecano",
+      "slug": "RayoVallecano",
+      "elo": 1741
+    },
+    {
+      "name": "Sevilla",
+      "slug": "Sevilla",
+      "elo": 1722
+    },
+    {
+      "name": "Elche",
+      "slug": "Elche",
+      "elo": 1712
+    },
+    {
+      "name": "Alaves",
+      "slug": "Alaves",
+      "elo": 1709
+    },
+    {
+      "name": "Levante",
+      "slug": "Levante",
+      "elo": 1708
+    },
+    {
+      "name": "Osasuna",
+      "slug": "Osasuna",
+      "elo": 1706
+    },
+    {
+      "name": "Espanyol",
+      "slug": "Espanyol",
+      "elo": 1691
+    },
+    {
+      "name": "Depor",
+      "slug": "Depor",
+      "elo": 1691
+    },
+    {
+      "name": "Getafe",
+      "slug": "Getafe",
+      "elo": 1684
+    },
+    {
+      "name": "Santander",
+      "slug": "Santander",
+      "elo": 1681
+    },
+    {
+      "name": "Malaga",
+      "slug": "Malaga",
+      "elo": 1658
+    },
+    {
+      "name": "Girona",
+      "slug": "Girona",
+      "elo": 1721
+    },
+    {
+      "name": "Mallorca",
+      "slug": "Mallorca",
+      "elo": 1720
+    },
+    {
+      "name": "Castellon",
+      "slug": "Castellon",
+      "elo": 1709
+    },
+    {
+      "name": "Almeria",
+      "slug": "Almeria",
+      "elo": 1706
+    },
+    {
+      "name": "Eibar",
+      "slug": "Eibar",
+      "elo": 1678
+    },
+    {
+      "name": "Burgos",
+      "slug": "Burgos",
+      "elo": 1663
+    },
+    {
+      "name": "Las Palmas",
+      "slug": "LasPalmas",
+      "elo": 1655
+    },
+    {
+      "name": "Oviedo",
+      "slug": "Oviedo",
+      "elo": 1644
+    },
+    {
+      "name": "Granada",
+      "slug": "Granada",
+      "elo": 1640
+    },
+    {
+      "name": "Gijon",
+      "slug": "Gijon",
+      "elo": 1638
+    },
+    {
+      "name": "Tenerife",
+      "slug": "Tenerife",
+      "elo": 1616
+    },
+    {
+      "name": "Cordoba",
+      "slug": "Cordoba",
+      "elo": 1615
+    },
+    {
+      "name": "Albacete",
+      "slug": "Albacete",
+      "elo": 1592
+    },
+    {
+      "name": "FC Andorra",
+      "slug": "fc-andorra",
+      "elo": 1587
+    },
+    {
+      "name": "Eldense",
+      "slug": "Eldense",
+      "elo": 1586
+    },
+    {
+      "name": "Leganes",
+      "slug": "Leganes",
+      "elo": 1586
+    },
+    {
+      "name": "Sabadell",
+      "slug": "Sabadell",
+      "elo": 1579
+    },
+    {
+      "name": "RC Celta B",
+      "slug": "rc-celta-b",
+      "elo": 1569
+    },
+    {
+      "name": "Valladolid",
+      "slug": "Valladolid",
+      "elo": 1561
+    },
+    {
+      "name": "Real Sociedad B",
+      "slug": "SociedadB",
+      "elo": 1559
+    },
+    {
+      "name": "Cadiz",
+      "slug": "Cadiz",
+      "elo": 1557
+    },
+    {
+      "name": "CA Ceuta",
+      "slug": "ad-ceuta-fc",
+      "elo": 1549
+    },
+    {
+      "name": "Villarreal B",
+      "slug": "VillarrealB",
+      "elo": 1598
+    },
+    {
+      "name": "Mirandes",
+      "slug": "Mirandes",
+      "elo": 1578
+    },
+    {
+      "name": "Huesca",
+      "slug": "Huesca",
+      "elo": 1569
+    },
+    {
+      "name": "Ponferradina",
+      "slug": "Ponferradina",
+      "elo": 1563
+    },
+    {
+      "name": "Real Madrid B",
+      "slug": "RealMadridB",
+      "elo": 1557
+    },
+    {
+      "name": "Pontevedra",
+      "slug": "Pontevedra",
+      "elo": 1551
+    },
+    {
+      "name": "Atletico B",
+      "slug": "AtleticoB",
+      "elo": 1545
+    },
+    {
+      "name": "Zamora",
+      "slug": "zamora-cf",
+      "elo": 1534
+    },
+    {
+      "name": "Guadalajara",
+      "slug": "Guadalajara",
+      "elo": 1612
+    },
+    {
+      "name": "Juventud Torremo",
+      "slug": "juventud-torremolinos",
+      "elo": 1566
+    },
+    {
+      "name": "Paris SG",
+      "slug": "ParisSG",
+      "elo": 1989
+    },
+    {
+      "name": "Lens",
+      "slug": "Lens",
+      "elo": 1802
+    },
+    {
+      "name": "Lyon",
+      "slug": "Lyon",
+      "elo": 1792
+    },
+    {
+      "name": "Monaco",
+      "slug": "Monaco",
+      "elo": 1790
+    },
+    {
+      "name": "Lille",
+      "slug": "Lille",
+      "elo": 1775
+    },
+    {
+      "name": "Marseille",
+      "slug": "Marseille",
+      "elo": 1765
+    },
+    {
+      "name": "Rennes",
+      "slug": "Rennes",
+      "elo": 1753
+    },
+    {
+      "name": "Strasbourg",
+      "slug": "Strasbourg",
+      "elo": 1728
+    },
+    {
+      "name": "Paris FC",
+      "slug": "ParisFC",
+      "elo": 1711
+    },
+    {
+      "name": "Toulouse",
+      "slug": "Toulouse",
+      "elo": 1689
+    },
+    {
+      "name": "Lorient",
+      "slug": "Lorient",
+      "elo": 1688
+    },
+    {
+      "name": "Nice",
+      "slug": "Nice",
+      "elo": 1686
+    },
+    {
+      "name": "Brest",
+      "slug": "Brest",
+      "elo": 1685
+    },
+    {
+      "name": "Auxerre",
+      "slug": "Auxerre",
+      "elo": 1641
+    },
+    {
+      "name": "Troyes",
+      "slug": "Troyes",
+      "elo": 1602
+    },
+    {
+      "name": "Angers",
+      "slug": "Angers",
+      "elo": 1600
+    },
+    {
+      "name": "Le Havre",
+      "slug": "LeHavre",
+      "elo": 1586
+    },
+    {
+      "name": "Le Mans",
+      "slug": "LeMans",
+      "elo": 1581
+    },
+    {
+      "name": "Reims",
+      "slug": "Reims",
+      "elo": 1640
+    },
+    {
+      "name": "Saint-Etienne",
+      "slug": "SaintEtienne",
+      "elo": 1615
+    },
+    {
+      "name": "Montpellier",
+      "slug": "Montpellier",
+      "elo": 1611
+    },
+    {
+      "name": "Nantes",
+      "slug": "Nantes",
+      "elo": 1560
+    },
+    {
+      "name": "Rodez",
+      "slug": "Rodez",
+      "elo": 1559
+    },
+    {
+      "name": "Red Star",
+      "slug": "RedStar",
+      "elo": 1559
+    },
+    {
+      "name": "Metz",
+      "slug": "Metz",
+      "elo": 1551
+    },
+    {
+      "name": "Annecy",
+      "slug": "Annecy",
+      "elo": 1551
+    },
+    {
+      "name": "Internazionale",
+      "slug": "Inter",
+      "elo": 1945
+    },
+    {
+      "name": "Roma",
+      "slug": "Roma",
+      "elo": 1862
+    },
+    {
+      "name": "Milan",
+      "slug": "Milan",
+      "elo": 1831
+    },
+    {
+      "name": "Juventus",
+      "slug": "Juventus",
+      "elo": 1828
+    },
+    {
+      "name": "Como",
+      "slug": "Como",
+      "elo": 1827
+    },
+    {
+      "name": "Napoli",
+      "slug": "Napoli",
+      "elo": 1826
+    },
+    {
+      "name": "Lazio",
+      "slug": "Lazio",
+      "elo": 1808
+    },
+    {
+      "name": "Atalanta",
+      "slug": "atalanta",
+      "elo": 1781
+    },
+    {
+      "name": "Bologna",
+      "slug": "Bologna",
+      "elo": 1772
+    },
+    {
+      "name": "Fiorentina",
+      "slug": "Fiorentina",
+      "elo": 1716
+    },
+    {
+      "name": "Frosinone",
+      "slug": "Frosinone",
+      "elo": 1707
+    },
+    {
+      "name": "Torino",
+      "slug": "Torino",
+      "elo": 1689
+    },
+    {
+      "name": "Genoa",
+      "slug": "Genoa",
+      "elo": 1686
+    },
+    {
+      "name": "Sassuolo",
+      "slug": "Sassuolo",
+      "elo": 1671
+    },
+    {
+      "name": "Udinese",
+      "slug": "Udinese",
+      "elo": 1665
+    },
+    {
+      "name": "Cagliari",
+      "slug": "Cagliari",
+      "elo": 1654
+    },
+    {
+      "name": "Parma",
+      "slug": "parma-calcio-1913",
+      "elo": 1650
+    },
+    {
+      "name": "Venezia",
+      "slug": "venezia-fc",
+      "elo": 1640
+    },
+    {
+      "name": "Monza",
+      "slug": "Monza",
+      "elo": 1635
+    },
+    {
+      "name": "Lecce",
+      "slug": "Lecce",
+      "elo": 1608
+    },
+    {
+      "name": "Palermo",
+      "slug": "Palermo",
+      "elo": 1664
+    },
+    {
+      "name": "Cremonese",
+      "slug": "Cremonese",
+      "elo": 1603
+    },
+    {
+      "name": "Verona",
+      "slug": "Verona",
+      "elo": 1583
+    },
+    {
+      "name": "Modena",
+      "slug": "Modena",
+      "elo": 1569
+    },
+    {
+      "name": "Pisa",
+      "slug": "pisa-sc",
+      "elo": 1555
+    },
+    {
+      "name": "Catanzaro",
+      "slug": "Catanzaro",
+      "elo": 1549
+    },
+    {
+      "name": "Juve Stabia",
+      "slug": "JuveStabia",
+      "elo": 1549
+    },
+    {
+      "name": "Mantova",
+      "slug": "mantova-1911-ssd",
+      "elo": 1545
+    },
+    {
+      "name": "Avellino",
+      "slug": "us-avellino",
+      "elo": 1531
+    },
+    {
+      "name": "Empoli",
+      "slug": "Empoli",
+      "elo": 1520
+    },
+    {
+      "name": "S\u00fcdtirol",
+      "slug": "Suedtirol",
+      "elo": 1517
+    },
+    {
+      "name": "Cesena",
+      "slug": "cesena-fc",
+      "elo": 1514
+    },
+    {
+      "name": "Padova",
+      "slug": "Padova",
+      "elo": 1512
+    },
+    {
+      "name": "Entella",
+      "slug": "Entella",
+      "elo": 1497
+    },
+    {
+      "name": "Carrarese",
+      "slug": "Carrarese",
+      "elo": 1496
+    },
+    {
+      "name": "Sampdoria",
+      "slug": "Sampdoria",
+      "elo": 1488
+    },
+    {
+      "name": "Benevento",
+      "slug": "Benevento",
+      "elo": 1563
+    },
+    {
+      "name": "Ascoli",
+      "slug": "Ascoli",
+      "elo": 1554
+    },
+    {
+      "name": "Vicenza",
+      "slug": "l-r-vicenza",
+      "elo": 1546
+    },
+    {
+      "name": "Arezzo",
+      "slug": "Arezzo",
+      "elo": 1496
+    },
+    {
+      "name": "Flamengo",
+      "slug": "flamengo",
+      "elo": 1881
+    },
+    {
+      "name": "Palmeiras",
+      "slug": "palmeiras",
+      "elo": 1865
+    },
+    {
+      "name": "Cruzeiro",
+      "slug": "cruzeiro",
+      "elo": 1783
+    },
+    {
+      "name": "Fluminense",
+      "slug": "fluminense",
+      "elo": 1761
+    },
+    {
+      "name": "Bahia",
+      "slug": "bahia-ba",
+      "elo": 1732
+    },
+    {
+      "name": "Santos",
+      "slug": "santos-fc_2",
+      "elo": 1728
+    },
+    {
+      "name": "Ath Paranaense",
+      "slug": "athletico-paranaense",
+      "elo": 1724
+    },
+    {
+      "name": "Mirassol",
+      "slug": "Mirassol",
+      "elo": 1719
+    },
+    {
+      "name": "S\u00e3o Paulo",
+      "slug": "sao-paulo-fc",
+      "elo": 1717
+    },
+    {
+      "name": "Atl\u00e9tico Mineiro",
+      "slug": "atletico-mineiro",
+      "elo": 1716
+    },
+    {
+      "name": "Corinthians",
+      "slug": "Corinthians",
+      "elo": 1711
+    },
+    {
+      "name": "Botafogo",
+      "slug": "botafogo",
+      "elo": 1706
+    },
+    {
+      "name": "Vasco da Gama",
+      "slug": "vasco-da-gama-rj",
+      "elo": 1703
+    },
+    {
+      "name": "Bragantino",
+      "slug": "red-bull-bragantino",
+      "elo": 1700
+    },
+    {
+      "name": "Internacional",
+      "slug": "internacional",
+      "elo": 1698
+    },
+    {
+      "name": "Gr\u00eamio",
+      "slug": "gremio-porto-alegre",
+      "elo": 1696
+    },
+    {
+      "name": "Vit\u00f3ria",
+      "slug": "vitoria-ba",
+      "elo": 1661
+    },
+    {
+      "name": "Remo",
+      "slug": "remo-pa",
+      "elo": 1640
+    },
+    {
+      "name": "Coritiba",
+      "slug": "coritiba-pr",
+      "elo": 1639
+    },
+    {
+      "name": "Chapecoense",
+      "slug": "chapecoense",
+      "elo": 1577
+    },
+    {
+      "name": "Novorizontino",
+      "slug": "gremio-novorizontino-sp",
+      "elo": 1717
+    },
+    {
+      "name": "Fortaleza",
+      "slug": "fortaleza-ce",
+      "elo": 1693
+    },
+    {
+      "name": "Juventude",
+      "slug": "juventude-rs",
+      "elo": 1679
+    },
+    {
+      "name": "Crici\u00fama",
+      "slug": "criciuma-sc",
+      "elo": 1661
+    },
+    {
+      "name": "Atl Goianiense",
+      "slug": "atletico-goianiense",
+      "elo": 1644
+    },
+    {
+      "name": "Goi\u00e1s",
+      "slug": "goias-go",
+      "elo": 1643
+    },
+    {
+      "name": "Vila Nova GO",
+      "slug": "vila-nova-go",
+      "elo": 1632
+    },
+    {
+      "name": "Cear\u00e1",
+      "slug": "ceara-ce",
+      "elo": 1628
+    },
+    {
+      "name": "CR Brasil",
+      "slug": "cr-brasil-al",
+      "elo": 1625
+    },
+    {
+      "name": "S\u00e3o Bernardo",
+      "slug": "sao-bernardo-fc-sp",
+      "elo": 1621
+    },
+    {
+      "name": "Sport",
+      "slug": "sport-recife-pe",
+      "elo": 1618
+    },
+    {
+      "name": "Cuiab\u00e1",
+      "slug": "cuiaba-mt",
+      "elo": 1617
+    },
+    {
+      "name": "N\u00e1utico",
+      "slug": "lsapi-3966",
+      "elo": 1614
+    },
+    {
+      "name": "Oper\u00e1rio",
+      "slug": "operario-ferroviario-pr",
+      "elo": 1602
+    },
+    {
+      "name": "Athletic",
+      "slug": "athletic-mg",
+      "elo": 1596
+    },
+    {
+      "name": "Botafogo SP",
+      "slug": "BotafogoSP",
+      "elo": 1584
+    },
+    {
+      "name": "Ava\u00ed",
+      "slug": "avai-sc",
+      "elo": 1567
+    },
+    {
+      "name": "Am\u00e9rica Mineiro",
+      "slug": "america-mg",
+      "elo": 1542
+    },
+    {
+      "name": "Ferrovi\u00e1ria SP",
+      "slug": "ferroviaria-sp",
+      "elo": 1561
+    },
+    {
+      "name": "Guarani",
+      "slug": "guarani-sp",
+      "elo": 1548
+    },
+    {
+      "name": "Benfica",
+      "slug": "benfica",
+      "elo": 1866
+    },
+    {
+      "name": "Sporting",
+      "slug": "Sporting",
+      "elo": 1860
+    },
+    {
+      "name": "Porto",
+      "slug": "porto",
+      "elo": 1833
+    },
+    {
+      "name": "Braga",
+      "slug": "Braga",
+      "elo": 1707
+    },
+    {
+      "name": "Famalicao",
+      "slug": "Famalicao",
+      "elo": 1599
+    },
+    {
+      "name": "Arouca",
+      "slug": "Arouca",
+      "elo": 1585
+    },
+    {
+      "name": "Santa Clara",
+      "slug": "SantaClara",
+      "elo": 1582
+    },
+    {
+      "name": "Gil Vicente",
+      "slug": "GilVicente",
+      "elo": 1577
+    },
+    {
+      "name": "Guimaraes",
+      "slug": "Guimaraes",
+      "elo": 1577
+    },
+    {
+      "name": "Moreirense",
+      "slug": "Moreirense",
+      "elo": 1553
+    },
+    {
+      "name": "Alverca",
+      "slug": "Alverca",
+      "elo": 1544
+    },
+    {
+      "name": "Ac Viseu",
+      "slug": "AcViseu",
+      "elo": 1534
+    },
+    {
+      "name": "Estoril",
+      "slug": "Estoril",
+      "elo": 1497
+    },
+    {
+      "name": "Casa Pia",
+      "slug": "CasaPia",
+      "elo": 1494
+    },
+    {
+      "name": "Rio Ave",
+      "slug": "RioAve",
+      "elo": 1486
+    },
+    {
+      "name": "Nacional",
+      "slug": "Nacional",
+      "elo": 1482
+    },
+    {
+      "name": "Maritimo",
+      "slug": "Maritimo",
+      "elo": 1477
+    },
+    {
+      "name": "Estrela Amadora",
+      "slug": "EstrelaAmadora",
+      "elo": 1476
+    },
+    {
+      "name": "sporting-cp-b",
+      "slug": "sporting-cp-b",
+      "elo": 1593
+    },
+    {
+      "name": "Tondela",
+      "slug": "Tondela",
+      "elo": 1475
+    },
+    {
+      "name": "Academica",
+      "slug": "Academica",
+      "elo": 1455
+    },
+    {
+      "name": "Vizela",
+      "slug": "Vizela",
+      "elo": 1453
+    },
+    {
+      "name": "Torreense",
+      "slug": "Torreense",
+      "elo": 1452
+    },
+    {
+      "name": "Penafiel",
+      "slug": "Penafiel",
+      "elo": 1448
+    },
+    {
+      "name": "Lusitania FC Lou",
+      "slug": "lsapi-4956",
+      "elo": 1448
+    },
+    {
+      "name": "AVS Futebol",
+      "slug": "AVSFutebol",
+      "elo": 1444
+    },
+    {
+      "name": "SC Farense",
+      "slug": "sc-farense",
+      "elo": 1442
+    },
+    {
+      "name": "Leiria",
+      "slug": "Leiria",
+      "elo": 1442
+    },
+    {
+      "name": "SL Benfica B",
+      "slug": "sl-benfica-b",
+      "elo": 1439
+    },
+    {
+      "name": "Felgueiras",
+      "slug": "Felgueiras",
+      "elo": 1405
+    },
+    {
+      "name": "FC Porto B",
+      "slug": "fc-porto-b",
+      "elo": 1399
+    },
+    {
+      "name": "Chaves",
+      "slug": "Chaves",
+      "elo": 1398
+    },
+    {
+      "name": "Leixoes",
+      "slug": "Leixoes",
+      "elo": 1394
+    },
+    {
+      "name": "Portimonense",
+      "slug": "Portimonense",
+      "elo": 1382
+    },
+    {
+      "name": "Feirense",
+      "slug": "Feirense",
+      "elo": 1362
+    },
+    {
+      "name": "Amarante",
+      "slug": "Amarante",
+      "elo": 1307
+    },
+    {
+      "name": "Brugge",
+      "slug": "Brugge",
+      "elo": 1836
+    },
+    {
+      "name": "St Gillis",
+      "slug": "StGillis",
+      "elo": 1817
+    },
+    {
+      "name": "Genk",
+      "slug": "Genk",
+      "elo": 1678
+    },
+    {
+      "name": "Anderlecht",
+      "slug": "Anderlecht",
+      "elo": 1662
+    },
+    {
+      "name": "Gent",
+      "slug": "Gent",
+      "elo": 1641
+    },
+    {
+      "name": "Charleroi",
+      "slug": "Charleroi",
+      "elo": 1627
+    },
+    {
+      "name": "St Truiden",
+      "slug": "StTruiden",
+      "elo": 1617
+    },
+    {
+      "name": "Westerlo",
+      "slug": "Westerlo",
+      "elo": 1585
+    },
+    {
+      "name": "Antwerp",
+      "slug": "Antwerp",
+      "elo": 1581
+    },
+    {
+      "name": "Standard",
+      "slug": "Standard",
+      "elo": 1579
+    },
+    {
+      "name": "Waasland-Beveren",
+      "slug": "sk-beveren",
+      "elo": 1573
+    },
+    {
+      "name": "Mechelen",
+      "slug": "Mechelen",
+      "elo": 1565
+    },
+    {
+      "name": "Zulte Waregem",
+      "slug": "ZulteWaregem",
+      "elo": 1557
+    },
+    {
+      "name": "Cercle Brugge",
+      "slug": "CercleBrugge",
+      "elo": 1545
+    },
+    {
+      "name": "Leuven",
+      "slug": "Leuven",
+      "elo": 1529
+    },
+    {
+      "name": "Lommel",
+      "slug": "Lommel",
+      "elo": 1522
+    },
+    {
+      "name": "La Louvi\u00e9re",
+      "slug": "Louviere",
+      "elo": 1486
+    },
+    {
+      "name": "Kortrijk",
+      "slug": "Kortrijk",
+      "elo": 1446
+    },
+    {
+      "name": "Zenit",
+      "slug": "Zenit",
+      "elo": 1829
+    },
+    {
+      "name": "Spartak Moskva",
+      "slug": "SpartakMoskva",
+      "elo": 1735
+    },
+    {
+      "name": "FC Krasnodar",
+      "slug": "FCKrasnodar",
+      "elo": 1730
+    },
+    {
+      "name": "CSKA Moskva",
+      "slug": "CSKAMoskva",
+      "elo": 1700
+    },
+    {
+      "name": "Dynamo Moskva",
+      "slug": "DynamoMoskva",
+      "elo": 1699
+    },
+    {
+      "name": "Lok Moskva",
+      "slug": "LokMoskva",
+      "elo": 1628
+    },
+    {
+      "name": "Baltika",
+      "slug": "Baltika",
+      "elo": 1616
+    },
+    {
+      "name": "Rostov",
+      "slug": "Rostov",
+      "elo": 1600
+    },
+    {
+      "name": "Rubin Kazan",
+      "slug": "RubinKazan",
+      "elo": 1553
+    },
+    {
+      "name": "Orenburg",
+      "slug": "Orenburg",
+      "elo": 1549
+    },
+    {
+      "name": "Kryliya Sovetov",
+      "slug": "KryliyaSovetov",
+      "elo": 1545
+    },
+    {
+      "name": "Terek Grozny",
+      "slug": "TerekGrozny",
+      "elo": 1536
+    },
+    {
+      "name": "Akron Tolyatti",
+      "slug": "akron-tolyatti",
+      "elo": 1501
+    },
+    {
+      "name": "Makhachkala",
+      "slug": "fk-dinamo-makhachkala",
+      "elo": 1493
+    },
+    {
+      "name": "Fakel Voronezh",
+      "slug": "FakelVoronezh",
+      "elo": 1492
+    },
+    {
+      "name": "Rodina Moskva",
+      "slug": "rodina-moskva",
+      "elo": 1514
+    },
+    {
+      "name": "Galatasaray",
+      "slug": "Galatasaray",
+      "elo": 1821
+    },
+    {
+      "name": "Fenerbah\u00e7e",
+      "slug": "Fenerbahce",
+      "elo": 1767
+    },
+    {
+      "name": "Amed SK",
+      "slug": "amed-sk",
+      "elo": 1722
+    },
+    {
+      "name": "Besiktas",
+      "slug": "Besiktas",
+      "elo": 1707
+    },
+    {
+      "name": "Trabzonspor",
+      "slug": "Trabzonspor",
+      "elo": 1700
+    },
+    {
+      "name": "G\u00f6ztepe",
+      "slug": "Goeztepe",
+      "elo": 1636
+    },
+    {
+      "name": "Ba\u015fak\u015fehir",
+      "slug": "istanbul-basaksehir",
+      "elo": 1635
+    },
+    {
+      "name": "Erzurum",
+      "slug": "ErzurumBB",
+      "elo": 1585
+    },
+    {
+      "name": "Kasimpasa",
+      "slug": "Kasimpasa",
+      "elo": 1584
+    },
+    {
+      "name": "Kocaelispor",
+      "slug": "Kocaelispor",
+      "elo": 1581
+    },
+    {
+      "name": "Samsunspor",
+      "slug": "Samsunspor",
+      "elo": 1571
+    },
+    {
+      "name": "Genclerbirligi",
+      "slug": "Genclerbirligi",
+      "elo": 1566
+    },
+    {
+      "name": "Rizespor",
+      "slug": "Rizespor",
+      "elo": 1556
+    },
+    {
+      "name": "Alanyaspor",
+      "slug": "Alanyaspor",
+      "elo": 1556
+    },
+    {
+      "name": "Konyaspor",
+      "slug": "Konyaspor",
+      "elo": 1541
+    },
+    {
+      "name": "Gaziantep",
+      "slug": "GaziantepFK",
+      "elo": 1515
+    },
+    {
+      "name": "Eyupspor",
+      "slug": "Eyupspor",
+      "elo": 1502
+    },
+    {
+      "name": "Band\u0131rmaspor",
+      "slug": "bandirmaspor",
+      "elo": 1619
+    },
+    {
+      "name": "\u00c7orum FK",
+      "slug": "corum-fk",
+      "elo": 1609
+    },
+    {
+      "name": "Bodrum",
+      "slug": "bodrum-fk",
+      "elo": 1589
+    },
+    {
+      "name": "Ind del Valle",
+      "slug": "IDV",
+      "elo": 1791
+    },
+    {
+      "name": "LDU Quito",
+      "slug": "ldu-quito",
+      "elo": 1704
+    },
+    {
+      "name": "Macar\u00e1",
+      "slug": "macara",
+      "elo": 1683
+    },
+    {
+      "name": "Uni Catolica",
+      "slug": "universidad-catolica_2",
+      "elo": 1673
+    },
+    {
+      "name": "Barcelona",
+      "slug": "BarcelonaEC",
+      "elo": 1641
+    },
+    {
+      "name": "Aucas",
+      "slug": "aucas",
+      "elo": 1610
+    },
+    {
+      "name": "Libertad de Loja",
+      "slug": "libertad-de-loja",
+      "elo": 1604
+    },
+    {
+      "name": "Guayaquil",
+      "slug": "guayaquil-city",
+      "elo": 1577
+    },
+    {
+      "name": "Leones del Norte",
+      "slug": "leones-del-norte",
+      "elo": 1574
+    },
+    {
+      "name": "Emelec",
+      "slug": "emelec",
+      "elo": 1561
+    },
+    {
+      "name": "Orense",
+      "slug": "orense-sc",
+      "elo": 1557
+    },
+    {
+      "name": "Cuenca",
+      "slug": "deportivo-cuenca",
+      "elo": 1556
+    },
+    {
+      "name": "Mushuc Runa",
+      "slug": "mushuc-runa",
+      "elo": 1550
+    },
+    {
+      "name": "Boca Juniors",
+      "slug": "bocajuniors",
+      "elo": 1789
+    },
+    {
+      "name": "Argentinos Junio",
+      "slug": "argentinos-juniors",
+      "elo": 1760
+    },
+    {
+      "name": "Rosario Central",
+      "slug": "rosario-central",
+      "elo": 1759
+    },
+    {
+      "name": "River Plate",
+      "slug": "riverplate",
+      "elo": 1745
+    },
+    {
+      "name": "V\u00e9lez Sarsfield",
+      "slug": "velez-sarsfield",
+      "elo": 1732
+    },
+    {
+      "name": "Ind Rivadavia",
+      "slug": "independiente-rivadavia",
+      "elo": 1721
+    },
+    {
+      "name": "Estudiantes",
+      "slug": "estudiantes",
+      "elo": 1714
+    },
+    {
+      "name": "Lan\u00fas",
+      "slug": "lanus",
+      "elo": 1708
+    },
+    {
+      "name": "Instituto",
+      "slug": "instituto-de-cordoba",
+      "elo": 1703
+    },
+    {
+      "name": "Racing Club",
+      "slug": "racing-club",
+      "elo": 1700
+    },
+    {
+      "name": "Gimnasia LP",
+      "slug": "gimnasia-de-la-plata",
+      "elo": 1698
+    },
+    {
+      "name": "Belgrano",
+      "slug": "belgrano-de-cordoba",
+      "elo": 1694
+    },
+    {
+      "name": "Independiente",
+      "slug": "Independiente",
+      "elo": 1689
+    },
+    {
+      "name": "Hurac\u00e1n",
+      "slug": "huracan",
+      "elo": 1666
+    },
+    {
+      "name": "Defensa y Justic",
+      "slug": "defensa-y-justicia",
+      "elo": 1662
+    },
+    {
+      "name": "San Lorenzo",
+      "slug": "SanLorenzo",
+      "elo": 1654
+    },
+    {
+      "name": "Tigre",
+      "slug": "tigre",
+      "elo": 1652
+    },
+    {
+      "name": "Barracas Central",
+      "slug": "barracas-central",
+      "elo": 1645
+    },
+    {
+      "name": "Platense",
+      "slug": "platense",
+      "elo": 1644
+    },
+    {
+      "name": "Talleres",
+      "slug": "talleres-de-cordoba",
+      "elo": 1642
+    },
+    {
+      "name": "GyE Mendoza",
+      "slug": "gimnasia-de-mendoza",
+      "elo": 1640
+    },
+    {
+      "name": "Uni\u00f3n de Santa F",
+      "slug": "union-de-santa-fe",
+      "elo": 1639
+    },
+    {
+      "name": "Atl\u00e9tico Tucum\u00e1n",
+      "slug": "atletico-tucuman",
+      "elo": 1635
+    },
+    {
+      "name": "Newell's Old Boy",
+      "slug": "newells-old-boys",
+      "elo": 1631
+    },
+    {
+      "name": "Sarmiento",
+      "slug": "sarmiento-de-junin",
+      "elo": 1617
+    },
+    {
+      "name": "Banfield",
+      "slug": "banfield",
+      "elo": 1601
+    },
+    {
+      "name": "Central C\u00f3rdoba",
+      "slug": "central-cordoba-sde",
+      "elo": 1599
+    },
+    {
+      "name": "Riestra",
+      "slug": "deportivo-riestra",
+      "elo": 1599
+    },
+    {
+      "name": "Aldosivi",
+      "slug": "aldosivi",
+      "elo": 1557
+    },
+    {
+      "name": "R\u00edo Cuarto",
+      "slug": "estudiantes-de-rio-cuarto",
+      "elo": 1536
+    },
+    {
+      "name": "Godoy Cruz",
+      "slug": "godoy-cruz",
+      "elo": 1644
+    },
+    {
+      "name": "Madryn",
+      "slug": "deportivo-madryn",
+      "elo": 1625
+    },
+    {
+      "name": "Ferrocarril Midl",
+      "slug": "lsapi-4199",
+      "elo": 1625
+    },
+    {
+      "name": "Tristan Su\u00e1rez",
+      "slug": "tristan-suarez",
+      "elo": 1617
+    },
+    {
+      "name": "Temperley",
+      "slug": "temperley",
+      "elo": 1608
+    },
+    {
+      "name": "Deportivo Mor\u00f3n",
+      "slug": "deportivo-moron",
+      "elo": 1598
+    },
+    {
+      "name": "San Juan",
+      "slug": "san-martin-de-san-juan",
+      "elo": 1593
+    },
+    {
+      "name": "GE Jujuy",
+      "slug": "gimnasia-de-jujuy",
+      "elo": 1586
+    },
+    {
+      "name": "Atlanta",
+      "slug": "atlanta",
+      "elo": 1585
+    },
+    {
+      "name": "Maip\u00fa",
+      "slug": "deportivo-maipu",
+      "elo": 1583
+    },
+    {
+      "name": "Col\u00f3n de Santa F",
+      "slug": "colon-de-santa-fe",
+      "elo": 1580
+    },
+    {
+      "name": "SM Tucuman",
+      "slug": "san-martin-de-tucuman",
+      "elo": 1578
+    },
+    {
+      "name": "Ferro",
+      "slug": "ferro-carril-oeste",
+      "elo": 1577
+    },
+    {
+      "name": "Colegiales de Mu",
+      "slug": "colegiales-de-munro",
+      "elo": 1577
+    },
+    {
+      "name": "Gimnasia y Tiro",
+      "slug": "gimnasia-y-tiro-de-salta",
+      "elo": 1577
+    },
+    {
+      "name": "Estudiantes de C",
+      "slug": "estudiantes-de-caseros",
+      "elo": 1575
+    },
+    {
+      "name": "Quilmes",
+      "slug": "quilmes",
+      "elo": 1555
+    },
+    {
+      "name": "PSV",
+      "slug": "PSV",
+      "elo": 1783
+    },
+    {
+      "name": "Feyenoord",
+      "slug": "Feyenoord",
+      "elo": 1724
+    },
+    {
+      "name": "Ajax",
+      "slug": "Ajax",
+      "elo": 1701
+    },
+    {
+      "name": "Twente",
+      "slug": "Twente",
+      "elo": 1683
+    },
+    {
+      "name": "AZ",
+      "slug": "Alkmaar",
+      "elo": 1681
+    },
+    {
+      "name": "Nijmegen",
+      "slug": "Nijmegen",
+      "elo": 1590
+    },
+    {
+      "name": "Utrecht",
+      "slug": "Utrecht",
+      "elo": 1583
+    },
+    {
+      "name": "Heerenveen",
+      "slug": "Heerenveen",
+      "elo": 1570
+    },
+    {
+      "name": "Go Ahead Eagles",
+      "slug": "GoAheadEagles",
+      "elo": 1523
+    },
+    {
+      "name": "Groningen",
+      "slug": "Groningen",
+      "elo": 1514
+    },
+    {
+      "name": "Sittard",
+      "slug": "Sittard",
+      "elo": 1510
+    },
+    {
+      "name": "Sparta",
+      "slug": "SpartaRotterdam",
+      "elo": 1506
+    },
+    {
+      "name": "Excelsior",
+      "slug": "Excelsior",
+      "elo": 1482
+    },
+    {
+      "name": "Zwolle",
+      "slug": "Zwolle",
+      "elo": 1467
+    },
+    {
+      "name": "Cambuur",
+      "slug": "Cambuur",
+      "elo": 1452
+    },
+    {
+      "name": "Den Haag",
+      "slug": "DenHaag",
+      "elo": 1446
+    },
+    {
+      "name": "Telstar",
+      "slug": "telstar",
+      "elo": 1446
+    },
+    {
+      "name": "Willem II",
+      "slug": "WillemII",
+      "elo": 1392
+    },
+    {
+      "name": "Heracles",
+      "slug": "Heracles",
+      "elo": 1461
+    },
+    {
+      "name": "Breda",
+      "slug": "Breda",
+      "elo": 1413
+    },
+    {
+      "name": "Almere",
+      "slug": "almere-city-fc",
+      "elo": 1404
+    },
+    {
+      "name": "Volendam",
+      "slug": "Volendam",
+      "elo": 1403
+    },
+    {
+      "name": "Waalwijk",
+      "slug": "Waalwijk",
+      "elo": 1384
+    },
+    {
+      "name": "Roda",
+      "slug": "Roda",
+      "elo": 1362
+    },
+    {
+      "name": "Vitesse",
+      "slug": "Vitesse",
+      "elo": 1353
+    },
+    {
+      "name": "De Graafschap",
+      "slug": "DeGraafschap",
+      "elo": 1347
+    },
+    {
+      "name": "Emmen",
+      "slug": "Emmen",
+      "elo": 1337
+    },
+    {
+      "name": "Venlo",
+      "slug": "Venlo",
+      "elo": 1331
+    },
+    {
+      "name": "Jong AZ",
+      "slug": "az-alkmaar-j",
+      "elo": 1304
+    },
+    {
+      "name": "Den Bosch",
+      "slug": "DenBosch",
+      "elo": 1302
+    },
+    {
+      "name": "Jong PSV",
+      "slug": "jong-psv",
+      "elo": 1273
+    },
+    {
+      "name": "Dordrecht",
+      "slug": "Dordrecht",
+      "elo": 1273
+    },
+    {
+      "name": "FC Eindhoven",
+      "slug": "FCEindhoven",
+      "elo": 1263
+    },
+    {
+      "name": "TOP Oss",
+      "slug": "top-oss",
+      "elo": 1262
+    },
+    {
+      "name": "Maastricht",
+      "slug": "Maastricht",
+      "elo": 1241
+    },
+    {
+      "name": "Helmond Sport",
+      "slug": "HelmondSport",
+      "elo": 1234
+    },
+    {
+      "name": "Jong Ajax",
+      "slug": "jong-ajax",
+      "elo": 1224
+    },
+    {
+      "name": "Jong Utrecht",
+      "slug": "fc-utrecht-j",
+      "elo": 1215
+    },
+    {
+      "name": "Bod\u00f8/Glimt",
+      "slug": "BodoeGlimt",
+      "elo": 1775
+    },
+    {
+      "name": "Viking",
+      "slug": "Viking",
+      "elo": 1707
+    },
+    {
+      "name": "Brann",
+      "slug": "Brann",
+      "elo": 1582
+    },
+    {
+      "name": "Troms\u00f8",
+      "slug": "Tromso",
+      "elo": 1553
+    },
+    {
+      "name": "Lillestr\u00f8m",
+      "slug": "Lillestrom",
+      "elo": 1533
+    },
+    {
+      "name": "Al Hilal",
+      "slug": "alhilal",
+      "elo": 1746
+    },
+    {
+      "name": "Al Nassr",
+      "slug": "al-nassr",
+      "elo": 1702
+    },
+    {
+      "name": "Al Ahli SFC",
+      "slug": "al-ahli-sfc",
+      "elo": 1645
+    },
+    {
+      "name": "Al Qadsiah",
+      "slug": "al-qadsiah",
+      "elo": 1643
+    },
+    {
+      "name": "Al Ittihad",
+      "slug": "al-ittihad_2",
+      "elo": 1574
+    },
+    {
+      "name": "Slavia Praha",
+      "slug": "SlaviaPraha",
+      "elo": 1746
+    },
+    {
+      "name": "Sparta Praha",
+      "slug": "SpartaPraha",
+      "elo": 1644
+    },
+    {
+      "name": "Viktoria Plze\u0148",
+      "slug": "ViktoriaPlzen",
+      "elo": 1620
+    },
+    {
+      "name": "Jablonec",
+      "slug": "Jablonec",
+      "elo": 1547
+    },
+    {
+      "name": "Slovan Liberec",
+      "slug": "SlovanLiberec",
+      "elo": 1531
+    },
+    {
+      "name": "Hradec Kralove",
+      "slug": "HradecKralove",
+      "elo": 1522
+    },
+    {
+      "name": "Sigma Olomouc",
+      "slug": "SigmaOlomouc",
+      "elo": 1518
+    },
+    {
+      "name": "Mlada Boleslav",
+      "slug": "MladaBoleslav",
+      "elo": 1502
+    },
+    {
+      "name": "Teplice",
+      "slug": "Teplice",
+      "elo": 1493
+    },
+    {
+      "name": "Bohemians",
+      "slug": "BohemiansPraha",
+      "elo": 1473
+    },
+    {
+      "name": "Zbrojovka Brno",
+      "slug": "ZbrojovkaBrno",
+      "elo": 1459
+    },
+    {
+      "name": "Banik Ostrava",
+      "slug": "BanikOstrava",
+      "elo": 1453
+    },
+    {
+      "name": "Pardubice",
+      "slug": "Pardubice",
+      "elo": 1446
+    },
+    {
+      "name": "Slovacko",
+      "slug": "Slovacko",
+      "elo": 1398
+    },
+    {
+      "name": "Zl\u00edn",
+      "slug": "Zlin",
+      "elo": 1367
+    },
+    {
+      "name": "Artis Brno",
+      "slug": "ArtisBrno",
+      "elo": 1306
+    },
+    {
+      "name": "Olympiakos",
+      "slug": "Olympiakos",
+      "elo": 1745
+    },
+    {
+      "name": "AEK",
+      "slug": "AEK",
+      "elo": 1693
+    },
+    {
+      "name": "Panathinaikos",
+      "slug": "Panathinaikos",
+      "elo": 1671
+    },
+    {
+      "name": "PAOK",
+      "slug": "PAOK",
+      "elo": 1652
+    },
+    {
+      "name": "PS Kalamata",
+      "slug": "ps-kalamata",
+      "elo": 1544
+    },
+    {
+      "name": "Aris",
+      "slug": "Aris",
+      "elo": 1525
+    },
+    {
+      "name": "OFI",
+      "slug": "OFI",
+      "elo": 1490
+    },
+    {
+      "name": "Iraklis",
+      "slug": "Iraklis",
+      "elo": 1466
+    },
+    {
+      "name": "Levadeiakos",
+      "slug": "Levadeiakos",
+      "elo": 1459
+    },
+    {
+      "name": "Atromitos",
+      "slug": "Atromitos",
+      "elo": 1435
+    },
+    {
+      "name": "Asteras Tripolis",
+      "slug": "AsterasTripolis",
+      "elo": 1409
+    },
+    {
+      "name": "Panetolikos",
+      "slug": "Panetolikos",
+      "elo": 1397
+    },
+    {
+      "name": "AE Kifisias",
+      "slug": "ae-kifisias",
+      "elo": 1396
+    },
+    {
+      "name": "NFC Volos",
+      "slug": "NFCVolos",
+      "elo": 1363
+    },
+    {
+      "name": "Atl\u00e9tico Naciona",
+      "slug": "atletico-nacional",
+      "elo": 1736
+    },
+    {
+      "name": "Am\u00e9rica de Cali",
+      "slug": "america-de-cali",
+      "elo": 1677
+    },
+    {
+      "name": "Santa Fe",
+      "slug": "santa-fe",
+      "elo": 1653
+    },
+    {
+      "name": "Millonarios",
+      "slug": "millonarios",
+      "elo": 1651
+    },
+    {
+      "name": "Once Caldas",
+      "slug": "once-caldas",
+      "elo": 1642
+    },
+    {
+      "name": "DIM",
+      "slug": "independiente-medellin",
+      "elo": 1642
+    },
+    {
+      "name": "Tolima",
+      "slug": "deportes-tolima",
+      "elo": 1635
+    },
+    {
+      "name": "Bucaramanga",
+      "slug": "atletico-bucaramanga",
+      "elo": 1634
+    },
+    {
+      "name": "Atl\u00e9tico Junior",
+      "slug": "atletico-junior",
+      "elo": 1617
+    },
+    {
+      "name": "Deportivo Cali",
+      "slug": "deportivo-cali",
+      "elo": 1613
+    },
+    {
+      "name": "\u00c1guilas Doradas",
+      "slug": "aguilas-doradas",
+      "elo": 1572
+    },
+    {
+      "name": "Cruz Azul",
+      "slug": "cruz-azul",
+      "elo": 1729
+    },
+    {
+      "name": "Toluca",
+      "slug": "deportivo-toluca",
+      "elo": 1715
+    },
+    {
+      "name": "Am\u00e9rica",
+      "slug": "America",
+      "elo": 1708
+    },
+    {
+      "name": "Guadalajara",
+      "slug": "deportivo-guadalajara",
+      "elo": 1685
+    },
+    {
+      "name": "UANL",
+      "slug": "uanl-tigres",
+      "elo": 1658
+    },
+    {
+      "name": "Pachuca",
+      "slug": "pachuca",
+      "elo": 1650
+    },
+    {
+      "name": "Monterrey",
+      "slug": "monterrey",
+      "elo": 1643
+    },
+    {
+      "name": "UNAM",
+      "slug": "pumas-unam",
+      "elo": 1630
+    },
+    {
+      "name": "Tijuana",
+      "slug": "club-tijuana",
+      "elo": 1618
+    },
+    {
+      "name": "Atlas",
+      "slug": "atlas-guadalajara",
+      "elo": 1585
+    },
+    {
+      "name": "Quer\u00e9taro",
+      "slug": "gallos-blancos",
+      "elo": 1566
+    },
+    {
+      "name": "Necaxa",
+      "slug": "club-necaxa",
+      "elo": 1526
+    },
+    {
+      "name": "Kashima Antlers",
+      "slug": "kashima-antlers",
+      "elo": 1716
+    },
+    {
+      "name": "Vissel Kobe",
+      "slug": "vissel-kobe",
+      "elo": 1697
+    },
+    {
+      "name": "FC Machida Zelvi",
+      "slug": "fc-machida-zelvia",
+      "elo": 1697
+    },
+    {
+      "name": "Sanfrecce Hirosh",
+      "slug": "sanfrecce-hiroshima",
+      "elo": 1687
+    },
+    {
+      "name": "FC Tokyo",
+      "slug": "fc-tokyo",
+      "elo": 1657
+    },
+    {
+      "name": "Kashiwa Reysol",
+      "slug": "kashiwa-reysol",
+      "elo": 1649
+    },
+    {
+      "name": "Kawasaki Frontal",
+      "slug": "kawasaki-frontale",
+      "elo": 1620
+    },
+    {
+      "name": "Yokohama F. Mari",
+      "slug": "yokohama-f-marinos",
+      "elo": 1615
+    },
+    {
+      "name": "Urawa Reds",
+      "slug": "urawareds",
+      "elo": 1597
+    },
+    {
+      "name": "Cerezo Osaka",
+      "slug": "cerezo-osaka",
+      "elo": 1588
+    },
+    {
+      "name": "Gamba Osaka",
+      "slug": "gamba-osaka",
+      "elo": 1585
+    },
+    {
+      "name": "Nagoya Grampus",
+      "slug": "nagoya-grampus",
+      "elo": 1574
+    },
+    {
+      "name": "Kyoto Purple San",
+      "slug": "kyoto-sanga-fc",
+      "elo": 1568
+    },
+    {
+      "name": "Midtjylland",
+      "slug": "Midtjylland",
+      "elo": 1712
+    },
+    {
+      "name": "FC Kobenhavn",
+      "slug": "FCKobenhavn",
+      "elo": 1692
+    },
+    {
+      "name": "Nordsjaelland",
+      "slug": "Nordsjaelland",
+      "elo": 1621
+    },
+    {
+      "name": "Aarhus",
+      "slug": "Aarhus",
+      "elo": 1593
+    },
+    {
+      "name": "Brondby",
+      "slug": "Brondby",
+      "elo": 1584
+    },
+    {
+      "name": "Viborg",
+      "slug": "Viborg",
+      "elo": 1579
+    },
+    {
+      "name": "Odense",
+      "slug": "Odense",
+      "elo": 1518
+    },
+    {
+      "name": "Silkeborg",
+      "slug": "Silkeborg",
+      "elo": 1492
+    },
+    {
+      "name": "Randers",
+      "slug": "Randers",
+      "elo": 1485
+    },
+    {
+      "name": "SonderjyskE",
+      "slug": "SonderjyskE",
+      "elo": 1471
+    },
+    {
+      "name": "Horsens",
+      "slug": "Horsens",
+      "elo": 1441
+    },
+    {
+      "name": "Lyngby",
+      "slug": "Lyngby",
+      "elo": 1421
+    },
+    {
+      "name": "Nashville",
+      "slug": "nashville-sc",
+      "elo": 1697
+    },
+    {
+      "name": "Inter Miami",
+      "slug": "intermiami",
+      "elo": 1682
+    },
+    {
+      "name": "Vancouver",
+      "slug": "vancouver-whitecaps",
+      "elo": 1664
+    },
+    {
+      "name": "Philadelphia",
+      "slug": "philadelphia-union",
+      "elo": 1646
+    },
+    {
+      "name": "LAFC",
+      "slug": "lafc",
+      "elo": 1644
+    },
+    {
+      "name": "Columbus",
+      "slug": "columbus-crew",
+      "elo": 1628
+    },
+    {
+      "name": "Charlotte",
+      "slug": "charlotte-fc",
+      "elo": 1615
+    },
+    {
+      "name": "FC Dallas",
+      "slug": "fc-dallas",
+      "elo": 1608
+    },
+    {
+      "name": "Cincinnati",
+      "slug": "fc-cincinnati",
+      "elo": 1606
+    },
+    {
+      "name": "Chicago Fire",
+      "slug": "chicago-fire",
+      "elo": 1606
+    },
+    {
+      "name": "Seattle Sounders",
+      "slug": "seattlesounders",
+      "elo": 1604
+    },
+    {
+      "name": "St. Louis City",
+      "slug": "st-louis-city-sc",
+      "elo": 1601
+    },
+    {
+      "name": "San Diego FC",
+      "slug": "san-diego-fc",
+      "elo": 1600
+    },
+    {
+      "name": "Orlando City",
+      "slug": "orlando-city",
+      "elo": 1595
+    },
+    {
+      "name": "NYC FC",
+      "slug": "new-york-city-fc",
+      "elo": 1594
+    },
+    {
+      "name": "Houston Dynamo",
+      "slug": "houston-dynamo",
+      "elo": 1589
+    },
+    {
+      "name": "Minnesota Utd",
+      "slug": "minnesota-united-fc",
+      "elo": 1585
+    },
+    {
+      "name": "Portland Timbers",
+      "slug": "portland-timbers",
+      "elo": 1569
+    },
+    {
+      "name": "San Jose",
+      "slug": "san-jose-earthquakes",
+      "elo": 1568
+    },
+    {
+      "name": "Real Salt Lake",
+      "slug": "real-salt-lake",
+      "elo": 1560
+    },
+    {
+      "name": "Bol\u00edvar",
+      "slug": "bolivar_3",
+      "elo": 1693
+    },
+    {
+      "name": "Always Ready",
+      "slug": "always-ready",
+      "elo": 1625
+    },
+    {
+      "name": "The Strongest",
+      "slug": "the-strongest",
+      "elo": 1608
+    },
+    {
+      "name": "Shakhtar",
+      "slug": "Shakhtar",
+      "elo": 1689
+    },
+    {
+      "name": "Dynamo Kyiv",
+      "slug": "DynamoKyiv",
+      "elo": 1580
+    },
+    {
+      "name": "Polissya Zhytomy",
+      "slug": "polissya-zhytomyr",
+      "elo": 1556
+    },
+    {
+      "name": "Cherkasy",
+      "slug": "fc-lnz-cherkasy",
+      "elo": 1498
+    },
+    {
+      "name": "Karpaty",
+      "slug": "Karpaty",
+      "elo": 1492
+    },
+    {
+      "name": "Zorya",
+      "slug": "Zorya",
+      "elo": 1474
+    },
+    {
+      "name": "Metalist 1925",
+      "slug": "metalist-1925-kharkiv",
+      "elo": 1466
+    },
+    {
+      "name": "Kryvbas",
+      "slug": "kryvbas-kryvyi-rih",
+      "elo": 1446
+    },
+    {
+      "name": "Kolos",
+      "slug": "Kolos",
+      "elo": 1444
+    },
+    {
+      "name": "Bukovyna",
+      "slug": "Bukovyna",
+      "elo": 1390
+    },
+    {
+      "name": "Epitsentr",
+      "slug": "epitsentrkamianets-podilskyi",
+      "elo": 1354
+    },
+    {
+      "name": "Veres",
+      "slug": "Veres",
+      "elo": 1341
+    },
+    {
+      "name": "Chernomorets",
+      "slug": "Chernomorets",
+      "elo": 1329
+    },
+    {
+      "name": "Livyi Bereh",
+      "slug": "livyi-bereh",
+      "elo": 1313
+    },
+    {
+      "name": "Obolon",
+      "slug": "fk-obolon",
+      "elo": 1312
+    },
+    {
+      "name": "FC Kudrivka",
+      "slug": "fckudrivka",
+      "elo": 1279
+    },
+    {
+      "name": "Pe\u00f1arol",
+      "slug": "PenarolMontevideo",
+      "elo": 1687
+    },
+    {
+      "name": "Nacional",
+      "slug": "NacionalMontevideo",
+      "elo": 1658
+    },
+    {
+      "name": "Liverpool",
+      "slug": "LiverpoolUY",
+      "elo": 1613
+    },
+    {
+      "name": "Maldonado",
+      "slug": "Maldonado",
+      "elo": 1583
+    },
+    {
+      "name": "Racing",
+      "slug": "racing_2",
+      "elo": 1580
+    },
+    {
+      "name": "Juventud",
+      "slug": "juventud-de-las-piedras",
+      "elo": 1539
+    },
+    {
+      "name": "Albion",
+      "slug": "albion",
+      "elo": 1534
+    },
+    {
+      "name": "Central Espa\u00f1ol",
+      "slug": "central-espanol",
+      "elo": 1502
+    },
+    {
+      "name": "Colo-Colo",
+      "slug": "colo-colo",
+      "elo": 1685
+    },
+    {
+      "name": "Uni de Chile",
+      "slug": "universidad-de-chile",
+      "elo": 1673
+    },
+    {
+      "name": "Uni Cat\u00f3lica",
+      "slug": "universidad-catolica",
+      "elo": 1655
+    },
+    {
+      "name": "Coquimbo",
+      "slug": "coquimbo-unido",
+      "elo": 1644
+    },
+    {
+      "name": "O'Higgins",
+      "slug": "ohiggins",
+      "elo": 1594
+    },
+    {
+      "name": "Audax Italiano",
+      "slug": "audax-italiano",
+      "elo": 1583
+    },
+    {
+      "name": "Limache",
+      "slug": "limache",
+      "elo": 1571
+    },
+    {
+      "name": "Palestino",
+      "slug": "palestino",
+      "elo": 1569
+    },
+    {
+      "name": "\u00d1ublense",
+      "slug": "nublense",
+      "elo": 1563
+    },
+    {
+      "name": "Lech",
+      "slug": "Lech",
+      "elo": 1681
+    },
+    {
+      "name": "Legia",
+      "slug": "Legia",
+      "elo": 1616
+    },
+    {
+      "name": "Gornik",
+      "slug": "Gornik",
+      "elo": 1593
+    },
+    {
+      "name": "Jagiellonia",
+      "slug": "Jagiellonia",
+      "elo": 1591
+    },
+    {
+      "name": "Pogon",
+      "slug": "Pogon",
+      "elo": 1588
+    },
+    {
+      "name": "Rakow",
+      "slug": "Rakow",
+      "elo": 1573
+    },
+    {
+      "name": "Katowice",
+      "slug": "Katowice",
+      "elo": 1559
+    },
+    {
+      "name": "Piast Gliwice",
+      "slug": "PiastGliwice",
+      "elo": 1541
+    },
+    {
+      "name": "Wisla",
+      "slug": "Wisla",
+      "elo": 1536
+    },
+    {
+      "name": "Lubin",
+      "slug": "Lubin",
+      "elo": 1529
+    },
+    {
+      "name": "Korona",
+      "slug": "Korona",
+      "elo": 1517
+    },
+    {
+      "name": "Motor Lublin",
+      "slug": "MotorLublin",
+      "elo": 1508
+    },
+    {
+      "name": "Plock",
+      "slug": "Plock",
+      "elo": 1506
+    },
+    {
+      "name": "KS Cracovia",
+      "slug": "ks-cracovia",
+      "elo": 1497
+    },
+    {
+      "name": "Widzew",
+      "slug": "Widzew",
+      "elo": 1492
+    },
+    {
+      "name": "Radomiak",
+      "slug": "Radomiak",
+      "elo": 1478
+    },
+    {
+      "name": "Slask",
+      "slug": "Slask",
+      "elo": 1464
+    },
+    {
+      "name": "Wieczysta Krak\u00f3w",
+      "slug": "wieczystakrak\u00f3w",
+      "elo": 1446
+    },
+    {
+      "name": "Club Olimpia",
+      "slug": "club-olimpia",
+      "elo": 1676
+    },
+    {
+      "name": "Cerro Porte\u00f1o",
+      "slug": "cerro-porteno",
+      "elo": 1657
+    },
+    {
+      "name": "Club Nacional",
+      "slug": "club-nacional",
+      "elo": 1627
+    },
+    {
+      "name": "Guaran\u00ed",
+      "slug": "guarani",
+      "elo": 1612
+    },
+    {
+      "name": "Sportivo Trinide",
+      "slug": "sportivo-trinidense",
+      "elo": 1602
+    },
+    {
+      "name": "Libertad",
+      "slug": "libertad",
+      "elo": 1596
+    },
+    {
+      "name": "2 de Mayo",
+      "slug": "2-de-mayo",
+      "elo": 1560
+    },
+    {
+      "name": "Sportivo Amelian",
+      "slug": "sportivo-ameliano",
+      "elo": 1549
+    },
+    {
+      "name": "Deportivo Recole",
+      "slug": "deportivorecoleta",
+      "elo": 1546
+    },
+    {
+      "name": "Lugano",
+      "slug": "Lugano",
+      "elo": 1675
+    },
+    {
+      "name": "Young Boys",
+      "slug": "YoungBoys",
+      "elo": 1613
+    },
+    {
+      "name": "St. Gallen",
+      "slug": "StGallen",
+      "elo": 1587
+    },
+    {
+      "name": "Sion",
+      "slug": "Sion",
+      "elo": 1580
+    },
+    {
+      "name": "Servette FC",
+      "slug": "servette-fc",
+      "elo": 1565
+    },
+    {
+      "name": "Thun",
+      "slug": "Thun",
+      "elo": 1546
+    },
+    {
+      "name": "Basel",
+      "slug": "fc-basel-1893",
+      "elo": 1545
+    },
+    {
+      "name": "Luzern",
+      "slug": "Luzern",
+      "elo": 1525
+    },
+    {
+      "name": "Zuerich",
+      "slug": "Zuerich",
+      "elo": 1492
+    },
+    {
+      "name": "Lausanne",
+      "slug": "Lausanne",
+      "elo": 1467
+    },
+    {
+      "name": "Grasshoppers",
+      "slug": "Grasshoppers",
+      "elo": 1445
+    },
+    {
+      "name": "Vaduz",
+      "slug": "Vaduz",
+      "elo": 1422
+    },
+    {
+      "name": "Ferencvaros",
+      "slug": "Ferencvaros",
+      "elo": 1667
+    },
+    {
+      "name": "Gyoer",
+      "slug": "Gyoer",
+      "elo": 1563
+    },
+    {
+      "name": "Crvena Zvezda",
+      "slug": "CrvenaZvezda",
+      "elo": 1663
+    },
+    {
+      "name": "Novi Sad",
+      "slug": "NoviSad",
+      "elo": 1474
+    },
+    {
+      "name": "Partizan",
+      "slug": "Partizan",
+      "elo": 1456
+    },
+    {
+      "name": "\u017delezni\u010dar Pan\u010de",
+      "slug": "zeleznicar-pancevo",
+      "elo": 1387
+    },
+    {
+      "name": "Kragujevac",
+      "slug": "Kragujevac",
+      "elo": 1360
+    },
+    {
+      "name": "FK \u010cukari\u010dki",
+      "slug": "fk-cukaricki",
+      "elo": 1350
+    },
+    {
+      "name": "IMT Beograd",
+      "slug": "imt-beograd",
+      "elo": 1337
+    },
+    {
+      "name": "OFK",
+      "slug": "OFK",
+      "elo": 1331
+    },
+    {
+      "name": "FK Novi Pazar",
+      "slug": "fk-novi-pazar",
+      "elo": 1328
+    },
+    {
+      "name": "Radnik Surdulica",
+      "slug": "radnik-surdulica",
+      "elo": 1321
+    },
+    {
+      "name": "Mladost Lucani",
+      "slug": "MladostLucani",
+      "elo": 1306
+    },
+    {
+      "name": "Radni\u010dki Ni\u0161",
+      "slug": "radnicki-nis",
+      "elo": 1260
+    },
+    {
+      "name": "Macva Sabac",
+      "slug": "MacvaSabac",
+      "elo": 1209
+    },
+    {
+      "name": "Zemun",
+      "slug": "Zemun",
+      "elo": 1089
+    },
+    {
+      "name": "RB Salzburg",
+      "slug": "rbsalzburg",
+      "elo": 1660
+    },
+    {
+      "name": "LASK",
+      "slug": "lask",
+      "elo": 1643
+    },
+    {
+      "name": "Sturm Graz",
+      "slug": "SturmGraz",
+      "elo": 1631
+    },
+    {
+      "name": "Austria Wien",
+      "slug": "AustriaWien",
+      "elo": 1520
+    },
+    {
+      "name": "Dinamo Zagreb",
+      "slug": "DinamoZagreb",
+      "elo": 1655
+    },
+    {
+      "name": "Hajduk",
+      "slug": "Hajduk",
+      "elo": 1602
+    },
+    {
+      "name": "Rijeka",
+      "slug": "Rijeka",
+      "elo": 1538
+    },
+    {
+      "name": "Celtic",
+      "slug": "Celtic",
+      "elo": 1650
+    },
+    {
+      "name": "Rangers",
+      "slug": "Rangers",
+      "elo": 1623
+    },
+    {
+      "name": "Hearts",
+      "slug": "Hearts",
+      "elo": 1545
+    },
+    {
+      "name": "Hibernian",
+      "slug": "Hibernian",
+      "elo": 1482
+    },
+    {
+      "name": "Motherwell",
+      "slug": "Motherwell",
+      "elo": 1475
+    },
+    {
+      "name": "Dundee United",
+      "slug": "DundeeUnited",
+      "elo": 1425
+    },
+    {
+      "name": "Falkirk",
+      "slug": "Falkirk",
+      "elo": 1408
+    },
+    {
+      "name": "Dundee",
+      "slug": "Dundee",
+      "elo": 1391
+    },
+    {
+      "name": "Aberdeen",
+      "slug": "Aberdeen",
+      "elo": 1387
+    },
+    {
+      "name": "Kilmarnock",
+      "slug": "Kilmarnock",
+      "elo": 1367
+    },
+    {
+      "name": "St Johnstone",
+      "slug": "StJohnstone",
+      "elo": 1367
+    },
+    {
+      "name": "St Mirren",
+      "slug": "StMirren",
+      "elo": 1354
+    },
+    {
+      "name": "Partick",
+      "slug": "Partick",
+      "elo": 1341
+    },
+    {
+      "name": "Omonia",
+      "slug": "Omonia",
+      "elo": 1636
+    },
+    {
+      "name": "Larnaca",
+      "slug": "Larnaca",
+      "elo": 1598
+    },
+    {
+      "name": "Paphos",
+      "slug": "Paphos",
+      "elo": 1580
+    },
+    {
+      "name": "Hammarby",
+      "slug": "Hammarby",
+      "elo": 1634
+    },
+    {
+      "name": "Djurgarden",
+      "slug": "Djurgarden",
+      "elo": 1618
+    },
+    {
+      "name": "Sirius",
+      "slug": "IKSirius",
+      "elo": 1569
+    },
+    {
+      "name": "Elfsborg",
+      "slug": "Elfsborg",
+      "elo": 1563
+    },
+    {
+      "name": "Malm\u00f6",
+      "slug": "Malmoe",
+      "elo": 1553
+    },
+    {
+      "name": "GAIS",
+      "slug": "GAIS",
+      "elo": 1537
+    },
+    {
+      "name": "AIK",
+      "slug": "AIK",
+      "elo": 1520
+    },
+    {
+      "name": "Mj\u00e4llby",
+      "slug": "Mjaellby",
+      "elo": 1513
+    },
+    {
+      "name": "G\u00f6teborg",
+      "slug": "Goeteborg",
+      "elo": 1504
+    },
+    {
+      "name": "\u00d6rgryte",
+      "slug": "Oergryte",
+      "elo": 1391
+    },
+    {
+      "name": "Universitario",
+      "slug": "universitario-de-deportes",
+      "elo": 1631
+    },
+    {
+      "name": "Alianza Lima",
+      "slug": "alianza-lima",
+      "elo": 1626
+    },
+    {
+      "name": "Beer-Sheva",
+      "slug": "Beer-Sheva",
+      "elo": 1630
+    },
+    {
+      "name": "Maccabi Tel Aviv",
+      "slug": "MTelAviv",
+      "elo": 1611
+    },
+    {
+      "name": "Mamelodi Sundown",
+      "slug": "mamelodisundowns",
+      "elo": 1621
+    },
+    {
+      "name": "Jeonbuk FC",
+      "slug": "jeonbuk-fc",
+      "elo": 1606
+    },
+    {
+      "name": "FC Seoul",
+      "slug": "fc-seoul",
+      "elo": 1598
+    },
+    {
+      "name": "Gangwon FC",
+      "slug": "gangwon-fc",
+      "elo": 1560
+    },
+    {
+      "name": "Al Ahly",
+      "slug": "alahly",
+      "elo": 1604
+    },
+    {
+      "name": "Pyramids FC",
+      "slug": "pyramids-fc",
+      "elo": 1601
+    },
+    {
+      "name": "Craiova",
+      "slug": "Craiova",
+      "elo": 1599
+    },
+    {
+      "name": "Dinamo Bucuresti",
+      "slug": "DinamoBucuresti",
+      "elo": 1532
+    },
+    {
+      "name": "Universitatea Cl",
+      "slug": "UniversitateaCluj",
+      "elo": 1525
+    },
+    {
+      "name": "CFR Cluj",
+      "slug": "CFRCluj",
+      "elo": 1525
+    },
+    {
+      "name": "Rapid Bucuresti",
+      "slug": "RapidBucuresti",
+      "elo": 1512
+    },
+    {
+      "name": "Steaua",
+      "slug": "Steaua",
+      "elo": 1501
+    },
+    {
+      "name": "UTA Arad",
+      "slug": "UTAArad",
+      "elo": 1436
+    },
+    {
+      "name": "Farul",
+      "slug": "Farul",
+      "elo": 1434
+    },
+    {
+      "name": "Arges Pitesti",
+      "slug": "ArgesPitesti",
+      "elo": 1421
+    },
+    {
+      "name": "Sepsi",
+      "slug": "Sepsi",
+      "elo": 1420
+    },
+    {
+      "name": "O\u0163elul Gala\u0163i",
+      "slug": "oelul-galai",
+      "elo": 1410
+    },
+    {
+      "name": "Petrolul Ploiest",
+      "slug": "PetrolulPloiesti",
+      "elo": 1408
+    },
+    {
+      "name": "Corvinul Hunedoa",
+      "slug": "fc-corvinul-hunedoara",
+      "elo": 1404
+    },
+    {
+      "name": "Botosani",
+      "slug": "Botosani",
+      "elo": 1396
+    },
+    {
+      "name": "Voluntari",
+      "slug": "Voluntari",
+      "elo": 1332
+    },
+    {
+      "name": "FK Csikszereda",
+      "slug": "fk-csikszereda",
+      "elo": 1319
+    },
+    {
+      "name": "Karabakh Agdam",
+      "slug": "KarabakhAgdam",
+      "elo": 1596
+    },
+    {
+      "name": "Sabah FK",
+      "slug": "sabah-fk",
+      "elo": 1567
+    },
+    {
+      "name": "Shabab Al Ahli C",
+      "slug": "shabab-al-ahli-club",
+      "elo": 1594
+    },
+    {
+      "name": "Levski",
+      "slug": "Levski",
+      "elo": 1594
+    },
+    {
+      "name": "Razgrad",
+      "slug": "Razgrad",
+      "elo": 1556
+    },
+    {
+      "name": "CSKA Sofia",
+      "slug": "CSKASofia",
+      "elo": 1515
+    },
+    {
+      "name": "CSKA 1948 Sofia",
+      "slug": "CSKA1948Sofia",
+      "elo": 1458
+    },
+    {
+      "name": "Arda",
+      "slug": "Arda",
+      "elo": 1404
+    },
+    {
+      "name": "Botev Plovdiv",
+      "slug": "BotevPlovdiv",
+      "elo": 1366
+    },
+    {
+      "name": "Cherno More",
+      "slug": "ChernoMore",
+      "elo": 1366
+    },
+    {
+      "name": "Lok Plovdiv",
+      "slug": "LokPlovdiv",
+      "elo": 1322
+    },
+    {
+      "name": "Slavia Sofia",
+      "slug": "SlaviaSofia",
+      "elo": 1321
+    },
+    {
+      "name": "Lok Sofia",
+      "slug": "LokSofia",
+      "elo": 1284
+    },
+    {
+      "name": "Botev Vratsa",
+      "slug": "botev-vratsa",
+      "elo": 1283
+    },
+    {
+      "name": "Spartak Varna",
+      "slug": "SpartakVarna",
+      "elo": 1265
+    },
+    {
+      "name": "Dunav Ruse",
+      "slug": "DunavRuse",
+      "elo": 1237
+    },
+    {
+      "name": "Septemvri Sofia",
+      "slug": "SeptemvriSofia",
+      "elo": 1225
+    },
+    {
+      "name": "Johor Darul Ta\u2019z",
+      "slug": "johor-darul-tazim",
+      "elo": 1591
+    },
+    {
+      "name": "FAR",
+      "slug": "far-de-rabat",
+      "elo": 1575
+    },
+    {
+      "name": "Chengdu Rongchen",
+      "slug": "chengdu-rongcheng",
+      "elo": 1526
+    },
+    {
+      "name": "Slovan",
+      "slug": "SlovanBratislava",
+      "elo": 1545
+    },
+    {
+      "name": "FC DAC 1904",
+      "slug": "fc-dac-1904",
+      "elo": 1541
+    },
+    {
+      "name": "Trnava",
+      "slug": "Trnava",
+      "elo": 1458
+    },
+    {
+      "name": "\u017dilina",
+      "slug": "Zilina",
+      "elo": 1454
+    },
+    {
+      "name": "FK \u017deleziarne Po",
+      "slug": "fk-zeleziarne-podbrezova",
+      "elo": 1370
+    },
+    {
+      "name": "FC Ko\u0161ice",
+      "slug": "fc-kosice",
+      "elo": 1363
+    },
+    {
+      "name": "MFK Zempl\u00edn Mich",
+      "slug": "mfk-zemplin-michalovce",
+      "elo": 1314
+    },
+    {
+      "name": "Ruzomberok",
+      "slug": "Ruzomberok",
+      "elo": 1309
+    },
+    {
+      "name": "MFK Skalica",
+      "slug": "mfk-skalica",
+      "elo": 1285
+    },
+    {
+      "name": "AS Tren\u010d\u00edn",
+      "slug": "as-trencin",
+      "elo": 1284
+    },
+    {
+      "name": "KFC Kom\u00e1rno",
+      "slug": "kfc-komarno",
+      "elo": 1284
+    },
+    {
+      "name": "Banska Bystrica",
+      "slug": "BanskaBystrica",
+      "elo": 1277
+    },
+    {
+      "name": "Celje",
+      "slug": "Celje",
+      "elo": 1512
+    },
+    {
+      "name": "Koper",
+      "slug": "Koper",
+      "elo": 1483
+    },
+    {
+      "name": "Olimpija Ljublja",
+      "slug": "OlimpijaLjubljana",
+      "elo": 1474
+    },
+    {
+      "name": "Maribor",
+      "slug": "Maribor",
+      "elo": 1467
+    },
+    {
+      "name": "Bravo",
+      "slug": "Bravo",
+      "elo": 1415
+    },
+    {
+      "name": "Aluminij",
+      "slug": "Aluminij",
+      "elo": 1316
+    },
+    {
+      "name": "Nafta",
+      "slug": "Nafta",
+      "elo": 1305
+    },
+    {
+      "name": "Radomlje",
+      "slug": "Radomlje",
+      "elo": 1300
+    },
+    {
+      "name": "Mura",
+      "slug": "Mura",
+      "elo": 1291
+    },
+    {
+      "name": "Brinje Grosuplje",
+      "slug": "BrinjeGrosuplje",
+      "elo": 1276
+    },
+    {
+      "name": "Ararat-Armenia",
+      "slug": "Ararat-Armenia",
+      "elo": 1439
+    }
+  ],
+  "teams": [
+    {
+      "id": 76897,
+      "name": "AEK Athens"
+    },
+    {
+      "id": 2,
+      "name": "Arsenal"
+    },
+    {
+      "id": 41,
+      "name": "Atl\u00e9tico Madrid"
+    },
+    {
+      "id": 3,
+      "name": "Aston Villa"
+    },
+    {
+      "id": 42,
+      "name": "Barcelona"
+    },
+    {
+      "id": 52,
+      "name": "Real Betis"
+    },
+    {
+      "id": 87,
+      "name": "Bodo/Glimt"
+    },
+    {
+      "id": 90,
+      "name": "Club Brugge"
+    },
+    {
+      "id": 37697,
+      "name": "Como"
+    },
+    {
+      "id": 25,
+      "name": "Borussia Dortmund"
+    },
+    {
+      "id": 9442,
+      "name": "FC Porto"
+    },
+    {
+      "id": 8564371,
+      "name": "Fenerbahce"
+    },
+    {
+      "id": 2881,
+      "name": "Feyenoord Rotterdam"
+    },
+    {
+      "id": 94,
+      "name": "Galatasaray"
+    },
+    {
+      "id": 95,
+      "name": "Internazionale"
+    },
+    {
+      "id": 8564340,
+      "name": "LASK Linz"
+    },
+    {
+      "id": 65,
+      "name": "Lille"
+    },
+    {
+      "id": 12,
+      "name": "Liverpool"
+    },
+    {
+      "id": 14,
+      "name": "Manchester United"
+    },
+    {
+      "id": 13,
+      "name": "Manchester City"
+    },
+    {
+      "id": 24,
+      "name": "Bayern Munich"
+    },
+    {
+      "id": 101,
+      "name": "Napoli"
+    },
+    {
+      "id": 73,
+      "name": "Paris Saint-Germain"
+    },
+    {
+      "id": 104,
+      "name": "PSV Eindhoven"
+    },
+    {
+      "id": 32,
+      "name": "RB Leipzig"
+    },
+    {
+      "id": 64,
+      "name": "Lens"
+    },
+    {
+      "id": 53,
+      "name": "Real Madrid"
+    },
+    {
+      "id": 22240,
+      "name": "AS Roma"
+    },
+    {
+      "id": 8564380,
+      "name": "Sabah FK"
+    },
+    {
+      "id": 109,
+      "name": "Sporting CP"
+    },
+    {
+      "id": 2870,
+      "name": "Shakhtar Donetsk"
+    },
+    {
+      "id": 2874,
+      "name": "Slovan Bratislava"
+    },
+    {
+      "id": 108,
+      "name": "Slavia Prague"
+    },
+    {
+      "id": 36,
+      "name": "VfB Stuttgart"
+    },
+    {
+      "id": 8564362,
+      "name": "Viking FK"
+    },
+    {
+      "id": 58,
+      "name": "Villarreal"
+    }
+  ]
+}
