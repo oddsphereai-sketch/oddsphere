@@ -1,6 +1,26 @@
 # Current production model releases and qualified research candidates
 
-## CBB native counterpressure consequence — November 4
+## CBB removal of rejected prior-forecast takeover — November 4
+
+Current market model R18, grade R22, receipt R14, board R23, publisher R33,
+tracking R21 and adapter R22 use `current_source_forecast_restoration`.
+Independent R4 and path R5 remain unchanged. This supersedes the R17/R21/R13
+forecast-selection exception below, which the owner explicitly rejected.
+
+Remove the hand-written switch that adopted the complete independent margin
+and residual law from a directional counterpressure confirmation. Restore the
+preceding current-source forecast method while preserving the separate Watchlist,
+Moneyline value eligibility, causal pressure continuity and grade-input repairs.
+This is a restoration, not a claim that unified contextual inference is finished.
+Neither the direction of a native response nor a split share certifies the full
+independent probability or determines an appropriate numerical correction.
+
+All exact R17/R21/R13 locked DTOs, probabilities, picks, grades, evidence and
+tracking stamps remain authoritative. Existing R13 anchors remain available to
+future unlocked reads. No provider, refresh, lease, writer or stake expansion.
+Evidence: `docs/model-audits/2026-11-04-cbb-remove-prior-takeover.json`.
+
+## Rejected CBB R17 forecast-selection exception — November 4
 
 The authoritative market model is
 `cbb_candidate_2026_11_04_r17_native_counterpressure_handoff`, with grade

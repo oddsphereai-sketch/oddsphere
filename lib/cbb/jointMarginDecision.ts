@@ -9,7 +9,6 @@ import type {CbbForecast,CbbQuote} from "./types";
 import type {CbbBehaviorEpisode,CbbMarketBehaviorReceipt} from "./marketBehaviorCandidate";
 import type {CbbPressureDecision} from "./sourcePressureDecision";
 import type {readCbbMarketBehaviorPath} from "./marketBehaviorPath";
-import {cbbCurrentNativeReaction,cbbQualifiedCounterpressure} from "./nativeCounterpressure";
 
 type Axis=CbbMarketBehaviorReceipt["margin"];
 type Path=ReturnType<typeof readCbbMarketBehaviorPath>;
@@ -152,33 +151,9 @@ export function decideCbbJointMargin(args:{base:CbbForecast;current:CbbQuote[];e
   decision.relativeInterpretation!.disposition="current_resistance_retained";
   return {decision,margin:structuredClone(args.relative),marginSd:base.uncertainty.marginSd};
  }
- // An active own-book move AGAINST its money can confirm the independent
- // side even while the book's absolute price still favors the other team.
- // Interpret the reaction, rather than adopting that earlier price stance.
- // This retains an existing forecast; it does not infer points/probability
- // from money shares or certify that its probability equals a source price.
- const priorDirection=sign(base.margin);
- const relative=args.relative,relativeAuthors=relative.authority?.authorIds??[];
- const counterpressure=priorDirection!==0&&relative.status==="confirming"&&relative.delta===0&&
-   relative.sourceDirection===priorDirection&&
-   !episodes.some(e=>e.market!=="total"&&e.direction===-priorDirection&&
-     relativeAuthors.some(id=>id.startsWith(`${e.book}:`)))&&
-   ["selected","equivalent"].includes(relative.authority?.status??"")&&
-   pressure.find(row=>row.market!=="total"&&relativeAuthors.some(id=>id.startsWith(`${row.book}:`))&&
-     profiles.some(profile=>profile.book===row.book)&&
-     episodes.some(e=>e.book===row.book&&e.market===row.market&&e.direction===priorDirection)&&
-     cbbQualifiedCounterpressure(row,current,base.asOf,priorDirection));
- const opposingReaction=priorDirection!==0&&pressure.some(row=>row.market!=="total"&&
-   cbbCurrentNativeReaction(row,current,base.asOf,-priorDirection as 1|-1));
- if(counterpressure&&!opposingReaction){
-  const source=profiles.find(profile=>profile.book===counterpressure.book)!;
-  decision.status="retained";decision.reason="qualified_native_counterpressure_precedes_current_level";
-  decision.authority=structuredClone(relative.authority!);decision.sourceBook=source.book;
-  decision.sourceQuotes=structuredClone(source.quotes);decision.impliedMargin=source.margin;decision.impliedMarginSd=source.marginSd;
-  decision.numericAssumption="qualified_native_counterpressure_retains_forecast";
-  decision.relativeInterpretation!.disposition="native_counterpressure_retained";
-  return {decision,margin:structuredClone(relative),marginSd:base.uncertainty.marginSd};
- }
+ // Directional counterpressure is evidence, not a numerical certificate for
+ // adopting the entire independent probability law. Keep it in the receipt
+ // and grade interpretation; do not use it as a forecast-selection switch.
  const ownEpisodes=episodes.filter(e=>e.book===chosen.book&&e.market!=="total"&&e.direction!==0);
  const confirmations=ownEpisodes.map(e=>e.market==="moneyline"?
   interpretCbbRelativeMarketMove(base.homeWinProbability,fair(e.anchor),fair(e.current)):

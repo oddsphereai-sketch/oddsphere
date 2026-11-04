@@ -4,7 +4,7 @@ import { chooseCbbCompleteTargetBook } from "./totalOnlyMarketResearch";
 import {gradeCbbMarketBehavior,CBB_MARKET_BEHAVIOR_GRADE_RELEASE,type CbbMarketBehaviorReceipt} from "./marketBehaviorCandidate";
 import type { CbbForecast, CbbMarket, CbbQuote } from "./types";
 
-export const CBB_PROVISIONAL_BOARD_RELEASE = "cbb_candidate_2026_11_04_r22_native_counterpressure_handoff" as const;
+export const CBB_PROVISIONAL_BOARD_RELEASE = "cbb_candidate_2026_11_04_r23_current_source_forecast_restoration" as const;
 const MARKETS: CbbMarket[] = ["moneyline", "spread", "total"];
 
 /** Preserve every existing complete-book choice. A missing Moneyline must not
