@@ -19,7 +19,7 @@ new accuracy/backtest claim. No historical locked payload is repaired.
 | CBB | Current training includes139 games through Nov4 03:00 UTC, receipt updated09:02 UTC. Published rolling member board has11 games /33 markets (ten current-day plus one future game). Schedule-only games are not silently counted as evaluated models. |
 | CFB |108 weekly games, including two started games.83 have current prices; all25 unpriced games are FCS-only. Zero missing-price FBS-involved games. Original quote timestamps on locked games are intentionally historical. |
 | EPL | Stored upcoming board contains ten fixtures and current model prices; regular half-hour writer succeeds. |
-| UCL | Nine current fixtures; statistics/history sources ready. Repeated production publication blocks for non-positive-EV actionables preserve the previous board. This is an outstanding sport-owned repair, not a green freshness certification. |
+| UCL | At initial capture: nine current fixtures; statistics/history ready but repeated publication blocks preserve the prior board. Separate repair #983 merged before final validation; normal live publication still needs verification. |
 | MLB/WNBA | No current games. Empty active-day reads cannot establish next-season model quality; off-season absence is not missing odds for a real game. |
 
 The SELECT-only Nov2–3 lock/grade join found no unsettled final records among
@@ -99,10 +99,13 @@ The actual28-request official dry run proposes171 outcomes and leaves23
 unmatched records untouched. Audit artifact:
 `/private/tmp/oddsphere-nfl-props-settlement-owner-review-20261104.json`, SHA256
 `9daef9f56184503c05478bf3af24cd064845f51da31a138fd48a05f118ee3e6d`.
-The separate current-state check matches13 of14 populated-ID records; the
+The normal read-only settlement preview reaches all14 populated-ID records in
+six games/requests and proposes13 outcomes. The current-state check also
+matches13 of14 populated-ID records; the
 remaining player has no official stat row and is not assigned an invented zero
-or void. Historical recovery requires explicit owner approval, requested in
-the model-health chat; this document does not assert that it has run.
+or void. The owner explicitly approved the171-row audited recovery in the
+model-health chat. It is not applied until protected PR publication; this
+document does not assert that it has run.
 
 Focused coverage includes more than a full page of null IDs before usable
 records, exact same-game/team/name identity, duplicate names, wrong teams,
@@ -120,10 +123,10 @@ FCS games are separately held and are not part of that warning count.
 Current-day NBA and all FBS-involved CFB games are priced. This count includes
 the rolling future schedule, not just today's slate.
 
-UCL's publication guard remains a real open item; NHL and CBB model-reader
-reviews are owned by their already-active model chats. This patch must not
-replace those changes. Fresh-main integration and all overlapping hunks must be
-reconciled before merge. After production deployment, verify the new writer
+The separate CBB #982, UCL #983 and NHL #984 repairs are integrated in full.
+The registry overlap was reviewed and preserves every current sport-owned
+release. Fresh-main integration must be repeated if main advances. After
+production deployment, verify the new writer
 source stamp and exact-price presence after the next natural NBA refresh,
 MLB's inactive result, all nine deep-audit sport reports and locked precedence.
 
