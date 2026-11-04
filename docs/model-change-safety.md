@@ -1,5 +1,33 @@
 # Model change safety protocol
 
+## Owner-directed prospective UCL graph-clock repair — November 4
+
+The owner explicitly reported Real Madrid's locked MR graph missing the sportsbook
+trace and requested: "It's already locked, but it should be fixed in general so
+it stops happening." This authorizes the future-only capture-clock correction;
+it does not authorize modifying that existing locked game or reconstructing a
+missing locked field. Stored evidence reproduces request-start locked_at before
+the actual completed quote timestamps, causing the strict chart to reject four
+valid-book trails. The repair corrects the producer rather than weakening that
+guard or replacing missing data with copy.
+
+The same UCL writer uses one completed-input time for future captured_at/locked_at
+and subsequent due-lock verification. A writer-clock assertion rejects an
+unlocked/new tuple containing later quote clocks; existing stored locks retain
+exact fields and precedence. Version the writer asR1 and member lifecycle asR25,
+with modelR22/gradeR25/outcomeR15/projected-scoreR13 unchanged. This is a
+non-numerical publication repair: same-input forecasts/prices/grades and board
+counts must be identical, so no actionable demotion rule or substitute promotion
+is introduced. No new source request, refresh, schedule, writer or sport lease.
+
+Focused actual-fixture two-source charts, negative stale-clock, route-crossing,
+writer/reader lock, and shared-default regressions plus full verify:model-change,
+production build/types/lint, independent review, clean latest-main protected PR
+and live source/clock/legacy-hash proof remain required. The next normal scheduled
+cycle applies the repair; earlier extra-refresh approvals are already used.
+Evidence: `docs/model-audits/2026-11-04-ucl-sportsbook-graph-clock.md`.
+
+
 ## Owner-directed NFL/NBA available-source repair and all-game review — November 4
 
 The owner directed: "fix the NFL split-qualification and NBA future-game price
