@@ -1,0 +1,36 @@
+{
+  "scope": "Use complete eligible consumer contracts from the existing bounded paid NBA response, including dates prepared before a later date triggers the shared request.",
+  "startingBase": "47be7c6d13c3c714b6a280b174b853156ef4c1d2",
+  "modelRelease": "nba_professional_unified_2026_11_04_r36_paid_consumer_book_coverage",
+  "marriageRelease": "nba_market_marriage_2026_11_04_r38_paid_consumer_book_coverage",
+  "gradeRelease": "nba_grade_policy_2026_11_04_r27_paid_consumer_book_coverage",
+  "cronRelease": "nba_daily_refresh_schedule_2026_11_04_r24_paid_consumer_book_coverage",
+  "problem": "Fallback previously required a missing game/market scope and filtered out every quote in covered scopes. A distinct complete consumer-book pair was discarded even when already fetched. Sequential date processing could finish today before a future-date gap acquired the shared league response.",
+  "repair": "The same service prepares bounded dates sequentially, acquires at most the existing one lazy league request only when a primary consumer-market gap exists, then finalizes each prepared date sequentially through its existing sole writer. Complete BDL physical-book contracts keep exact priority; complete eligible paid-book gaps fill next; native Owls consumer gaps fill afterward.",
+  "providerPolicy": "No request, polling, book roster, market roster, date-window, lease or parallelism expansion. No provider calls or DB writes were performed during implementation or tests.",
+  "contracts": [
+    "Pair identity binds exact fixture, book family, market, native provider event, native timestamp and actual response receipt.",
+    "Actual paid response completion is stored in availableAt and never renewed on later date reuse. Native quotes after response availability, future receipt, missing clocks, post-start additions, different fixture times and nonexecution books fail closed.",
+    "A singleton or incomplete primary fragment cannot splice into a complete backup pair. Complete same-book BDL pairs remain unchanged even if backup prices appear better.",
+    "No Circa or Pinnacle quote is relabeled as a consumer offer. Hard Rock aliases identify one physical book.",
+    "One-date operator wrapper preserves the same prepare/finalize service. No-game return values and provider/error preservation use the existing paths.",
+    "Runtime R36 reads only bounded exact R35 then R34 unlocked knowledge for missing games; current state wins, R35 wins over R34, and the same event/state validation remains fatal. Existing R35/R37/R26 locked DTO fields remain authoritative without reconstruction or mutation."
+  ],
+  "regressionEvidence": {
+    "suite": "scripts/test-nba-paid-consumer-book-coverage.ts (imported by existing current-board suite)",
+    "reachableSyntheticProof": "Three complete primary game/markets leave zero missing game/market scopes, yet a unique valid paid FanDuel ML pair must add two rows. Existing code discarded both rows; repaired physical-book reconciliation adds both and retains all original primary rows.",
+    "coordinatorProof": "Production route uses the tested coordinator. Ordered events are prepare(today), prepare(future), one fetch, finalize(today), finalize(future). The earlier complete date consumes the unique book pair from the later-triggered response. Fully covered dates make zero backup calls.",
+    "negativeCases": "Singleton, different native time, different event, different actual receipt, native time after receipt but before evaluation, future/missing receipt, different fixture/participants, professional/context-only book, post-start addition and Hard Rock duplicate family.",
+    "compatibility": "Literal R35/R37/R26 locked DTO round-trip remains exact; existing predecessor-state and writer/reader immutability suites remain required.",
+    "realServiceProof": "The actual coordinator, real prepareNbaLines and real finalize dry-run run with all I/O replaced in memory. Two original Owls and four BDL mock reads prepare both dates before one paid mock response; today retains six primary rows and adds the new two-sided paid-book pair. The unoffered future date retains its three missing-scope errors. The actual one-date wrapper no-game path fetches nothing and original DB-load errors propagate unchanged.",
+    "knowledgeContinuity": "Canonical native source-anchor state available only under R34 on a future slate continues into R36 with original knowledgeAt and anchors. Current R36 wins; R35 wins over R34; corrupt R35 is fatal; arbitrary old releases remain excluded."
+  },
+  "boardImpact": {
+    "actualPublishedBeforeAfter": "Not measured: the authenticated production response's 630 per-event quotes were not supplied to this audit, so no specific skipped book, new forecast, probability, promotion or demotion is claimed from that aggregate.",
+    "productionReceiptReportedByOwner": "Normal 16:42 refresh authenticated successfully: 18 events, 630 quotes, 3 credits used, 18361 remaining. These are aggregate feed diagnostics, not consumed-pair proof.",
+    "prospectiveVerification": "The existing refresh now reports per-date theOddsApiPairsAdded, theOddsApiBooksAdded and owlsPairsAdded. Verify those alongside normal live release, coverage, coherent scores/probabilities/grades and exact locked-record preservation after publication.",
+    "gradeRules": "No grade thresholds, EV protection, probability law, sharp confirmation rule, stake rule or target-book priority was loosened. Different newly available contracts can legitimately change the selected execution offer or evaluated grade; this repair does not promise a Best Angle count."
+  },
+  "publication": "Root owns registry/safety documentation, current-main integration, full model gate, intentional commit, protected PR and live verification. No commit or deployment was performed by this implementation agent.",
+  "providerReceiptRelease": "nba_the_odds_api_current_2026_11_04_r3_response_availability"
+}

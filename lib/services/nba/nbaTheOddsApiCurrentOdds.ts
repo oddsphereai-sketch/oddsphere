@@ -1,7 +1,7 @@
 import { isNbaConsumerRetailSportsbook } from "./nbaMarketSourceEligibility";
 
 export const NBA_THE_ODDS_API_CURRENT_RELEASE =
-  "nba_the_odds_api_current_2026_11_04_r2_credential_diagnostics" as const;
+  "nba_the_odds_api_current_2026_11_04_r3_response_availability" as const;
 
 const SPORT_KEY = "basketball_nba";
 const BOOKMAKERS = [
@@ -38,6 +38,8 @@ export type NbaTheOddsApiCurrentQuote = {
 export type NbaTheOddsApiCurrentBoard = {
   release: typeof NBA_THE_ODDS_API_CURRENT_RELEASE;
   requests: 1;
+  /** Actual parsed response availability; never request start. */
+  availableAt: string;
   creditsUsed: number;
   creditsRemaining: number | null;
   eventsReturned: number;
@@ -153,6 +155,7 @@ export function parseNbaTheOddsApiCurrentBoard(
   return {
     release: NBA_THE_ODDS_API_CURRENT_RELEASE,
     requests: 1,
+    availableAt: new Date().toISOString(),
     creditsUsed: nonnegativeInteger(headers.get("x-requests-last")) ?? 3,
     creditsRemaining: nonnegativeInteger(headers.get("x-requests-remaining")),
     eventsReturned: value.length,

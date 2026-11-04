@@ -21,6 +21,27 @@ model input, price, score, grade, writer, lease, cadence or provider call change
 Evidence: `docs/model-audits/2026-11-04-cbb-published-probability-comparison.json`.
 
 
+## NBA paid consumer-book response reuse — November 4
+
+The authoritative NBA tuple is model
+`nba_professional_unified_2026_11_04_r36_paid_consumer_book_coverage`, marriage
+`nba_market_marriage_2026_11_04_r38_paid_consumer_book_coverage`, grade
+`nba_grade_policy_2026_11_04_r27_paid_consumer_book_coverage`, and cron
+`nba_daily_refresh_schedule_2026_11_04_r24_paid_consumer_book_coverage`.
+The Odds API current-board receipt advances to R3 `response_availability`.
+Consequence R7 and posture R9 remain unchanged. Exact compatible R35 then R34
+unlocked knowledge can carry into R36, with current-state precedence and original
+clocks/anchors; locked R35/R37/R26 and all earlier payloads retain exact values.
+
+One existing bounded shared backup response now reaches every prepared date,
+including an earlier fully covered date when a later gap triggers acquisition.
+Only complete eligible missing physical-book pairs are added; intact BDL pairs
+remain authoritative. No additional request, polling cadence, market/book roster,
+writer, lease, grade threshold or stake. Real same-response additional-book counts
+were not archived before repair; prospective diagnostics count actual admitted
+pairs/books without claiming every returned quote was used. Evidence/rollback:
+`docs/model-audits/2026-11-04-nba-paid-consumer-book-coverage.json`.
+
 ## CBB response frontier and source-law support — November 4
 
 The authoritative CBB runtime is independent prior

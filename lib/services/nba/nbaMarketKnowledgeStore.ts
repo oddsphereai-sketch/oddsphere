@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isNbaMarketKnowledgeState, type NbaMarketKnowledgeState } from "./nbaMarketConsequence";
-import { NBA_MODEL_RELEASE, NBA_PREVIOUS_MODEL_RELEASE } from "../../automodel/nba/nbaChampionRuntime";
+import { NBA_MODEL_RELEASE, NBA_COMPATIBLE_KNOWLEDGE_MODEL_RELEASES } from "../../automodel/nba/nbaChampionRuntime";
 
 /** Read the existing sole writer's unlocked captures. Any surviving market
  * can carry state when ML is held; duplicate market copies must agree. No new
@@ -30,14 +30,17 @@ export async function loadNbaMarketKnowledgeStates(args: {
     if (existing && JSON.stringify(existing) !== JSON.stringify(row.knowledge)) throw new Error("NBA stored market knowledge-state copies disagree");
     result.set(externalId, row.knowledge);
   }
-  // Compatible input releases preserve the market knowledge epoch. Carry only its exact predecessor's unlocked state
-  // when the current release has no state for that game; never reset anchors
-  // merely because the grade/model stamp advances. Current state always wins.
-  const missing = [...args.externalIdByDbId].filter(([, externalId]) => !result.has(externalId));
-  if (args.modelRelease === NBA_MODEL_RELEASE && missing.length) {
-    const previous = await loadNbaMarketKnowledgeStates({ ...args, modelRelease: NBA_PREVIOUS_MODEL_RELEASE,
-      externalIdByDbId: new Map(missing) });
-    for (const [externalId, knowledge] of previous) result.set(externalId, knowledge);
+  // Carry only these exact compatible predecessors for missing games. All
+  // reads retain identical source-state/event validation and unlocked scope.
+  // Current state wins; R35 wins over R34; corrupt state is fatal, not skipped.
+  if (args.modelRelease === NBA_MODEL_RELEASE) {
+    for (const modelRelease of NBA_COMPATIBLE_KNOWLEDGE_MODEL_RELEASES) {
+      const missing = [...args.externalIdByDbId].filter(([, externalId]) => !result.has(externalId));
+      if (!missing.length) break;
+      const previous = await loadNbaMarketKnowledgeStates({ ...args, modelRelease,
+        externalIdByDbId: new Map(missing) });
+      for (const [externalId, knowledge] of previous) result.set(externalId, knowledge);
+    }
   }
   return result;
 }

@@ -104,6 +104,7 @@ export type RefreshNbaLinesResult = {
     lineValue: number | null;
     oddsAmerican: number | null;
   }>;
+  consumerSourceCoverage?: { theOddsApiPairsAdded: number; theOddsApiBooksAdded: string[]; owlsPairsAdded: number };
   warnings: string[];
   errors: string[];
 };
@@ -483,7 +484,9 @@ function scopedConsumerPairs(rows: readonly SharpOddsRow[], games: GameRow[], te
     const market = normalizeMarket(row.market_type ?? row.market);
     const observed = Date.parse(row.provider_timestamp ?? "");
     const start = Date.parse(row.event_start_time ?? "");
+    const received = row.wire_received_at ? Date.parse(row.wire_received_at) : cutoff;
     if (!game || !market || !row.event_id || !Number.isFinite(observed) || !Number.isFinite(cutoff) || observed > cutoff ||
+        !Number.isFinite(received) || received > cutoff || observed > received || cutoff >= Date.parse(game.game_date) ||
         !Number.isFinite(start) || observed >= start || Math.abs(start - Date.parse(game.game_date)) > 18 * 3_600_000) continue;
     const home = teamById.get(game.home_team_id ?? -1)?.display_name ?? "";
     const away = teamById.get(game.away_team_id ?? -1)?.display_name ?? "";
@@ -493,7 +496,7 @@ function scopedConsumerPairs(rows: readonly SharpOddsRow[], games: GameRow[], te
     if (!payload || payload.odds_american === null || Math.abs(payload.odds_american) < 100 ||
         market === "moneyline" && payload.line_value !== null) continue;
     const scope = `${game.id}|${market}`, bookScope = `${scope}|${consumerBookFamily(row.sportsbook!)}`;
-    const key = `${bookScope}|${row.event_id}|${row.provider_timestamp}`;
+    const key = `${bookScope}|${row.event_id}|${row.provider_timestamp}|${row.wire_received_at ?? availableAt}`;
     const group = groups.get(key) ?? { bookScope, scope, rows: [], payloads: [], observed };
     group.rows.push(row); group.payloads.push(payload); groups.set(key, group);
   }
@@ -519,7 +522,11 @@ function fillOwlsConsumerGaps(primaryRows: readonly SharpOddsRow[], nativeRows: 
     const game = matchGame(row.home_team ?? "", row.away_team ?? "", games, teamById);
     return game ? `${game.id}|${normalizeMarket(row.market_type ?? row.market)}|${consumerBookFamily(row.sportsbook!)}` : null;
   };
-  const addedRows = native.rows.filter(row => !primary.bookScopeKeys.has(bookScope(row)!));
+  const addedRows = native.rows.filter(row => {
+    const game = matchGame(row.home_team ?? "", row.away_team ?? "", games, teamById);
+    return game && Date.parse(primaryAvailableAt) < Date.parse(game.game_date) &&
+      !primary.bookScopeKeys.has(bookScope(row)!);
+  });
   const addedScopes = new Set(addedRows.map(row => bookScope(row)!));
   // An incomplete primary fragment cannot be spliced into the newly selected
   // native pair by the final per-side main-line dedupe.
@@ -540,9 +547,29 @@ function owlsConsumerRows(response: RawOwlsOddsResponse): SharpOddsRow[] {
     provider_timestamp: row.observedAt, is_main_line: true,
   }));
 }
+function fillPaidConsumerGaps(primaryRows: readonly SharpOddsRow[], fallback: NbaTheOddsApiCurrentBoard | null,
+  games: GameRow[], teamById: Map<number, TeamRow>, evaluationAt: string) {
+  const fallbackRows: SharpOddsRow[] = fallback && Number.isFinite(Date.parse(fallback.availableAt)) &&
+      Date.parse(fallback.availableAt) <= Date.parse(evaluationAt) ? fallback.quotes.flatMap((quote): SharpOddsRow[] => {
+    const storedGame = matchGame(quote.homeTeam, quote.awayTeam, games, teamById);
+    const distanceMs = storedGame === null ? Number.POSITIVE_INFINITY
+      : Math.abs(Date.parse(quote.scheduledStart) - Date.parse(storedGame.game_date));
+    if (!storedGame || !Number.isFinite(distanceMs) || distanceMs > 18 * 3_600_000) return [];
+    return [{ event_id: quote.providerEventId, sportsbook: quote.sportsbook, market_type: quote.market,
+      side: quote.side, line: quote.line, odds_american: quote.americanPrice, home_team: quote.homeTeam,
+      away_team: quote.awayTeam, event_start_time: quote.scheduledStart,
+      provider_timestamp: quote.observedAt, wire_received_at: fallback.availableAt, is_main_line: true }];
+  }) : [];
+  // Whole eligible physical-book contracts fill gaps even when another book
+  // already covers this market. Complete BDL pairs retain exact priority.
+  return fillOwlsConsumerGaps(primaryRows, fallbackRows, games, teamById,
+    evaluationAt, fallback?.availableAt ?? "");
+}
+
 export const __NBA_LINES_TEST__ = {
   scopedConsumerPairs,
   fillOwlsConsumerGaps,
+  fillPaidConsumerGaps,
   owlsConsumerRows,
   eventIdsForGames,
   eventTargetsForGames,
@@ -588,13 +615,59 @@ function buildLinePayload(
   };
 }
 
-/**
- * Refresh NBA lines from Owls. See module docstring for the
- * service contract.
- */
-export async function refreshNbaLines(
-  opts: RefreshNbaLinesOptions,
-): Promise<RefreshNbaLinesResult> {
+export type NbaConsumerFallbackReceipt = { board: NbaTheOddsApiCurrentBoard | null; error?: string };
+export type PreparedNbaLines = {
+  needsConsumerFallback: boolean;
+  finalize: (fallback?: NbaConsumerFallbackReceipt) => Promise<RefreshNbaLinesResult>;
+};
+
+async function acquireNbaConsumerFallback(opts: RefreshNbaLinesOptions): Promise<NbaConsumerFallbackReceipt> {
+  try {
+    const board = opts.theOddsApiCurrentBoard ?? (opts.getTheOddsApiCurrentBoard
+      ? await opts.getTheOddsApiCurrentBoard() : opts.theOddsApiKey
+        ? await fetchNbaTheOddsApiCurrentBoard({ apiKey: opts.theOddsApiKey }) : null);
+    return { board };
+  } catch (error) { return { board: null, error: error instanceof Error ? error.message : String(error) }; }
+}
+
+/** The same route's bounded sequential preparation and sole writer. A later
+ * date's gap can acquire one league response for every already prepared date. */
+export async function refreshNbaLineDates(args: {
+  dates: readonly string[];
+  optionsForDate: (date: string) => RefreshNbaLinesOptions;
+  onFailure?: (date: string, error: unknown) => void;
+  prepare?: typeof prepareNbaLines;
+}) {
+  const prepared: Array<{ date: string; opts: RefreshNbaLinesOptions; value: PreparedNbaLines }> = [];
+  const results: Array<{ date: string; result: RefreshNbaLinesResult }> = [];
+  const failures: Array<{ date: string; error: string }> = [];
+  const failure = (date: string, error: unknown) => {
+    failures.push({ date, error: error instanceof Error ? error.message : String(error) });
+    args.onFailure?.(date, error);
+  };
+  for (const date of args.dates) {
+    try { const opts = args.optionsForDate(date);
+      prepared.push({ date, opts, value: await (args.prepare ?? prepareNbaLines)(opts) });
+    } catch (error) { failure(date, error); }
+  }
+  const supplied = prepared.find(entry => entry.opts.theOddsApiCurrentBoard);
+  const trigger = prepared.find(entry => entry.value.needsConsumerFallback);
+  const fallback = supplied ? { board: supplied.opts.theOddsApiCurrentBoard! }
+    : trigger ? await acquireNbaConsumerFallback(trigger.opts) : { board: null };
+  for (const entry of prepared) {
+    try { results.push({ date: entry.date, result: await entry.value.finalize(fallback) }); }
+    catch (error) { failure(entry.date, error); }
+  }
+  return { results, failures };
+}
+
+/** One-date operator compatibility uses the exact same prepare/finalize path. */
+export async function refreshNbaLines(opts: RefreshNbaLinesOptions): Promise<RefreshNbaLinesResult> {
+  return (await prepareNbaLines(opts)).finalize();
+}
+
+/** Prepare existing providers without applying anything or fetching a backup. */
+export async function prepareNbaLines(opts: RefreshNbaLinesOptions): Promise<PreparedNbaLines> {
   const log = opts.logger ?? (() => {});
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -608,7 +681,7 @@ export async function refreshNbaLines(
     log(
       `(no NBA games in DB for slate_date ${opts.slateDate}; run seed-nba-finals.ts first)`,
     );
-    return {
+    return { needsConsumerFallback: false, finalize: async () => ({
       mode: "no-games",
       gamesInDb: 0,
       oddsRowsFetched: 0,
@@ -623,7 +696,7 @@ export async function refreshNbaLines(
       canonicalLines: [],
       warnings,
       errors,
-    };
+    }) };
   }
 
   // 2. Load NBA teams for matching.
@@ -696,6 +769,7 @@ export async function refreshNbaLines(
       slateDate: opts.slateDate,
       apiKey: opts.ballDontLieApiKey,
     });
+    const retailAvailableAt = new Date().toISOString();
     const providerGameById = new Map(retail.games.map((game) => [game.providerGameId, game]));
     const storedGameByProviderId = new Map<number, GameRow>();
     for (const providerGame of retail.games) {
@@ -722,11 +796,12 @@ export async function refreshNbaLines(
         away_team: providerGame.awayTeam,
         event_start_time: providerGame.scheduledStart,
         provider_timestamp: quote.observedAt,
+        wire_received_at: retailAvailableAt,
         is_main_line: true,
       }];
     });
     oddsRows.push(...retailRows);
-    retailScopeKeys = scopedConsumerPairs(retailRows, games, teamById, new Date().toISOString()).scopeKeys;
+    retailScopeKeys = scopedConsumerPairs(retailRows, games, teamById, retailAvailableAt).scopeKeys;
     const incompleteRetailGames = games.filter((game) =>
       NBA_CURRENT_LINE_MARKETS.some((market) => !retailScopeKeys.has(`${game.id}|${market}`)));
     if (incompleteRetailGames.length > 0) warnings.push(
@@ -740,54 +815,19 @@ export async function refreshNbaLines(
   const missingRetailScopeKeys = () => new Set(games.flatMap((game) =>
     NBA_CURRENT_LINE_MARKETS.flatMap((market) =>
       retailScopeKeys.has(`${game.id}|${market}`) ? [] : [`${game.id}|${market}`])));
-  if (
-    missingRetailScopeKeys().size > 0 &&
-    (opts.theOddsApiCurrentBoard || opts.getTheOddsApiCurrentBoard || opts.theOddsApiKey)
-  ) {
-    const missingScopes = missingRetailScopeKeys();
-    let fallback: NbaTheOddsApiCurrentBoard | null = opts.theOddsApiCurrentBoard ?? null;
-    if (!fallback) {
-      try {
-        fallback = opts.getTheOddsApiCurrentBoard
-          ? await opts.getTheOddsApiCurrentBoard()
-          : opts.theOddsApiKey
-            ? await fetchNbaTheOddsApiCurrentBoard({ apiKey: opts.theOddsApiKey })
-            : null;
-      } catch (error) {
-        warnings.push(`The Odds API NBA consumer fallback failed: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-    if (fallback) {
-      const fallbackRows = fallback.quotes.flatMap((quote): SharpOddsRow[] => {
-        const storedGame = matchGame(quote.homeTeam, quote.awayTeam, games, teamById);
-        const distanceMs = storedGame === null
-          ? Number.POSITIVE_INFINITY
-          : Math.abs(Date.parse(quote.scheduledStart) - Date.parse(storedGame.game_date));
-        if (
-          storedGame === null || !missingScopes.has(`${storedGame.id}|${quote.market}`) ||
-          !Number.isFinite(distanceMs) || distanceMs > 18 * 3_600_000
-        ) return [];
-        retailGameIds.add(storedGame.id);
-        return [{
-          event_id: quote.providerEventId,
-          sportsbook: quote.sportsbook,
-          market_type: quote.market,
-          side: quote.side,
-          line: quote.line,
-          odds_american: quote.americanPrice,
-          home_team: quote.homeTeam,
-          away_team: quote.awayTeam,
-          event_start_time: quote.scheduledStart,
-          provider_timestamp: quote.observedAt,
-          is_main_line: true,
-        }];
-      });
-      const completeFallback = scopedConsumerPairs(fallbackRows, games, teamById, new Date().toISOString());
-      oddsRows.push(...completeFallback.rows);
-      retailScopeKeys = scopedConsumerPairs(oddsRows, games, teamById, new Date().toISOString()).scopeKeys;
-      log(`The Odds API normalized consumer fallback rows: ${completeFallback.rows.length}`);
-    }
+  return { needsConsumerFallback: missingRetailScopeKeys().size > 0, finalize: async (providedFallback) => {
+  const fallbackReceipt = providedFallback ?? (opts.theOddsApiCurrentBoard || missingRetailScopeKeys().size > 0
+    ? await acquireNbaConsumerFallback(opts) : { board: null });
+  if (fallbackReceipt.error && missingRetailScopeKeys().size > 0) {
+    warnings.push(`The Odds API NBA consumer fallback failed: ${fallbackReceipt.error}`);
   }
+  const evaluationAt = new Date().toISOString();
+  const fallback = fallbackReceipt.board;
+  const paidGap = fillPaidConsumerGaps(oddsRows, fallback, games, teamById, evaluationAt);
+  oddsRows = paidGap.rows;
+  for (const row of paidGap.addedRows) retailGameIds.add(matchGame(row.home_team!, row.away_team!, games, teamById)!.id);
+  retailScopeKeys = scopedConsumerPairs(oddsRows, games, teamById, evaluationAt).scopeKeys;
+  log(`The Odds API native consumer gap rows: ${paidGap.addedRows.length}`);
 
   // Reuse the already-fetched league response only after BDL/TOA. Fill an
   // exact missing consumer book/market contract; never replace an intact
@@ -799,6 +839,9 @@ export async function refreshNbaLines(
   retailScopeKeys = scopedConsumerPairs(oddsRows, games, teamById, new Date().toISOString()).scopeKeys;
   log(`Owls native consumer gap rows: ${nativeGap.addedRows.length}`);
 
+  const consumerSourceCoverage = { theOddsApiPairsAdded: paidGap.addedRows.length / 2,
+    theOddsApiBooksAdded: [...new Set(paidGap.addedRows.map(row => consumerBookFamily(row.sportsbook!)))].sort(),
+    owlsPairsAdded: nativeGap.addedRows.length / 2 };
   const consumerMissingScopes = missingRetailScopeKeys();
   if (consumerMissingScopes.size > 0) {
     const consumerMissingGames = new Set([...consumerMissingScopes].map((key) => Number(key.split("|")[0])));
@@ -945,6 +988,7 @@ export async function refreshNbaLines(
       scopesReconciled: reconciliationGameIds.size * NBA_GAME_MARKETS.length,
       incompleteBookGroupsDropped: completeBoard.incompleteGroups,
       canonicalLines,
+      consumerSourceCoverage,
       warnings,
       errors,
     };
@@ -1088,7 +1132,9 @@ export async function refreshNbaLines(
     scopesReconciled,
     incompleteBookGroupsDropped: completeBoard.incompleteGroups,
     canonicalLines,
+    consumerSourceCoverage,
     warnings,
     errors,
   };
+  } };
 }
