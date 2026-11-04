@@ -167,64 +167,71 @@ function PropReader({ row, onClose }: { row: Row; onClose: () => void }) {
     <div className="p-4 sm:p-6">
       <div className="relative overflow-hidden rounded-xl border border-gray-800 bg-[#0d1015] p-4 sm:p-5">
         <div className="absolute inset-x-0 top-0 h-28 opacity-70" style={{ background: `linear-gradient(105deg, ${teamColor(row.team)}38, rgba(124,58,237,.10), transparent 75%)` }} />
-        <div className="relative grid gap-4 sm:grid-cols-[auto_1fr] sm:items-center">
+        <div className="relative grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 sm:gap-4">
           <PlayerVisual row={row} hero />
-          <div>
-            <div className="flex flex-wrap items-center gap-2"><span className="rounded-md border border-violet-400/30 bg-violet-400/[0.10] px-3 py-1.5 text-sm font-black text-violet-100">{marketLabel(row.market)}</span><span className="text-[9px] text-gray-600">{row.team} vs {row.opponent} · {gameTime(row.scheduledStart)}</span></div>
-            <h3 className="mt-2 text-2xl font-black text-white">{row.playerName}</h3>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-violet-200">{marketLabel(row.market)}</p>
+            <h3 className="mt-1 break-words text-xl font-black leading-tight text-white sm:text-2xl">{row.playerName}</h3>
+            <p className="mt-1 text-[11px] text-gray-400">{row.team} vs {row.opponent} · {gameTime(row.scheduledStart)}</p>
           </div>
         </div>
         <div className="relative mt-4 grid gap-2 sm:grid-cols-[1.2fr_1fr]">
           <DecisionTile row={row} showGrade />
           <MarketQuoteTile row={row} />
         </div>
-        <div className="relative mt-2 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-gray-800 bg-gray-800">
-          <Metric title="Model projection" value={row.projection.toFixed(1)} /><Metric title="Pick confidence" value={percent(row.probability)} /><Metric title="Other-book market" value={row.targetExcludedProbability === null ? "—" : percent(row.targetExcludedProbability)} />
+        <div className="relative mt-2 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-gray-800 bg-gray-800 sm:grid-cols-3">
+          <Metric title="Model projection" value={row.projection.toFixed(1)} /><Metric title="Pick confidence" value={percent(row.probability)} /><Metric title="Other-book market" value={row.targetExcludedProbability === null ? "—" : percent(row.targetExcludedProbability)} className="col-span-2 sm:col-span-1" />
         </div>
       </div>
-      {row.movement ? <SameBookMovement row={row} /> : null}
-      <FeaturedEvidence row={row} />
-      <section className="mt-5 overflow-hidden rounded-xl border border-sky-400/20 bg-[linear-gradient(145deg,rgba(14,165,233,.07),rgba(0,0,0,.20)_62%)] p-4 sm:p-5">
-        <div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-[10px] font-black uppercase tracking-wider text-sky-300">Market check</p><h4 className="mt-1 text-lg font-black text-white">Price and confirmation</h4></div><p className="text-[10px] text-gray-500">{row.targetExcludedBooks} other books · {row.targetExcludedReferenceBooks} reference books</p></div>
-        <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1.15fr]">
-          <div className="min-w-0 space-y-3">
-            <div className="grid grid-cols-2 gap-2">
-              {bestPickQuote ? <PriceChoiceCard title={`Best ${capitalize(row.side)}`} quote={bestPickQuote} selected /> : null}
-              {bestOpposingQuote ? <PriceChoiceCard title={`Best ${capitalize(otherSide)}`} quote={bestOpposingQuote} /> : null}
-            </div>
-            <details className="rounded-lg border border-gray-800 bg-black/20">
-              <summary className="cursor-pointer list-none px-3 py-3 text-xs font-black text-violet-200">Compare all {row.priceLadder.length} available prices <span aria-hidden="true" className="float-right text-gray-600">＋</span></summary>
-              <div className="border-t border-gray-800 px-3 py-1">{row.priceLadder.map((quote, index) => <div key={`${quote.sportsbook}-${quote.side}-${index}`} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-gray-800 py-2 text-xs last:border-b-0"><strong className="text-gray-200">{book(quote.sportsbook)}</strong><span className={quote.side === row.side ? "text-emerald-300" : "text-gray-500"}>{capitalize(quote.side)} {quote.line}</span><strong className="text-white">{price(quote.americanPrice)}</strong></div>)}</div>
-            </details>
-          </div>
-          <div className="rounded-lg border border-gray-800 bg-black/25 p-4"><ProbabilityBar title="OddSphere forecast" value={row.probability} tone="bg-violet-400" />{row.targetExcludedProbability === null ? <div className="mt-4"><Metric title="Other-book market" value="—" /></div> : <div className="mt-4"><ProbabilityBar title="Other-book market" value={row.targetExcludedProbability} tone="bg-sky-400" /></div>}</div>
+      <div className="mt-5 grid items-start gap-4 lg:grid-cols-2">
+        <div className="min-w-0 space-y-4">
+          <FeaturedEvidence row={row} />
+          <details className="min-w-0 rounded-xl border border-gray-800 bg-black/20">
+            <summary className="cursor-pointer list-none px-4 py-4 text-sm font-black text-violet-200">View every model input <span aria-hidden="true" className="float-right text-gray-600">＋</span></summary>
+            <div className="grid gap-3 border-t border-gray-800 p-4"><EvidencePanel title="Role & minutes" metrics={row.role} /><EvidencePanel title="Recent production" metrics={row.production} /><EvidencePanel title="Matchup" metrics={row.matchup} /></div>
+          </details>
         </div>
-      </section>
-      <details className="mt-5 rounded-xl border border-gray-800 bg-black/20">
-        <summary className="cursor-pointer list-none px-4 py-4 text-sm font-black text-violet-200">View every model input <span aria-hidden="true" className="float-right text-gray-600">＋</span></summary>
-        <div className="grid gap-3 border-t border-gray-800 p-4 lg:grid-cols-3"><EvidencePanel title="Role & minutes" metrics={row.role} /><EvidencePanel title="Recent production" metrics={row.production} /><EvidencePanel title="Matchup" metrics={row.matchup} /></div>
-      </details>
+        <div className="min-w-0 space-y-4">
+          <section className="min-w-0 overflow-hidden rounded-xl border border-sky-400/20 bg-[linear-gradient(145deg,rgba(14,165,233,.07),rgba(0,0,0,.20)_62%)] p-4 sm:p-5">
+            <div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-[10px] font-black uppercase tracking-wider text-sky-300">Market check</p><h4 className="mt-1 text-lg font-black text-white">Price and confirmation</h4></div><p className="text-[10px] text-gray-500">{row.targetExcludedBooks} other books · {row.targetExcludedReferenceBooks} reference books</p></div>
+            <div className="mt-4 grid gap-3">
+              <div className="min-w-0 space-y-3">
+                <div className="grid gap-2 min-[380px]:grid-cols-2">
+                  {bestPickQuote ? <PriceChoiceCard title={`Best ${capitalize(row.side)}`} quote={bestPickQuote} selected /> : null}
+                  {bestOpposingQuote ? <PriceChoiceCard title={`Best ${capitalize(otherSide)}`} quote={bestOpposingQuote} /> : null}
+                </div>
+                <details className="rounded-lg border border-gray-800 bg-black/20">
+                  <summary className="cursor-pointer list-none px-3 py-3 text-xs font-black text-violet-200">Compare all {row.priceLadder.length} available prices <span aria-hidden="true" className="float-right text-gray-600">＋</span></summary>
+                  <div className="border-t border-gray-800 px-3 py-1">{row.priceLadder.map((quote, index) => <div key={`${quote.sportsbook}-${quote.side}-${index}`} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-gray-800 py-2 text-xs last:border-b-0"><strong className="text-gray-200">{book(quote.sportsbook)}</strong><span className={quote.side === row.side ? "text-emerald-300" : "text-gray-500"}>{capitalize(quote.side)} {quote.line}</span><strong className="text-white">{price(quote.americanPrice)}</strong></div>)}</div>
+                </details>
+              </div>
+              <div className="rounded-lg border border-gray-800 bg-black/25 p-4"><ProbabilityBar title="OddSphere forecast" value={row.probability} tone="bg-violet-400" />{row.targetExcludedProbability === null ? <div className="mt-4"><Metric title="Other-book market" value="—" /></div> : <div className="mt-4"><ProbabilityBar title="Other-book market" value={row.targetExcludedProbability} tone="bg-sky-400" /></div>}</div>
+            </div>
+          </section>
+          {row.movement ? <SameBookMovement row={row} /> : null}
+        </div>
+      </div>
     </div>
   </PlayerPropReaderDialog>;
 }
 
 function FeaturedEvidence({ row }: { row: Row }) {
-  return <section className="mt-5 rounded-xl border border-violet-400/20 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,.12),transparent_48%),rgba(0,0,0,.20)] p-4 sm:p-5">
+  return <section className="min-w-0 rounded-xl border border-violet-400/20 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,.12),transparent_48%),rgba(0,0,0,.20)] p-4 sm:p-5">
     <p className="text-[10px] font-black uppercase tracking-wider text-emerald-300">Why this pick</p>
-    <div className="mt-1 flex flex-wrap items-end justify-between gap-2"><h4 className="text-lg font-black text-white">Key drivers for {marketLabel(row.market)}</h4><p className="text-[10px] text-gray-500">Market-specific model inputs</p></div>
-    <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">{featuredMetrics(row).map(({ metric, group }) => <FeaturedMetric key={metric.key} metric={metric} group={group} />)}</div>
+    <h4 className="mt-1 text-lg font-black text-white">Key drivers for {marketLabel(row.market)}</h4>
+    <div className="mt-4 grid grid-cols-2 gap-2">{featuredMetrics(row).map(({ metric, group }) => <FeaturedMetric key={metric.key} metric={metric} group={group} />)}</div>
   </section>;
 }
 function FeaturedMetric({ metric, group }: { metric: NbaPlayerPropsReaderMetric; group: string }) {
-  return <div className="min-h-28 rounded-lg border border-white/[0.08] bg-[#0b0e14]/90 p-3">
-    <span className="text-[8px] font-black uppercase tracking-[0.14em] text-violet-300">{group}</span>
-    <strong className="mt-3 block text-2xl font-black tabular-nums text-white">{metricValue(metric)}</strong>
-    <span className="mt-1 block text-[10px] leading-4 text-gray-500">{metric.label}</span>
+  return <div className="min-h-24 rounded-lg border border-white/[0.08] bg-[#0b0e14]/90 p-3">
+    <span className="text-[9px] font-black uppercase tracking-wider text-violet-300">{group}</span>
+    <strong className="mt-2 block text-xl font-black tabular-nums text-white sm:text-2xl">{metricValue(metric)}</strong>
+    <span className="mt-1 block text-[11px] leading-4 text-gray-400">{metric.label}</span>
   </div>;
 }
 function PriceChoiceCard({ title, quote, selected = false }: { title: string; quote: Row["priceLadder"][number]; selected?: boolean }) {
   return <div className={`rounded-lg border p-3 ${selected ? "border-emerald-400/35 bg-emerald-400/[0.08]" : "border-gray-800 bg-black/25"}`}>
-    <span className={`text-[8px] font-black uppercase tracking-wider ${selected ? "text-emerald-300" : "text-gray-500"}`}>{title}</span>
+    <span className={`text-[10px] font-black uppercase tracking-wider ${selected ? "text-emerald-300" : "text-gray-400"}`}>{title}</span>
     <strong className="mt-2 block text-xl font-black text-white">{capitalize(quote.side)} {quote.line}</strong>
     <span className="mt-1 block text-xs text-gray-400">{price(quote.americanPrice)} · {book(quote.sportsbook)}</span>
   </div>;
@@ -238,31 +245,30 @@ function SameBookMovement({ row }: { row: Row }) {
   const supportsPick = movementSupportsSide(row);
   const directionTone = supportsPick ? "text-emerald-300" : "text-amber-300";
   const currentTone = supportsPick ? "emerald" : "amber";
-  return <section className="mt-4 rounded-lg border border-white/[0.09] bg-black/25 p-3" aria-label={`${book(movement.sportsbook)} same-book market movement`}>
+  return <section className="min-w-0 rounded-xl border border-white/[0.09] bg-black/25 p-4" aria-label={`${book(movement.sportsbook)} same-book market movement`}>
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div>
-        <p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Same-book movement</p>
-        <p className="mt-0.5 text-[7px] font-semibold text-gray-600">{book(movement.sportsbook)} · {capitalize(row.side)} {row.line}</p>
+        <p className="text-[10px] font-black uppercase tracking-wider text-gray-300">Same-book movement</p>
+        <p className="mt-1 text-[11px] font-semibold text-gray-400">{book(movement.sportsbook)} · {capitalize(row.side)} {row.line}</p>
       </div>
-      <span className={`text-[7px] font-black uppercase tracking-wider ${hasTrail ? directionTone : "text-gray-500"}`}>{hasTrail ? movementLabel(row) : "Current quote"}</span>
+      <span className={`text-[10px] font-black uppercase tracking-wider ${hasTrail ? directionTone : "text-gray-400"}`}>{hasTrail ? movementLabel(row) : "Current quote"}</span>
     </div>
     <div className="mt-3 overflow-hidden rounded-lg border border-white/[0.07] bg-black/25">
-      <div className="grid grid-cols-[3.25rem_repeat(3,minmax(0,1fr))] border-b border-white/[0.06] bg-white/[0.025]">
+      <div className="grid grid-cols-[3.5rem_repeat(3,minmax(0,1fr))] border-b border-white/[0.06] bg-white/[0.025]">
         <span aria-hidden="true" />
-        {(["Opening", "Prior", "Current"] as const).map((label) => <span key={label} className="px-2 py-1.5 text-center text-[6px] font-black uppercase tracking-wider text-gray-600">{label}</span>)}
+        {(["Opening", "Prior", "Current"] as const).map((label) => <span key={label} className="px-1 py-2 text-center text-[9px] font-black uppercase tracking-wider text-gray-400">{label}</span>)}
       </div>
       <PropMovementTrack label="Line" values={[movement.openingLine, movement.priorLine, movement.currentLine]} currentTone={currentTone} />
       <PropMovementTrack label="Odds" values={[movement.openingPrice, movement.priorPrice, movement.currentPrice]} formatValue={price} currentTone={currentTone} />
     </div>
-    {!hasTrail ? <p className="mt-1 text-[9px] leading-relaxed text-gray-600">No earlier different same-book quote is stored.</p> : null}
+    {!hasTrail ? <p className="mt-2 text-[11px] leading-5 text-gray-400">No earlier different same-book quote is stored.</p> : null}
   </section>;
 }
 function PropMovementTrack({ label, values, formatValue = String, currentTone }: { label: "Line" | "Odds"; values: readonly (number | null)[]; formatValue?: (value: number) => string; currentTone: "emerald" | "amber" }) {
   const currentClass = currentTone === "emerald" ? "text-emerald-200" : "text-amber-200";
-  return <div className="grid grid-cols-[3.25rem_repeat(3,minmax(0,1fr))] border-b border-white/[0.06] last:border-b-0">
-    <span className="flex items-center px-2 py-2 text-[7px] font-black uppercase tracking-[0.14em] text-gray-500">{label}</span>
-    {values.map((value, index) => <span key={`${label}-${index}`} className={`relative flex items-center justify-center border-l border-white/[0.05] px-1 py-2 font-mono text-xs font-black ${index === values.length - 1 ? currentClass : "text-gray-200"}`}>
-      {index > 0 ? <span aria-hidden="true" className="absolute left-0 -translate-x-1/2 bg-[#0a0d14] px-0.5 text-[7px] text-gray-700">→</span> : null}
+  return <div className="grid grid-cols-[3.5rem_repeat(3,minmax(0,1fr))] border-b border-white/[0.06] last:border-b-0">
+    <span className="flex items-center px-2 py-2 text-[9px] font-black uppercase tracking-wider text-gray-400">{label}</span>
+    {values.map((value, index) => <span key={`${label}-${index}`} className={`flex items-center justify-center border-l border-white/[0.05] px-1 py-2 font-mono text-xs font-black ${index === values.length - 1 ? currentClass : "text-gray-200"}`}>
       {value === null ? "—" : formatValue(value)}
     </span>)}
   </div>;
@@ -271,28 +277,28 @@ function EvidencePanel({ title, metrics }: { title: string; metrics: readonly Nb
 function DecisionTile({ row, showGrade = false }: { row: Row; showGrade?: boolean }) {
   const colors = gradeColors(row.grade);
   return <span className="rounded-lg border p-3" style={{ borderColor: colors.border, background: colors.background }}>
-    <span className="flex items-center justify-between gap-2"><span className="block text-[8px] font-black uppercase tracking-[0.16em] text-emerald-300">Our pick</span>{showGrade ? <GradeBadge grade={row.grade} /> : null}</span>
+    <span className="flex items-center justify-between gap-2"><span className="block text-[10px] font-black uppercase tracking-wider text-emerald-300">Our pick</span>{showGrade ? <GradeBadge grade={row.grade} /> : null}</span>
     <strong className="mt-1 block text-xl font-black text-white sm:text-2xl">{selection(row)}</strong>
     <span className="mt-1 block text-[9px] text-gray-500">Prediction against the listed market line</span>
   </span>;
 }
 function MarketQuoteTile({ row }: { row: Row }) {
   return <span className="rounded-lg border border-gray-700 bg-black/30 p-3">
-    <span className="block text-[8px] font-black uppercase tracking-[0.16em] text-sky-300">Market offer</span>
+    <span className="block text-[10px] font-black uppercase tracking-wider text-sky-300">Market offer</span>
     <strong className="mt-1 block text-lg font-black text-white sm:text-xl">{row.line.toFixed(1)} <span className="text-sm text-gray-400">· {price(row.americanPrice)}</span></strong>
     <span className="mt-1 block text-[9px] text-gray-500">{book(row.sportsbook)} · evaluated quote</span>
   </span>;
 }
 function ProbabilityBar({ title, value, tone }: { title: string; value: number; tone: string }) { return <div><div className="flex justify-between text-xs"><span className="text-gray-500">{title}</span><strong className="text-white">{percent(value)}</strong></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-800"><span className={`block h-full ${tone}`} style={{ width: `${Math.max(0, Math.min(100, value * 100))}%` }} /></div></div>; }
 function PanelTitle({ children }: { children: React.ReactNode }) { return <p className="text-[10px] font-black uppercase tracking-wider text-violet-300">{children}</p>; }
-function Metric({ title, value }: { title: string; value: string }) { return <span className="bg-gray-950 px-2 py-3 text-center"><span className="block text-[8px] font-black uppercase text-gray-600">{title}</span><strong className="mt-1 block text-sm tabular-nums text-white">{value}</strong></span>; }
+function Metric({ title, value, className = "" }: { title: string; value: string; className?: string }) { return <span className={`block bg-gray-950 px-2 py-3 text-center ${className}`}><span className="block text-[8px] font-black uppercase text-gray-500">{title}</span><strong className="mt-1 block text-sm tabular-nums text-white">{value}</strong></span>; }
 function GradeBadge({ grade }: { grade: NbaPlayerPropsMemberGrade }) { const colors = gradeColors(grade); return <span className="inline-flex w-fit rounded border px-2 py-1 text-[9px] font-black uppercase tracking-wider" style={{ borderColor: colors.border, background: colors.background, color: colors.text }}>{grade}</span>; }
 function PlayerVisual({ row, compact = false, hero = false }: { row: Row; compact?: boolean; hero?: boolean }) {
-  const dimensions = hero ? "h-24 w-24" : compact ? "h-12 w-12" : "h-16 w-14";
+  const dimensions = hero ? "h-16 w-16 sm:h-20 sm:w-20" : compact ? "h-12 w-12" : "h-16 w-14";
   const initials = row.playerName.split(/\s+/).filter(Boolean).slice(0, 2).map((name) => name[0]).join("");
   return <span className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-xl border ${dimensions}`} style={{ borderColor: `${teamColor(row.team)}88`, background: `linear-gradient(145deg, ${teamColor(row.team)}88, #0b0e14 72%)` }}>
-    <span className={`${hero ? "text-4xl" : compact ? "text-lg" : "text-2xl"} absolute inset-0 flex items-center justify-center font-black text-white/15`}>{initials}</span>
-    <span className={`relative rounded-full border bg-white shadow-[0_5px_18px_rgba(0,0,0,.38)] ${hero ? "h-14 w-14" : compact ? "h-8 w-8" : "h-10 w-10"}`} style={{ borderColor: teamColor(row.team) }}>
+    <span className={`${hero ? "text-3xl" : compact ? "text-lg" : "text-2xl"} absolute inset-0 flex items-center justify-center font-black text-white/15`}>{initials}</span>
+    <span className={`relative rounded-full border bg-white shadow-[0_5px_18px_rgba(0,0,0,.38)] ${hero ? "h-11 w-11 sm:h-14 sm:w-14" : compact ? "h-8 w-8" : "h-10 w-10"}`} style={{ borderColor: teamColor(row.team) }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={`https://a.espncdn.com/i/teamlogos/nba/500/${row.team.toLowerCase()}.png`} alt="" className="h-full w-full object-contain p-0.5" />
     </span>
