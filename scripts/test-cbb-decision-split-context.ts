@@ -71,8 +71,12 @@ assert.equal(chronological.length,1);assert.equal(chronological[0].firstMoney,.6
 const contradictory=structuredClone(direct);
 for(const row of contradictory.rows){row.fetchedAt="2026-11-03T19:31:00Z";
  row.moneyPct=row.selection==="first"?.1:.9;row.ticketsPct=row.selection==="first"?.1:.9;}
-assert.equal(cbbDecisionSplitContext({game,allGames:[game],asOf:at,direct:{...direct,rows:[...direct.rows,...contradictory.rows]} as ReturnType<typeof cbbCurrentSplitEvidence>,
- canonical:[],publicRows:[],draftKings:null}).length,0,"same-source-time contradictory states must be quarantined");
+const currentConflict=cbbDecisionSplitContext({game,allGames:[game],asOf:at,direct:{...direct,rows:[...direct.rows,...contradictory.rows]} as ReturnType<typeof cbbCurrentSplitEvidence>,
+ canonical:[],publicRows:[],draftKings:null});
+assert.equal(currentConflict.length,1,"current ambiguity remains an explicit durable sentinel");
+assert.equal(currentConflict[0].sourceConflict,"same_native_clock");
+assert.equal(currentConflict[0].firstMoney,null);
+assert.equal(currentConflict[0].sourceHistory?.length,2,"conflicting actual states remain available, without selecting a convenient one");
 const oneAxis={gameId:game.id,evidenceClass:"tickets_only_context",market:"spread",book:"circa",
  sourceClass:"professional_adjacent_named_book",providerEventId:"named:alst-tam",sourceAt:observed,
  availability:{availableBy:"2026-11-03T19:31:00Z"},first:{ownLine:-32.5,money:null,tickets:.8,observationId:1},
@@ -86,3 +90,11 @@ const duplicate={...game,id:9};
 const ambiguous=cbbDecisionSplitContext({game,allGames:[game,duplicate],asOf:at,direct:{...direct,rows:[]},canonical:[],publicRows:[],draftKings:feed});
 assert.equal(ambiguous.length,0,"month/day network identity cannot choose among same-day duplicate fixtures");
 console.log("PASS CBB predecision split context: source class, own line, physical-family deduplication, clocks and ambiguous fixture rejection");
+assert.equal(chronological[0].sourceHistory?.length,1,"available older native state remains historical input, not a second source vote");
+assert.equal(chronological[0].sourceHistory?.[0]?.observedAt,"2026-11-03T18:00:00Z");
+const historicalConflict=cbbDecisionSplitContext({game,allGames:[game],asOf:at,
+ direct:{...direct,eventId:"named:alst-tam",rows:[...direct.rows,...olderRecapture.rows,...olderRecapture.rows.map(row=>({...row,
+  moneyPct:row.selection==="first"?.8:.2,ticketsPct:row.selection==="first"?.8:.2,fetchedAt:"2026-11-03T19:31:01Z"}))]},
+ canonical:[],publicRows:[],draftKings:null});
+assert.equal(historicalConflict.length,1);
+assert.equal(historicalConflict[0].sourceHistory?.length,2,"historical ambiguity stays as an interruption, never silently discarded");

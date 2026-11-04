@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {readCbbMarketBehavior,CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
 import {CBB_CURRENT_SCORE_RELEASE} from "../lib/cbb/currentScoreRuntime";
-import {normalCdf} from "../lib/cbb/model";
+import {normalCdf,cbbThresholdProbabilities} from "../lib/cbb/model";
 import type {CbbForecast,CbbQuote} from "../lib/cbb/types";
 
 const asOf="2026-11-03T18:30:00Z",startsAt="2026-11-03T23:00:00Z";
@@ -113,3 +113,45 @@ assert.equal(withheldLane.receipt.jointMarginDecision?.sourceBook,"pinnacle");
 assert.equal(withheldLane.receipt.jointMarginDecision?.candidates.find(c=>c.book==="circa")?.reason,"one_native_contract_independent_residual_shape");
 assert.equal(withheldLane.receipt.currentProfessionalQuotes.some(q=>q.sportsbook==="circa"&&q.market==="moneyline"),false);
 console.log("PASS CBB joint decision integrity: inconsistent-law no-fallback, shared state, winner opposition, static correction and partial-onset native authority");
+
+// The actual Butler failure: tiny juice around 50% cannot certify a 35-point
+// independent margin when its own source still implies about 27.5 points.
+const butler=forecast(35.37856687172993);
+const butlerAnchor=quote("pinnacle","spread",-27.5,-108,-110,"18:00");
+const aroundEven=[[-107,-109],[-109,-107],[-110,-106]].map(([a,b])=>
+ read(butler,[quote("pinnacle","spread",-27.5,a,b,"18:20")],[butlerAnchor]));
+assert.ok(aroundEven.every(r=>r.receipt.jointMarginDecision!.status==="applied"));
+assert.ok(aroundEven.every(r=>r.forecast.margin>27&&r.forecast.margin<28),
+ "the coherent source correction remains continuous across a tiny preferred-side change");
+assert.ok(Math.max(...aroundEven.map(r=>r.forecast.margin))-Math.min(...aroundEven.map(r=>r.forecast.margin))<.3);
+assert.ok(aroundEven.every(r=>r.forecast.uncertainty.marginSd===butler.uncertainty.marginSd));
+
+// A genuinely stronger same-source ML AND cover law may confirm the more
+// conservative independent law. Both native contracts, not just their sign,
+// support its actual conditional probabilities without a score adjustment.
+const american=(p:number)=>p>=.5?-100*p/(1-p):100*(1-p)/p;
+function nativeJoint(margin:number,time:string,line=-3.5){
+ const f=forecast(margin),p=f.homeWinProbability;
+ const cover=cbbThresholdProbabilities(f,"spread",line);
+ const first=cover.first/(cover.first+cover.second);
+ return [quote("pinnacle","moneyline",null,american(p*1.04),american((1-p)*1.04),time),
+  quote("pinnacle","spread",line,american(first*1.04),american((1-first)*1.04),time)];
+}
+const strongJoint=read(forecast(4),nativeJoint(6,"18:20"),nativeJoint(8,"18:00"));
+assert.equal(strongJoint.receipt.jointMarginDecision!.status,"confirmed");
+assert.equal(strongJoint.forecast.margin,4);
+assert.equal(strongJoint.forecast.uncertainty.marginSd,11);
+const strongerIndependent=read(forecast(9),nativeJoint(6,"18:20"),nativeJoint(4,"18:00"));
+assert.equal(strongerIndependent.receipt.jointMarginDecision!.status,"applied",
+ "same-side source movement cannot certify greater independent probability strength");
+assert.ok(Math.abs(strongerIndependent.forecast.margin-6)<1e-6);
+console.log("PASS CBB quantitative confirmation: actual small-juice continuity and both native probability constraints");
+
+for(const side of [1,-1])for(const line of [-3.5*side,-3*side]){
+ const proof=read(forecast(4*side),nativeJoint(6*side,"18:20",line),nativeJoint(8*side,"18:00",line));
+ assert.equal(proof.receipt.jointMarginDecision!.status,"confirmed",
+  "numeric support checks mirror both outcomes and condition integer contracts on no push");
+ assert.equal(proof.forecast.margin,4*side);
+ const veto=read(forecast(9*side),nativeJoint(6*side,"18:20",line),nativeJoint(4*side,"18:00",line));
+ assert.equal(veto.receipt.jointMarginDecision!.status,"applied");
+}

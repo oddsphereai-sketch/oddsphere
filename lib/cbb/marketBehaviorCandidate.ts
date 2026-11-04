@@ -2,13 +2,13 @@ import {decideCbbJointMargin,type CbbJointMarginDecision} from "./jointMarginDec
 import { cbbExactMarketCenter } from "./marketReaderResearch";
 import { cbbImpliedProbability } from "./marketEvidence";
 import { normalCdf } from "./model";
-import {readCbbMarketBehaviorPath,expandCbbMarketBehaviorPathStream,cbbPublishedSourcePressure,CBB_MARKET_BEHAVIOR_PATH_RELEASE,type CbbMarketBehaviorPathTape,type CbbMarketPathStreamRead,type CbbSourcePathQuarantine} from "./marketBehaviorPath";
+import {cbbSameNativePressureState,readCbbMarketBehaviorPath,expandCbbMarketBehaviorPathStream,cbbPublishedSourcePressure,CBB_MARKET_BEHAVIOR_PATH_RELEASE,type CbbMarketBehaviorPathTape,type CbbMarketPathStreamRead,type CbbSourcePathQuarantine} from "./marketBehaviorPath";
 import {cbbEvidenceAvailableAt,cbbEvidenceProvablyBefore,cbbEvidenceReceiptBounds} from "./marketReceiptTime";
 import { gradeCbbProvisional } from "./provisionalGradePolicy";
 import {gradeCbbReceivedMarket} from "./marketBehaviorGrade";
 import { CBB_CURRENT_SCORE_RELEASE,CBB_PREVIOUS_CURRENT_SCORE_RELEASE } from "./currentScoreRuntime";
 import type { CbbForecast,CbbMarket,CbbQuote,CbbCanonicalReceipt } from "./types";
-import type {CbbDecisionSplitContext} from "./decisionSplitContext";
+import {cbbSelectDecisionSplitFrontiers,type CbbDecisionSplitContext} from "./decisionSplitContext";
 import {interpretCbbRelativeMarketMove,type CbbRelativeMarketInterpretation} from "./marketEpisodeInterpretation";
 import {selectCbbSourceEpisode,type CbbSourceAuthority} from "./sourceEpisodeAuthority";
 import {readCbbSourcePressure,type CbbPressureDecision} from "./sourcePressureDecision";
@@ -27,17 +27,20 @@ export const CBB_ALIGNED_MARKET_BEHAVIOR_RECEIPT_RELEASE="cbb_market_behavior_20
 export const CBB_JOINT_MARKET_BEHAVIOR_MODEL_RELEASE="cbb_candidate_2026_11_03_r13_joint_native_market_decision" as const;
 export const CBB_JOINT_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_03_r15_joint_native_market_decision" as const;
 export const CBB_JOINT_MARKET_BEHAVIOR_RECEIPT_RELEASE="cbb_market_behavior_2026_11_03_r9_joint_native_market_decision" as const;
-export const CBB_MARKET_BEHAVIOR_MODEL_RELEASE="cbb_candidate_2026_11_04_r14_current_board_source_aliases" as const;
-export const CBB_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_04_r16_current_board_source_aliases" as const;
+export const CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE="cbb_candidate_2026_11_04_r14_current_board_source_aliases" as const;
+export const CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_04_r16_current_board_source_aliases" as const;
+export const CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_RECEIPT_RELEASE="cbb_market_behavior_2026_11_04_r10_current_board_source_aliases" as const;
+export const CBB_MARKET_BEHAVIOR_MODEL_RELEASE="cbb_candidate_2026_11_04_r15_response_frontier_law_support" as const;
+export const CBB_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_04_r17_response_frontier_law_support" as const;
 export const CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_03_r8_new_orleans_prior_input" as const;
 export const CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_03_r7_verified_action_or_professional_value_best" as const;
 export const CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_03_r6_exact_decision_gate_reasons" as const;
 export const CBB_OLDER_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_02_r5_resolved_price_not_double_penalized" as const;
-export const CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE="cbb_market_behavior_2026_11_04_r10_current_board_source_aliases" as const;
+export const CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE="cbb_market_behavior_2026_11_04_r11_response_frontier_law_support" as const;
 const priority=["circa","pinnacle","bookmaker"];
 export const cbbBookFamily=(book:string)=>["pinnacle","ps3838"].includes(book.toLowerCase())?"pinnacle":book.toLowerCase();
 type AttestedQuote=CbbQuote&{orientationVerified?:boolean};
-export type CbbMarketAnchors={release:typeof CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_JOINT_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_ALIGNED_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_RETAIL_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_EPISODE_MARKET_BEHAVIOR_RECEIPT_RELEASE|"cbb_market_behavior_2026_11_03_r4_new_orleans_prior_input"|"cbb_market_behavior_2026_11_03_r3_direction_and_magnitude"|"cbb_market_behavior_2026_11_02_r2_received_source_path"|"cbb_market_behavior_2026_11_02_r1_same_book_economics";gameId:number;startsAt:string;
+export type CbbMarketAnchors={release:typeof CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_JOINT_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_ALIGNED_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_RETAIL_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_EPISODE_MARKET_BEHAVIOR_RECEIPT_RELEASE|"cbb_market_behavior_2026_11_03_r4_new_orleans_prior_input"|"cbb_market_behavior_2026_11_03_r3_direction_and_magnitude"|"cbb_market_behavior_2026_11_02_r2_received_source_path"|"cbb_market_behavior_2026_11_02_r1_same_book_economics";gameId:number;startsAt:string;
   independentRelease:string;independentInputKey:string;capturedAt:string;quotes:Array<CbbQuote&{anchorCapturedAt?:string}>;quarantinedKeys?:string[]};
 export type CbbBehaviorFlow={provider:"owls";gameId:number;sourceBook:string;market:CbbMarket;line:number|null;
   firstMoney:number;secondMoney:number;firstTickets:number;secondTickets:number;
@@ -242,7 +245,7 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
     Math.abs(base.homeWinProbability-independentWinner)>1e-8))throw new Error("CBB independent forecast coherence mismatch");
   const excludedFamilies=[...new Set(args.targets.map(q=>cbbBookFamily(q.sportsbook)))].sort(),excluded=new Set(excludedFamilies);
   const previousPath=args.previousPath;
-  if(previousPath&&(![CBB_MARKET_BEHAVIOR_PATH_RELEASE,"cbb_market_behavior_path_2026_11_02_r3_compact_native_frontier","cbb_market_behavior_path_2026_11_02_r2_availability_bounds"].includes(previousPath.release)||
+  if(previousPath&&(![CBB_MARKET_BEHAVIOR_PATH_RELEASE,"cbb_market_behavior_path_2026_11_03_r4_identical_preflow_state","cbb_market_behavior_path_2026_11_02_r3_compact_native_frontier","cbb_market_behavior_path_2026_11_02_r2_availability_bounds"].includes(previousPath.release)||
     previousPath.gameId!==base.gameId||previousPath.startsAt!==args.startsAt||
     !Number.isFinite(Date.parse(previousPath.capturedAt))||Date.parse(previousPath.capturedAt)>at))
     throw new Error("CBB path prior identity/cutoff mismatch");
@@ -253,7 +256,7 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
       cbbBookFamily(q.sportsbook)===cbbBookFamily(stream.book)&&q.market===stream.market))??[];
   const current=latestQuotes([...retainedQuotes,...(args.historyQuotes??[]),...args.currentQuotes],base,at,excluded);
   const previous=args.anchors;
-  const reusable=previous&&[CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_JOINT_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_ALIGNED_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_RECEIPT_RELEASE,"cbb_market_behavior_2026_11_03_r4_new_orleans_prior_input","cbb_market_behavior_2026_11_03_r3_direction_and_magnitude","cbb_market_behavior_2026_11_02_r2_received_source_path","cbb_market_behavior_2026_11_02_r1_same_book_economics"].includes(previous.release)&&previous.gameId===base.gameId&&
+  const reusable=previous&&[CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_JOINT_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_ALIGNED_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_RECEIPT_RELEASE,"cbb_market_behavior_2026_11_03_r4_new_orleans_prior_input","cbb_market_behavior_2026_11_03_r3_direction_and_magnitude","cbb_market_behavior_2026_11_02_r2_received_source_path","cbb_market_behavior_2026_11_02_r1_same_book_economics"].includes(previous.release)&&previous.gameId===base.gameId&&
     previous.startsAt===args.startsAt&&[base.release,CBB_PREVIOUS_CURRENT_SCORE_RELEASE].includes(previous.independentRelease)&&
     Number.isFinite(Date.parse(previous.capturedAt))&&Date.parse(previous.capturedAt)<=at;
   const originals=reusable?previous.quotes.filter(q=>validQuote(q,base,Date.parse(q.anchorCapturedAt??previous.capturedAt),new Set(),false)):[];
@@ -276,9 +279,12 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
     independentRelease:reusable?previous.independentRelease:base.release,independentInputKey:reusable?previous.independentInputKey:args.independentInputKey,capturedAt:reusable?previous.capturedAt:base.asOf,
     quotes:[...structuredClone(originals),...current.filter(q=>!known.has(`${cbbBookFamily(q.sportsbook)}:${q.market}`))
       .map(q=>({...q,anchorCapturedAt:base.asOf}))],quarantinedKeys:[...quarantined]};
+  const incomingSplitContext=cbbSelectDecisionSplitFrontiers(args.splitContext??[],base.asOf);
+  const splitConflicts=incomingSplitContext.filter(row=>row.sourceConflict&&row.observedAt!==null)
+    .map(row=>({book:row.physicalFamily,market:row.market,sourceAt:row.observedAt!,reason:"current_native_split_state_conflict"}));
   const path=readCbbMarketBehaviorPath({independent:base,startsAt:args.startsAt,currentQuotes:args.currentQuotes,
     seedQuotes:[...anchors.quotes,...(args.historyQuotes??[])],previous:args.previousPath,
-    flows:[...(args.historyFlows??[]),...(args.flows??[])],excludedFamilies,quarantinedSources:args.quarantinedSources});
+    flows:[...(args.historyFlows??[]),...(args.flows??[])],excludedFamilies,quarantinedSources:[...(args.quarantinedSources??[]),...splitConflicts]});
   for(const key of path.quarantinedKeys)quarantined.add(key);
   const pathPosture=path.streams.map(stream=>compactPosture(stream,at));
   for(const posture of pathPosture){
@@ -294,7 +300,14 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
       posture.latestFlowMatched=path.streams.find(s=>s.book===posture.book&&s.market===posture.market)?.boundFlows.some(b=>
         b.flow.observedAt===latest.observedAt&&b.flow.line===latest.line)??false;
       posture.flowLine=latest.line;posture.flowObservedAt=latest.observedAt;
-      if(!posture.latestFlowMatched){posture.boundFlowDirection=null;posture.flowReactionDirection=null;posture.pressureDirection=null;posture.flowResponse=null;posture.flowCurrentResolution=null;}
+      const priorBinding=path.streams.find(s=>s.book===posture.book&&s.market===posture.market)?.boundFlows
+        .filter(b=>at-Date.parse(b.flow.observedAt)<=3*3600_000).at(-1);
+      const unchangedSinceBinding=priorBinding&&flows.filter(f=>Date.parse(f.observedAt)>=Date.parse(priorBinding.flow.observedAt))
+        .every(f=>cbbSameNativePressureState(f,priorBinding.flow));
+      // The latest read remains explicitly unmatched. An identical repeat
+      // cannot erase an already observed response; its original source clock
+      // and current buyback/resolution remain in the compact posture.
+      if(!posture.latestFlowMatched&&!unchangedSinceBinding){posture.boundFlowDirection=null;posture.flowReactionDirection=null;posture.pressureDirection=null;posture.flowResponse=null;posture.flowCurrentResolution=null;}
     }
   }
   const episodes:CbbBehaviorEpisode[]=[];
@@ -318,7 +331,19 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
   // A contradictory original receipt disqualifies the source from ALL
   // forecast authority, including the current-level winner arbitration.
   let winnerArbitration=adjudicateWinner(base,current.filter(q=>!quarantined.has(`${cbbBookFamily(q.sportsbook)}:${q.market}`)&&!withheldCurrent.has(`${cbbBookFamily(q.sportsbook)}:${q.market}`)));
-  const pressureDecisions=readCbbSourcePressure({forecast:base,rows:args.splitContext??[],
+  // The retained native path is already qualified input, including on a
+  // temporarily incomplete canonical read. Project its real flow receipts
+  // into the same one-per-market pressure frontier; never synthesize a read.
+  const pathContexts:CbbDecisionSplitContext[]=path.tape.streams.flatMap(stream=>
+    expandCbbMarketBehaviorPathStream(path.tape,stream).flows.map(flow=>({gameId:flow.gameId,market:flow.market,
+      sourceBook:flow.sourceBook,physicalFamily:cbbBookFamily(flow.sourceBook),sourceClass:"professional_adjacent_named_book" as const,
+      provider:"owls" as const,sourceEventId:flow.sourceEventId,line:flow.line,firstMoney:flow.firstMoney,secondMoney:flow.secondMoney,
+      firstTickets:flow.firstTickets,secondTickets:flow.secondTickets,observedAt:flow.observedAt,
+      availableBy:new Date(cbbEvidenceAvailableAt(flow)).toISOString(),receiptEarliest:flow.fetchedAt,
+      clockBasis:flow.canonicalReceipt?"db_inserted_upper_bound" as const:"verified_provider_observation" as const,
+      observationIds:flow.canonicalReceipt?.observationIds??[]})));
+  const splitContext=cbbSelectDecisionSplitFrontiers([...incomingSplitContext,...pathContexts],base.asOf);
+  const pressureDecisions=readCbbSourcePressure({forecast:base,rows:splitContext,
     quotes:[...anchors.quotes,...retainedQuotes,...(args.historyQuotes??[]),...(args.contextQuotes??[]),...args.currentQuotes],
     quarantinedKeys:[...quarantined,...withheldCurrent,...(args.quarantinedSources??[]).map(q=>`${q.book}:${q.market}`)]});
   let margin=chooseAxis(episodes,"margin",base,path,pressureDecisions),total=chooseAxis(episodes,"total",base,path,pressureDecisions);
@@ -350,7 +375,7 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
     sourcePriority:[],evaluatedAt:base.asOf,evaluatedTargets:structuredClone(args.targets),
     currentProfessionalQuotes:structuredClone(current.filter(q=>!quarantined.has(`${cbbBookFamily(q.sportsbook)}:${q.market}`)&&!withheldCurrent.has(`${cbbBookFamily(q.sportsbook)}:${q.market}`))),
     inputRevisionSinceAnchor:anchors.independentInputKey===args.independentInputKey?"same":"changed",sourceProblems,
-    excludedFamilies,anchors,episodes,pathTape:path.tape,pathPosture,splitContext:structuredClone(args.splitContext??[]),
+    excludedFamilies,anchors,episodes,pathTape:path.tape,pathPosture,splitContext:structuredClone(splitContext),
     withheldCurrentSources:structuredClone(args.currentSourceProblems??[]),
     pressureDecisions,
     historyCompleteness:args.historyCompleteness?{...args.historyCompleteness}:{price:true,split:true},
