@@ -160,8 +160,40 @@ function boardRows(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerPropsRuntime
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_28_r52_owls_reference_prices");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_11_04_r67_settlement_identity_continuity");
+const resolvedAliasDecision: NflPlayerPropsRuntimeDecision = { ...decision, playerName: "Chig Okonkwo", providerPlayerId: "734", team: "WAS",
+  scheduledStart: "2026-11-05T17:00:00Z", lockAt: "2026-11-05T16:00:00Z", healthHolds: [], projection: 25 };
+const unresolvedAliasDecision: NflPlayerPropsRuntimeDecision = { ...resolvedAliasDecision, playerName: "Chigoziem Okonkwo", providerPlayerId: null,
+  team: "", projection: null, grade: "Held", healthHolds: ["team_game_identity_unmatched", "roster_identity_unmatched"] };
+const aliasRowsBefore = JSON.stringify([resolvedAliasDecision, unresolvedAliasDecision]);
+const aliasSnapshot = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 9, evaluatedAt: "2026-11-04T13:00:00Z",
+  nextBoard: boardRows([resolvedAliasDecision, unresolvedAliasDecision]) });
+assert.equal(aliasSnapshot.board.decisions.length, 2, "the full stored source/decision board remains available for audit");
+assert.deepEqual(aliasSnapshot.memberDecisions, [resolvedAliasDecision], "the member keeps the actual resolved prediction rather than a duplicate unresolved alias");
+assert.equal(JSON.stringify([resolvedAliasDecision, unresolvedAliasDecision]), aliasRowsBefore);
+for (const other of [
+  { ...resolvedAliasDecision, gameId: "wrong" }, { ...resolvedAliasDecision, team: "LA" },
+  { ...resolvedAliasDecision, providerPlayerId: "999" }, { ...resolvedAliasDecision, line: resolvedAliasDecision.line + 1 },
+  { ...resolvedAliasDecision, side: resolvedAliasDecision.side === "under" ? "over" as const : "under" as const },
+  { ...resolvedAliasDecision, healthHolds: ["historical_identity_unmatched"] },
+]) {
+  const negative = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 9, evaluatedAt: "2026-11-04T13:00:00Z",
+    nextBoard: boardRows([other, unresolvedAliasDecision]) });
+  assert.ok(negative.memberDecisions.some(row => row.playerName === "Chigoziem Okonkwo"), "wrong game/team/player/scope or unresolved replacement cannot suppress the exception");
+}
+const collisionSnapshot = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 9, evaluatedAt: "2026-11-04T13:00:00Z",
+  nextBoard: boardRows([resolvedAliasDecision, { ...resolvedAliasDecision, providerPlayerId: "999" }, unresolvedAliasDecision]) });
+assert.ok(collisionSnapshot.memberDecisions.some(row => row.playerName === "Chigoziem Okonkwo"), "ambiguous resolved IDs cannot suppress the exception");
+const lockedAlias = { ...unresolvedAliasDecision, state: "locked" as const, grade: "No Play" as const };
+const legacyAliasSnapshot = { ...aliasSnapshot, memberDecisions: [resolvedAliasDecision, lockedAlias] };
+const lockedAliasBefore = JSON.stringify(legacyAliasSnapshot);
+const aliasReader = buildNflPlayerPropsMemberSnapshot(legacyAliasSnapshot);
+assert.deepEqual(aliasReader.memberDecisions.find(row => row.playerName === "Chigoziem Okonkwo"), lockedAlias, "the reader renders the exact legacy locked alias payload first");
+assert.equal(JSON.stringify(legacyAliasSnapshot), lockedAliasBefore, "reader alias handling cannot mutate a stored lock");
+const lockedAliasWriter = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 9, evaluatedAt: "2026-11-04T13:00:00Z",
+  previous: { ...legacyAliasSnapshot, board: boardRows([resolvedAliasDecision, lockedAlias]) }, nextBoard: boardRows([resolvedAliasDecision]) });
+assert.deepEqual(lockedAliasWriter.board.decisions.find(row => row.playerName === "Chigoziem Okonkwo"), lockedAlias, "the writer preserves the complete prior locked alias record even when the current feed omits it");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_11_04_r53_verified_alias_duplicates");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_11_04_r69_verified_alias_display");
 assert.equal(NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES, 60);
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_11_04_r41_pregame_roster_identity");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_11_04_r4_identity_queue_isolation");
