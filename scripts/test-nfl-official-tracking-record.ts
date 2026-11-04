@@ -415,6 +415,14 @@ const skewCurrentPayload = {
 assert.equal(buildNflOfficialTrackingRecords({ payload: skewCurrentPayload, gameId: 5005 })
   .find(record => record.market === "total")?.side, "under",
   "current tracking preserves the PMF-preferred Under when a skewed mean is more than one point above its line");
+const skewR57Payload = { ...skewCurrentPayload,
+  decisions: { ...skewCurrentPayload.decisions,
+    modelPromotionStatus: "nfl_v1_member_release_2026_11_04_r57_pmf_mean_direction_diagnostic" } } as NflForwardEvidencePayload;
+const skewR57Bytes = JSON.stringify(skewR57Payload);
+assert.equal(buildNflOfficialTrackingRecords({ payload: skewR57Payload, gameId: 5005 })
+  .find(record => record.market === "total")?.side, "under",
+  "an exact R57 PMF-policy payload retains its original policy after the current input release advances");
+assert.equal(JSON.stringify(skewR57Payload), skewR57Bytes, "prior PMF payload bytes remain unchanged");
 const skewLegacyPayload = { ...skewCurrentPayload,
   decisions: { ...skewCurrentPayload.decisions,
     modelPromotionStatus: "nfl_v1_member_release_2026_11_04_r56_unchanged_ml_confirmation" } } as NflForwardEvidencePayload;

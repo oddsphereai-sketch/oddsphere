@@ -284,3 +284,35 @@ const staleFallbackEvidence = buildNbaMemberGameEvidence({ game, priceRows, spli
 assert.equal(staleFallbackEvidence.moneyline.sportsbookSplits?.sourceBook, "draftkings", "a fresher complete fallback should replace stale Circa until Circa resumes");
 
 console.log("NBA member market evidence tests passed");
+
+const nativeAt = "2026-10-16T16:44:03.791Z";
+const receiptAt = "2026-10-16T17:55:55.439Z";
+const nativeClockRows = withCirca.filter(row => row.sourceBook === "circa").map(row => ({
+  ...row, sourceObservedAt: nativeAt, fetchedAt: receiptAt,
+}));
+const nativeClockEvidence = buildNbaMemberGameEvidence({ game, priceRows, splitRows: nativeClockRows, evaluatedAt });
+const nativeSection = nativeClockEvidence.moneyline.sportsbookSplits!;
+assert.equal(nativeSection.sourceObservedAt, nativeAt);
+assert.equal(nativeSection.lastUpdated, nativeAt);
+assert.ok(nativeSection.rows.every(row => row.observedAt === nativeAt && row.freshnessCheckedAt === receiptAt));
+assert.ok(nativeSection.rows.every(row => row.isStale === true),
+  "a fresh HTTP receipt cannot refresh the native read older than 75 minutes");
+const missingNative = buildNbaMemberGameEvidence({ game, priceRows,
+  splitRows: nativeClockRows.map(row => ({ ...row, sourceObservedAt: null })), evaluatedAt });
+assert.equal(missingNative.moneyline.sportsbookSplits!.sourceObservedAt, null);
+assert.equal(missingNative.moneyline.sportsbookSplits!.lastUpdated, null);
+assert.ok(missingNative.moneyline.sportsbookSplits!.rows.every(row => row.observedAt === null && row.isStale === true),
+  "missing native source clocks remain unknown rather than becoming receipt clocks");
+for (const invalidRows of [
+  nativeClockRows.map(row => ({ ...row, fetchedAt: "2026-10-16T18:01:00Z" })),
+  nativeClockRows.map(row => ({ ...row, sourceObservedAt: "2026-10-16T17:59:00Z" })),
+  nativeClockRows.map((row, i) => ({ ...row, sourceObservedAt: i === 0 ? nativeAt : "2026-10-16T16:44:04.791Z" })),
+]) {
+  assert.equal(buildNbaMemberGameEvidence({ game, priceRows, splitRows: invalidRows, evaluatedAt })
+    .moneyline.sportsbookSplits, null, "future receipts, native-after-receipt or different native reads cannot form an available pair");
+}
+console.log("NBA member native split clocks: source age, actual receipt, unknown clocks and same-read pairs passed");
+const nativeStaleFallback = buildNbaMemberGameEvidence({ game, priceRows,
+  splitRows: [...nativeClockRows, ...fallbackRows.filter(row => row.sourceBook === "draftkings")], evaluatedAt });
+assert.equal(nativeStaleFallback.moneyline.sportsbookSplits!.sourceBook, "draftkings",
+  "a newer receipt of stale Circa cannot defeat a genuinely fresher native fallback");

@@ -1,7 +1,7 @@
 import { isNbaConsumerRetailSportsbook } from "./nbaMarketSourceEligibility";
 
 export const NBA_THE_ODDS_API_CURRENT_RELEASE =
-  "nba_the_odds_api_current_2026_11_03_r1_bounded_board_fallback" as const;
+  "nba_the_odds_api_current_2026_11_04_r2_credential_diagnostics" as const;
 
 const SPORT_KEY = "basketball_nba";
 const BOOKMAKERS = [
@@ -160,30 +160,53 @@ export function parseNbaTheOddsApiCurrentBoard(
   };
 }
 
+/** Bounded non-secret status for the existing refresh diagnostics. */
+export function nbaTheOddsApiSafeDiagnosticError(error: string | null, apiKey: string | null): string | null {
+  if (!error) return error;
+  let safe = error;
+  if (apiKey) for (const representation of new Set([apiKey, encodeURIComponent(apiKey)])) {
+    safe = safe.split(representation).join("[redacted]");
+  }
+  return safe.slice(0, 400);
+}
+
 export async function fetchNbaTheOddsApiCurrentBoard(args: {
   apiKey: string;
   fetchImpl?: typeof fetch;
 }): Promise<NbaTheOddsApiCurrentBoard> {
+  const apiKey = typeof args.apiKey === "string" ? args.apiKey.trim() : "";
+  if (!apiKey) throw new Error("The Odds API NBA current board requires a configured API key; no request was made.");
   const url = new URL(`https://api.the-odds-api.com/v4/sports/${SPORT_KEY}/odds`);
-  url.searchParams.set("apiKey", args.apiKey);
+  url.searchParams.set("apiKey", apiKey);
   url.searchParams.set("bookmakers", BOOKMAKERS.join(","));
   url.searchParams.set("markets", "h2h,spreads,totals");
   url.searchParams.set("oddsFormat", "american");
   url.searchParams.set("dateFormat", "iso");
-  const response = await (args.fetchImpl ?? fetch)(url, {
-    headers: { accept: "application/json" },
-    cache: "no-store",
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
+  let response: Response;
+  try {
+    response = await (args.fetchImpl ?? fetch)(url, {
+      headers: { accept: "application/json" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(nbaTheOddsApiSafeDiagnosticError(`The Odds API NBA current board request failed: ${detail}`, apiKey)!);
+  }
   const declaredLength = Number(response.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE_BYTES) {
     throw new Error("The Odds API NBA current board exceeded the response-size limit.");
   }
-  const raw = await response.text();
+  let raw: string;
+  try { raw = await response.text(); }
+  catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(nbaTheOddsApiSafeDiagnosticError(`The Odds API NBA current board body read failed: ${detail}`, apiKey)!);
+  }
   if (Buffer.byteLength(raw, "utf8") > MAX_RESPONSE_BYTES) {
     throw new Error("The Odds API NBA current board exceeded the response-size limit.");
   }
-  if (!response.ok) throw new Error(`The Odds API NBA current board failed (${response.status}): ${raw.slice(0, 160)}`);
+  if (!response.ok) throw new Error(`The Odds API NBA current board failed (${response.status}): ${nbaTheOddsApiSafeDiagnosticError(raw, apiKey)!.slice(0, 160)}`);
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);

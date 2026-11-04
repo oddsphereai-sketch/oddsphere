@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 
 import type { RawOwlsSplitsResponse } from "../lib/providers/owls/owlsSharpBookSplits";
 import type { NflPreviewGame } from "../lib/services/football/balldontlieNflPreviewSlate";
-import { mapNflOwlsSplits, NFL_OWLS_SPLITS_RELEASE, qualifyNflOwlsSplitsForModel } from "../lib/services/football/nflOwlsSplits";
+import { hasNflOwlsSplitMarketCoverage, mapNflOwlsSplits, NFL_OWLS_SPLITS_RELEASE, qualifyNflOwlsSplitsForModel } from "../lib/services/football/nflOwlsSplits";
 import { nflModelSharpSplits } from "../lib/services/football/sharpApiNflSplits";
 
 const game: NflPreviewGame = {
@@ -136,3 +136,66 @@ const reusedEventWrongTeams = { ...structuredClone(response.data![0]!),
 assert.equal(mapNflOwlsSplits({ games: [game], capturedAt: "2026-10-27T23:47:00.000Z",
   response: { ...response, data: [lowerPriorityOriginal, reusedEventWrongTeams] } }).matchedGames, 0,
 "a reused provider event ID cannot substitute a priority-book row from different participants into the first canonical game");
+
+// A complete Circa ML is usable independently of its other native contracts.
+// A complete retail book cannot replace or complete a partial professional book.
+const partialResponse = structuredClone(response);
+partialResponse.data![0]!.splits = [
+  { book: "circa", as_of: "2026-10-27T23:45:00.000Z", moneyline: markets().moneyline },
+  { book: "draftkings", as_of: "2026-10-27T23:46:00.000Z", ...markets(70, 65) },
+];
+const partialMapped = mapNflOwlsSplits({ games: [game], capturedAt: "2026-10-27T23:47:00.000Z", response: partialResponse });
+const partialSplits = partialMapped.splitsByGame[game.providerGameId]!;
+assert.equal(partialSplits.moneyline.sourceSportsbook, "circa");
+assert.equal(partialSplits.moneyline.awayMoneyPct, 62);
+assert.equal(partialSplits.spread.sourceSportsbook, "draftkings");
+const qualifyPartial = (splits = partialSplits) => qualifyNflOwlsSplitsForModel({
+  splits, providerGameId: game.providerGameId, evaluatedAt: "2026-10-27T23:47:00.000Z",
+  currentHomeSpread: -3.5, currentTotal: 46.5,
+});
+assert.deepEqual(qualifyPartial().qualifiedMarkets, ["moneyline"]);
+assert.equal(qualifyPartial().splits!.spread.homeMoneyPct, null,
+  "retail fallback is retained for display without being relabeled professional model evidence");
+
+const onlyMlResponse = structuredClone(partialResponse);
+onlyMlResponse.data![0]!.splits!.pop();
+const onlyMl = mapNflOwlsSplits({ games: [game], capturedAt: "2026-10-27T23:47:00.000Z", response: onlyMlResponse }).splitsByGame[game.providerGameId]!;
+assert.equal(onlyMl.spread.homeMoneyPct, null);
+assert.equal(onlyMl.spread.sourceSportsbook, null);
+assert.deepEqual(qualifyPartial(onlyMl).qualifiedMarkets, ["moneyline"], "absent contracts must not discard valid ML");
+
+const malformedResponse = structuredClone(response);
+malformedResponse.data![0]!.splits = [{ book: "circa", as_of: "2026-10-27T23:45:00.000Z", ...markets(),
+  spread: { ...markets().spread, away_line: 4 }, total: { ...markets().total, over_handle_pct: null } }];
+const malformed = mapNflOwlsSplits({ games: [game], capturedAt: "2026-10-27T23:47:00.000Z", response: malformedResponse }).splitsByGame[game.providerGameId]!;
+assert.deepEqual(qualifyPartial(malformed).qualifiedMarkets, ["moneyline"]);
+assert.equal(malformed.spread.sourceSportsbook, null, "non-opposing handicap pair is not a native contract");
+assert.equal(malformed.total.overMoneyPct, null, "missing money cannot be reconstructed from tickets");
+
+const roundedResponse = structuredClone(onlyMlResponse);
+roundedResponse.data![0]!.splits![0]!.moneyline = { ...markets().moneyline,
+  home_handle_pct: 86, away_handle_pct: 14, home_bets_pct: 43, away_bets_pct: 58 };
+const rounded = mapNflOwlsSplits({ games: [game], capturedAt: "2026-10-27T23:47:00.000Z", response: roundedResponse }).splitsByGame[game.providerGameId]!;
+assert.equal(rounded.moneyline.awayBetsPct, 58);
+assert.deepEqual(qualifyPartial(rounded).qualifiedMarkets, ["moneyline"], "retain published one-point whole-number rounding");
+
+for (const capturedAt of ["2026-10-27T23:48:00.000Z", "2026-10-27T23:44:00.000Z", "not-a-time"]) {
+  const unavailable = { ...onlyMl, moneyline: { ...onlyMl.moneyline, capturedAt } };
+  assert.deepEqual(qualifyPartial(unavailable).qualifiedMarkets, [], "response must arrive after native read and before evaluation");
+}
+const wrongNativeEvent = { ...split, total: { ...split.total, sourceEventId: "another-native-event" } };
+assert.deepEqual(qualifyPartial(wrongNativeEvent).qualifiedMarkets, [], "partial qualification cannot mix native event identities");
+assert.equal(JSON.stringify(response.data![0]!.splits![0]!.moneyline), JSON.stringify(markets().moneyline),
+  "normalization must preserve raw input rather than fill or rewrite it");
+console.log("NFL independent-market qualification preserves partial native markets, rounding, book identity and actual availability.");
+assert.deepEqual(qualifyNflOwlsSplitsForModel({ splits: split, providerGameId: game.providerGameId,
+  evaluatedAt: "2026-10-27T23:47:00.000Z", currentHomeSpread: NaN, currentTotal: Infinity }).qualifiedMarkets,
+["moneyline"], "an unverifiable evaluated handicap cannot match a native source contract");
+
+assert.equal(hasNflOwlsSplitMarketCoverage(onlyMl), true,
+  "a mapped valid partial native market is available feed coverage, despite missing other contracts");
+assert.equal(hasNflOwlsSplitMarketCoverage(qualifyPartial(onlyMl).splits), true);
+assert.equal(hasNflOwlsSplitMarketCoverage(null), false);
+assert.equal(hasNflOwlsSplitMarketCoverage({ ...onlyMl, moneyline: { ...onlyMl.moneyline,
+  homeMoneyPct: null, awayMoneyPct: null, homeBetsPct: null, awayBetsPct: null } }), false,
+  "masked/absent native markets cannot manufacture feed availability");

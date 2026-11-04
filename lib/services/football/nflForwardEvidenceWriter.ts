@@ -50,7 +50,7 @@ import {
   unavailableNflSharpApiSplitSources,
   type NflRegularSharpSplitSet,
 } from "./sharpApiNflSplits";
-import { fetchNflOwlsSplits, qualifyNflOwlsSplitsForModel, qualifyNflOwlsSplitsForSourceReaction } from "./nflOwlsSplits";
+import { fetchNflOwlsSplits, hasNflOwlsSplitMarketCoverage, qualifyNflOwlsSplitsForModel, qualifyNflOwlsSplitsForSourceReaction } from "./nflOwlsSplits";
 import { qualifyNflPublicSourceReaction } from "./nflPublicSourceReaction";
 import { captureBooksWithSharpBooks } from "./sharpApiFootballSharpOdds";
 import { readNflOwlsNamedPriceHistory } from "./nflOwlsNamedPriceHistory";
@@ -162,7 +162,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_04_r108_pmf_mean_direction_diagnostic" as const;
+  "nfl_forward_evidence_writer_2026_11_04_r109_per_market_source_qualification" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -748,8 +748,9 @@ export async function runNflForwardEvidenceWriter(args: {
         return Number.isFinite(age) && age >= 0 && age <= 120 * 60_000;
       });
     const sharpApiCoverage = modelSplitCoverage && sharpSplits?.moneyline.provider === "sharpapi";
-    const owlsCoverage = displaySharpSplits?.moneyline.provider === "owls" &&
-      completeSharpApiNflSplitSet(displaySharpSplits);
+    // Availability is per native market; full-model coverage is assessed
+    // separately above. A valid partial set is not an unavailable provider.
+    const owlsCoverage = hasNflOwlsSplitMarketCoverage(displaySharpSplits);
     const weatherCoverage = plan.stage === "unlocked" || weather.status !== "provider_unavailable";
     const collectedEvidenceHolds = [
       !rosterAndDepth ? "roster_depth_unavailable" : null,

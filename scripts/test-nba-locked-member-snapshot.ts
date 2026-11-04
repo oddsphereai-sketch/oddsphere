@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { sanitizeRetainedSharpSplitPresentation } from "../lib/providers/real_api/sharpApiCurrentSplits";
 
 import type { NbaDailyEdgeDto, NbaDailyEdgeGameDto } from "../lib/services/nba/buildNbaDailyEdgeDto";
+import type { NbaMemberGameEvidence } from "../lib/services/nba/nbaMemberMarketEvidence";
 import type { DailyEdgeGameDto } from "../app/lab/lib/labTypes";
 import { adaptNbaToDailyEdgeResponse } from "../lib/services/nba/adaptNbaToDailyEdgeResponse";
 import {
@@ -154,3 +156,34 @@ assert.throws(() => applyNbaLockedMemberSnapshotPrecedence({
 }), /locked member DTO mismatch/);
 
 console.log("NBA locked member snapshot precedence tests passed");
+
+
+for (const observedAt of [null, "2026-10-20T17:44:03.791Z"]) {
+  const storedMember = structuredClone(lockedMemberGame);
+  storedMember.markets.moneyline.sportsbookSplits = {
+    label: "Sharp Book Splits", sourceBook: "circa", sourceObservedAt: observedAt,
+    lastUpdated: observedAt, signal: null, rows: [
+      { side: "away", label: "AWY", moneyPct: 62, betsPct: 54, observedAt, freshnessCheckedAt: observedAt, isStale: true },
+      { side: "home", label: "HME", moneyPct: 38, betsPct: 46, observedAt, freshnessCheckedAt: observedAt, isStale: true },
+    ],
+  };
+  const originalMember = JSON.stringify(storedMember);
+  const clockCapture = buildNbaLockedMemberCapture({ gameDto: locked, memberGame: storedMember });
+  assert.equal(JSON.stringify(storedMember), originalMember, "writer capture must not modify null or native-clock legacy evidence");
+  const clockRows = rows.map(row => ({ ...row, snapshot_json: clockCapture }));
+  const storedBytes = JSON.stringify(clockRows);
+  const clockRestored = applyNbaLockedMemberSnapshotPrecedence({ games: [dynamic], dbIdByExternalId: map, rows: clockRows });
+  const currentEvidence = { ...storedMember.markets.moneyline.sportsbookSplits,
+    sourceObservedAt: "2026-10-20T22:05:00Z", lastUpdated: "2026-10-20T22:05:00Z" };
+  const response = adaptNbaToDailyEdgeResponse({ as_of: "2026-10-20T22:05:00Z", slate_date_et: "2026-10-20",
+    market_signals_capability: "available", games: clockRestored.games } as NbaDailyEdgeDto, {
+    lockedMemberGamesByExternalId: clockRestored.memberGamesByExternalId,
+    memberEvidenceByGame: new Map([[9001, { moneyline: { sportsbookSplits: currentEvidence } } as unknown as NbaMemberGameEvidence]]),
+  });
+  const exactReader = JSON.stringify(response);
+  assert.equal(sanitizeRetainedSharpSplitPresentation(response), 0);
+  assert.equal(JSON.stringify(response), exactReader, "NBA response cleanup cannot reinterpret a locked native or null clock");
+  assert.deepEqual(response.games[0]!.markets.moneyline.sportsbookSplits, storedMember.markets.moneyline.sportsbookSplits,
+    "exact locked source evidence must win over fresh dynamic clocks");
+  assert.equal(JSON.stringify(clockRows), storedBytes, "reader precedence cannot mutate stored locked bytes");
+}

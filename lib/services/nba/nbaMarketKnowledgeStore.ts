@@ -30,8 +30,7 @@ export async function loadNbaMarketKnowledgeStates(args: {
     if (existing && JSON.stringify(existing) !== JSON.stringify(row.knowledge)) throw new Error("NBA stored market knowledge-state copies disagree");
     result.set(externalId, row.knowledge);
   }
-  // This release changes pressure attribution, not the numerical forecast or
-  // market knowledge epoch. Carry only its exact predecessor's unlocked state
+  // Compatible input releases preserve the market knowledge epoch. Carry only its exact predecessor's unlocked state
   // when the current release has no state for that game; never reset anchors
   // merely because the grade/model stamp advances. Current state always wins.
   const missing = [...args.externalIdByDbId].filter(([, externalId]) => !result.has(externalId));
