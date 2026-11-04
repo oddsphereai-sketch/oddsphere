@@ -9,11 +9,13 @@ import type {
   NhlSplitPressureReceipt,
 } from "../services/nhl/nhlMarketEpisodeArbiter";
 
-export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r28_exact_price_professional_best" as const;
-export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r28_exact_price_professional_best" as const;
-export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r28_exact_price_professional_best" as const;
+export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r30_positive_value_actionability" as const;
+export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r30_positive_value_actionability" as const;
+export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r30_positive_value_actionability" as const;
 export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
   NHL_REGULAR_MODEL_RELEASE,
+  "nhl_regular_2026_r29_exact_event_date_professional_splits",
+  "nhl_regular_2026_r28_exact_price_professional_best",
   "nhl_regular_2026_r27_external_audited_sharp_reader",
   "nhl_regular_2026_r26_causal_joint_market_reader",
   "nhl_regular_2026_r25_categorical_total_response",
@@ -35,6 +37,8 @@ export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
 ] as const;
 export const NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES = [
   NHL_REGULAR_CALIBRATION_RELEASE,
+  "nhl_regular_calibration_2026_r29_exact_event_date_professional_splits",
+  "nhl_regular_calibration_2026_r28_exact_price_professional_best",
   "nhl_regular_calibration_2026_r27_external_audited_sharp_reader",
   "nhl_regular_calibration_2026_r26_causal_joint_market_reader",
   "nhl_regular_calibration_2026_r25_categorical_total_response",
@@ -80,6 +84,7 @@ export function resolveNhlPriceAwareVerdict(
   if (oddsAmerican <= -200 && verdict === "best_angle") return "lean";
 
   const exactPriceEdge = modelProbability - americanImpliedProbability(oddsAmerican);
+  if (verdict === "lean" && exactPriceEdge <= 0) return "watchlist";
   if (verdict === "best_angle" && market === "moneyline" && (modelProbability < 0.70 || exactPriceEdge < 0.05)) {
     return "lean";
   }

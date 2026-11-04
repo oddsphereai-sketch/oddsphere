@@ -10,6 +10,42 @@ cannot count as blind evidence. These are review obligations, not runtime
 activation gates, quotas, source weights or forecasting rules. Stored locked
 public records retain exact precedence.
 
+## Owner-directed cross-sport sharp-reader audit repairs — November 4
+
+The owner requested independent sharp-minded reviews across every Daily Edge
+model and correction of concrete signal-capture, interpretation and grade gaps.
+The first scoped live repairs are NBA grade R28 and NHL R30/reader R22. NBA must
+compose corroborated opposition after its initial economics grade, preserving
+the existing causal promotion rule and changing no score, probability, side or
+price. NHL must admit exact event-date professional splits under the R29 identity
+contract and prevent a nonpositive exact-price Lean from remaining actionable;
+its existing 58%/5pp puck-line promotion remains the paired positive rule.
+
+Both changes are future-unlocked only. Existing locked payloads and their exact
+grades, evidence, rationale and releases remain authoritative. Report actual
+board contraction openly, do not add a compensating play quota, and run focused
+side-symmetry, promotion/demotion, writer/reader precedence, full model-change,
+latest-main integration and post-deployment live checks before completion.
+
+## Owner-directed NHL professional split ingestion repair — November 4
+
+The cross-sport sharp-reader audit found that NHL member cards displayed exact
+current Circa splits while the prediction writer discarded the same rows solely
+because Owls omitted `event_start_time`. The rows retain an exact provider event
+date, exact away/home identity, source book, per-market source clock and complete
+money/ticket pair. The owner explicitly directed gaps in signal capture and
+application to be found and closed.
+
+The scoped future-unlocked repair advances NHL model/calibration/decision to R29
+and reader to R21. It may accept a missing-start row only when the provider event
+ID date matches the game's UTC or ET date, exact team orientation matches, and all
+existing single-event, market-pair, source-clock, freshness, conflict and target-
+exclusion guards pass. It must not infer a time, combine sources, convert a split
+percentage into goals, or reinterpret an R28 or older lock. Same-input board
+impact, paired promotion/demotion counts, focused reader/model/receipt tests,
+the full model-change gate, latest-main integration safety and protected live
+verification remain required.
+
 ## Owner-directed removal of CBB forecast-selection switch — November 4
 
 The owner explicitly rejected the R17 hand-written rule selecting the full

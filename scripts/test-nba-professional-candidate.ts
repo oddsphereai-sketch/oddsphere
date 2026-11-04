@@ -222,6 +222,7 @@ assert.deepEqual(applied.audit.professional_grade_context?.moneyline, {
   spreadReadQualified: true,
   spreadReadSide: "home",
   spreadCorrectionApplied: true,
+  spreadSideFlipped: true,
 });
 const intelligence = buildNbaGameIntelligence({
   snapshot,
@@ -265,7 +266,7 @@ const observedIntel = buildNbaGameIntelligence({ snapshot, prediction: observedP
 const originalIntel = buildNbaGameIntelligence({ snapshot, prediction: originalPrediction, lines: postureFixtureLines,
   splitsRow: null, opportunities: [], injuriesSource: "espn" });
 assert.equal(originalIntel.spread.grade, "best_angle");
-assert.equal(observedIntel.spread.grade, "lean");
+assert.equal(observedIntel.spread.grade, "watch");
 assert.equal(buildMarketSignal(observedIntel.spread), "market_resistance");
 assert.equal(buildNbaSharpStatus(observedIntel.spread), "mixed");
 const posture = observedIntel.spread.named_book_posture!;
@@ -287,10 +288,12 @@ assert.equal(buildMarketSignal({ ...observedIntel.spread,
   named_book_posture: { ...posture, pickedSide: "away", opposingSources: [], supportingSources: ["circa"] } }), "market_neutral",
 "wrong-pick evidence cannot claim confirmation");
 for (const key of ["ml", "spread", "total"] as const) {
-  for (const field of ["pick_side", "model_prob_on_pick", "consensus_line", "current_price", "effective_confidence"] as const) {
+  for (const field of ["pick_side", "model_prob_on_pick", "consensus_line", "current_price"] as const) {
     assert.deepEqual(observedIntel[key][field], originalIntel[key][field], `${key}:${field} unchanged by opposition plumbing`);
   }
 }
+assert.equal(observedIntel.spread.effective_confidence, 52,
+  "corroborated opposition caps the non-actionable Watchlist confidence without changing the forecast");
 
 const injuredSnapshot: NbaGameSnapshot = {
   ...snapshot,

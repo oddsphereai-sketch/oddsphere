@@ -286,6 +286,7 @@ export type NbaAutoModelAudit = {
       spreadReadQualified: boolean;
       spreadReadSide: "home" | "away" | null;
       spreadCorrectionApplied: boolean;
+      spreadSideFlipped?: boolean;
       jointConflict?: boolean;
     };
     spread: {

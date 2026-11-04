@@ -55,7 +55,7 @@ export function dailyEdgeMarketCapabilities(
     // Treat both keys as spread so the normalized recommendation layer does
     // not silently discard the splits that the football writer published.
     expectsConsensusSplits: key === "moneyline" || key === "total" || key === "spread" || key === "firstInning",
-    expectsSharpBookContext: false,
+    expectsSharpBookContext: key === "moneyline" || key === "total" || key === "spread" || key === "firstInning",
     isFirstInning: false,
     isSpreadLike: key === "spread" || key === "firstInning",
     isSoccerLike: false,

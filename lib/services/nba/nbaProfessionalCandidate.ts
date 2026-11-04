@@ -375,6 +375,8 @@ export function applyNbaProfessionalCandidate(args: {
               ? candidate.marketReader.reads.spread.side
               : null,
           spreadCorrectionApplied: candidate.readerDecisionAudit.spreadCorrectionApplied,
+          spreadSideFlipped: candidate.readerDecisionAudit.independentPicks.moneyline !==
+            candidate.readerDecisionAudit.finalPicks.moneyline,
           ...(candidate.marketConsequence ? { jointConflict: candidate.marketConsequence.books.some(b => b.jointStatus === "joint_conflict") ||
             candidate.marketConsequence.arbitration.margin.conflicts.length > 0 ||
             candidate.marketConsequence.reasons.some(r => r.includes("provider_economic_conflict")) } : {}),

@@ -187,7 +187,7 @@ const flowOpposed = run(movement("spread", -5.5, -3.5), [timedSplit], 10);
 assert.ok(flowOpposed.intel.spread.named_book_posture!.flowInterpretations!.some(p =>
   p.reaction === "opposed" && p.pressureSide === "home" && p.quoteSide === "away"));
 assert.ok(flowOpposed.candidate.final.marginHome < 10);
-assert.equal(gradeNbaMarket({ ...strongStatic, market: "spread", namedBookPosture: flowOpposed.intel.spread.named_book_posture }).grade, "lean");
+assert.equal(gradeNbaMarket({ ...strongStatic, market: "spread", namedBookPosture: flowOpposed.intel.spread.named_book_posture }).grade, "watch");
 assert.equal(buildMarketSignal(flowOpposed.intel.spread), "market_resistance");
 const unresolved = run(["circa", "pinnacle"].flatMap(book => [...pair("spread", book, opening, -5.5),
   ...pair("spread", book, current, book === "circa" ? -6.5 : -4.5)]));

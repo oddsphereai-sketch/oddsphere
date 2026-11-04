@@ -210,7 +210,11 @@ export function identifiedNhlProfessionalSplits(args: {
   const matching = args.feed.rows.filter((row) => {
     if (normalize(text(row.league) ?? "") !== "nhl") return false;
     const startAt = timestamp(row.event_start_time);
-    if (!startAt || !accepted.has(easternDate(startAt))) return false;
+    const eventDate = providerEventDate(row);
+    // Current Owls split rows do not always carry event_start_time. The event
+    // ID still carries the provider's exact event date, and exact away/home
+    // identity plus the single-event guard below prevents cross-game reuse.
+    if (startAt ? !accepted.has(easternDate(startAt)) : !eventDate || !accepted.has(eventDate)) return false;
     return teamMatches("nhl", row.away_team, args.awayAbbr)
       && teamMatches("nhl", row.home_team, args.homeAbbr);
   });
@@ -785,6 +789,13 @@ function hasMemberFacingFreshnessState(section: MarketSplitDisplaySection): bool
 }
 
 type MatchDateCache = { dates: Map<string, Set<string>>; eastern: Map<string, string> };
+function providerEventDate(row: Json): string | null {
+  const rawEventId = text(row.event_id) ?? "";
+  const dashed = rawEventId.match(/_(\d{4}-\d{2}-\d{2})(?:_|$)/)?.[1] ?? null;
+  const compact = rawEventId.match(/-(\d{4})(\d{2})(\d{2})(?:$|[-_])/);
+  return dashed ?? (compact ? `${compact[1]}-${compact[2]}-${compact[3]}` : null);
+}
+
 function cachedEasternDate(value: string, cache?: MatchDateCache): string {
   if (!cache) return easternDate(value);
   let date = cache.eastern.get(value);
@@ -798,12 +809,7 @@ function rowMatchesGame(row: Json, game: DailyEdgeGameDto, slateDate: string, sp
   let dates = cache?.dates.get(dateKey);
   if (!dates) { dates = acceptedDates(game.gameStartAt, slateDate); cache?.dates.set(dateKey, dates); }
   const startAt = timestamp(row.event_start_time);
-  const rawEventId = text(row.event_id) ?? "";
-  const dashedEventDate = rawEventId.match(/_(\d{4}-\d{2}-\d{2})(?:_|$)/)?.[1] ?? null;
-  const compactEventDate = rawEventId.match(/-(\d{4})(\d{2})(\d{2})(?:$|[-_])/);
-  const eventDate = dashedEventDate ?? (compactEventDate
-    ? `${compactEventDate[1]}-${compactEventDate[2]}-${compactEventDate[3]}`
-    : null);
+  const eventDate = providerEventDate(row);
   if (startAt ? !dates.has(cachedEasternDate(startAt, cache)) : !eventDate || !dates.has(eventDate)) return false;
   if (sport === "cbb") {
     if (startAt && game.gameStartAt &&

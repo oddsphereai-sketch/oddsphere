@@ -221,6 +221,33 @@ assert.equal(
   "lean",
   "direct Moneyline opposition cannot be erased by a Spread-authored final side",
 );
+const marginAdjustedWithoutWinnerFlip = gradeNbaMarket({
+  ...moneylineBestAngle,
+  moneylineEvidence: {
+    directReadQualified: false,
+    directReadSide: null,
+    spreadReadQualified: true,
+    spreadReadSide: "away",
+    spreadCorrectionApplied: true,
+    spreadSideFlipped: false,
+  },
+});
+assert.equal(marginAdjustedWithoutWinnerFlip.grade, "best_angle");
+assert.equal(marginAdjustedWithoutWinnerFlip.rationale.some((reason) => reason.includes("authored the final side")), false,
+  "a same-winner margin correction cannot be described as authoring the side");
+const actualWinnerFlip = gradeNbaMarket({
+  ...moneylineBestAngle,
+  moneylineEvidence: {
+    directReadQualified: false,
+    directReadSide: null,
+    spreadReadQualified: true,
+    spreadReadSide: "away",
+    spreadCorrectionApplied: true,
+    spreadSideFlipped: true,
+  },
+});
+assert.equal(actualWinnerFlip.rationale.some((reason) => reason.includes("authored the final side")), true,
+  "an actual winner flip retains the explicit reader-authorship rationale");
 assert.equal(
   gradeNbaMarket({
     ...moneylineBestAngle,

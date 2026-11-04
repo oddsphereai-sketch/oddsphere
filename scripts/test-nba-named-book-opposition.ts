@@ -79,6 +79,8 @@ assert.equal(gradeNbaR22MarketForAudit({ ...leanInput, namedBookPosture: corrobo
   "the frozen r22 comparison keeps an opposed Lean actionable");
 assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: corroboratedOpposition }).grade, "watch",
   "two opposing named books move a Lean to Watchlist");
+assert.equal(gradeNbaMarket({ ...base, namedBookPosture: corroboratedOpposition }).grade, "watch",
+  "corroborated opposition must not stop at Lean merely because economics first earned Best Angle");
 assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: { ...loneOpposition,
   conflictingSources: ["pinnacle"] } }).grade, "watch",
   "opposition corroborated by a different conflicting named book moves a Lean to Watchlist");
