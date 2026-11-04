@@ -7,9 +7,11 @@ import {
 import { regulationScore } from "./uclCompetitionContext";
 
 export const UCL_ELO_STRENGTH_FOUNDATION_RELEASE =
-  "ucl_elo_strength_foundation_2026_10_14_r1_local_public_consensus" as const;
+  "ucl_elo_strength_foundation_2026_11_04_r2_canonical_club_lineages" as const;
+const LEGACY_FOUNDATION_RELEASE = "ucl_elo_strength_foundation_2026_10_14_r1_local_public_consensus" as const;
 
-const SNAPSHOT_KEY = "soccer::uefa_champions_league::elo-strength-foundation::r1";
+const SNAPSHOT_KEY = "soccer::uefa_champions_league::elo-strength-foundation::r2";
+const LEGACY_SNAPSHOT_KEY = "soccer::uefa_champions_league::elo-strength-foundation::r1";
 const SNAPSHOT_TTL_MS = 7 * 24 * 60 * 60_000;
 const SNAPSHOT_STALE_MS = 35 * 24 * 60 * 60_000;
 const PUBLIC_ELO_URL = "https://raw.githubusercontent.com/xgabora/Club-Football-Match-Data/main/data/EloRatings.csv";
@@ -32,11 +34,12 @@ export type UclEloClubRating = {
 
 export type UclEloStrengthFoundationPayload = {
   schemaVersion: 1;
-  release: typeof UCL_ELO_STRENGTH_FOUNDATION_RELEASE;
+  release: typeof UCL_ELO_STRENGTH_FOUNDATION_RELEASE | typeof LEGACY_FOUNDATION_RELEASE;
   generatedAt: string;
   domesticMatches: number;
   uclMatches: number;
   clubs: Record<string, UclEloClubRating>;
+  identityBasis?: { kind: "intact_legacy_lineages"; sourceRelease: string; sourceGeneratedAt: string };
 };
 
 export type UclEloPair = {
@@ -46,7 +49,7 @@ export type UclEloPair = {
   awayPublic: number | null;
   homeGames: number;
   awayGames: number;
-  sourceRelease: typeof UCL_ELO_STRENGTH_FOUNDATION_RELEASE;
+  sourceRelease: UclEloStrengthFoundationPayload["release"];
 };
 
 function parseCsv(line: string): string[] {
@@ -108,6 +111,9 @@ export function normalizeUclEloClub(value: string): string {
     "fk qarabag": "qarabag",
     "bodo glimt": "bodoe glimt",
     "shakhtar donetsk": "shakhtar",
+    "aek athens": "aek",
+    "lask linz": "lask",
+    "viking fk": "viking",
   };
   return aliases[normalized] ?? normalized;
 }
@@ -243,11 +249,28 @@ export function buildUclEloStrengthFoundation(input: {
 }
 
 export function validateUclEloStrengthFoundation(payload: UclEloStrengthFoundationPayload): UclEloStrengthFoundationPayload {
-  if (payload.schemaVersion !== 1 || payload.release !== UCL_ELO_STRENGTH_FOUNDATION_RELEASE) throw new Error("UCL Elo foundation release mismatch");
+  if (payload.schemaVersion !== 1 || ![UCL_ELO_STRENGTH_FOUNDATION_RELEASE, LEGACY_FOUNDATION_RELEASE].includes(payload.release)) throw new Error("UCL Elo foundation release mismatch");
   if (!Number.isFinite(Date.parse(payload.generatedAt)) || payload.domesticMatches < 1_000 || payload.uclMatches < 100) throw new Error("UCL Elo foundation coverage incomplete");
   const valid = Object.values(payload.clubs).filter((club) => Number.isFinite(club.localElo) && club.localGames >= 0);
   if (valid.length < 100) throw new Error("UCL Elo foundation club coverage incomplete");
   return payload;
+}
+
+/** Convert old raw club identities without pretending separately accumulated
+ * Elo values can be added. Existing canonical lineage wins; otherwise select
+ * one intact most-observed lineage. Source time is never refreshed. */
+export function canonicalUclEloFoundation(payload: UclEloStrengthFoundationPayload): UclEloStrengthFoundationPayload {
+  const groups = new Map<string,Array<[string,UclEloClubRating]>>();
+  for (const entry of Object.entries(payload.clubs)) {
+    const canonical = normalizeUclEloClub(entry[0]);
+    groups.set(canonical, [...(groups.get(canonical) ?? []), entry]);
+  }
+  const clubs = Object.fromEntries([...groups].map(([canonical, rows]) => [canonical,
+    {...rows.sort(([a,left],[b,right]) => (a===canonical?0:1)-(b===canonical?0:1)
+      || right.localGames-left.localGames || a.localeCompare(b))[0]![1]}]));
+  return { ...payload, release: UCL_ELO_STRENGTH_FOUNDATION_RELEASE, clubs,
+    ...(payload.release === LEGACY_FOUNDATION_RELEASE ? { identityBasis: { kind: "intact_legacy_lineages" as const,
+      sourceRelease: payload.release, sourceGeneratedAt: payload.generatedAt } } : {}) };
 }
 
 export function uclEloPair(
@@ -255,8 +278,17 @@ export function uclEloPair(
   homeName: string,
   awayName: string,
 ): UclEloPair {
-  const home = payload.clubs[normalizeUclEloClub(homeName)] ?? { localElo: 1500, localGames: 0, publicElo: null };
-  const away = payload.clubs[normalizeUclEloClub(awayName)] ?? { localElo: 1500, localGames: 0, publicElo: null };
+  // Prefer the intact canonical lineage in legacy R1 payloads. Never average
+  // or sum final Elo scalars/game counts from aliases. Future event rebuilds
+  // use the same normalizer and therefore accumulate one club identity.
+  const lookup = (name: string) => {
+    const canonical = normalizeUclEloClub(name);
+    return payload.clubs[canonical] ?? Object.entries(payload.clubs)
+      .filter(([key]) => normalizeUclEloClub(key) === canonical)
+      .sort(([a,left],[b,right]) => right.localGames-left.localGames || a.localeCompare(b))[0]?.[1]
+      ?? { localElo: 1500, localGames: 0, publicElo: null };
+  };
+  const home = lookup(homeName), away = lookup(awayName);
   return {
     homeLocal: home.localElo,
     awayLocal: away.localElo,
@@ -275,6 +307,16 @@ export async function loadUclEloStrengthFoundation(input: {
 }): Promise<UclEloStrengthFoundationPayload> {
   const fresh = (await readLabResponseSnapshot<UclEloStrengthFoundationPayload>(SNAPSHOT_KEY, "fresh").catch(() => null))?.payload;
   if (fresh) return validateUclEloStrengthFoundation(fresh);
+  const legacy = (await readLabResponseSnapshot<UclEloStrengthFoundationPayload>(LEGACY_SNAPSHOT_KEY, "fresh").catch(() => null))?.payload;
+  if (legacy) {
+    const migrated = canonicalUclEloFoundation(validateUclEloStrengthFoundation(legacy));
+    if (input.allowWrite) await upsertLabResponseSnapshot({ snapshotKey: SNAPSHOT_KEY, kind: "daily_edge", sport: "soccer",
+      slateDate: migrated.generatedAt.slice(0,10), payload: migrated,
+      ttlMs: Math.max(0, Date.parse(migrated.generatedAt)+SNAPSHOT_TTL_MS-Date.now()),
+      staleMs: Math.max(0, Date.parse(migrated.generatedAt)+SNAPSHOT_STALE_MS-Date.now()),
+      source: "ucl_elo_strength_foundation", payloadVersion: UCL_ELO_STRENGTH_FOUNDATION_RELEASE });
+    return migrated;
+  }
   try {
     const [domestic, publicElo] = await Promise.all([fetchDomesticMatches(), fetchPublicElo()]);
     const payload = validateUclEloStrengthFoundation(buildUclEloStrengthFoundation({
@@ -299,8 +341,9 @@ export async function loadUclEloStrengthFoundation(input: {
     }
     return payload;
   } catch (error) {
-    const latest = (await readLatestLabResponseSnapshot<UclEloStrengthFoundationPayload>(SNAPSHOT_KEY).catch(() => null))?.payload;
-    if (latest) return validateUclEloStrengthFoundation(latest);
+    const latest = (await readLatestLabResponseSnapshot<UclEloStrengthFoundationPayload>(SNAPSHOT_KEY).catch(() => null))?.payload
+      ?? (await readLatestLabResponseSnapshot<UclEloStrengthFoundationPayload>(LEGACY_SNAPSHOT_KEY).catch(() => null))?.payload;
+    if (latest) return canonicalUclEloFoundation(validateUclEloStrengthFoundation(latest));
     throw error;
   }
 }

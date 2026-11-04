@@ -1,5 +1,7 @@
 import type { DailyEdgeResponse, MarketEdgeDto } from "@/app/lab/lib/labTypes";
 import type { UclSlate } from "./buildUclSlate";
+import { actionableGrade, UCL_PREVIEW_GRADE_RELEASE, uclExactPriceExpectedValue, type ForecastSide } from "./uclTransferredGrade";
+import type { UclRelativeMarketReadReceipt } from "./uclRelativeMarketRead";
 
 export type UclPublicationCoverage = {
   activeFixtures: number;
@@ -10,6 +12,8 @@ export type UclPublicationCoverage = {
   outcomeExpected: number;
   heldMarkets: number;
   nonpositiveEvActionables: number;
+  qualifiedConfidenceLeans: number;
+  unqualifiedActionables: number;
   priceCollapse: boolean;
   unlockedPriceRegressions: number;
   hardErrors: string[];
@@ -54,6 +58,35 @@ export function evaluateUclPublicationCoverage(
     (market.verdict?.key === "best_angle" || market.verdict?.key === "lean")
       && !(typeof market.pinnacleEvPct === "number" && market.pinnacleEvPct > 0)
   ).length;
+  let qualifiedConfidenceLeans = 0, unqualifiedActionables = 0;
+  for (const game of games) for (const [name, market] of [
+    ["match_result",game.markets.moneyline], ["total",game.markets.total], ["btts",game.markets.first_inning],
+    ["double_chance",game.soccerDoubleChanceMarket],
+  ] as const) {
+    if (!market || !["lean","best_angle"].includes(market.verdict?.key)
+      || typeof market.pinnacleEvPct === "number" && market.pinnacleEvPct > 0) continue;
+    // A verified locked public tuple keeps its own release's semantics. It
+    // cannot be rejected or regraded by a new publication policy.
+    if (game.lockState === "locked" && game.lockedAt) continue;
+    const p = market.modelProb, price = market.priceAmerican, q = market.marketFairProb;
+    const side = name === "match_result" ? market.soccerMatchResultContext?.displayed_side
+      : name === "total" ? market.soccerTotalContext?.displayed_side : market.soccerBttsContext?.displayed_side;
+    const read = (game.soccerModelProvenance?.goalsReader as {relativeMarketReader?:UclRelativeMarketReadReceipt}|undefined)?.relativeMarketReader;
+    const probabilities = game.soccerProjection?.goalOutlookProbabilities;
+    const jointProbability = !probabilities ? null : side === "home" ? probabilities.home : side === "away" ? probabilities.away
+      : side === "draw" ? probabilities.draw : side === "over" ? probabilities.over25 : side === "under" ? probabilities.under25
+      : side === "yes" ? probabilities.bttsYes : side === "no" ? probabilities.bttsNo : null;
+    const qualified = name !== "double_chance" && market.verdict.key === "lean"
+      && market.reviewFlags?.includes(UCL_PREVIEW_GRADE_RELEASE) && !market.held
+      && typeof p === "number" && Number.isFinite(p) && typeof price === "number"
+      && market.currentPriceAmerican === price && typeof q === "number" && Number.isFinite(q)
+      && jointProbability !== null && Math.abs(p-jointProbability) <= 1e-9
+      && typeof market.pinnacleEvPct === "number" && Math.abs(market.pinnacleEvPct-100*uclExactPriceExpectedValue(p,price)) <= 1e-8
+      && (name !== "total" || market.line === 2.5)
+      && actionableGrade({market:name,probability:p,price,fairProbability:q,side:side as ForecastSide,
+        read:read?.markets[name],legacyLean:false})?.verdict.key === "lean";
+    if (qualified) qualifiedConfidenceLeans++; else unqualifiedActionables++;
+  }
   const incoherent = games.filter((game) => {
     const probabilities = game.soccerProjection?.goalOutlookProbabilities;
     return !probabilities
@@ -82,7 +115,7 @@ export function evaluateUclPublicationCoverage(
     ...(games.length === activeIds.size ? [] : [`fixture/model coverage ${games.length}/${activeIds.size}`]),
     ...(markets.length === selectedExpected ? [] : [`market prediction coverage ${markets.length}/${selectedExpected}`]),
     ...(incoherent === 0 ? [] : [`coherent PMF coverage ${games.length - incoherent}/${games.length}`]),
-    ...(nonpositiveEvActionables === 0 ? [] : [`positive-EV actionable coverage ${markets.length - nonpositiveEvActionables}/${markets.length}`]),
+    ...(unqualifiedActionables === 0 ? [] : [`qualified actionable coverage ${markets.length - unqualifiedActionables}/${markets.length}`]),
   ];
   const errors = [
     ...hardErrors,
@@ -98,7 +131,7 @@ export function evaluateUclPublicationCoverage(
     ...(selectedCurrent === selectedExpected ? [] : [`selected current-price coverage ${selectedCurrent}/${selectedExpected}; missing markets held`]),
     ...(outcomeCurrent === outcomeExpected ? [] : [`outcome price-board coverage ${outcomeCurrent}/${outcomeExpected}; missing outcomes held`]),
   ];
-  return { activeFixtures: activeIds.size, responseFixtures: games.length, selectedCurrent, selectedExpected, outcomeCurrent, outcomeExpected, heldMarkets, nonpositiveEvActionables, priceCollapse, unlockedPriceRegressions, hardErrors, errors, warnings };
+  return { activeFixtures: activeIds.size, responseFixtures: games.length, selectedCurrent, selectedExpected, outcomeCurrent, outcomeExpected, heldMarkets, nonpositiveEvActionables, qualifiedConfidenceLeans, unqualifiedActionables, priceCollapse, unlockedPriceRegressions, hardErrors, errors, warnings };
 }
 
 /** On a same-cohort all-price outage, retain every non-due LKG card while

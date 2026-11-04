@@ -17,7 +17,7 @@ import { applyUclStoredQuoteFallback, UCL_STORED_QUOTE_FALLBACK_RELEASE } from "
 
 export { hydrateEplPriceHistory as hydrateUclPriceHistory, hydrateEplStoredPriceHistory as hydrateUclStoredPriceHistory };
 export type UclStoredPriceObservation = EplStoredPriceObservation;
-export const UCL_PROJECTED_SCORE_RELEASE = "ucl_projected_score_2026_11_03_r10_attested_stored_paths" as const;
+export const UCL_PROJECTED_SCORE_RELEASE = "ucl_projected_score_2026_11_04_r11_opponent_strength_score_law" as const;
 
 export type UclPreviewBuildOptions = Pick<EplPreviewBuildOptions,
   "captureAllBookPrices"
@@ -191,6 +191,8 @@ export async function buildUclDailyEdgePreview(slate: UclSlate, options: UclPrev
           ...game.soccerModelProvenance,
           coherentOutcomeRelease: UCL_COHERENT_MARKET_OUTCOME_RELEASE,
           projectedScoreRelease: UCL_PROJECTED_SCORE_RELEASE,
+          independentScoreInputs: match?.prediction && "adjustment" in match.prediction
+            ? (match.prediction as import("./uclModel").UclPrediction).adjustment : undefined,
           regulationTime: true,
         } : null,
         breakdown: {

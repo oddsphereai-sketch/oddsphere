@@ -2,7 +2,7 @@ import type { Grade } from "@/lib/types/domain/Grade";
 import type { UclRelativeMarketAxisReceipt } from "./uclRelativeMarketRead";
 
 export const UCL_PREVIEW_GRADE_RELEASE =
-  "ucl_grade_policy_2026_11_03_r22_attested_stored_paths" as const;
+  "ucl_grade_policy_2026_11_04_r23_opponent_strength_score_law" as const;
 
 export type UclPreviewMarket = "match_result" | "double_chance" | "total" | "btts";
 export type UclPreviewGrade = {
@@ -22,7 +22,7 @@ export function uclExactPriceExpectedValue(probability: number, american: number
   return probability * decimal - 1;
 }
 
-type ForecastSide = "home" | "draw" | "away" | "over" | "under" | "yes" | "no";
+export type ForecastSide = "home" | "draw" | "away" | "over" | "under" | "yes" | "no";
 
 /** Price movement confirms a prediction; it is not an independent value quote.
  * A native Total's currentTargetProbabilities are its translated2.5 outlook,
@@ -43,7 +43,7 @@ function movementConfirmation(market: UclPreviewMarket, side: ForecastSide | und
   return { aligned: true, originator: read.selected.sourceClass === "named_originator" && !read.retraced };
 }
 
-function actionableGrade(input: { market: "match_result" | "total" | "btts"; probability: number; price: number;
+export function actionableGrade(input: { market: "match_result" | "total" | "btts"; probability: number; price: number;
   fairProbability: number | null; side?: ForecastSide; read?: UclRelativeMarketAxisReceipt; legacyLean: boolean }): UclPreviewGrade | null {
   if (!Number.isFinite(input.probability) || input.probability <= 0 || input.probability >= 1 ||
     !Number.isFinite(input.price) || Math.abs(input.price) < 100 || input.price < -350) return null;

@@ -1009,6 +1009,8 @@ export type DailyEdgeGameDto = {
   } | null;
   /** Locked audit provenance for the single coherent soccer score PMF. */
   soccerModelProvenance?: {
+    /** Prospective UCL independent fit/strength inputs; old locks stay exact. */
+    independentScoreInputs?: import("@/lib/services/ucl/uclModel").UclPrediction["adjustment"];
     coherentOutcomeRelease: string;
     projectedScoreRelease?: string;
     source: "independent_club_pmf" | "target_excluded_total_tilt" | "target_excluded_opening_match_result_log_pool" | "target_excluded_late_match_result_log_pool" | "target_excluded_goals_arbitration" | "relative_same_book_market_paths";
