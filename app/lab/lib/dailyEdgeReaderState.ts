@@ -25,6 +25,9 @@ export function primaryDailyEdgeMarket(
   return MARKET_KEYS.reduce((best, candidate) => {
     const bestRank = VERDICT_RANK[game.markets[best].verdict.key] ?? 0;
     const candidateRank = VERDICT_RANK[game.markets[candidate].verdict.key] ?? 0;
+    if(candidateRank===bestRank&&game.markets[best].verdict.key==="watchlist"&&
+      game.markets[best].reviewFlags?.includes("informational_non_actionable_price")&&
+      !game.markets[candidate].reviewFlags?.includes("informational_non_actionable_price"))return candidate;
     return candidateRank > bestRank ? candidate : best;
   }, MARKET_KEYS[0]);
 }

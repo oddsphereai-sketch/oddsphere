@@ -1,0 +1,96 @@
+{
+  "scope": "Owner-directed correction of CBB Moneyline price-only eligibility and active-board Watchlist headline selection; no forecasting coefficients or accuracy claim.",
+  "baseSha": "0b7013618257926e4fc629692d63df4b56178547",
+  "releases": {
+    "model": "cbb_candidate_2026_11_04_r16_contextual_authority_handoff unchanged",
+    "receipt": "R12 unchanged",
+    "independent": "R4 unchanged",
+    "path": "R5 unchanged",
+    "grade": "cbb_2026_11_04_r20_moneyline_value_eligibility",
+    "board": "R21 moneyline_value_eligibility",
+    "publisher": "R31 moneyline_value_eligibility",
+    "tracking": "R19 moneyline_value_eligibility",
+    "adapter": "R20 moneyline_value_eligibility"
+  },
+  "rootCauses": [
+    "The current market grade required ML price>=-250 in addition to positive exact-price EV, hiding a genuine Charlotte value Lean.",
+    "The active production board used dailyEdgeReaderState rather than the tested legacy headline helper, so a new price-only ML Watch could still bury a positive-value Total Watch."
+  ],
+  "changes": [
+    "Remove only the current-reader ML price floor. Preserve3%/8% reserves, professional-value/action support, resistance and all non-ML contract rules.",
+    "Honor the existing informational_non_actionable_price flag on equal-Watch ties in the actual active-reader helper; preserve explicit user selection and all unflagged precedence."
+  ],
+  "actualSameInputImpact": {
+    "attemptedGames": 28,
+    "includedGames": 28,
+    "excludedGames": 0,
+    "markets": 84,
+    "oldCounts": {
+      "Watchlist": 46,
+      "Lean": 38
+    },
+    "newCounts": {
+      "Watchlist": 45,
+      "Lean": 39
+    },
+    "actionablePromotions": 1,
+    "actionableDemotions": 0,
+    "newBest": 0,
+    "gradeChanges": 1,
+    "nonMLGradeChanges": 0,
+    "numericAndSelectionChanges": 0,
+    "scoreChanges": 0,
+    "uncertaintyChanges": 0,
+    "coherenceIssues": [],
+    "nonMLDecisionChanges": 0,
+    "unchangedNonMLMarkets": 56
+  },
+  "actualPromotion": {
+    "gameId": 10882652,
+    "market": "moneyline",
+    "pick": "CLT",
+    "price": -850,
+    "probability": 0.9231859526730855,
+    "expectedValue": 0.03179606475227198,
+    "before": "Watchlist",
+    "after": "Lean",
+    "professionalConfirmation": false,
+    "gradeBasis": "model_value"
+  },
+  "unchanged": [
+    "all scores and probabilities/pushes",
+    "all picks/lines/physical books/prices/EV",
+    "all56non-Moneyline decisions",
+    "source budgets/poll cadence",
+    "writer/lease ownership",
+    "stake policy"
+  ],
+  "functionalCoverage": [
+    "actual CLT full-reader/board promotion",
+    "source-native89% profile and-350 executable price produce qualified Best beyond old floor",
+    "mirrored away favorite",
+    "same law at worse payout demotes Best to Lean then Watch",
+    "99% native held pressure cannot bypass negative EV",
+    "missing inputs Held",
+    "non-Moneyline -600/-500 boundary unchanged",
+    "actual active-reader helper failed before/fixed after positive-Total versus price-only-ML Watch case"
+  ],
+  "locks": "Exact R19 No Play, negative-value Watch and actual Charlotte positive-value Watch remain frozen through reader/writer/tracking. Current unlocked Charlotte may become Lean; old R19 Charlotte locks may not. Model16/calR19/model_usedr16 and original writer stamp18 remain exact.",
+  "checks": {
+    "fullModelChangeGate": "PASS; optional local PostgreSQL proof unset, remote PR proof required",
+    "focused": "PASS",
+    "typescript": "PASS",
+    "eslint": "PASS",
+    "sameInputReplay": "28/28 old baseline exact; one actionable promotion, zero demotions or numeric changes"
+  },
+  "independentReviews": {
+    "A": "Version/compatibility audit and exact R19 locked variants passed.",
+    "C": "28game/84market exact baseline replay; only CharlotteML changes.",
+    "D": "Full-reader price/source controls passed; no new cap, score nudge or weaker-side substitution."
+  },
+  "knownBoundary": "This closes a payout eligibility defect and active headline path; it does not replace the broader whole-current-source-law inference method or establish improved accuracy.",
+  "publication": "Requires clean latest-main committed integration guard, protected up-to-date PR, remote tree match, production commit and normal-cycle live writer/reader/lock proof.",
+  "newPaidServices": 0,
+  "newProviderRequests": 0,
+  "auditDatabaseWrites": 0
+}

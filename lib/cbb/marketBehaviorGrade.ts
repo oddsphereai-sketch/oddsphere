@@ -133,7 +133,11 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
     (responseBound(s)&&s.flowResponse==="held"&&s.boundFlowDirection!==null&&s.boundFlowDirection*sign>0)||
     (s.recentDirection*sign<0&&!fullyAppliedPriceResponse(s))));
   const corroboratedOpposition=new Set(unresolvedSources.map(s=>s.book)).size>=2;
-  const modelExpectedValue=base.expectedValue,eligible=base.price!==null&&base.price>=(input.target.market==="moneyline"?-250:-500);
+  // Moneyline risk is already expressed in its executable payout and the
+  // resulting EV. A second -250 cutoff must not veto genuinely positive
+  // value or qualified market support. Keep the existing non-ML contract rule.
+  const modelExpectedValue=base.expectedValue,eligible=base.price!==null&&
+    (input.target.market==="moneyline"||base.price>=-500);
   let grade:CbbProvisionalGrade=base.grade,reason=base.reason,gradeBasis="held_or_non_actionable";
   if(modelExpectedValue!==null){
     // A source's vig-negative implied EV is not a veto on independent value.
