@@ -34,7 +34,13 @@ export function seedUclSlate(input: { slate: UclSlate; apply: boolean; client?: 
 }
 
 export function writeUclPredictionRecords(input: { slate: UclSlate; response: DailyEdgeResponse; apply: boolean; now?: Date; client?: typeof supabase }) {
-  return writeEplPredictionRecords({ ...input, config: uclPipelineConfig(input.slate) });
+  // Historical scaffolding is never a forecast eligible for a new write,
+  // even if the request-start clock predates kickoff. Stored locks are read
+  // and restored by their existing authoritative path, never recreated here.
+  const eligible=new Set(input.slate.matches.filter(m=>m.prediction?.release===input.slate.modelRelease
+    && m.prediction.calibrationRelease===input.slate.calibrationRelease).map(m=>m.id));
+  const response={...input.response,games:input.response.games.filter(g=>eligible.has(Number(g.external_id)))};
+  return writeEplPredictionRecords({ ...input, response, config: uclPipelineConfig(input.slate) });
 }
 
 export function findUclGamesEnteringLock(now = new Date()) {
@@ -194,8 +200,14 @@ export async function verifyUclAllMarketLocks(input: {
     // capture is authoritative when all four rows agree with their own release
     // stamps and scalar tuple; a later reader release must never replace it.
     const legacyIdentity = !currentAuthority && snapshotAuthorityMatchesRow(row);
+    // After kickoff the normal writer proposes no replacement. An existing
+    // current-release lock must then prove itself from its own captured tuple,
+    // just as a legacy lock does. Never use this branch to excuse a mismatching
+    // freshly proposed tuple, and never reconstruct a missing stored field.
+    const existingCurrentIdentity = currentAuthority && expected === undefined
+      && snapshotAuthorityMatchesRow(row);
     const capturedMarket = memberMarketAtCapture(row);
-    if (!row.locked_at || !snapshotAuthorityMatchesRow(row) || (!currentIdentity && !legacyIdentity)
+    if (!row.locked_at || !snapshotAuthorityMatchesRow(row) || (!currentIdentity && !legacyIdentity && !existingCurrentIdentity)
       || !capturedMarket || !memberMarketMatchesRecord(capturedMarket, row)) continue;
     const cohorts = cohortsByProvider.get(providerId) ?? new Map<string, Map<string, UclLockedRecord>>();
     const cohort = cohorts.get(lockedCohortKey(row)) ?? new Map<string, UclLockedRecord>();

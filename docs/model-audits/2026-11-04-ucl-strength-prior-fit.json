@@ -1,0 +1,1832 @@
+{
+  "release": "ucl_strength_score_prior_2026_11_04_r1_original_dated_ratings",
+  "fit": {
+    "coefficientPer400": 0.6748444915670129,
+    "coefficientStdError": 0.1206552725060845,
+    "homeRate": 1.7790105652967545,
+    "awayRate": 1.3089765303776084,
+    "trainingRows": 147,
+    "iterations": 4,
+    "converged": true,
+    "logLikelihood": -164.52238104023897,
+    "minimumRatingDifference": -569.3399999999999,
+    "maximumRatingDifference": 600.0800000000002
+  },
+  "trainingCutoff": "2025-06-02T00:00:00Z",
+  "source": "https://raw.githubusercontent.com/xgabora/Club-Football-Match-Data/main/data/EloRatings.csv",
+  "authenticSourceCutoff": "2025-06-01",
+  "sourceRange": "bytes=-2500000",
+  "sourceHash": "d9bd8719800ea19f3d4e494b10e69d2a41cd5080155e59590881601f24c00a7f",
+  "trainingAvailable": 185,
+  "missing": [
+    {
+      "fixture": "Aston Villa at Young Boys",
+      "homeMissing": true,
+      "awayMissing": false
+    },
+    {
+      "fixture": "Dinamo Zagreb at Bayern Munich",
+      "homeMissing": false,
+      "awayMissing": true
+    },
+    {
+      "fixture": "Shakhtar Donetsk at Bologna",
+      "homeMissing": false,
+      "awayMissing": true
+    },
+    {
+      "fixture": "RB Salzburg at Sparta Prague",
+      "homeMissing": true,
+      "awayMissing": false
+    },
+    {
+      "fixture": "Slovan Bratislava at Celtic",
+      "homeMissing": false,
+      "awayMissing": true
+    },
+    {
+      "fixture": "Sparta Prague at VfB Stuttgart",
+      "homeMissing": false,
+      "awayMissing": true
+    },
+    {
+      "fixture": "Young Boys at Barcelona",
+      "homeMissing": false,
+      "awayMissing": true
+    },
+    {
+      "fixture": "Manchester City at Slovan Bratislava",
+      "homeMissing": true,
+      "awayMissing": false
+    },
+    {
+      "fixture": "Atalanta at Shakhtar Donetsk",
+      "homeMissing": true,
+      "awayMissing": false
+    },
+    {
+      "fixture": "AS Monaco at Dinamo Zagreb",
+      "homeMissing": true,
+      "awayMissing": false
+    },
+    {
+      "fixture": "Shakhtar Donetsk at Arsenal",
+      "homeMissing": false,
+      "awayMissing": true
+    },
+    {
+      "fixture": "Slovan Bratislava at Girona",
+      "homeMissing": false,
+      "awayMissing": true
+    },
+    {
+      "fixture": "Sparta Prague at Manchester City",
+      "homeMissing": false,
+      "awayMissing": true
+    },
+    {
+      "fixture": "Dinamo Zagreb at RB Salzburg",
+      "homeMissing": false,
+      "awayMissing": true
+    },
+    {
+      "fixture": "Internazionale at Young Boys",
+      "homeMissing": true,
+      "awayMissing": false
+    },
+    {
+      "fixture": "Dinamo Zagreb at Slovan Bratislava",
+      "homeMissing": true,
+      "awayMissing": true
+    },
+    {
+      "fixture": "Young Boys at Shakhtar Donetsk",
+      "homeMissing": true,
+      "awayMissing": true
+    },
+    {
+      "fixture": "Brest at Sparta Prague",
+      "homeMissing": true,
+      "awayMissing": false
+    },
+    {
+      "fixture": "AC Milan at Slovan Bratislava",
+      "homeMissing": true,
+      "awayMissing": false
+    },
+    {
+      "fixture": "Atl\u00e9tico Madrid at Sparta Prague",
+      "homeMissing": true,
+      "awayMissing": false
+    },
+    {
+      "fixture": "Atalanta at Young Boys",
+      "homeMissing": true,
+      "awayMissing": false
+    },
+    {
+      "fixture": "Borussia Dortmund at Dinamo Zagreb",
+      "homeMissing": true,
+      "awayMissing": false
+    },
+    {
+      "fixture": "Shakhtar Donetsk at PSV Eindhoven",
+      "homeMissing": false,
+      "awayMissing": true
+    },
+    {
+      "fixture": "Celtic at Dinamo Zagreb",
+      "homeMissing": true,
+      "awayMissing": false
+    },
+    {
+      "fixture": "Bayern Munich at Shakhtar Donetsk",
+      "homeMissing": true,
+      "awayMissing": false
+    },
+    {
+      "fixture": "Slovan Bratislava at Atl\u00e9tico Madrid",
+      "homeMissing": false,
+      "awayMissing": true
+    },
+    {
+      "fixture": "Sparta Prague at Feyenoord Rotterdam",
+      "homeMissing": false,
+      "awayMissing": true
+    },
+    {
+      "fixture": "Young Boys at VfB Stuttgart",
+      "homeMissing": false,
+      "awayMissing": true
+    },
+    {
+      "fixture": "VfB Stuttgart at Slovan Bratislava",
+      "homeMissing": true,
+      "awayMissing": false
+    },
+    {
+      "fixture": "Brest at Shakhtar Donetsk",
+      "homeMissing": true,
+      "awayMissing": false
+    },
+    {
+      "fixture": "Dinamo Zagreb at Arsenal",
+      "homeMissing": false,
+      "awayMissing": true
+    },
+    {
+      "fixture": "Young Boys at Celtic",
+      "homeMissing": false,
+      "awayMissing": true
+    },
+    {
+      "fixture": "Internazionale at Sparta Prague",
+      "homeMissing": true,
+      "awayMissing": false
+    },
+    {
+      "fixture": "Sparta Prague at Bayer Leverkusen",
+      "homeMissing": false,
+      "awayMissing": true
+    },
+    {
+      "fixture": "Slovan Bratislava at Bayern Munich",
+      "homeMissing": false,
+      "awayMissing": true
+    },
+    {
+      "fixture": "Shakhtar Donetsk at Borussia Dortmund",
+      "homeMissing": false,
+      "awayMissing": true
+    },
+    {
+      "fixture": "AC Milan at Dinamo Zagreb",
+      "homeMissing": true,
+      "awayMissing": false
+    },
+    {
+      "fixture": "Red Star Belgrade at Young Boys",
+      "homeMissing": true,
+      "awayMissing": false
+    }
+  ],
+  "rows": [
+    {
+      "id": 1373,
+      "kickoff": "2024-09-17T16:45:00.000Z",
+      "homeElo": 1829.4,
+      "awayElo": 1799.48,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 3,
+      "awayGoals": 1,
+      "weight": 0.6134691859272635
+    },
+    {
+      "id": 1375,
+      "kickoff": "2024-09-17T19:00:00.000Z",
+      "homeElo": 1821.77,
+      "awayElo": 1903.09,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 1,
+      "awayGoals": 3,
+      "weight": 0.6135784142554613
+    },
+    {
+      "id": 1377,
+      "kickoff": "2024-09-17T19:00:00.000Z",
+      "homeElo": 1993.12,
+      "awayElo": 1799.68,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 3,
+      "awayGoals": 1,
+      "weight": 0.6135784142554613
+    },
+    {
+      "id": 1378,
+      "kickoff": "2024-09-17T19:00:00.000Z",
+      "homeElo": 1838.47,
+      "awayElo": 1756.8,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 2,
+      "awayGoals": 0,
+      "weight": 0.6135784142554613
+    },
+    {
+      "id": 1382,
+      "kickoff": "2024-09-18T19:00:00.000Z",
+      "homeElo": 1712.48,
+      "awayElo": 1874.08,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 0,
+      "awayGoals": 3,
+      "weight": 0.614744727223216
+    },
+    {
+      "id": 1383,
+      "kickoff": "2024-09-18T19:00:00.000Z",
+      "homeElo": 2061.4,
+      "awayElo": 1966.39,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 0,
+      "awayGoals": 0,
+      "weight": 0.614744727223216
+    },
+    {
+      "id": 1384,
+      "kickoff": "2024-09-18T19:00:00.000Z",
+      "homeElo": 1899.04,
+      "awayElo": 1800.78,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 1,
+      "awayGoals": 0,
+      "weight": 0.614744727223216
+    },
+    {
+      "id": 1385,
+      "kickoff": "2024-09-19T16:45:00.000Z",
+      "homeElo": 1740.77,
+      "awayElo": 1924.16,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 0,
+      "awayGoals": 4,
+      "weight": 0.6158036131891003
+    },
+    {
+      "id": 1386,
+      "kickoff": "2024-09-19T16:45:00.000Z",
+      "homeElo": 1366.31,
+      "awayElo": 1761.26,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 1,
+      "awayGoals": 2,
+      "weight": 0.6158036131891003
+    },
+    {
+      "id": 1387,
+      "kickoff": "2024-09-19T19:00:00.000Z",
+      "homeElo": 1776.65,
+      "awayElo": 1898.2,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 2,
+      "awayGoals": 1,
+      "weight": 0.6159132571626034
+    },
+    {
+      "id": 1388,
+      "kickoff": "2024-09-19T19:00:00.000Z",
+      "homeElo": 1866.29,
+      "awayElo": 1950.36,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 0,
+      "awayGoals": 0,
+      "weight": 0.6159132571626034
+    },
+    {
+      "id": 1389,
+      "kickoff": "2024-09-19T19:00:00.000Z",
+      "homeElo": 1838.46,
+      "awayElo": 1854.54,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 2,
+      "awayGoals": 1,
+      "weight": 0.6159132571626034
+    },
+    {
+      "id": 1390,
+      "kickoff": "2024-09-19T19:00:00.000Z",
+      "homeElo": 1680.87,
+      "awayElo": 1606.42,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 2,
+      "awayGoals": 1,
+      "weight": 0.6159132571626034
+    },
+    {
+      "id": 1391,
+      "kickoff": "2024-10-01T16:45:00.000Z",
+      "homeElo": 1674.05,
+      "awayElo": 1680.87,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 0,
+      "awayGoals": 4,
+      "weight": 0.629997910933618
+    },
+    {
+      "id": 1393,
+      "kickoff": "2024-10-01T19:00:00.000Z",
+      "homeElo": 1950.36,
+      "awayElo": 1899.04,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 2,
+      "awayGoals": 0,
+      "weight": 0.6301100822050655
+    },
+    {
+      "id": 1395,
+      "kickoff": "2024-10-01T19:00:00.000Z",
+      "homeElo": 1924.16,
+      "awayElo": 1821.77,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 1,
+      "awayGoals": 0,
+      "weight": 0.6301100822050655
+    },
+    {
+      "id": 1396,
+      "kickoff": "2024-10-01T19:00:00.000Z",
+      "homeElo": 1874.08,
+      "awayElo": 1655.61,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 7,
+      "awayGoals": 1,
+      "weight": 0.6301100822050655
+    },
+    {
+      "id": 1397,
+      "kickoff": "2024-10-01T19:00:00.000Z",
+      "homeElo": 1966.39,
+      "awayElo": 1366.31,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 4,
+      "awayGoals": 0,
+      "weight": 0.6301100822050655
+    },
+    {
+      "id": 1398,
+      "kickoff": "2024-10-01T19:00:00.000Z",
+      "homeElo": 1799.48,
+      "awayElo": 1838.47,
+      "homeRatingDay": "2024-09-15",
+      "awayRatingDay": "2024-09-15",
+      "homeGoals": 1,
+      "awayGoals": 1,
+      "weight": 0.6301100822050655
+    },
+    {
+      "id": 1400,
+      "kickoff": "2024-10-02T16:45:00.000Z",
+      "homeElo": 1765.16,
+      "awayElo": 1726.5,
+      "homeRatingDay": "2024-10-01",
+      "awayRatingDay": "2024-10-01",
+      "homeGoals": 2,
+      "awayGoals": 3,
+      "weight": 0.6311954346992998
+    },
+    {
+      "id": 1402,
+      "kickoff": "2024-10-02T19:00:00.000Z",
+      "homeElo": 1794.3,
+      "awayElo": 1925.75,
+      "homeRatingDay": "2024-10-01",
+      "awayRatingDay": "2024-10-01",
+      "homeGoals": 1,
+      "awayGoals": 0,
+      "weight": 0.6313078191901264
+    },
+    {
+      "id": 1403,
+      "kickoff": "2024-10-02T19:00:00.000Z",
+      "homeElo": 1774.74,
+      "awayElo": 1853.03,
+      "homeRatingDay": "2024-10-01",
+      "awayRatingDay": "2024-10-01",
+      "homeGoals": 4,
+      "awayGoals": 0,
+      "weight": 0.6313078191901264
+    },
+    {
+      "id": 1405,
+      "kickoff": "2024-10-02T19:00:00.000Z",
+      "homeElo": 1760.08,
+      "awayElo": 1997.27,
+      "homeRatingDay": "2024-10-01",
+      "awayRatingDay": "2024-10-01",
+      "homeGoals": 1,
+      "awayGoals": 0,
+      "weight": 0.6313078191901264
+    },
+    {
+      "id": 1406,
+      "kickoff": "2024-10-02T19:00:00.000Z",
+      "homeElo": 1925.49,
+      "awayElo": 1765.55,
+      "homeRatingDay": "2024-10-01",
+      "awayRatingDay": "2024-10-01",
+      "homeGoals": 2,
+      "awayGoals": 0,
+      "weight": 0.6313078191901264
+    },
+    {
+      "id": 1407,
+      "kickoff": "2024-10-02T19:00:00.000Z",
+      "homeElo": 1850.53,
+      "awayElo": 1843.42,
+      "homeRatingDay": "2024-10-01",
+      "awayRatingDay": "2024-10-01",
+      "homeGoals": 2,
+      "awayGoals": 3,
+      "weight": 0.6313078191901264
+    },
+    {
+      "id": 1408,
+      "kickoff": "2024-10-02T19:00:00.000Z",
+      "homeElo": 1574.7,
+      "awayElo": 1677.87,
+      "homeRatingDay": "2024-10-01",
+      "awayRatingDay": "2024-10-01",
+      "homeGoals": 0,
+      "awayGoals": 1,
+      "weight": 0.6313078191901264
+    },
+    {
+      "id": 1409,
+      "kickoff": "2024-10-22T16:45:00.000Z",
+      "homeElo": 1817.41,
+      "awayElo": 1691.51,
+      "homeRatingDay": "2024-10-15",
+      "awayRatingDay": "2024-10-15",
+      "homeGoals": 3,
+      "awayGoals": 1,
+      "weight": 0.6556297369408294
+    },
+    {
+      "id": 1410,
+      "kickoff": "2024-10-22T16:45:00.000Z",
+      "homeElo": 1809.43,
+      "awayElo": 1357.91,
+      "homeRatingDay": "2024-10-15",
+      "awayRatingDay": "2024-10-15",
+      "homeGoals": 5,
+      "awayGoals": 1,
+      "weight": 0.6556297369408294
+    },
+    {
+      "id": 1412,
+      "kickoff": "2024-10-22T19:00:00.000Z",
+      "homeElo": 1809.55,
+      "awayElo": 1757.48,
+      "homeRatingDay": "2024-10-15",
+      "awayRatingDay": "2024-10-15",
+      "homeGoals": 2,
+      "awayGoals": 0,
+      "weight": 0.655746471964732
+    },
+    {
+      "id": 1414,
+      "kickoff": "2024-10-22T19:00:00.000Z",
+      "homeElo": 1848.74,
+      "awayElo": 1804.37,
+      "homeRatingDay": "2024-10-15",
+      "awayRatingDay": "2024-10-15",
+      "homeGoals": 0,
+      "awayGoals": 1,
+      "weight": 0.655746471964732
+    },
+    {
+      "id": 1415,
+      "kickoff": "2024-10-22T19:00:00.000Z",
+      "homeElo": 1905.28,
+      "awayElo": 1800.99,
+      "homeRatingDay": "2024-10-15",
+      "awayRatingDay": "2024-10-15",
+      "homeGoals": 1,
+      "awayGoals": 1,
+      "weight": 0.655746471964732
+    },
+    {
+      "id": 1416,
+      "kickoff": "2024-10-22T19:00:00.000Z",
+      "homeElo": 1969.73,
+      "awayElo": 1864.24,
+      "homeRatingDay": "2024-10-15",
+      "awayRatingDay": "2024-10-15",
+      "homeGoals": 5,
+      "awayGoals": 2,
+      "weight": 0.655746471964732
+    },
+    {
+      "id": 1417,
+      "kickoff": "2024-10-22T19:00:00.000Z",
+      "homeElo": 1580.17,
+      "awayElo": 1853.1,
+      "homeRatingDay": "2024-10-15",
+      "awayRatingDay": "2024-10-15",
+      "homeGoals": 0,
+      "awayGoals": 2,
+      "weight": 0.655746471964732
+    },
+    {
+      "id": 1418,
+      "kickoff": "2024-10-23T16:45:00.000Z",
+      "homeElo": 1867,
+      "awayElo": 1661.92,
+      "homeRatingDay": "2024-10-15",
+      "awayRatingDay": "2024-10-15",
+      "homeGoals": 0,
+      "awayGoals": 0,
+      "weight": 0.656875982647122
+    },
+    {
+      "id": 1419,
+      "kickoff": "2024-10-23T16:45:00.000Z",
+      "homeElo": 1714.16,
+      "awayElo": 1935.1,
+      "homeRatingDay": "2024-10-15",
+      "awayRatingDay": "2024-10-15",
+      "homeGoals": 1,
+      "awayGoals": 1,
+      "weight": 0.656875982647122
+    },
+    {
+      "id": 1420,
+      "kickoff": "2024-10-23T19:00:00.000Z",
+      "homeElo": 1817.35,
+      "awayElo": 1784.98,
+      "homeRatingDay": "2024-10-15",
+      "awayRatingDay": "2024-10-15",
+      "homeGoals": 1,
+      "awayGoals": 3,
+      "weight": 0.6569929395653564
+    },
+    {
+      "id": 1421,
+      "kickoff": "2024-10-23T19:00:00.000Z",
+      "homeElo": 1886.44,
+      "awayElo": 1912.3,
+      "homeRatingDay": "2024-10-15",
+      "awayRatingDay": "2024-10-15",
+      "homeGoals": 4,
+      "awayGoals": 1,
+      "weight": 0.6569929395653564
+    },
+    {
+      "id": 1422,
+      "kickoff": "2024-10-23T19:00:00.000Z",
+      "homeElo": 1792.18,
+      "awayElo": 1745.96,
+      "homeRatingDay": "2024-10-15",
+      "awayRatingDay": "2024-10-15",
+      "homeGoals": 1,
+      "awayGoals": 3,
+      "weight": 0.6569929395653564
+    },
+    {
+      "id": 1424,
+      "kickoff": "2024-10-23T19:00:00.000Z",
+      "homeElo": 1844.11,
+      "awayElo": 1943.17,
+      "homeRatingDay": "2024-10-15",
+      "awayRatingDay": "2024-10-15",
+      "homeGoals": 0,
+      "awayGoals": 1,
+      "weight": 0.6569929395653564
+    },
+    {
+      "id": 1427,
+      "kickoff": "2024-11-05T17:45:00.000Z",
+      "homeElo": 1821.01,
+      "awayElo": 1726.14,
+      "homeRatingDay": "2024-11-01",
+      "awayRatingDay": "2024-11-01",
+      "homeGoals": 4,
+      "awayGoals": 0,
+      "weight": 0.6733476728357327
+    },
+    {
+      "id": 1429,
+      "kickoff": "2024-11-05T20:00:00.000Z",
+      "homeElo": 1756.14,
+      "awayElo": 1797.89,
+      "homeRatingDay": "2024-11-01",
+      "awayRatingDay": "2024-11-01",
+      "homeGoals": 0,
+      "awayGoals": 1,
+      "weight": 0.6734675625421546
+    },
+    {
+      "id": 1430,
+      "kickoff": "2024-11-05T20:00:00.000Z",
+      "homeElo": 1841.71,
+      "awayElo": 1570.35,
+      "homeRatingDay": "2024-11-01",
+      "awayRatingDay": "2024-11-01",
+      "homeGoals": 1,
+      "awayGoals": 0,
+      "weight": 0.6734675625421546
+    },
+    {
+      "id": 1431,
+      "kickoff": "2024-11-05T20:00:00.000Z",
+      "homeElo": 1677.88,
+      "awayElo": 1843.91,
+      "homeRatingDay": "2024-11-01",
+      "awayRatingDay": "2024-11-01",
+      "homeGoals": 3,
+      "awayGoals": 1,
+      "weight": 0.6734675625421546
+    },
+    {
+      "id": 1432,
+      "kickoff": "2024-11-05T20:00:00.000Z",
+      "homeElo": 1810.23,
+      "awayElo": 1838.69,
+      "homeRatingDay": "2024-11-01",
+      "awayRatingDay": "2024-11-01",
+      "homeGoals": 1,
+      "awayGoals": 1,
+      "weight": 0.6734675625421546
+    },
+    {
+      "id": 1433,
+      "kickoff": "2024-11-05T20:00:00.000Z",
+      "homeElo": 1964.46,
+      "awayElo": 1923.26,
+      "homeRatingDay": "2024-11-01",
+      "awayRatingDay": "2024-11-01",
+      "homeGoals": 4,
+      "awayGoals": 0,
+      "weight": 0.6734675625421546
+    },
+    {
+      "id": 1434,
+      "kickoff": "2024-11-05T20:00:00.000Z",
+      "homeElo": 1959.42,
+      "awayElo": 1810.72,
+      "homeRatingDay": "2024-11-01",
+      "awayRatingDay": "2024-11-01",
+      "homeGoals": 1,
+      "awayGoals": 3,
+      "weight": 0.6734675625421546
+    },
+    {
+      "id": 1435,
+      "kickoff": "2024-11-05T20:00:00.000Z",
+      "homeElo": 1858.22,
+      "awayElo": 2073.82,
+      "homeRatingDay": "2024-11-01",
+      "awayRatingDay": "2024-11-01",
+      "homeGoals": 4,
+      "awayGoals": 1,
+      "weight": 0.6734675625421546
+    },
+    {
+      "id": 1436,
+      "kickoff": "2024-11-06T17:45:00.000Z",
+      "homeElo": 1688,
+      "awayElo": 1830.11,
+      "homeRatingDay": "2024-11-01",
+      "awayRatingDay": "2024-11-01",
+      "homeGoals": 1,
+      "awayGoals": 0,
+      "weight": 0.6746275974621373
+    },
+    {
+      "id": 1438,
+      "kickoff": "2024-11-06T20:00:00.000Z",
+      "homeElo": 1765.64,
+      "awayElo": 1577.07,
+      "homeRatingDay": "2024-11-01",
+      "awayRatingDay": "2024-11-01",
+      "homeGoals": 1,
+      "awayGoals": 3,
+      "weight": 0.6747477150594302
+    },
+    {
+      "id": 1439,
+      "kickoff": "2024-11-06T20:00:00.000Z",
+      "homeElo": 1966.08,
+      "awayElo": 1969.05,
+      "homeRatingDay": "2024-11-01",
+      "awayRatingDay": "2024-11-01",
+      "homeGoals": 1,
+      "awayGoals": 0,
+      "weight": 0.6747477150594302
+    },
+    {
+      "id": 1440,
+      "kickoff": "2024-11-06T20:00:00.000Z",
+      "homeElo": 1909.6,
+      "awayElo": 1798.29,
+      "homeRatingDay": "2024-11-01",
+      "awayRatingDay": "2024-11-01",
+      "homeGoals": 1,
+      "awayGoals": 2,
+      "weight": 0.6747477150594302
+    },
+    {
+      "id": 1441,
+      "kickoff": "2024-11-06T20:00:00.000Z",
+      "homeElo": 1358.99,
+      "awayElo": 1928.33,
+      "homeRatingDay": "2024-11-01",
+      "awayRatingDay": "2024-11-01",
+      "homeGoals": 2,
+      "awayGoals": 5,
+      "weight": 0.6747477150594302
+    },
+    {
+      "id": 1443,
+      "kickoff": "2024-11-06T20:00:00.000Z",
+      "homeElo": 1804.45,
+      "awayElo": 1871.33,
+      "homeRatingDay": "2024-11-01",
+      "awayRatingDay": "2024-11-01",
+      "homeGoals": 0,
+      "awayGoals": 2,
+      "weight": 0.6747477150594302
+    },
+    {
+      "id": 1444,
+      "kickoff": "2024-11-06T20:15:00.000Z",
+      "homeElo": 1908.25,
+      "awayElo": 1775.64,
+      "homeRatingDay": "2024-11-01",
+      "awayRatingDay": "2024-11-01",
+      "homeGoals": 1,
+      "awayGoals": 0,
+      "weight": 0.6747610627792429
+    },
+    {
+      "id": 1447,
+      "kickoff": "2024-11-26T20:00:00.000Z",
+      "homeElo": 1917.28,
+      "awayElo": 1706.26,
+      "homeRatingDay": "2024-11-15",
+      "awayRatingDay": "2024-11-15",
+      "homeGoals": 3,
+      "awayGoals": 0,
+      "weight": 0.7008679762340027
+    },
+    {
+      "id": 1448,
+      "kickoff": "2024-11-26T20:00:00.000Z",
+      "homeElo": 1896.3,
+      "awayElo": 1580.66,
+      "homeRatingDay": "2024-11-15",
+      "awayRatingDay": "2024-11-15",
+      "homeGoals": 5,
+      "awayGoals": 0,
+      "weight": 0.7008679762340027
+    },
+    {
+      "id": 1449,
+      "kickoff": "2024-11-26T20:00:00.000Z",
+      "homeElo": 1912.21,
+      "awayElo": 1901.84,
+      "homeRatingDay": "2024-11-15",
+      "awayRatingDay": "2024-11-15",
+      "homeGoals": 1,
+      "awayGoals": 0,
+      "weight": 0.7008679762340027
+    },
+    {
+      "id": 1450,
+      "kickoff": "2024-11-26T20:00:00.000Z",
+      "homeElo": 1971.82,
+      "awayElo": 1812.09,
+      "homeRatingDay": "2024-11-15",
+      "awayRatingDay": "2024-11-15",
+      "homeGoals": 1,
+      "awayGoals": 0,
+      "weight": 0.7008679762340027
+    },
+    {
+      "id": 1451,
+      "kickoff": "2024-11-26T20:00:00.000Z",
+      "homeElo": 2018.32,
+      "awayElo": 1754.98,
+      "homeRatingDay": "2024-11-15",
+      "awayRatingDay": "2024-11-15",
+      "homeGoals": 3,
+      "awayGoals": 3,
+      "weight": 0.7008679762340027
+    },
+    {
+      "id": 1452,
+      "kickoff": "2024-11-26T20:00:00.000Z",
+      "homeElo": 1887.51,
+      "awayElo": 1943.19,
+      "homeRatingDay": "2024-11-15",
+      "awayRatingDay": "2024-11-15",
+      "homeGoals": 1,
+      "awayGoals": 5,
+      "weight": 0.7008679762340027
+    },
+    {
+      "id": 1454,
+      "kickoff": "2024-11-27T17:45:00.000Z",
+      "homeElo": 1352.73,
+      "awayElo": 1781.3,
+      "homeRatingDay": "2024-11-15",
+      "awayRatingDay": "2024-11-15",
+      "homeGoals": 5,
+      "awayGoals": 1,
+      "weight": 0.7020752078394271
+    },
+    {
+      "id": 1455,
+      "kickoff": "2024-11-27T17:45:00.000Z",
+      "homeElo": 1581.21,
+      "awayElo": 1723.7,
+      "homeRatingDay": "2024-11-15",
+      "awayRatingDay": "2024-11-15",
+      "homeGoals": 1,
+      "awayGoals": 0,
+      "weight": 0.7020752078394271
+    },
+    {
+      "id": 1456,
+      "kickoff": "2024-11-27T20:00:00.000Z",
+      "homeElo": 1799.06,
+      "awayElo": 1790.49,
+      "homeRatingDay": "2024-11-15",
+      "awayRatingDay": "2024-11-15",
+      "homeGoals": 2,
+      "awayGoals": 3,
+      "weight": 0.7022002124899956
+    },
+    {
+      "id": 1457,
+      "kickoff": "2024-11-27T20:00:00.000Z",
+      "homeElo": 1796.74,
+      "awayElo": 1857.91,
+      "homeRatingDay": "2024-11-15",
+      "awayRatingDay": "2024-11-15",
+      "homeGoals": 0,
+      "awayGoals": 0,
+      "weight": 0.7022002124899956
+    },
+    {
+      "id": 1458,
+      "kickoff": "2024-11-27T20:00:00.000Z",
+      "homeElo": 1764.34,
+      "awayElo": 1803.92,
+      "homeRatingDay": "2024-11-15",
+      "awayRatingDay": "2024-11-15",
+      "homeGoals": 1,
+      "awayGoals": 2,
+      "weight": 0.7022002124899956
+    },
+    {
+      "id": 1459,
+      "kickoff": "2024-11-27T20:00:00.000Z",
+      "homeElo": 1700.22,
+      "awayElo": 1696.82,
+      "homeRatingDay": "2024-11-15",
+      "awayRatingDay": "2024-11-15",
+      "homeGoals": 1,
+      "awayGoals": 1,
+      "weight": 0.7022002124899956
+    },
+    {
+      "id": 1461,
+      "kickoff": "2024-11-27T20:00:00.000Z",
+      "homeElo": 1971.55,
+      "awayElo": 1939.57,
+      "homeRatingDay": "2024-11-15",
+      "awayRatingDay": "2024-11-15",
+      "homeGoals": 2,
+      "awayGoals": 0,
+      "weight": 0.7022002124899956
+    },
+    {
+      "id": 1464,
+      "kickoff": "2024-12-10T17:45:00.000Z",
+      "homeElo": 1719.58,
+      "awayElo": 1986.96,
+      "homeRatingDay": "2024-12-01",
+      "awayRatingDay": "2024-12-01",
+      "homeGoals": 0,
+      "awayGoals": 1,
+      "weight": 0.7196233612674947
+    },
+    {
+      "id": 1465,
+      "kickoff": "2024-12-10T20:00:00.000Z",
+      "homeElo": 1909.47,
+      "awayElo": 1935.72,
+      "homeRatingDay": "2024-12-01",
+      "awayRatingDay": "2024-12-01",
+      "homeGoals": 2,
+      "awayGoals": 3,
+      "weight": 0.7197514903707756
+    },
+    {
+      "id": 1466,
+      "kickoff": "2024-12-10T20:00:00.000Z",
+      "homeElo": 1898.46,
+      "awayElo": 1977.84,
+      "homeRatingDay": "2024-12-01",
+      "awayRatingDay": "2024-12-01",
+      "homeGoals": 1,
+      "awayGoals": 0,
+      "weight": 0.7197514903707756
+    },
+    {
+      "id": 1467,
+      "kickoff": "2024-12-10T20:00:00.000Z",
+      "homeElo": 1696.83,
+      "awayElo": 1824.53,
+      "homeRatingDay": "2024-12-01",
+      "awayRatingDay": "2024-12-01",
+      "homeGoals": 1,
+      "awayGoals": 0,
+      "weight": 0.7197514903707756
+    },
+    {
+      "id": 1468,
+      "kickoff": "2024-12-10T20:00:00.000Z",
+      "homeElo": 1710.01,
+      "awayElo": 1852.61,
+      "homeRatingDay": "2024-12-01",
+      "awayRatingDay": "2024-12-01",
+      "homeGoals": 2,
+      "awayGoals": 1,
+      "weight": 0.7197514903707756
+    },
+    {
+      "id": 1469,
+      "kickoff": "2024-12-10T20:00:00.000Z",
+      "homeElo": 1766.22,
+      "awayElo": 1798.8,
+      "homeRatingDay": "2024-12-01",
+      "awayRatingDay": "2024-12-01",
+      "homeGoals": 2,
+      "awayGoals": 3,
+      "weight": 0.7197514903707756
+    },
+    {
+      "id": 1470,
+      "kickoff": "2024-12-10T20:00:00.000Z",
+      "homeElo": 1556.85,
+      "awayElo": 1883.75,
+      "homeRatingDay": "2024-12-01",
+      "awayRatingDay": "2024-12-01",
+      "homeGoals": 0,
+      "awayGoals": 3,
+      "weight": 0.7197514903707756
+    },
+    {
+      "id": 1473,
+      "kickoff": "2024-12-11T17:45:00.000Z",
+      "homeElo": 1808.48,
+      "awayElo": 1585.88,
+      "homeRatingDay": "2024-12-01",
+      "awayRatingDay": "2024-12-01",
+      "homeGoals": 3,
+      "awayGoals": 2,
+      "weight": 0.7209912484660104
+    },
+    {
+      "id": 1474,
+      "kickoff": "2024-12-11T20:00:00.000Z",
+      "homeElo": 1840.24,
+      "awayElo": 1334.83,
+      "homeRatingDay": "2024-12-01",
+      "awayRatingDay": "2024-12-01",
+      "homeGoals": 2,
+      "awayGoals": 1,
+      "weight": 0.7211196211219183
+    },
+    {
+      "id": 1475,
+      "kickoff": "2024-12-11T20:00:00.000Z",
+      "homeElo": 1977.47,
+      "awayElo": 1784.71,
+      "homeRatingDay": "2024-12-01",
+      "awayRatingDay": "2024-12-01",
+      "homeGoals": 3,
+      "awayGoals": 0,
+      "weight": 0.7211196211219183
+    },
+    {
+      "id": 1476,
+      "kickoff": "2024-12-11T20:00:00.000Z",
+      "homeElo": 1800.35,
+      "awayElo": 1750.21,
+      "homeRatingDay": "2024-12-01",
+      "awayRatingDay": "2024-12-01",
+      "homeGoals": 0,
+      "awayGoals": 0,
+      "weight": 0.7211196211219183
+    },
+    {
+      "id": 1477,
+      "kickoff": "2024-12-11T20:00:00.000Z",
+      "homeElo": 1835.77,
+      "awayElo": 1898.79,
+      "homeRatingDay": "2024-12-01",
+      "awayRatingDay": "2024-12-01",
+      "homeGoals": 2,
+      "awayGoals": 3,
+      "weight": 0.7211196211219183
+    },
+    {
+      "id": 1479,
+      "kickoff": "2024-12-11T20:00:00.000Z",
+      "homeElo": 1857.97,
+      "awayElo": 1988.89,
+      "homeRatingDay": "2024-12-01",
+      "awayRatingDay": "2024-12-01",
+      "homeGoals": 2,
+      "awayGoals": 0,
+      "weight": 0.7211196211219183
+    },
+    {
+      "id": 1481,
+      "kickoff": "2025-01-21T17:45:00.000Z",
+      "homeElo": 1766.92,
+      "awayElo": 1802.28,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 1,
+      "awayGoals": 0,
+      "weight": 0.7793711428470886
+    },
+    {
+      "id": 1482,
+      "kickoff": "2025-01-21T17:45:00.000Z",
+      "homeElo": 1911.76,
+      "awayElo": 1584.33,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 5,
+      "awayGoals": 0,
+      "weight": 0.7793711428470886
+    },
+    {
+      "id": 1483,
+      "kickoff": "2025-01-21T20:00:00.000Z",
+      "homeElo": 1868.26,
+      "awayElo": 1915.81,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 2,
+      "awayGoals": 1,
+      "weight": 0.77950991005648
+    },
+    {
+      "id": 1484,
+      "kickoff": "2025-01-21T20:00:00.000Z",
+      "homeElo": 1778.76,
+      "awayElo": 1892.09,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 4,
+      "awayGoals": 5,
+      "weight": 0.77950991005648
+    },
+    {
+      "id": 1485,
+      "kickoff": "2025-01-21T20:00:00.000Z",
+      "homeElo": 1767.97,
+      "awayElo": 1788.9,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 2,
+      "awayGoals": 1,
+      "weight": 0.77950991005648
+    },
+    {
+      "id": 1486,
+      "kickoff": "2025-01-21T20:00:00.000Z",
+      "homeElo": 1752.62,
+      "awayElo": 1859.48,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 0,
+      "awayGoals": 0,
+      "weight": 0.77950991005648
+    },
+    {
+      "id": 1487,
+      "kickoff": "2025-01-21T20:00:00.000Z",
+      "homeElo": 1997.82,
+      "awayElo": 1804.44,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 2,
+      "awayGoals": 1,
+      "weight": 0.77950991005648
+    },
+    {
+      "id": 1488,
+      "kickoff": "2025-01-21T20:00:00.000Z",
+      "homeElo": 1372.52,
+      "awayElo": 1810.27,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 2,
+      "awayGoals": 3,
+      "weight": 0.77950991005648
+    },
+    {
+      "id": 1490,
+      "kickoff": "2025-01-22T17:45:00.000Z",
+      "homeElo": 1757.58,
+      "awayElo": 1822.57,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 2,
+      "awayGoals": 1,
+      "weight": 0.7808526008799619
+    },
+    {
+      "id": 1492,
+      "kickoff": "2025-01-22T20:00:00.000Z",
+      "homeElo": 1833.83,
+      "awayElo": 1724.5,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 1,
+      "awayGoals": 0,
+      "weight": 0.7809916318632932
+    },
+    {
+      "id": 1495,
+      "kickoff": "2025-01-22T20:00:00.000Z",
+      "homeElo": 1734.55,
+      "awayElo": 1906.89,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 3,
+      "awayGoals": 0,
+      "weight": 0.7809916318632932
+    },
+    {
+      "id": 1496,
+      "kickoff": "2025-01-22T20:00:00.000Z",
+      "homeElo": 1901.87,
+      "awayElo": 1940.29,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 4,
+      "awayGoals": 2,
+      "weight": 0.7809916318632932
+    },
+    {
+      "id": 1497,
+      "kickoff": "2025-01-22T20:00:00.000Z",
+      "homeElo": 1952.22,
+      "awayElo": 1556.88,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 5,
+      "awayGoals": 1,
+      "weight": 0.7809916318632932
+    },
+    {
+      "id": 1499,
+      "kickoff": "2025-01-29T20:00:00.000Z",
+      "homeElo": 1802.28,
+      "awayElo": 1685.93,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 4,
+      "awayGoals": 2,
+      "weight": 0.7914428473873502
+    },
+    {
+      "id": 1500,
+      "kickoff": "2025-01-29T20:00:00.000Z",
+      "homeElo": 1892.09,
+      "awayElo": 1911.76,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 2,
+      "awayGoals": 2,
+      "weight": 0.7914428473873502
+    },
+    {
+      "id": 1504,
+      "kickoff": "2025-01-29T20:00:00.000Z",
+      "homeElo": 1701.22,
+      "awayElo": 1952.22,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 0,
+      "awayGoals": 3,
+      "weight": 0.7914428473873502
+    },
+    {
+      "id": 1506,
+      "kickoff": "2025-01-29T20:00:00.000Z",
+      "homeElo": 1724.5,
+      "awayElo": 1985.78,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 1,
+      "awayGoals": 2,
+      "weight": 0.7914428473873502
+    },
+    {
+      "id": 1507,
+      "kickoff": "2025-01-29T20:00:00.000Z",
+      "homeElo": 1994.78,
+      "awayElo": 1766.92,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 3,
+      "awayGoals": 0,
+      "weight": 0.7914428473873502
+    },
+    {
+      "id": 1508,
+      "kickoff": "2025-01-29T20:00:00.000Z",
+      "homeElo": 1859.48,
+      "awayElo": 1778.76,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 0,
+      "awayGoals": 2,
+      "weight": 0.7914428473873502
+    },
+    {
+      "id": 1509,
+      "kickoff": "2025-01-29T20:00:00.000Z",
+      "homeElo": 1804.44,
+      "awayElo": 1734.55,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 6,
+      "awayGoals": 1,
+      "weight": 0.7914428473873502
+    },
+    {
+      "id": 1510,
+      "kickoff": "2025-01-29T20:00:00.000Z",
+      "homeElo": 1940.29,
+      "awayElo": 1752.62,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 3,
+      "awayGoals": 1,
+      "weight": 0.7914428473873502
+    },
+    {
+      "id": 1511,
+      "kickoff": "2025-01-29T20:00:00.000Z",
+      "homeElo": 1810.27,
+      "awayElo": 1997.82,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 3,
+      "awayGoals": 2,
+      "weight": 0.7914428473873502
+    },
+    {
+      "id": 1512,
+      "kickoff": "2025-01-29T20:00:00.000Z",
+      "homeElo": 1556.88,
+      "awayElo": 1868.26,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 1,
+      "awayGoals": 4,
+      "weight": 0.7914428473873502
+    },
+    {
+      "id": 1513,
+      "kickoff": "2025-01-29T20:00:00.000Z",
+      "homeElo": 1584.33,
+      "awayElo": 1757.58,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 1,
+      "awayGoals": 0,
+      "weight": 0.7914428473873502
+    },
+    {
+      "id": 1514,
+      "kickoff": "2025-01-29T20:00:00.000Z",
+      "homeElo": 1822.57,
+      "awayElo": 1767.97,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 1,
+      "awayGoals": 1,
+      "weight": 0.7914428473873502
+    },
+    {
+      "id": 1515,
+      "kickoff": "2025-01-29T20:00:00.000Z",
+      "homeElo": 1748.97,
+      "awayElo": 1901.87,
+      "homeRatingDay": "2025-01-15",
+      "awayRatingDay": "2025-01-15",
+      "homeGoals": 1,
+      "awayGoals": 4,
+      "weight": 0.7914428473873502
+    },
+    {
+      "id": 1517,
+      "kickoff": "2025-02-11T17:45:00.000Z",
+      "homeElo": 1689.18,
+      "awayElo": 1915.5,
+      "homeRatingDay": "2025-02-01",
+      "awayRatingDay": "2025-02-01",
+      "homeGoals": 0,
+      "awayGoals": 3,
+      "weight": 0.8110803043884242
+    },
+    {
+      "id": 1518,
+      "kickoff": "2025-02-11T20:00:00.000Z",
+      "homeElo": 1835.3,
+      "awayElo": 1814.54,
+      "homeRatingDay": "2025-02-01",
+      "awayRatingDay": "2025-02-01",
+      "homeGoals": 2,
+      "awayGoals": 1,
+      "weight": 0.8112247174212459
+    },
+    {
+      "id": 1519,
+      "kickoff": "2025-02-11T20:00:00.000Z",
+      "homeElo": 1947.53,
+      "awayElo": 1964.78,
+      "homeRatingDay": "2025-02-01",
+      "awayRatingDay": "2025-02-01",
+      "homeGoals": 2,
+      "awayGoals": 3,
+      "weight": 0.8112247174212459
+    },
+    {
+      "id": 1520,
+      "kickoff": "2025-02-11T20:00:00.000Z",
+      "homeElo": 1817.87,
+      "awayElo": 1759.67,
+      "homeRatingDay": "2025-02-01",
+      "awayRatingDay": "2025-02-01",
+      "homeGoals": 0,
+      "awayGoals": 3,
+      "weight": 0.8112247174212459
+    },
+    {
+      "id": 1521,
+      "kickoff": "2025-02-12T17:45:00.000Z",
+      "homeElo": 1733.48,
+      "awayElo": 1901.91,
+      "homeRatingDay": "2025-02-01",
+      "awayRatingDay": "2025-02-01",
+      "homeGoals": 2,
+      "awayGoals": 1,
+      "weight": 0.8126220363902688
+    },
+    {
+      "id": 1522,
+      "kickoff": "2025-02-12T20:00:00.000Z",
+      "homeElo": 1759.89,
+      "awayElo": 1775.36,
+      "homeRatingDay": "2025-02-01",
+      "awayRatingDay": "2025-02-01",
+      "homeGoals": 0,
+      "awayGoals": 1,
+      "weight": 0.8127667239288244
+    },
+    {
+      "id": 1523,
+      "kickoff": "2025-02-12T20:00:00.000Z",
+      "homeElo": 1684.51,
+      "awayElo": 1888.25,
+      "homeRatingDay": "2025-02-01",
+      "awayRatingDay": "2025-02-01",
+      "homeGoals": 1,
+      "awayGoals": 2,
+      "weight": 0.8127667239288244
+    },
+    {
+      "id": 1524,
+      "kickoff": "2025-02-12T20:00:00.000Z",
+      "homeElo": 1744.26,
+      "awayElo": 1810.91,
+      "homeRatingDay": "2025-02-01",
+      "awayRatingDay": "2025-02-01",
+      "homeGoals": 1,
+      "awayGoals": 0,
+      "weight": 0.8127667239288244
+    },
+    {
+      "id": 1525,
+      "kickoff": "2025-02-18T17:45:00.000Z",
+      "homeElo": 1816.65,
+      "awayElo": 1753.43,
+      "homeRatingDay": "2025-02-15",
+      "awayRatingDay": "2025-02-15",
+      "homeGoals": 1,
+      "awayGoals": 1,
+      "weight": 0.8219341659698308
+    },
+    {
+      "id": 1526,
+      "kickoff": "2025-02-18T20:00:00.000Z",
+      "homeElo": 1898.03,
+      "awayElo": 1719.32,
+      "homeRatingDay": "2025-02-15",
+      "awayRatingDay": "2025-02-15",
+      "homeGoals": 1,
+      "awayGoals": 3,
+      "weight": 0.8220805115351778
+    },
+    {
+      "id": 1527,
+      "kickoff": "2025-02-18T20:00:00.000Z",
+      "homeElo": 1904.63,
+      "awayElo": 1685.7,
+      "homeRatingDay": "2025-02-15",
+      "awayRatingDay": "2025-02-15",
+      "homeGoals": 1,
+      "awayGoals": 1,
+      "weight": 0.8220805115351778
+    },
+    {
+      "id": 1528,
+      "kickoff": "2025-02-18T20:00:00.000Z",
+      "homeElo": 1781.15,
+      "awayElo": 1748.78,
+      "homeRatingDay": "2025-02-15",
+      "awayRatingDay": "2025-02-15",
+      "homeGoals": 3,
+      "awayGoals": 3,
+      "weight": 0.8220805115351778
+    },
+    {
+      "id": 1529,
+      "kickoff": "2025-02-19T17:45:00.000Z",
+      "homeElo": 1781.31,
+      "awayElo": 1794.27,
+      "homeRatingDay": "2025-02-15",
+      "awayRatingDay": "2025-02-15",
+      "homeGoals": 0,
+      "awayGoals": 0,
+      "weight": 0.8234965294007128
+    },
+    {
+      "id": 1530,
+      "kickoff": "2025-02-19T20:00:00.000Z",
+      "homeElo": 1928.38,
+      "awayElo": 1681.78,
+      "homeRatingDay": "2025-02-15",
+      "awayRatingDay": "2025-02-15",
+      "homeGoals": 7,
+      "awayGoals": 0,
+      "weight": 0.8236431531452244
+    },
+    {
+      "id": 1532,
+      "kickoff": "2025-02-19T20:00:00.000Z",
+      "homeElo": 1960.03,
+      "awayElo": 1926.48,
+      "homeRatingDay": "2025-02-15",
+      "awayRatingDay": "2025-02-15",
+      "homeGoals": 3,
+      "awayGoals": 1,
+      "weight": 0.8236431531452244
+    },
+    {
+      "id": 1533,
+      "kickoff": "2025-03-04T17:45:00.000Z",
+      "homeElo": 1734.02,
+      "awayElo": 1783.92,
+      "homeRatingDay": "2025-03-01",
+      "awayRatingDay": "2025-03-01",
+      "homeGoals": 1,
+      "awayGoals": 3,
+      "weight": 0.8440795713370263
+    },
+    {
+      "id": 1534,
+      "kickoff": "2025-03-04T20:00:00.000Z",
+      "homeElo": 1768.6,
+      "awayElo": 1800.13,
+      "homeRatingDay": "2025-03-01",
+      "awayRatingDay": "2025-03-01",
+      "homeGoals": 1,
+      "awayGoals": 1,
+      "weight": 0.8442298598968399
+    },
+    {
+      "id": 1535,
+      "kickoff": "2025-03-04T20:00:00.000Z",
+      "homeElo": 1818.07,
+      "awayElo": 1979.18,
+      "homeRatingDay": "2025-03-01",
+      "awayRatingDay": "2025-03-01",
+      "homeGoals": 1,
+      "awayGoals": 7,
+      "weight": 0.8442298598968399
+    },
+    {
+      "id": 1536,
+      "kickoff": "2025-03-04T20:00:00.000Z",
+      "homeElo": 1969.61,
+      "awayElo": 1881.32,
+      "homeRatingDay": "2025-03-01",
+      "awayRatingDay": "2025-03-01",
+      "homeGoals": 2,
+      "awayGoals": 1,
+      "weight": 0.8442298598968399
+    },
+    {
+      "id": 1537,
+      "kickoff": "2025-03-05T17:45:00.000Z",
+      "homeElo": 1759.75,
+      "awayElo": 1947.28,
+      "homeRatingDay": "2025-03-01",
+      "awayRatingDay": "2025-03-01",
+      "homeGoals": 0,
+      "awayGoals": 2,
+      "weight": 0.845684029588808
+    },
+    {
+      "id": 1538,
+      "kickoff": "2025-03-05T20:00:00.000Z",
+      "homeElo": 1914.25,
+      "awayElo": 1902.19,
+      "homeRatingDay": "2025-03-01",
+      "awayRatingDay": "2025-03-01",
+      "homeGoals": 3,
+      "awayGoals": 0,
+      "weight": 0.8458346038227784
+    },
+    {
+      "id": 1539,
+      "kickoff": "2025-03-05T20:00:00.000Z",
+      "homeElo": 1784.35,
+      "awayElo": 1920.57,
+      "homeRatingDay": "2025-03-01",
+      "awayRatingDay": "2025-03-01",
+      "homeGoals": 0,
+      "awayGoals": 1,
+      "weight": 0.8458346038227784
+    },
+    {
+      "id": 1540,
+      "kickoff": "2025-03-05T20:00:00.000Z",
+      "homeElo": 1938.58,
+      "awayElo": 2004.54,
+      "homeRatingDay": "2025-03-01",
+      "awayRatingDay": "2025-03-01",
+      "homeGoals": 0,
+      "awayGoals": 1,
+      "weight": 0.8458346038227784
+    },
+    {
+      "id": 1541,
+      "kickoff": "2025-03-11T17:45:00.000Z",
+      "homeElo": 1920.57,
+      "awayElo": 1784.35,
+      "homeRatingDay": "2025-03-01",
+      "awayRatingDay": "2025-03-01",
+      "homeGoals": 3,
+      "awayGoals": 1,
+      "weight": 0.8553750284963432
+    },
+    {
+      "id": 1542,
+      "kickoff": "2025-03-11T20:00:00.000Z",
+      "homeElo": 1902.19,
+      "awayElo": 1914.25,
+      "homeRatingDay": "2025-03-01",
+      "awayRatingDay": "2025-03-01",
+      "homeGoals": 0,
+      "awayGoals": 2,
+      "weight": 0.8555273282148751
+    },
+    {
+      "id": 1543,
+      "kickoff": "2025-03-11T20:00:00.000Z",
+      "homeElo": 1947.28,
+      "awayElo": 1759.75,
+      "homeRatingDay": "2025-03-01",
+      "awayRatingDay": "2025-03-01",
+      "homeGoals": 2,
+      "awayGoals": 1,
+      "weight": 0.8555273282148751
+    },
+    {
+      "id": 1545,
+      "kickoff": "2025-03-12T17:45:00.000Z",
+      "homeElo": 1800.13,
+      "awayElo": 1768.6,
+      "homeRatingDay": "2025-03-01",
+      "awayRatingDay": "2025-03-01",
+      "homeGoals": 1,
+      "awayGoals": 2,
+      "weight": 0.8570009575786749
+    },
+    {
+      "id": 1546,
+      "kickoff": "2025-03-12T20:00:00.000Z",
+      "homeElo": 1979.18,
+      "awayElo": 1818.07,
+      "homeRatingDay": "2025-03-01",
+      "awayRatingDay": "2025-03-01",
+      "homeGoals": 2,
+      "awayGoals": 2,
+      "weight": 0.85715354679425
+    },
+    {
+      "id": 1547,
+      "kickoff": "2025-03-12T20:00:00.000Z",
+      "homeElo": 1783.92,
+      "awayElo": 1734.02,
+      "homeRatingDay": "2025-03-01",
+      "awayRatingDay": "2025-03-01",
+      "homeGoals": 3,
+      "awayGoals": 0,
+      "weight": 0.85715354679425
+    },
+    {
+      "id": 1549,
+      "kickoff": "2025-04-08T19:00:00.000Z",
+      "homeElo": 1998.97,
+      "awayElo": 1964.24,
+      "homeRatingDay": "2025-04-01",
+      "awayRatingDay": "2025-04-01",
+      "homeGoals": 3,
+      "awayGoals": 0,
+      "weight": 0.9021780046321455
+    },
+    {
+      "id": 1550,
+      "kickoff": "2025-04-08T19:00:00.000Z",
+      "homeElo": 1922.66,
+      "awayElo": 1963.86,
+      "homeRatingDay": "2025-04-01",
+      "awayRatingDay": "2025-04-01",
+      "homeGoals": 1,
+      "awayGoals": 2,
+      "weight": 0.9021780046321455
+    },
+    {
+      "id": 1551,
+      "kickoff": "2025-04-09T19:00:00.000Z",
+      "homeElo": 1954.88,
+      "awayElo": 1779.86,
+      "homeRatingDay": "2025-04-01",
+      "awayRatingDay": "2025-04-01",
+      "homeGoals": 4,
+      "awayGoals": 0,
+      "weight": 0.9038928985749228
+    },
+    {
+      "id": 1552,
+      "kickoff": "2025-04-09T19:00:00.000Z",
+      "homeElo": 1959.09,
+      "awayElo": 1821.52,
+      "homeRatingDay": "2025-04-01",
+      "awayRatingDay": "2025-04-01",
+      "homeGoals": 3,
+      "awayGoals": 1,
+      "weight": 0.9038928985749228
+    },
+    {
+      "id": 1553,
+      "kickoff": "2025-04-15T19:00:00.000Z",
+      "homeElo": 1821.52,
+      "awayElo": 1959.09,
+      "homeRatingDay": "2025-04-01",
+      "awayRatingDay": "2025-04-01",
+      "homeGoals": 3,
+      "awayGoals": 2,
+      "weight": 0.9142509339476348
+    },
+    {
+      "id": 1554,
+      "kickoff": "2025-04-15T19:00:00.000Z",
+      "homeElo": 1779.86,
+      "awayElo": 1954.88,
+      "homeRatingDay": "2025-04-01",
+      "awayRatingDay": "2025-04-01",
+      "homeGoals": 3,
+      "awayGoals": 1,
+      "weight": 0.9142509339476348
+    },
+    {
+      "id": 1555,
+      "kickoff": "2025-04-16T19:00:00.000Z",
+      "homeElo": 1964.36,
+      "awayElo": 1912.55,
+      "homeRatingDay": "2025-04-15",
+      "awayRatingDay": "2025-04-15",
+      "homeGoals": 2,
+      "awayGoals": 2,
+      "weight": 0.9159887765693295
+    },
+    {
+      "id": 1556,
+      "kickoff": "2025-04-16T19:00:00.000Z",
+      "homeElo": 1940.91,
+      "awayElo": 2000.47,
+      "homeRatingDay": "2025-04-15",
+      "awayRatingDay": "2025-04-15",
+      "homeGoals": 1,
+      "awayGoals": 2,
+      "weight": 0.9159887765693295
+    },
+    {
+      "id": 1557,
+      "kickoff": "2025-04-29T19:00:00.000Z",
+      "homeElo": 2000.47,
+      "awayElo": 1964.97,
+      "homeRatingDay": "2025-04-15",
+      "awayRatingDay": "2025-04-15",
+      "homeGoals": 0,
+      "awayGoals": 1,
+      "weight": 0.9388836337158916
+    },
+    {
+      "id": 1558,
+      "kickoff": "2025-04-30T19:00:00.000Z",
+      "homeElo": 1955.37,
+      "awayElo": 1964.36,
+      "homeRatingDay": "2025-04-15",
+      "awayRatingDay": "2025-04-15",
+      "homeGoals": 3,
+      "awayGoals": 3,
+      "weight": 0.9406682991013979
+    },
+    {
+      "id": 1560,
+      "kickoff": "2025-05-07T19:00:00.000Z",
+      "homeElo": 1947.74,
+      "awayElo": 1997.35,
+      "homeRatingDay": "2025-05-01",
+      "awayRatingDay": "2025-05-01",
+      "homeGoals": 2,
+      "awayGoals": 1,
+      "weight": 0.953256304823177
+    },
+    {
+      "id": 1561,
+      "kickoff": "2025-05-31T19:00:00.000Z",
+      "homeElo": 1948.38,
+      "awayElo": 1958.82,
+      "homeRatingDay": "2025-05-15",
+      "awayRatingDay": "2025-05-15",
+      "homeGoals": 5,
+      "awayGoals": 0,
+      "weight": 0.9977079654081015
+    }
+  ]
+}
