@@ -1,5 +1,72 @@
 # Current production model releases and qualified research candidates
 
+## NFL market-specific splits and NBA complete consumer pairs — November 4
+
+The owner directed repair of NFL split qualification, NBA future-price coverage,
+and several independent AI reviews of every NFL and NBA board game. This tuple
+supersedes the prior NFL R57 / NBA R34 inputs prospectively. It does not loosen
+premium floors, force a market vote, fabricate a missing offer or restamp a native
+source observation.
+
+NFL retains each complete native book/market independently. An absent or invalid
+Total cannot discard valid Moneyline/Spread data; exact native source identity,
+contract, percentages, read time, actual response availability and decision cutoff
+still apply. Professional authority remains source-specific. Fresh retail figures
+cannot replace stale Circa as professional money. The exact R65/R73/R57/R60,
+R64/R72/R56/R59 and older locked snapshots retain original writer and reader
+precedence; R57's PMF policy remains intact after this input-version change.
+
+NBA reuses intact executable consumer pairs from the already-fetched Owls body
+after preserving complete BALLDONTLIE/The Odds API pairs. One-sided or context-only
+retail rows cannot falsely establish execution coverage. Exact event/date/native
+clock matching and same-contract pair checks prevent mixed sides or professional
+book relabeling. Native Circa/Pinnacle source paths and public-money context remain
+separate. The source-to-reader split path now retains true native read and receipt
+times for unlocked NBA data; legacy locked null or stored clocks remain exact.
+
+The Odds API is an active paid backup. The existing NBA writer retains one
+memoized league-board request per cycle, with its existing eight-book/three-market
+ceiling. A missing local key now fails before HTTP, so an unauthenticated local
+probe cannot be mistaken for an invalid paid account. The existing leased refresh
+also overwrites one bounded non-secret provider-diagnostic snapshot containing
+configuration, quota and coverage status; no new job, schedule, prediction writer,
+provider polling loop or schema is introduced. A sensitive production variable
+exists; actual authenticated status must be verified from the live diagnostic.
+
+Frozen input comparison: 84 native consumer rows fill 42 missing physical book/
+market pairs across 14 priced NBA games while all 954 prior rows remain. Existing
+runtime math on the same inputs changes no scores, changes one Watchlist spread
+side and five exact-line probabilities, and promotes one New York spread from
+Watchlist to Lean with zero actionable demotions or Best Angle tier changes.
+NFL's 15-game frozen qualification and grades remain unchanged because its native
+Circa reads are genuinely stale. Two immediate future NBA games have no eligible
+Owls or BALLDONTLIE consumer offer; a keyless local TOA response is not availability
+proof. Unpriced games remain unpriced until a valid source offers the contract.
+All 68 published games / 204 markets were covered in multiple per-game reviews;
+this is a functional audit, not a prediction-accuracy guarantee.
+
+Current exact runtime identifiers:
+
+- `nba_daily_refresh_schedule_2026_11_04_r23_native_consumer_pairs`
+- `nba_grade_policy_2026_11_04_r26_native_consumer_pairs`
+- `nba_market_marriage_2026_11_04_r37_native_consumer_pairs`
+- `nba_professional_unified_2026_11_04_r35_native_consumer_pairs`
+- `nba_the_odds_api_current_2026_11_04_r2_credential_diagnostics`
+- `nfl_forward_evidence_writer_2026_11_04_r109_per_market_source_qualification`
+- `nfl_forward_member_snapshot_2026_11_04_r66_per_market_source_qualification`
+- `nfl_full_game_evidence_runtime_2026_11_04_r19_per_market_source_qualification`
+- `nfl_market_innovation_2026_11_04_r6_per_market_source_qualification`
+- `nfl_market_innovation_posture_2026_11_04_r6_per_market_source_qualification`
+- `nfl_owls_splits_2026_11_04_r5_per_market_source_qualification`
+- `nfl_v1_daily_edge_calibration_2026_11_04_r52_per_market_source_qualification`
+- `nfl_v1_daily_edge_decision_2026_11_04_r61_per_market_source_qualification`
+- `nfl_v1_daily_edge_model_2026_11_04_r53_per_market_source_qualification`
+- `nfl_v1_grade_policy_2026_11_04_r61_per_market_source_qualification`
+- `nfl_v1_member_release_2026_11_04_r58_per_market_source_qualification`
+- `nfl_weekly_member_fixture_2026_11_04_r74_per_market_source_qualification`
+
+Evidence: `docs/model-audits/2026-11-04-nfl-nba-market-source-coverage.json`.
+
 ## CBB locked terminal-score continuity — November 4
 
 The sole fixture seed advances to

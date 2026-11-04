@@ -1,5 +1,32 @@
 # Model change safety protocol
 
+## Owner-directed NFL/NBA available-source repair and all-game review — November 4
+
+The owner directed: "fix the NFL split-qualification and NBA future-game price
+gaps too, and spot check them live" and requested several independent AI readers
+review every game. The owner confirmed The Odds API remains active with a20,000
+credit plan and approximately1,600 used; this is not authority to spend the balance
+or raise polling cadence.
+
+This scoped functional repair retains market-specific NFL source evidence,
+reconciles complete native NBA consumer pairs through the existing writer, and
+preserves true native split clocks through the unlocked NBA member reader. All
+book identities, source contracts, actual availability, current qualification,
+professional/retail roles, price-pair integrity, exact-price value, locked payloads,
+sport leases, schedules and source budgets remain enforced. No quota, fixed blend,
+new model branch, duplicate prediction writer or artificial grade is introduced.
+
+The existing NBA refresh records bounded non-secret provider diagnostics to make
+its configured paid backup's auth/quota/coverage inspectable after a long request.
+Local missing-key probes must be labeled unauthenticated, never invalid-account
+proof. Source absence cannot be fixed by inventing a price or changing Circa's
+read clock. Same-input board impact, exact prior-release reader/writer tests,
+multiple per-game evidence reviews, the full model-change gate, current-main
+integration safety, protected PR/deployment and live source/reader/lock proof
+remain mandatory. If actual provider authentication cannot be verified, report
+the specific external/configuration blocker and retain the previous valid data.
+Evidence: `docs/model-audits/2026-11-04-nfl-nba-market-source-coverage.json`.
+
 ## Owner-directed NFL probability-coherence publication repair — November 4
 
 While verifying the authorized moneyline restriction repair, the normal NFL
