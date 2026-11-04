@@ -37,3 +37,38 @@ assert.equal(run([context],[before,after,{...after,line:-5.5,firstPrice:0,provid
 const offTarget=run();assert.equal(offTarget.ownLine,-3.5);assert.equal(offTarget.current?.line,-4.5,"native pressure remains meaningful when the line changes");
 assert.equal(run([{...context,firstMoney:null,secondMoney:null}]).moneyDirection,null,"missing handle is never invented from tickets");
 console.log("PASS CBB pressure interpretation: own-source chronology, actual hold, native contracts, distinct money/tickets and no aggregate causality");
+
+const lateRepeat:CbbDecisionSplitContext={...context,observedAt:"2026-11-03T18:25:00Z",
+ availableBy:"2026-11-03T18:29:00Z",sourceHistory:[context]};
+const repeat=run([lateRepeat]);
+assert.equal(repeat.reaction,"toward_money","unchanged late reread cannot erase an already observed response");
+assert.equal(repeat.sourceAt,context.observedAt,"do not restamp the older response as the latest unmatched flow");
+assert.equal(repeat.latestObservation?.sourceAt,lateRepeat.observedAt);
+assert.equal(repeat.current!.providerObservedAt,after.providerObservedAt);
+assert.equal(run([lateRepeat],[before,{...after,line:before.line}]).resolution,"held",
+ "a later exact hold remains a hold despite an unresponded repeated source read");
+for(const changed of [{firstMoney:.2,secondMoney:.8},{firstTickets:.5,secondTickets:.5},{line:-4.5},
+ {sourceEventId:"different-native-event"}]) {
+ assert.equal(run([{...lateRepeat,...changed}]).reaction,"unbound","new pressure, contract, tickets or identity cannot inherit old response");
+}
+const laterBuyback={...after,line:-4,providerObservedAt:"2026-11-03T18:23:00Z",fetchedAt:"2026-11-03T18:24:00Z"};
+assert.equal(run([lateRepeat],[before,after,laterBuyback]).resolution,"contested",
+ "retained earlier response must be re-evaluated against subsequent buyback");
+assert.equal(readCbbSourcePressure({forecast,rows:[context,lateRepeat],quotes:[before,after],quarantinedKeys:[]}).length,1,
+ "historical rereads do not multiply physical source votes");
+const conflictingPast={...context,observedAt:"2026-11-03T18:15:00Z",availableBy:"2026-11-03T18:16:00Z"};
+assert.equal(run([{...lateRepeat,sourceHistory:[context,{...conflictingPast,firstMoney:.2,secondMoney:.8},conflictingPast]}]).reaction,
+ "unbound","same-clock conflicting historical pressure interrupts unchanged continuity even when latest returns to old values");
+console.log("PASS CBB pressure frontier: mature response/hold, unchanged native repeat, changed-state veto and latest buyback");
+
+assert.equal(run([{...lateRepeat,sourceHistory:[context,
+ {...conflictingPast,observedAt:"2026-11-03T18:15:00+00:00",firstMoney:.2,secondMoney:.8},conflictingPast]}]).reaction,
+ "unbound","equivalent ISO representations cannot evade one native-time pressure ambiguity");
+
+const microReceipt:CbbDecisionSplitContext={...context,clockBasis:"db_inserted_upper_bound",
+ availableBy:"2026-11-03T18:11:00.000123Z",receiptEarliest:"2026-11-03T18:10:30Z"};
+const microQuote={...after,providerObservedAt:"2026-11-03T18:10:01Z",fetchedAt:"2026-11-03T18:11:00.000Z"};
+assert.equal(run([microReceipt],[before,microQuote]).reaction,"unbound",
+ "a microsecond availability upper bound cannot be truncated into a prior millisecond response");
+assert.equal(run([microReceipt],[before,{...microQuote,fetchedAt:"2026-11-03T18:11:00.001Z"}]).reaction,"toward_money",
+ "the first genuinely available millisecond after the pressure bound still qualifies");

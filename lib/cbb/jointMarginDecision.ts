@@ -132,9 +132,16 @@ export function decideCbbJointMargin(args:{base:CbbForecast;current:CbbQuote[];e
  const ownStreams=path.streams.filter(s=>s.book===chosen.book&&s.market!=="total");
  const unresolvedPath=ownStreams.some(s=>s.status==="conflicting"||s.currentResolution==="contested");
  const sourceDirection=sign(chosen.margin),independentDirection=sign(base.margin);
- // Confirmation must agree with the actual current outcome/contract too.
- // A move towards a model on the opposite side cannot certify that model.
- const confirms=!unresolvedPath&&confirmations.length>0&&confirmations.every(c=>c.kind==="confirms_independent")&&
+ // A directional move alone cannot certify a stronger independent law.
+ // Every available native contract must support at least that law's actual
+ // conditional probability on its preferred outcome (including ML and Spread
+ // together). This is an economic ordering, not a confidence/point threshold.
+ // A single contract still retains explicit independent residual shape only.
+ const strengthSupported=chosen.quotes.every(q=>{
+  const p=cbbThresholdProbabilities(base,q.market,q.line),independent=p.first/(p.first+p.second),source=fair(q);
+  return independent>=.5 ? source+1e-8>=independent : source-1e-8<=independent;
+ });
+ const confirms=strengthSupported&&!unresolvedPath&&confirmations.length>0&&confirmations.every(c=>c.kind==="confirms_independent")&&
   sourceDirection===independentDirection&&chosen.quotes.filter(q=>q.market==="spread").every(q=>
     (()=>{const original=cbbThresholdProbabilities(base,"spread",q.line);
       const implied=cbbThresholdProbabilities({...base,margin:chosen!.margin,uncertainty:{...base.uncertainty,marginSd:chosen!.marginSd}},"spread",q.line);

@@ -1,5 +1,34 @@
 # Model change safety protocol
 
+## Owner-directed CBB response continuity and source-law support repair — November 4
+
+The owner requested complete current-board price/source checks, several independent
+AI reviews, and correction of evidence that fails to affect final projections,
+picks and grades properly. This continues the explicit functional-repair and
+forward-evaluation direction in this chat; no settled-outcome qualification,
+shadow writer, forced Best Angle count or new grading definition is introduced.
+
+The scoped release is market model R15 /grade R17 /receipt R11 /path R5 /
+board R18 /publisher R27 /tracking R16 /adapter R16. The independently fitted
+R4 prior is unchanged. This repair preserves the original qualified response
+across an exact unchanged native pressure reread, without claiming the new read
+has a later price response. Changed pressure, contracts, event identity, ambiguous
+native states and subsequent buyback interrupt that continuity. A source can
+confirm the whole independent margin law only when its available exact contracts
+support that law's actual preferred-outcome probability strength. Merely crossing
+50% cannot restore a much stronger independent forecast.
+
+Current-source identity, response availability, one physical source frontier,
+target-family exclusion, exact-price grading, original stored locks, source
+budgets, schedules and prediction_pipeline:cbb lease remain mandatory. Grade
+reserve/price/tier thresholds remain unchanged. Paired held/contrarian-response
+tests must preserve both legitimate promotion and demotion behavior. All 11 games
+and 33 current markets require a causal same-input comparison, promotion/demotion
+counts, independent review, focused/full checks, fresh-main protected PR and live
+normal-writer/reader/coverage/lock verification before completion.
+
+Evidence: `docs/model-audits/2026-11-04-cbb-response-frontier-law-support.md`.
+
 ## Owner-directed NFL/NBA available-source repair and all-game review — November 4
 
 The owner directed: "fix the NFL split-qualification and NBA future-game price

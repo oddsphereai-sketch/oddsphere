@@ -1,3 +1,4 @@
+import {CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_RECEIPT_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
 import assert from "node:assert/strict";
 import {normalCdf} from "../lib/cbb/model";
 import {CBB_RETAIL_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_RECEIPT_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
@@ -230,6 +231,27 @@ async function main(){
  assert.ok(priorTracked.every(row=>row.model_version===CBB_JOINT_MARKET_BEHAVIOR_MODEL_RELEASE&&row.calibration_version===CBB_JOINT_MARKET_BEHAVIOR_GRADE_RELEASE&&row.model_used==="cbb_r13_joint_native_market_decision"));
  assert.equal(await writeLockedCbbTracking(jointPublic,priorTrackingDb),0);
  assert.equal(JSON.stringify(jointPublic),jointBytes,"R13/R15/R9 stored scores, probabilities, prices, grades, source evidence and uncertainty remain exact");
+ const sourceAliasPublic=structuredClone(frozen.record);
+ Object.assign(sourceAliasPublic.snapshot.board,{release:"cbb_candidate_2026_11_04_r17_current_board_source_aliases",
+  modelRelease:CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE,gradeRelease:CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_GRADE_RELEASE});
+ const sourceAliasReceipt=sourceAliasPublic.snapshot.board.marketContext.verifiedMarketRead!;
+ Object.assign(sourceAliasReceipt,{release:CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_RECEIPT_RELEASE,modelRelease:CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE});
+ Object.assign(sourceAliasReceipt.forecastIdentity,{release:CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE});
+ sourceAliasReceipt.anchors.release=CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_RECEIPT_RELEASE;
+ sourceAliasReceipt.pathTape.release="cbb_market_behavior_path_2026_11_03_r4_identical_preflow_state";
+ const sourceAliasBytes=JSON.stringify(sourceAliasPublic),sourceAliasWrites=writes;stored=sourceAliasPublic;
+ assert.equal((await writeCbbMemberGame({game,candidate:newR6,homeLogo:null,awayLogo:null,now:"2026-11-02T19:09:40Z"},db)).written,false);
+ assert.equal(writes,sourceAliasWrites);
+ assert.equal(readCbbProvisionalSnapshot({locked:sourceAliasPublic.snapshot,unlocked:initial.record.snapshot}),sourceAliasPublic.snapshot);
+ assert.deepEqual(cbbMemberGameForReader(sourceAliasPublic,game),sourceAliasPublic.memberGame,"R14/R16/R10 stored DTO wins over new source-law and response semantics");
+ priorTracked.length=0;assert.equal(await writeLockedCbbTracking(sourceAliasPublic,priorTrackingDb),3);
+ assert.ok(priorTracked.every(row=>row.model_version===CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE&&row.calibration_version===CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_GRADE_RELEASE&&row.model_used==="cbb_r14_current_board_source_aliases"));
+ assert.equal(await writeLockedCbbTracking(sourceAliasPublic,priorTrackingDb),0);
+ assert.equal(JSON.stringify(sourceAliasPublic),sourceAliasBytes,"R14 score, probabilities, prices, grades, source clocks and evidence remain byte exact");
+ const sourceAliasMigrated=readCbbMarketBehavior({independent,independentInputKey:"frozen-source",startsAt:start,targets,currentQuotes:refs,
+  anchors:sourceAliasReceipt.anchors,previousPath:sourceAliasReceipt.pathTape});
+ assert.deepEqual(sourceAliasMigrated.receipt.anchors.quotes,sourceAliasReceipt.anchors.quotes,"R10 actual anchors survive the response-frontier release");
+ assert.ok(sourceAliasMigrated.receipt.pathTape.streams.length>=sourceAliasReceipt.pathTape.streams.length,"R4 prior path history remains compatible without a new opening");
  const jointMigrated=readCbbMarketBehavior({independent,independentInputKey:"same-alias-input",startsAt:start,targets,currentQuotes:refs,anchors:jointReceipt.anchors});
  assert.deepEqual(jointMigrated.receipt.anchors.quotes,jointReceipt.anchors.quotes,"R9 actual anchors survive the source-identity release");
  const migratedPrior=readCbbMarketBehavior({independent,independentInputKey:"new-r4-input",startsAt:start,targets,currentQuotes:refs,anchors:retailReceipt.anchors});
@@ -245,7 +267,7 @@ async function main(){
  const confirmingSplits=structuredClone(splits);
  Object.assign(confirmingSplits.data[0].splits[0].spread,{home_line:-3.5,away_line:3.5,home_bets_pct:40,away_bets_pct:60,home_handle_pct:80,away_handle_pct:20});
  const realNamedFlow=cbbBehaviorFlows(cbbCurrentSplitEvidence(game,odds,confirmingSplits,"2026-11-02T15:11:00Z",at));
- const target={...targets[1],line:-3.5},current={...target,sportsbook:"circa"},anchor={...current,firstPrice:120,secondPrice:-140,providerObservedAt:"2026-11-02T15:00:00Z",fetchedAt:"2026-11-02T15:01:00Z"};
+ const target={...targets[1],line:-3.5,firstPrice:150,secondPrice:-170},current={...target,sportsbook:"circa",firstPrice:-110,secondPrice:-110},anchor={...current,firstPrice:120,secondPrice:-140,providerObservedAt:"2026-11-02T15:00:00Z",fetchedAt:"2026-11-02T15:01:00Z"};
  const confirmingRead=readCbbMarketBehavior({independent,independentInputKey:"frozen-source",startsAt:start,targets:[target],currentQuotes:[current],flows:realNamedFlow,
    anchors:{release:CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,gameId:777,startsAt:start,independentRelease:CBB_CURRENT_SCORE_RELEASE,independentInputKey:"frozen-source",capturedAt:"2026-11-02T15:01:00Z",quotes:[anchor]}});
  const confirmingInput={forecast:confirmingRead.forecast,target,references:[current],asOf:at};
@@ -257,10 +279,11 @@ async function main(){
  assert.equal(qualifiedDto.markets.first_inning.writerMovementDirection,"support",
   "genuine observed professional movement toward the final pick must survive the new joint-law explanation without being confused with the model-to-source level difference");
  assert.equal(qualifiedDto.markets.first_inning.readerMovementSource,"writer_market_anchor");
- const priceOnlyRead=readCbbMarketBehavior({independent,independentInputKey:"frozen-source",startsAt:start,targets:[target],currentQuotes:[current],
+ const priceOnlyTarget={...target,firstPrice:110,secondPrice:-130};
+ const priceOnlyRead=readCbbMarketBehavior({independent,independentInputKey:"frozen-source",startsAt:start,targets:[priceOnlyTarget],currentQuotes:[current],
    anchors:{release:CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,gameId:777,startsAt:start,independentRelease:CBB_CURRENT_SCORE_RELEASE,independentInputKey:"frozen-source",capturedAt:"2026-11-02T15:01:00Z",quotes:[anchor]}});
- const priceBoard=buildCbbProvisionalBoard(priceOnlyRead.forecast,[target,current],{marketBehavior:priceOnlyRead.receipt});
- const priceDto=adaptCbbProvisionalGame({game,snapshot:{...initial.record.snapshot,board:priceBoard},homeLogo:null,awayLogo:null,now:at,marketQuotes:[target,current]});
+ const priceBoard=buildCbbProvisionalBoard(priceOnlyRead.forecast,[priceOnlyTarget,current],{marketBehavior:priceOnlyRead.receipt});
+ const priceDto=adaptCbbProvisionalGame({game,snapshot:{...initial.record.snapshot,board:priceBoard},homeLogo:null,awayLogo:null,now:at,marketQuotes:[priceOnlyTarget,current]});
  assert.equal(priceDto.markets.first_inning.verdict.key,"lean");assert.equal(priceDto.markets.first_inning.grade,"model_only");
  assert.notEqual(priceDto.markets.first_inning.sharpStatus,"confirm","price-only promotion cannot imply identified sharp flow");
  const history=[{date:"2026-11-02T09:29:59Z"},{date:"2026-11-02T09:30:00Z"},{date:"2026-11-02T09:30:01Z"}] as Parameters<typeof cbbHistoryAtDecision>[0];

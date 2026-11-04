@@ -1,5 +1,34 @@
 # Current production model releases and qualified research candidates
 
+
+## CBB response frontier and source-law support — November 4
+
+The authoritative CBB runtime is independent prior
+`cbb_candidate_2026_11_03_r4_verified_new_orleans_venue_prior`, market model
+`cbb_candidate_2026_11_04_r15_response_frontier_law_support`, grade
+`cbb_2026_11_04_r17_response_frontier_law_support`, receipt R11, path R5,
+board R18, publisher R27, tracking R16 and adapter R16, all with suffix
+`response_frontier_law_support` except path `retained_response_frontier`.
+Canonical history R2, evidence R4, reader evidence R11, source identity R5,
+split mapping R4 and the member-store schema R2 remain unchanged.
+
+An unchanged unresponded native split reread cannot erase an earlier established
+own-book response. Its original clocks remain authoritative, and its latest
+observation stays separately unresponded. Changed pressure/contract/native-event
+identity and same-clock ambiguity interrupt retention; one physical market
+supplies one response frontier. Whole-law independent confirmation requires
+actual probability-strength support on every available selected-source contract,
+rather than a same-side crossing of 50%. Otherwise the existing coherent selected
+source law supplies the correction; no scalar blend or new grade thresholds.
+
+Exact R14 model /R16 grade /R10 receipt /R4 path anchors remain compatible for
+unlocked continuity. Stored locked R14 and all earlier payloads keep exact writer,
+reader and tracking precedence. Tracking retains R15's original-member evidence
+hash and future-evidence cutoff repair. No new provider calls, schedules, writer,
+stakes or member labels are added. Evidence, current-board impact and rollback:
+`docs/model-audits/2026-11-04-cbb-response-frontier-law-support.md`.
+
+
 ## NBA props historical settlement catch-up — November 4
 
 The sole writer advances to

@@ -68,6 +68,11 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
   const pressure=(receipt.pressureDecisions??[]).filter(row=>sameAxis(row.market)&&row.reaction!=="unbound"&&row.moneyDirection!==null&&row.moneyDirection!==0);
   const streams=receipt.pathPosture.filter(s=>sameAxis(s.market)&&
     !receipt.excludedFamilies.includes(s.book)&&!quarantined.has(`${s.book}:${s.market}`));
+  // A retained response has its original bound native clock even when a
+  // later identical read is honestly still unmatched. Its existing tier
+  // consequences must not disappear solely because collection repeated.
+  const responseBound=(s:typeof streams[number])=>s.latestFlowMatched||
+    s.pressureObservedAt!==null&&s.flowResponse!==null&&s.boundFlowDirection!==null;
   const relevantPressure=streams.filter(s=>s.status==="observed"&&s.pressureDirection!==null&&s.pressureDirection!==0);
   const support=relevantPressure.filter(s=>s.pressureDirection!*sign>0),opposition=relevantPressure.filter(s=>s.pressureDirection!*sign<0);
   const marketPressure=opposition.length&&support.length?"mixed":opposition.length?"opposes":support.length?"supports":"unavailable";
@@ -85,11 +90,11 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
   const freshAdverse=adverseSources.some(s=>!fullyAppliedPriceResponse(s));
   // A named source's concentration is context even without matched response;
   // it cannot become invented score points or exact-target action confirmation.
-  const unmatchedCircaOpposition=streams.some(s=>s.book==="circa"&&!s.latestFlowMatched&&s.flowConcentrationDirection*sign<0);
+  const unmatchedCircaOpposition=streams.some(s=>s.book==="circa"&&!responseBound(s)&&s.flowConcentrationDirection*sign<0);
   // Response is relative to source money, not to this pick. A book resisting
   // opposite-side money can support the pick; only pick-adverse residuals or
   // pressure toward the pick that the source actually held are resistance.
-  const matchedFlowResistance=streams.some(s=>s.latestFlowMatched&&s.boundFlowDirection!==null&&s.boundFlowDirection!==0&&(
+  const matchedFlowResistance=streams.some(s=>responseBound(s)&&s.boundFlowDirection!==null&&s.boundFlowDirection!==0&&(
     (s.flowReactionDirection!==null&&s.flowReactionDirection*sign<0)||
     (s.flowResponse==="held"&&s.boundFlowDirection!==null&&s.boundFlowDirection*sign>0)));
   const pathConflict=axis.crossMarketDisagreement===true||["conflicting","unresolved"].includes(axis.status)||streams.some(s=>s.status==="conflicting"||s.flowCurrentResolution==="contested"||s.sourceCurrentResolution==="contested");
@@ -125,7 +130,7 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
   // physical sources can constrain Lean only while resistance is unresolved;
   // counting transported moves again would impose a second model penalty.
   const unresolvedSources=streams.filter(s=>s.status==="observed"&&(
-    (s.latestFlowMatched&&s.flowResponse==="held"&&s.boundFlowDirection!==null&&s.boundFlowDirection*sign>0)||
+    (responseBound(s)&&s.flowResponse==="held"&&s.boundFlowDirection!==null&&s.boundFlowDirection*sign>0)||
     (s.recentDirection*sign<0&&!fullyAppliedPriceResponse(s))));
   const corroboratedOpposition=new Set(unresolvedSources.map(s=>s.book)).size>=2;
   const modelExpectedValue=base.expectedValue,eligible=base.price!==null&&base.price>=(input.target.market==="moneyline"?-250:-500);

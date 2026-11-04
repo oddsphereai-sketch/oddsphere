@@ -1,8 +1,9 @@
+import {cbbSameNativePressureState} from "./marketBehaviorPath";
 import type {CbbDecisionSplitContext} from "./decisionSplitContext";
 import type {CbbForecast,CbbQuote} from "./types";
 import {cbbExactMarketCenter} from "./marketReaderResearch";
 import {cbbImpliedProbability} from "./marketEvidence";
-import {cbbEvidenceAvailableAt,cbbEvidenceReceiptBounds} from "./marketReceiptTime";
+import {cbbAvailabilityUpperBoundMs,cbbEvidenceAvailableAt,cbbEvidenceReceiptBounds} from "./marketReceiptTime";
 
 export type CbbPressureDecision={
   book:string;market:CbbQuote["market"];sourceClass:CbbDecisionSplitContext["sourceClass"];
@@ -12,10 +13,19 @@ export type CbbPressureDecision={
   reactionDirection:-1|0|1|null;reactionDelta:number|null;
   latestDirection:-1|0|1|null;resolution:"unavailable"|"held"|"ongoing"|"contested"|"resumed"|"cancelled"|"reversed";
   baseline:CbbQuote|null;current:CbbQuote|null;reason:string;
+  /** Unresponded repeat is current context, not the older response's clock. */
+  latestObservation?:{sourceAt:string|null;availableBy:string;sourceEventId:string|null;line:number|null};
 };
 const family=(book:string)=>book==="ps3838"?"pinnacle":book==="draftkings_network"?"draftkings":book;
 const sign=(n:number):-1|0|1=>Math.abs(n)<=1e-7?0:n>0?1:-1;
-const share=(a:number|null,b:number|null)=>a===null||b===null?null:sign(a-b);
+const share=(a:number|null,b:number|null)=>{
+ if(a===null||b===null)return null;
+ const first=Number((a*100).toFixed(6)),second=Number((b*100).toFixed(6));
+ // Whole published shares summing to99/101 cannot establish a one-point
+ // majority. Preserve the existing path reader's rounded-neutral semantics.
+ if(Number.isInteger(first)&&Number.isInteger(second)&&Math.abs(first+second-100)===1&&Math.abs(first-second)<=1)return 0;
+ return sign(a-b);
+};
 const pair=(q:CbbQuote)=>JSON.stringify([q.line,q.firstPrice,q.secondPrice]);
 
 /** Pressure changes interpretation, not score amplitude. Only a genuine later
@@ -23,8 +33,9 @@ const pair=(q:CbbQuote)=>JSON.stringify([q.line,q.firstPrice,q.secondPrice]);
 export function readCbbSourcePressure(args:{forecast:CbbForecast;rows:readonly CbbDecisionSplitContext[];quotes:readonly CbbQuote[];
   quarantinedKeys:readonly string[]}):CbbPressureDecision[]{
   const at=Date.parse(args.forecast.asOf),quarantined=new Set(args.quarantinedKeys);
-  return args.rows.filter(row=>row.gameId===args.forecast.gameId&&Date.parse(row.availableBy)<=at&&
-    Number.isFinite(Date.parse(row.observedAt??row.availableBy))&&at-Date.parse(row.observedAt??row.availableBy)<=3*3600_000).map(row=>{
+  const states=args.rows.flatMap(row=>[...(row.sourceHistory??[]),row]).filter(row=>row.gameId===args.forecast.gameId&&cbbAvailabilityUpperBoundMs(row.availableBy)<=at&&
+    Number.isFinite(Date.parse(row.observedAt??row.availableBy))&&at-Date.parse(row.observedAt??row.availableBy)<=3*3600_000);
+  const reads=states.map((row):CbbPressureDecision=>{
     const book=family(row.physicalFamily),moneyDirection=share(row.firstMoney,row.secondMoney),ticketDirection=share(row.firstTickets,row.secondTickets);
     const read:CbbPressureDecision={book,market:row.market,sourceClass:row.sourceClass,ownLine:row.line,moneyDirection,ticketDirection,
       sourceAt:row.observedAt,availableBy:row.availableBy,reaction:"unbound",reactionDirection:null,reactionDelta:null,
@@ -34,7 +45,7 @@ export function readCbbSourcePressure(args:{forecast:CbbForecast;rows:readonly C
     // line is needed. It cannot establish when sportsbook pressure occurred.
     if(row.sourceClass==="multi_book_consensus"||row.sourceClass==="retail_network"||row.clockBasis==="capture_upper_bound"||
       row.observedAt===null||row.market!=="moneyline"&&row.line===null||quarantined.has(`${book}:${row.market}`))return read;
-    const observed=Date.parse(row.observedAt),earliest=Date.parse(row.receiptEarliest??row.availableBy),available=Date.parse(row.availableBy);
+    const observed=Date.parse(row.observedAt),earliest=Date.parse(row.receiptEarliest??row.availableBy),available=cbbAvailabilityUpperBoundMs(row.availableBy);
     if(![observed,earliest,available].every(Number.isFinite)||earliest>available||observed>available||available>at)return read;
     const quotes=args.quotes.filter(q=>q.gameId===row.gameId&&family(q.sportsbook)===book&&q.market===row.market&&q.phase==="current"&&
       (q as CbbQuote&{orientationVerified?:boolean}).orientationVerified===true&&
@@ -66,7 +77,8 @@ export function readCbbSourcePressure(args:{forecast:CbbForecast;rows:readonly C
       const origin=center(baseline),post=ordered.filter(q=>Date.parse(q.providerObservedAt)>observed);
       const positions=post.map(q=>center(q)-origin),deltas=positions.map((p,i)=>p-(positions[i-1]??0));
       const moving=deltas.map(sign).filter(d=>d!==0);
-      const initial:-1|0|1=moving.length?moving[0]:0,latestDirection=moving.at(-1)??0;
+      const initial:-1|0|1=moving.length?moving[0]:0;
+      const latestDirection:-1|0|1=moving.at(-1)??0;
       const delta=positions.at(-1)??0,direction=sign(delta),reversed=moving.some(d=>d!==initial);
       const frontier=Math.max(0,...positions.map(p=>p*initial));
       const resolution=initial===0?"held" as const:direction===0?"cancelled" as const:direction!==initial?"reversed" as const:
@@ -76,5 +88,25 @@ export function readCbbSourcePressure(args:{forecast:CbbForecast;rows:readonly C
         reaction:direction===0?"held" as const:moneyDirection!==null&&moneyDirection!==0&&direction===moneyDirection?"toward_money" as const:"against_money" as const,
         reason:"observed_own_contract_pressure_and_later_economic_state"};
     }catch{return {...read,reason:"source_economics_unavailable"};}
+  });
+  // One physical market supplies one current response frontier. Historical
+  // observations are not extra votes. Only an exact unchanged native repeat
+  // can retain a prior response, re-evaluated against all current own prices.
+  const groups=new Map<string,number[]>();
+  states.forEach((row,index)=>{const key=`${family(row.physicalFamily)}:${row.market}`;groups.set(key,[...(groups.get(key)??[]),index]);});
+  return [...groups.values()].map(indices=>{
+    indices.sort((a,b)=>Date.parse(states[a].observedAt??states[a].availableBy)-Date.parse(states[b].observedAt??states[b].availableBy)||
+      Date.parse(states[a].availableBy)-Date.parse(states[b].availableBy));
+    const last=indices.at(-1)!,latest=states[last];
+    const byNativeTime=new Map<number,number[]>();
+    for(const i of indices){const key=Date.parse(states[i].observedAt??states[i].availableBy);byNativeTime.set(key,[...(byNativeTime.get(key)??[]),i]);}
+    const ambiguous=new Set([...byNativeTime.values()].filter(group=>group.some(i=>!cbbSameNativePressureState(states[i],states[group[0]]))).flat());
+    if(ambiguous.has(last))return {...reads[last],reaction:"unbound" as const,resolution:"unavailable" as const,
+      baseline:null,current:null,reactionDirection:null,reactionDelta:null,latestDirection:null,reason:"ambiguous_source_pressure_frontier"};
+    if(reads[last].reaction!=="unbound")return reads[last];
+    const previous=[...indices].reverse().find(index=>!ambiguous.has(index)&&reads[index].reaction!=="unbound"&&
+      indices.slice(indices.indexOf(index)).every(i=>cbbSameNativePressureState(states[i],states[index])));
+    return previous===undefined?reads[last]:{...reads[previous],latestObservation:{sourceAt:latest.observedAt,
+      availableBy:latest.availableBy,sourceEventId:latest.sourceEventId,line:latest.line}};
   });
 }
