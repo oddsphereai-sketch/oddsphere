@@ -6756,15 +6756,48 @@ three-market pricing for both upcoming games. Predictions, prices, grades,
 locks, tracking, copy, labels, and layout are unchanged. Evidence and rollback:
 `docs/model-audits/2026-10-08-nhl-pregame-coverage-gate-r10.md`.
 
-## NHL regular-season champion (active from 2026-11-03)
+## NHL regular-season champion (active from 2026-11-04)
 
-- Model: `nhl_regular_2026_r25_categorical_total_response`
-- Calibration: `nhl_regular_calibration_2026_r25_categorical_total_response`
-- Decision: `nhl_regular_decision_2026_r25_categorical_total_response`
-- Reader: `nhl_daily_edge_reader_2026_10_27_r18_owls_same_book_movement`
+- Model: `nhl_regular_2026_r26_causal_joint_market_reader`
+- Calibration: `nhl_regular_calibration_2026_r26_causal_joint_market_reader`
+- Decision: `nhl_regular_decision_2026_r26_causal_joint_market_reader`
+- Reader: `nhl_daily_edge_reader_2026_11_03_r19_immutable_reader_receipt`
+- Reader receipt: `nhl_reader_receipt_2026_11_03_r1_immutable_market_evidence`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
+
+The November 4 r26 release replaces r25's endpoint and target-excluded reader
+with a causal, multi-professional-book episode arbiter. The independent model
+is the sole prior. Exact-contract fresh paths reject stale, future, partial,
+flat, bought-back and reversed evidence; split response must occur after the
+complete split receipt was available. Without a split, price discovery needs a
+unique named-book leader and later independent named-book follower. The exact
+execution-book family is excluded. Opposed named paths fail closed, one book
+alone authors amplitude, and no current ML/Total/spread market level is blended
+or substituted into the forecast.
+
+Qualified ML, puck-line and main-Total innovations enter one information
+projection over one independent product-Poisson score distribution. That one
+distribution owns final scores, predictions and probabilities. Exact-price
+grades consume the final probability once; no categorical second bonus exists.
+An invalid or nonconvergent constraint set returns the exact independent PMF.
+Every new writer tuple freezes a canonical hash-bound evidence receipt with
+quotes, trails, split clocks, considered paths, rejection reasons, before/after
+decisions and final scores. Locked cards verify and render it before mutable
+data reads. Legacy r23-r25 locks remain exact and are never rewritten.
+
+The release also permits incomplete same-day/future MoneyPuck file publication
+without discarding all prior paired games. Only exact earlier pairs replay and
+the existing settled-game ID gate still rejects missing historical coverage.
+On the exact November 4 four-game / twelve-market board, r26 has zero errors,
+zero pick changes, zero promotions, zero demotions and the same eight
+actionables (zero Best Angle, eight Lean, four Watchlist). Current named paths
+are flat after excluding each evaluated execution book, so no score consequence
+is warranted on that snapshot. Paired functional tests cover promotions,
+demotions and score/pick consequences on all three markets. This is forward
+functional qualification, not a future-accuracy claim. Evidence and rollback:
+`docs/model-audits/2026-11-04-nhl-causal-joint-market-reader-r26.md`.
 
 The November 3 r25 functional follow-up closes the remaining two-book Total
 interpretation gap found in the owner-requested live spot check. When
