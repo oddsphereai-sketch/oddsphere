@@ -14,6 +14,7 @@ import {
 import { gradePredictionsForSlate } from "../lib/services/predictionGradingService";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 import type { DailyEdgeResponse, MarketEdgeDto } from "../app/lab/lib/labTypes";
+import { soccerPublishedScorePresentation } from "../app/lab/lib/soccerPublishedScorePresentation";
 
 type Operation = { table: string; kind: string; payload?: Record<string, unknown>; filters: Record<string, unknown> };
 
@@ -75,10 +76,18 @@ const slate = {
   competitionContexts: { 34: { stage: "league_phase", regulationTime: true } },
   matches: [{ id: 34, kickoff, homeTeam: { id: 1 }, awayTeam: { id: 2 } }],
 } as never;
+const frozenProjection = {
+  expectedGoals: { away: 2.1466406123, home: 0.7067270992 },
+  likelyScore: { away: 2, home: 0 }, likelyScoreProbability: 0.13419,
+  representativeScore: { away: 3, home: 0 }, representativeScoreProbability: 0.09509,
+  medianTotal: 3, mostLikelyTotal: 2,
+  coherentScorePresentation: { release: "ucl_projected_score_2026_11_04_r12_shared_joint_scenario",
+    score: { away: 2.5, home: 0.4 }, scenario: { away: 3, home: 0 }, scenarioProbability: 0.09509 },
+};
 const response = {
   games: [{
     external_id: 34, awayTeam: "AWY", homeTeam: "HOM", gameStartAt: kickoff,
-    status: { lineupConfirmed: null }, soccerProjection: { expectedHomeGoals: 1.4, expectedAwayGoals: 1.1 }, soccerModelProvenance: { release: UCL_MODEL_RELEASE },
+    status: { lineupConfirmed: null }, soccerProjection: frozenProjection, soccerModelProvenance: { release: UCL_MODEL_RELEASE },
     markets: { moneyline: market("home", -110), total: market("over", null), first_inning: market("yes", null) },
     soccerDoubleChanceMarket: market("home_or_draw", -120),
   }],
@@ -91,6 +100,8 @@ const write = await writeUclPredictionRecords({
   slate, response, apply: true, now: new Date("2026-09-08T16:45:00Z"), client: writerClient(operations),
 });
 assert.deepEqual(write.errors, []);
+for (const row of write.proposed) assert.deepEqual(row.snapshot_json?.member_projection_at_capture, frozenProjection,
+  "every market freezes the exact common presentation and the distinct unconditional scoring means");
 assert.deepEqual((write.proposed.find(row=>row.market==='match_result')!.snapshot_json!.member_market_at_capture as MarketEdgeDto).sportsbookSplits,frozenPublicSplits,'the existing immutable writer freezes complete public split evidence');
 const priorLock = operations.find((operation) => operation.kind === "update");
 assert.deepEqual(Object.keys(priorLock?.payload ?? {}), ["locked_at"], "disappearing quote may only add the lock timestamp");
@@ -129,7 +140,11 @@ assert.deepEqual({ completeProviderIds: verified.completeProviderIds, incomplete
 assert.equal(verified.lockedResponse.games[0]?.markets.total.currentPriceAmerican, -115, "locked member card reconstructs the prior immutable DB tuple instead of the fresh held tuple");
 assert.equal(verified.lockedResponse.games[0]?.markets.total.held, false);
 assert.deepEqual(verified.lockedResponse.games[0]?.markets.moneyline.sportsbookSplits,frozenPublicSplits,'locked reader renders the exact captured public section');
-assert.deepEqual(verified.lockedResponse.games[0]?.soccerProjection, { expectedHomeGoals: 1.4, expectedAwayGoals: 1.1 }, "locked projected score/probability payload is reconstructed from the common DB capture");
+assert.deepEqual(verified.lockedResponse.games[0]?.soccerProjection, frozenProjection, "locked projected score/probability payload is reconstructed from the common DB capture");
+assert.deepEqual(soccerPublishedScorePresentation(verified.lockedResponse.games[0]!)?.score, { away: 2.5, home: 0.4 },
+  "reader uses the exact captured scenario presentation, never rounds unconditional means into a conflicting final");
+assert.deepEqual(verified.lockedResponse.games[0]?.soccerProjection?.expectedGoals, frozenProjection.expectedGoals,
+  "presentation cannot replace the underlying expected-goal means used by probabilities");
 const incomplete = await verifyUclAllMarketLocks(lockInput, lockVerificationClient(four.slice(0, 3)));
 assert.deepEqual({ completeProviderIds: incomplete.completeProviderIds, incompleteProviderIds: incomplete.incompleteProviderIds }, { completeProviderIds: [], incompleteProviderIds: [34] });
 const partialRefreshLock = await verifyUclRefreshAllMarketLocks({
@@ -260,9 +275,11 @@ function alreadyLockedWriterClient(rows: typeof four, operations: Operation[]) {
   } as unknown as typeof supabase;
 }
 const repairOperations: Operation[] = [];
+const changedPresentationResponse = structuredClone(response) as DailyEdgeResponse;
+changedPresentationResponse.games[0]!.soccerProjection!.coherentScorePresentation!.score = { away: 8, home: 0.1 };
 const repairWrite = await writeUclPredictionRecords({
   slate,
-  response,
+  response: changedPresentationResponse,
   apply: true,
   now: new Date("2026-09-08T16:55:00Z"),
   client: alreadyLockedWriterClient(four, repairOperations),
@@ -272,6 +289,8 @@ assert.equal(repairOperations.some((operation) => operation.kind === "update" ||
 const repaired = await verifyUclAllMarketLocks({ ...lockInput, expectedRows: repairWrite.proposed, writerLockedRecordIds: repairWrite.lockedRecordIds }, lockVerificationClient(four));
 assert.deepEqual(repaired.completeProviderIds, [34], "a T1 DB lock can reconstruct the member snapshot during a T2 repair cycle");
 assert.equal(repaired.lockedResponse.games[0]?.markets.total.currentPriceAmerican, -115);
+assert.deepEqual(soccerPublishedScorePresentation(repaired.lockedResponse.games[0]!), frozenProjection.coherentScorePresentation,
+  "an incoming newer scenario cannot override the existing stored locked presentation");
 
 for (const trackedMarket of ["match_result", "double_chance", "total", "btts"] as const) {
   const heldRecord = {
@@ -404,6 +423,11 @@ const incoming = { date: "2026-09-08", games: [{ external_id: 34, id: "fresh", s
 const preserved = preserveLockedEplGames(previous, incoming, new Date("2026-09-08T17:00:00Z"), { boardDate: "2026-09-08" });
 assert.equal(preserved.games[0]?.markets, lockedMarket);
 assert.deepEqual(preserved.games[0]?.soccerProjection, { home: 1.2 });
+const incomingPresentation = structuredClone(incoming);
+incomingPresentation.games[0]!.soccerProjection = structuredClone(frozenProjection);
+const preservedLegacy = preserveLockedEplGames(previous, incomingPresentation, new Date("2026-09-08T17:00:00Z"), { boardDate: "2026-09-08" });
+assert.equal(soccerPublishedScorePresentation(preservedLegacy.games[0]!), null,
+  "new presentation semantics cannot be reconstructed or injected into an old locked projection");
 assert.deepEqual(preserved.games[0]?.result, { final: true });
 
 const priorDayLocked = { ...previous.games[0]!, external_id: 35, gameStartAt: "2026-09-09T19:00:00Z" };

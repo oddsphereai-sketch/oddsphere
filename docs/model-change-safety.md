@@ -1,5 +1,40 @@
 # Model change safety protocol
 
+## Owner-directed UCL multibook/full-pregame and score-presentation continuation — November 4
+
+After the R20 spot check, Daniel explicitly directed this chat to continue repairing
+the single-book score influence and incomplete path interpretation, and to make
+the score card and reader agree without forcing Arsenal to 3-0 or forcing No/Under
+selections. His existing authorization prioritizes product correctness now and
+forward outcome evaluation rather than a shadow deployment or historical tuning.
+
+This scoped continuation covers model R21, grade R24, coherent outcome R14,
+projected score R12 and member lifecycle R23, documented in
+`docs/model-audits/2026-11-04-ucl-multibook-full-pregame-coherence.md`.
+It permits normalized correlated-source opinion pooling and first-observed
+complete pregame comparison instead of a midnight reset. The same source families
+define both endpoint profiles; missing baselines are excluded, copied economic
+paths cannot multiply confidence, and the independent model is not blended with
+a fixed sportsbook weight. Native Total units, source identity, original clocks,
+gaps and two-sided pairing remain enforced. Reversals already present in the
+endpoint must not be applied a second time as invented momentum evidence.
+
+The final law continues to own every probability and pick. One stored illustrative
+decimal scenario is displayed consistently across the new card and reader, while
+unconditional means and the exact scenario probability remain separately intact.
+An impossible intersection of selected marginal directions stays explicitly
+without a shared scenario; no score or probability can be fabricated to hide it.
+Exact team-to-score marginals replace only the new UCL reader's Poisson-from-mean
+approximation. All prior locked fields and reader precedence remain unchanged.
+
+Grade thresholds, stakes, source budgets/cadence, writer, sport lease, lock and
+tracking definitions are unchanged. Same-input current-board counts, promotions,
+demotions and price coverage must be reported; functional tests, full model-change
+verification, clean latest-main protected PR and live deployment/normal writer/
+member/locked-record proof remain mandatory. This is not a claim of improved win
+rate. The exception does not authorize another extra refresh cycle or provider
+request beyond existing specific approvals.
+
 ## Owner-directed NHL external-audited sharp-reader repair — November 4
 
 Daniel Mengel requested repeated independent AI reviews of whether the NHL

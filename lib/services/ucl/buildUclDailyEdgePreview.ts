@@ -14,10 +14,11 @@ import { deriveUclCoherentMarketOutcome, UCL_COHERENT_MARKET_OUTCOME_RELEASE } f
 import { deriveUclMatchResultDecision, deriveUclPreviewGrade } from "./uclPreviewGrade";
 import { uclTeamAsset, uclTeamLogo } from "./uclTeamAssets";
 import { applyUclStoredQuoteFallback, UCL_STORED_QUOTE_FALLBACK_RELEASE } from "./uclStoredQuoteFallback";
+import type { UclRelativeMarketReadReceipt } from "./uclRelativeMarketRead";
 
 export { hydrateEplPriceHistory as hydrateUclPriceHistory, hydrateEplStoredPriceHistory as hydrateUclStoredPriceHistory };
 export type UclStoredPriceObservation = EplStoredPriceObservation;
-export const UCL_PROJECTED_SCORE_RELEASE = "ucl_projected_score_2026_11_04_r11_opponent_strength_score_law" as const;
+export const UCL_PROJECTED_SCORE_RELEASE = "ucl_projected_score_2026_11_04_r12_shared_joint_scenario" as const;
 
 export type UclPreviewBuildOptions = Pick<EplPreviewBuildOptions,
   "captureAllBookPrices"
@@ -52,7 +53,12 @@ function scoreMatchesFinalDirections(
   const bttsMatches = probabilities.bttsYes >= probabilities.bttsNo
     ? displayed.home >= 0.5 && displayed.away >= 0.5
     : displayed.home < 0.5 || displayed.away < 0.5;
-  return resultMatches && totalMatches && bttsMatches;
+  const rounded = { home: Math.round(displayed.home), away: Math.round(displayed.away) };
+  const roundedResultMatches = result === "home" ? rounded.home > rounded.away
+    : result === "away" ? rounded.away > rounded.home : rounded.home === rounded.away;
+  const roundedTotalMatches = probabilities.over25 >= probabilities.under25
+    ? rounded.home + rounded.away > 2.5 : rounded.home + rounded.away < 2.5;
+  return resultMatches && totalMatches && bttsMatches && roundedResultMatches && roundedTotalMatches;
 }
 
 /**
@@ -153,6 +159,7 @@ export async function buildUclDailyEdgePreview(slate: UclSlate, options: UclPrev
     date: slate.boardDate,
     requested_date: slate.boardDate,
     games: base.games.map((game) => {
+      if (game.lockState === "locked" && game.lockedAt) return game;
       const match = matchById.get(Number(game.external_id));
       const awayAsset = uclTeamAsset(game.awayTeam);
       const homeAsset = uclTeamAsset(game.homeTeam);
@@ -160,10 +167,23 @@ export async function buildUclDailyEdgePreview(slate: UclSlate, options: UclPrev
       const aggregate = context?.aggregateBefore;
       const stage = context ? stageLabel(context.stage, context.leg) : "Stage pending";
       const stageRow = { label: "Competition context", awayValue: aggregate ? `${aggregate.away} aggregate` : null, homeValue: aggregate ? `${aggregate.home} aggregate` : stage, source: "feature_snapshot" as const };
+      const projected = uclCoherentProjectedScore(game);
+      const projection = game.soccerProjection;
+      const reader = (game.soccerModelProvenance?.goalsReader as {relativeMarketReader?:UclRelativeMarketReadReceipt} | undefined)?.relativeMarketReader;
       return {
         ...game,
         id: `soccer-ucl-${game.external_id}`,
-        projected: uclCoherentProjectedScore(game),
+        projected,
+        soccerProjection: projection ? {
+          ...projection,
+          ...(reader?.finalTeamToScoreProbabilities ? { teamToScoreProbabilities: reader.finalTeamToScoreProbabilities } : {}),
+          coherentScorePresentation: {
+            release: UCL_PROJECTED_SCORE_RELEASE,
+            score: projected,
+            scenario: projection.representativeScore,
+            scenarioProbability: projection.representativeScoreProbability,
+          },
+        } : projection,
         awayTeamDisplayName: match?.awayTeam.name ?? awayAsset?.displayName ?? null,
         homeTeamDisplayName: match?.homeTeam.name ?? homeAsset?.displayName ?? null,
         awayTeamLogo: uclTeamLogo(game.awayTeam),
