@@ -10,6 +10,27 @@ import {
   uclForecastSideFromMemberMarket,
 } from "./uclTrackingForecastContinuity";
 
+export const UCL_PREDICTION_WRITER_RELEASE = "ucl_prediction_writer_2026_11_04_r1_input_completion_clock" as const;
+
+/** Publication clocks describe the completed inputs being frozen, never the
+ * start of a request which has not fetched them yet. Reject a stale clock
+ * rather than creating a lock that immediately invalidates its own chart.
+ * Actual stored locks retain every original value and are never repaired here. */
+export function assertUclPublicationClock(response:Pick<DailyEdgeResponse,"games">,now:Date):void {
+  const at=now.getTime();
+  if(!Number.isFinite(at))throw Error("Invalid UCL publication clock");
+  for(const game of response.games){
+    if(game.lockState==="locked"&&game.lockedAt)continue;
+    for(const market of [game.markets.moneyline,game.markets.total,game.markets.first_inning,game.soccerDoubleChanceMarket]){
+      if(!market)continue;
+      const clocks=[market.currentPriceObservedAt,...(market.oddsTrail??[]).map(s=>s.observedAt),
+        ...(market.lineTrail??[]).map(s=>s.observedAt),...(market.opposingOddsTrail?.stops??[]).map(s=>s.observedAt)];
+      if(clocks.some(clock=>Number.isFinite(Date.parse(clock??""))&&Date.parse(clock!)>at))
+        throw Error(`UCL publication clock precedes captured quote evidence for ${game.external_id}`);
+    }
+  }
+}
+
 export const UCL_LOCK_MINUTES = 60;
 
 export function uclPipelineConfig(slate: UclSlate): ClubSoccerPipelineConfig {
@@ -20,6 +41,7 @@ export function uclPipelineConfig(slate: UclSlate): ClubSoccerPipelineConfig {
     slugPrefix: "ucl",
     providerIdKey: "balldontlie_ucl",
     predictionSource: "ucl_club_model",
+    writerRelease: UCL_PREDICTION_WRITER_RELEASE,
     lockMinutes: UCL_LOCK_MINUTES,
     contextForGame: (providerId) => slate.competitionContexts[providerId] ?? null,
     preservePriorPricedTupleOnMissingLock: true,
@@ -40,7 +62,9 @@ export function writeUclPredictionRecords(input: { slate: UclSlate; response: Da
   const eligible=new Set(input.slate.matches.filter(m=>m.prediction?.release===input.slate.modelRelease
     && m.prediction.calibrationRelease===input.slate.calibrationRelease).map(m=>m.id));
   const response={...input.response,games:input.response.games.filter(g=>eligible.has(Number(g.external_id)))};
-  return writeEplPredictionRecords({ ...input, response, config: uclPipelineConfig(input.slate) });
+  const now=input.now??new Date();
+  assertUclPublicationClock(response,now);
+  return writeEplPredictionRecords({ ...input, response, now, config: uclPipelineConfig(input.slate) });
 }
 
 export function findUclGamesEnteringLock(now = new Date()) {
