@@ -1,5 +1,19 @@
 # Current production model releases and qualified research candidates
 
+## CBB future tracking evidence receipts — November 4
+
+Tracking alone advances to
+`cbb_tracking_writer_2026_11_04_r15_original_member_evidence_hash`.
+Every newly inserted tracking receipt includes the SHA256 of the original
+locked member JSON, a sorted-JSON format identifier and its exact snapshot key.
+This preserves alternate-line eligibility when the existing insert-only mirror
+materializes a verified pregame lock after the game. Existing rows, including
+older missing-hash receipts, remain unchanged and owner-controlled. Post-start
+publication or locks still fail alternate-line admission. No model, forecast,
+probability, grade, pick, price, stake, reader rule, writer, lease, provider call,
+schedule or actionable-board changes. Evidence:
+`docs/model-audits/2026-11-04-cbb-future-tracking-evidence.md`.
+
 ## CBB locked terminal-score continuity — November 4
 
 The sole fixture seed advances to
@@ -259,7 +273,7 @@ The sole independent runtime remains
 The sole market path is now
 `cbb_candidate_2026_11_04_r14_current_board_source_aliases`, grade
 `cbb_2026_11_04_r16_current_board_source_aliases`, receipt R10, path R4,
-board R17, publisher R26, tracking R14 and adapter R15. Canonical history R2,
+board R17, publisher R26, tracking R15 (evidence receipts above) and adapter R15. Canonical history R2,
 evidence R4 and reader evidence R11 retain their bounded native contracts.
 
 Source identity R5 /split mapping R4 admits exact observed labels N Dakota St,
