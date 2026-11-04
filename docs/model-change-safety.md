@@ -39,6 +39,24 @@ source/math/writer/reader tests, full model gate, independent reviews, clean
 latest-main protected PR and live normal-refresh/reader/lock verification remain
 required. This does not authorize an extra forecast refresh/provider cycle.
 
+## Owner-directed NFL probability-coherence publication repair — November 4
+
+While verifying the authorized moneyline restriction repair, the normal NFL
+writer rejected ARI–SEA solely because the selected Under and released PMF Under
+had a mean above the line. That blocked publication of the full new weekly board.
+The owner-authorized repair continues by separating legitimate mean/median skew
+from actual probability disagreement. It does not change scores, probabilities,
+picks, premium floors, stake, provider budgets, writer, schedule or sport lease.
+The new NFL-only contract binds decision probability and push mass to the released
+distribution; a wrong PMF side, invalid distribution or forged mean remains fatal.
+CFB, default callers and exact prior locked records retain their semantics.
+
+The full NFL release tuple advances with exact R64 and R63 legacy snapshot
+compatibility. Same-input stored-tuple replay, explicit skew/false-probability/
+push/identity tests, locked writer/reader tests, independent review, the mandatory
+model gate, fresh-main protected PR and live 15/15 source/member proof are required.
+If those checks fail, reject publication and retain only offline audit evidence.
+Evidence: `docs/model-audits/2026-11-04-nfl-pmf-mean-coherence.json`.
 
 ## Owner-directed moneyline evidence and strongest-tier correction — November 4
 

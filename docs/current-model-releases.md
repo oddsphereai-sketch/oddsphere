@@ -1,5 +1,80 @@
 # Current production model releases and qualified research candidates
 
+## CBB locked terminal-score continuity — November 4
+
+The sole fixture seed advances to
+`cbb_fixture_seed_2026_11_04_r7_locked_terminal_score_continuity`.
+A verified final for the same provider event, season and exact two team IDs may
+fill terminal status/scores while preserving the locked start, slate, team
+orientation and all prediction/member fields. Scores are mapped by team ID when
+the provider reverses home/away labels. The exact original locked member names,
+orientation and start must agree with the canonical identities first; a missing
+or conflicting receipt stays held. Unknown participants, changed event or
+season, nonfinal/tied/malformed scores, canceled/postponed fixtures, a different
+ET slate, >18-hour changes or a revised existing final remain held for review.
+The existing CBB leased cron seeds at most three additional pending slate dates
+inside its existing six-day grading window; no pending rows means no added
+provider request. No independent writer, timer, model input, score forecast,
+probability, pick, grade, stake, lock or reader interpretation changes.
+Evidence: `docs/model-audits/2026-11-04-cbb-locked-terminal-score-continuity.md`.
+
+## NFL full-distribution authority and mean-direction diagnostics — November 4
+
+This supersedes the NFL tuple in the moneyline repair below. Live verification
+found that ARI–SEA's PMF and selected Total both favored Under, while its
+unconditional expected total was 43.3859 against 41.5. A skewed distribution can
+legitimately have its mean above the line and most probability below it. The
+old public-score direction guard blocked that game and consequently the entire
+new 15-game member snapshot. Raising a point tolerance would not repair the
+semantic error.
+
+The new NFL-only contract keeps the complete distribution authoritative. It
+requires exact selected-side probability and refund mass from that distribution,
+and retains fatal checks for a wrong PMF side, malformed mass, forged means,
+invalid value, identity, or chronology. A verified mean/median difference becomes
+a diagnostic. Means, representative scores, probabilities, picks, thresholds and
+stakes are not changed to manufacture agreement. CFB, default callers and prior
+locked NFL payloads retain their existing coherence contract. Exact R64/R72/R56/R59
+and R63/R71/R55/R58 snapshot compatibility remains byte-preserving; unlocked
+preceding-release games cannot be mixed into a new release.
+
+Sole writer, source budgets, ordinary schedules and the shared NFL
+`prediction_pipeline` lease are unchanged. This is a functional publication repair,
+not a claim of increased accuracy or permission to override genuine contradictions.
+
+Current exact runtime identifiers:
+
+- `football_cross_market_coherence_2026_11_04_r15_nfl_pmf_mean_diagnostic`
+- `nfl_forward_evidence_writer_2026_11_04_r108_pmf_mean_direction_diagnostic`
+- `nfl_forward_member_snapshot_2026_11_04_r65_pmf_mean_direction_diagnostic`
+- `nfl_full_game_evidence_runtime_2026_11_04_r18_pmf_mean_direction_diagnostic`
+- `nfl_market_innovation_2026_11_04_r5_pmf_mean_direction_diagnostic`
+- `nfl_market_innovation_posture_2026_11_04_r5_pmf_mean_direction_diagnostic`
+- `nfl_v1_daily_edge_calibration_2026_11_04_r51_pmf_mean_direction_diagnostic`
+- `nfl_v1_daily_edge_decision_2026_11_04_r60_pmf_mean_direction_diagnostic`
+- `nfl_v1_daily_edge_model_2026_11_04_r52_pmf_mean_direction_diagnostic`
+- `nfl_v1_grade_policy_2026_11_04_r60_pmf_mean_direction_diagnostic`
+- `nfl_v1_member_release_2026_11_04_r57_pmf_mean_direction_diagnostic`
+- `nfl_weekly_member_fixture_2026_11_04_r73_pmf_mean_direction_diagnostic`
+
+Evidence: `docs/model-audits/2026-11-04-nfl-pmf-mean-coherence.json`.
+
+## NFL props verified alias display — November 4
+
+Writer r69 `nfl_player_props_writer_2026_11_04_r69_verified_alias_display`,
+member r53 `nfl_player_props_member_2026_11_04_r53_verified_alias_duplicates`,
+and lifecycle r35 `nfl_player_props_member_lifecycle_2026_11_04_r35_verified_alias_duplicates`
+remove an unlocked unresolved Chigoziem Okonkwo duplicate only when the same exact
+game/market/line/side already has a resolved Chig Okonkwo Washington prediction.
+The authority must uniquely identify BALLDONTLIE player734 on WAS. Missing,
+ambiguous, wrong-game/team/player or different-line/side replacements cannot
+remove the exception. The complete source/decision board and health findings
+remain stored; every actual prediction field is unchanged. All locked aliases
+retain exact writer and reader precedence even if the current feed omits them.
+Model/calibration/runtime/decision releases, grades, actionables, source prices,
+provider requests, cadence, lease and settlement remain unchanged. Evidence:
+`docs/model-audits/2026-11-04-nfl-props-verified-alias-display.md`.
+
 ## NFL player-props verified participation settlement — November 4
 
 Sole writer /tracking /settlement advance to

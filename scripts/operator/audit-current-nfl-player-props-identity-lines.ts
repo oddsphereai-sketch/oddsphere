@@ -13,6 +13,7 @@ import { readNflPlayerPropsCurrentSeasonState } from "../../lib/services/footbal
 import { resolveNflForwardWeek } from "../../lib/services/football/nflForwardWeekSelection";
 import { readNflPlayerPropsReferenceOffers } from "../../lib/services/football/nflPlayerPropsReferenceOfferStore";
 import { readNflPlayerPropsSnapshotRecord } from "../../lib/services/football/nflPlayerPropsSnapshotStore";
+import { deriveNflPlayerPropsMemberDecisions } from "../../lib/services/football/nflPlayerPropsProductionContract";
 
 loadEnvConfig(process.cwd());
 
@@ -38,7 +39,8 @@ async function main(): Promise<void> {
   const historicalNamesById = group(currentSeason.stats, (row) => row.playerId);
   const gameRows = group(memberRows, (row) => row.gameId);
   const scopes = group(memberRows, nflPlayerPropsCanonicalMarketScopeKey);
-  const canonicalRows = selectNflPlayerPropsCanonicalLines(rows);
+  const memberCandidateRows = deriveNflPlayerPropsMemberDecisions({ decisions: rows });
+  const canonicalRows = selectNflPlayerPropsCanonicalLines(memberCandidateRows);
   const canonicalKeys = new Set(canonicalRows.map(decisionKey));
   const memberKeys = new Set(memberRows.map(decisionKey));
 
@@ -92,7 +94,8 @@ async function main(): Promise<void> {
     games: gameRows.size,
     playerMarketScopes: scopes.size,
     canonicalRowsSelected: canonicalRows.length,
-    alternateLineRows: rows.length - canonicalRows.length,
+    alternateLineRows: memberCandidateRows.length - canonicalRows.length,
+    unresolvedAliasDuplicatesRetainedInternally: rows.length - memberCandidateRows.length,
     canonicalRowsMissingFromMember: [...canonicalKeys].filter((key) => !memberKeys.has(key)),
     nonCanonicalRowsInMember: [...memberKeys].filter((key) => !canonicalKeys.has(key)),
     providerIdNameMismatches,

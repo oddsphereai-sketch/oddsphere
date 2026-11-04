@@ -84,11 +84,40 @@ export function cbbCanonicalGamePayload(game: CbbGame, homeDbId: number, awayDbI
 
 export type CbbExistingFixture = {
   id: number;
+  external_id?: number;
+  season?: number;
   status: string;
   game_date: string;
   home_team_id: number | null;
   away_team_id: number | null;
+  home_score?: number | null;
+  away_score?: number | null;
 };
+
+/** Final results are keyed by teams, not a provider's revised home/away label.
+ * Never move a locked fixture or copy a score onto a different matchup. */
+export function cbbLockedTerminalScore(previous: CbbExistingFixture,
+  payload: ReturnType<typeof cbbCanonicalGamePayload>): { status: "STATUS_FINAL"; home_score: number; away_score: number; period: number } | null {
+  if (payload.status !== "STATUS_FINAL" || previous.external_id !== payload.external_id
+    || previous.season !== payload.season || previous.home_team_id === previous.away_team_id
+    || !["STATUS_SCHEDULED","STATUS_IN_PROGRESS","STATUS_FINAL"].includes(previous.status)
+    || !Number.isFinite(Date.parse(previous.game_date))
+    || !Number.isFinite(Date.parse(payload.game_date))
+    || computeSlateDate("cbb",previous.game_date)!==payload.slate_date
+    || Math.abs(Date.parse(previous.game_date) - Date.parse(payload.game_date)) > 18 * 3_600_000
+    || !Number.isInteger(payload.home_score) || !Number.isInteger(payload.away_score)
+    || payload.home_score! < 0 || payload.away_score! < 0
+    || payload.home_score === payload.away_score) return null;
+  const same = previous.home_team_id === payload.home_team_id && previous.away_team_id === payload.away_team_id;
+  const reversed = previous.home_team_id === payload.away_team_id && previous.away_team_id === payload.home_team_id;
+  if (!same && !reversed) return null;
+  const home = same ? payload.home_score! : payload.away_score!;
+  const away = same ? payload.away_score! : payload.home_score!;
+  // A previously recorded final is evidence. Official revisions need review;
+  // this continuity path fills absent outcomes, never silently regrades one.
+  if (previous.status === "STATUS_FINAL" && (previous.home_score !== home || previous.away_score !== away)) return null;
+  return { status: "STATUS_FINAL", home_score: home, away_score: away, period: payload.period };
+}
 
 export function cbbFixtureIdentityWouldChange(previous:CbbExistingFixture,payload:ReturnType<typeof cbbCanonicalGamePayload>):boolean {
   return Date.parse(previous.game_date)!==Date.parse(payload.game_date)||previous.home_team_id!==payload.home_team_id||previous.away_team_id!==payload.away_team_id;
