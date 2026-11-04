@@ -6,14 +6,14 @@ import { cbbImpliedProbability } from "@/lib/cbb/marketEvidence";
 import { CBB_SCORE_RESEARCH_RELEASE } from "@/lib/cbb/scoreResearch";
 import {CBB_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_OLDER_MARKET_BEHAVIOR_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import { CBB_CURRENT_SCORE_RELEASE,CBB_PREVIOUS_CURRENT_SCORE_RELEASE } from "@/lib/cbb/currentScoreRuntime";
-import {CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_JOINT_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_JOINT_MARKET_BEHAVIOR_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
+import {CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_CONTINUITY_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_JOINT_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_JOINT_MARKET_BEHAVIOR_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import {CBB_ALIGNED_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_ALIGNED_MARKET_BEHAVIOR_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import {CBB_RETAIL_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import {CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import { CBB_PROVISIONAL_GRADE_RELEASE, CBB_LEGACY_PROVISIONAL_GRADE_RELEASE } from "@/lib/cbb/provisionalGradePolicy";
 import type { CbbStoredMemberGame } from "./cbbMemberGameStore";
 
-export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_04_r16_response_frontier_law_support" as const;
+export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_04_r17_contextual_authority_handoff" as const;
 /** Hash stored JSON independently of PostgreSQL jsonb object-key ordering. */
 export function cbbTrackingEvidenceSha256(record:CbbStoredMemberGame):string {
   const sorted=(value:unknown):unknown=>Array.isArray(value)?value.map(sorted)
@@ -21,11 +21,11 @@ export function cbbTrackingEvidenceSha256(record:CbbStoredMemberGame):string {
       .map(key=>[key,sorted((value as Record<string,unknown>)[key])])):value;
   return createHash("sha256").update(JSON.stringify(sorted(JSON.parse(JSON.stringify(record))))).digest("hex");
 }
-const receivedMarketGradeReleases:readonly string[]=[CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_JOINT_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_ALIGNED_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_OLDER_MARKET_BEHAVIOR_GRADE_RELEASE];
+const receivedMarketGradeReleases:readonly string[]=[CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_CONTINUITY_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_JOINT_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_ALIGNED_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_OLDER_MARKET_BEHAVIOR_GRADE_RELEASE];
 
 /** Never relabel an earlier public lock with the current score model. */
 export function cbbLockedModelRelease(board:{release:string;modelRelease?:string}):string{
-  if(board.modelRelease===CBB_SCORE_RESEARCH_RELEASE||board.modelRelease===CBB_CURRENT_SCORE_RELEASE||board.modelRelease===CBB_PREVIOUS_CURRENT_SCORE_RELEASE||board.modelRelease===CBB_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_JOINT_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_ALIGNED_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_RETAIL_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_PRIOR_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE)return board.modelRelease;
+  if(board.modelRelease===CBB_SCORE_RESEARCH_RELEASE||board.modelRelease===CBB_CURRENT_SCORE_RELEASE||board.modelRelease===CBB_PREVIOUS_CURRENT_SCORE_RELEASE||board.modelRelease===CBB_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_JOINT_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_ALIGNED_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_RETAIL_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_PRIOR_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE)return board.modelRelease;
   if(board.modelRelease!==undefined)throw new Error("CBB locked model release is unknown");
   if(["cbb_candidate_2026_10_29_r2_explicit_unqualified_reader","cbb_candidate_2026_10_29_r3_exact_quote_reader_fields",
     "cbb_candidate_2026_11_02_r4_supported_market_coverage","cbb_candidate_2026_11_02_r5_exact_reference_probabilities"].includes(board.release))return CBB_SCORE_RESEARCH_RELEASE;
@@ -54,7 +54,7 @@ export async function writeLockedCbbTracking(record: CbbStoredMemberGame, db?: t
   const { snapshot, memberGame } = record;
   const gradeRelease = cbbLockedGradeRelease(snapshot.board);
   const modelRelease = cbbLockedModelRelease(snapshot.board);
-  if(modelRelease===CBB_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_JOINT_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_ALIGNED_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_RETAIL_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_PRIOR_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE){
+  if(modelRelease===CBB_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_JOINT_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_ALIGNED_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_RETAIL_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_PRIOR_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE){
     const read=snapshot.board.marketContext.verifiedMarketRead;
     if(!read||read.modelRelease!==modelRelease||read.anchors.gameId!==snapshot.gameId||
       !receivedMarketGradeReleases.includes(gradeRelease)||(["home","away","margin","total","homeWinProbability"] as const).some(key=>read.finalScore[key]!==snapshot.board.score[key]))
@@ -113,7 +113,8 @@ export async function writeLockedCbbTracking(record: CbbStoredMemberGame, db?: t
         modelRelease===CBB_RETAIL_MARKET_BEHAVIOR_MODEL_RELEASE?"cbb_r11_retail_response_receipts":
         modelRelease===CBB_ALIGNED_MARKET_BEHAVIOR_MODEL_RELEASE?"cbb_r12_aligned_native_reactions":
         modelRelease===CBB_JOINT_MARKET_BEHAVIOR_MODEL_RELEASE?"cbb_r13_joint_native_market_decision":
-        modelRelease===CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE?"cbb_r14_current_board_source_aliases":"cbb_r15_response_frontier_law_support",
+        modelRelease===CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE?"cbb_r14_current_board_source_aliases":
+        modelRelease===CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE?"cbb_r15_response_frontier_law_support":"cbb_r16_contextual_authority_handoff",
       model_version: modelRelease, calibration_version: gradeRelease,
       prediction_source: "cbb_daily_edge", confidence: row.probability,
       model_probability: row.probability, market_probability: cbbImpliedProbability(row.price),

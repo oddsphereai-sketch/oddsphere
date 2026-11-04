@@ -1,5 +1,29 @@
 # Current production model releases and qualified research candidates
 
+## CBB contextual authority handoff — November 4
+
+The authoritative CBB market model is
+`cbb_candidate_2026_11_04_r16_contextual_authority_handoff`, with grade
+`cbb_2026_11_04_r18_contextual_authority_handoff`, receipt R12, board R19,
+publisher R29, tracking R17 and adapter R18, all with suffix
+`contextual_authority_handoff`. Independent R4 and path R5 are unchanged.
+Release completion still requires protected deployment and normal-writer proof.
+
+An explicit, native-contract-bound `qualified_current_resistance` decision must
+survive current-level arbitration. It retains the input forecast and residual
+shape instead of silently applying an older net price stance. Current native
+joint consistency and opposite-winner resolution still run first. Plain static
+profiles, unbound splits and tiny juice changes do not acquire this exception.
+New decision receipts retain the upstream relative interpretation and its
+disposition, so current-level replacement is inspectable in future spot checks.
+
+Exact prior R15/R17/R11 stored locks and R11 anchors remain supported without
+relabeling or adding the new trace retrospectively. No grade threshold, fixed
+blend, new fitting, paid AI runtime, provider budget, schedule, lease or writer.
+This closes a reproduced handoff defect; it does not establish that the remaining
+current-source forecast policy completes the full conditional-inference vision.
+Evidence: `docs/model-audits/2026-11-04-cbb-contextual-authority-handoff.json`.
+
 
 
 ## CBB stored probability comparison presentation — November 4
@@ -42,9 +66,10 @@ were not archived before repair; prospective diagnostics count actual admitted
 pairs/books without claiming every returned quote was used. Evidence/rollback:
 `docs/model-audits/2026-11-04-nba-paid-consumer-book-coverage.json`.
 
-## CBB response frontier and source-law support — November 4
+## Prior CBB response frontier and source-law support — November 4
 
-The authoritative CBB runtime is independent prior
+The preceding CBB release, superseded by the contextual handoff release above,
+uses independent prior
 `cbb_candidate_2026_11_03_r4_verified_new_orleans_venue_prior`, market model
 `cbb_candidate_2026_11_04_r15_response_frontier_law_support`, grade
 `cbb_2026_11_04_r17_response_frontier_law_support`, receipt R11, path R5,

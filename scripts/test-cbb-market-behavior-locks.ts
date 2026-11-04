@@ -1,4 +1,5 @@
 import {CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_RECEIPT_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
+import {CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_CONTINUITY_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_CONTINUITY_MARKET_BEHAVIOR_RECEIPT_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
 import assert from "node:assert/strict";
 import {normalCdf} from "../lib/cbb/model";
 import {CBB_RETAIL_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_RECEIPT_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
@@ -238,6 +239,7 @@ async function main(){
  Object.assign(sourceAliasReceipt,{release:CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_RECEIPT_RELEASE,modelRelease:CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE});
  Object.assign(sourceAliasReceipt.forecastIdentity,{release:CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE});
  sourceAliasReceipt.anchors.release=CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_RECEIPT_RELEASE;
+ delete sourceAliasReceipt.jointMarginDecision?.relativeInterpretation;
  sourceAliasReceipt.pathTape.release="cbb_market_behavior_path_2026_11_03_r4_identical_preflow_state";
  const sourceAliasBytes=JSON.stringify(sourceAliasPublic),sourceAliasWrites=writes;stored=sourceAliasPublic;
  assert.equal((await writeCbbMemberGame({game,candidate:newR6,homeLogo:null,awayLogo:null,now:"2026-11-02T19:09:40Z"},db)).written,false);
@@ -252,6 +254,56 @@ async function main(){
   anchors:sourceAliasReceipt.anchors,previousPath:sourceAliasReceipt.pathTape});
  assert.deepEqual(sourceAliasMigrated.receipt.anchors.quotes,sourceAliasReceipt.anchors.quotes,"R10 actual anchors survive the response-frontier release");
  assert.ok(sourceAliasMigrated.receipt.pathTape.streams.length>=sourceAliasReceipt.pathTape.streams.length,"R4 prior path history remains compatible without a new opening");
+ // R15/R17/R11 was the actual immediate predecessor. It did not store the
+ // new contextual handoff interpretation; never synthesize that field on it.
+ const continuityPublic=structuredClone(frozen.record);
+ Object.assign(continuityPublic.snapshot.board,{release:"cbb_candidate_2026_11_04_r18_response_frontier_law_support",
+  modelRelease:CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE,gradeRelease:CBB_CONTINUITY_MARKET_BEHAVIOR_GRADE_RELEASE});
+ const continuityReceipt=continuityPublic.snapshot.board.marketContext.verifiedMarketRead!;
+ Object.assign(continuityReceipt,{release:CBB_CONTINUITY_MARKET_BEHAVIOR_RECEIPT_RELEASE,modelRelease:CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE});
+ Object.assign(continuityReceipt.forecastIdentity,{release:CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE});
+ continuityReceipt.anchors.release=CBB_CONTINUITY_MARKET_BEHAVIOR_RECEIPT_RELEASE;
+ delete continuityReceipt.jointMarginDecision?.relativeInterpretation;
+ assert.ok(continuityReceipt.jointMarginDecision);
+ assert.equal(Object.hasOwn(continuityReceipt.jointMarginDecision,"relativeInterpretation"),false);
+ const continuityBytes=JSON.stringify(continuityPublic),continuityWrites=writes;stored=continuityPublic;
+ assert.equal(cbbLockedModelRelease(continuityPublic.snapshot.board),CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE);
+ assert.equal(cbbLockedGradeRelease(continuityPublic.snapshot.board),CBB_CONTINUITY_MARKET_BEHAVIOR_GRADE_RELEASE);
+ const continuityWrite=await writeCbbMemberGame({game,candidate:newR6,homeLogo:null,awayLogo:null,now:"2026-11-02T19:09:50Z"},db);
+ assert.equal(continuityWrite.written,false);assert.equal(continuityWrite.record,continuityPublic);assert.equal(writes,continuityWrites);
+ assert.equal(readCbbProvisionalSnapshot({locked:continuityPublic.snapshot,unlocked:initial.record.snapshot}),continuityPublic.snapshot);
+ assert.deepEqual(cbbMemberGameForReader(continuityPublic,game),continuityPublic.memberGame,
+  "stored R15 DTO takes precedence over R16 retained-current-resistance semantics");
+ const continuityResult=cbbMemberGameForReader(continuityPublic,{...game,status:"post",status_state:"final",home_score:80,away_score:85});
+ const {result:continuityOfficialResult,...continuityReaderFields}=continuityResult;
+ const {result:continuityStoredResult,...continuityStoredFields}=continuityPublic.memberGame;
+ void continuityOfficialResult;void continuityStoredResult;
+ assert.deepEqual(continuityReaderFields,continuityStoredFields,"only the official result may accrue to the R15 stored DTO");
+ priorTracked.length=0;assert.equal(await writeLockedCbbTracking(continuityPublic,priorTrackingDb),3);
+ assert.ok(priorTracked.every(row=>row.model_version===CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE&&
+  row.calibration_version===CBB_CONTINUITY_MARKET_BEHAVIOR_GRADE_RELEASE&&row.model_used==="cbb_r15_response_frontier_law_support"));
+ for(const trackedRow of priorTracked){
+  const row=continuityPublic.snapshot.board.rows.find(row=>row.market===trackedRow.market)!;
+  assert.equal(trackedRow.model_probability,row.probability);assert.equal(trackedRow.expected_value,row.expectedValue);assert.equal(trackedRow.odds_american,row.price);
+  const receipt=trackedRow.snapshot_json as Record<string,unknown>;
+  assert.equal(receipt.modelRelease,CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE);
+  assert.equal(receipt.gradeRelease,CBB_CONTINUITY_MARKET_BEHAVIOR_GRADE_RELEASE);
+  assert.equal(receipt.boardRelease,continuityPublic.snapshot.board.release);
+  receipt.release="cbb_tracking_writer_2026_11_04_r16_response_frontier_law_support";
+ }
+ const continuityTrackingBytes=JSON.stringify(priorTracked);
+ assert.equal(await writeLockedCbbTracking(continuityPublic,priorTrackingDb),0);
+ assert.equal(JSON.stringify(priorTracked),continuityTrackingBytes,"existing R15 tracking identity and original writer stamp cannot be relabeled");
+ assert.equal(JSON.stringify(continuityPublic),continuityBytes,"R15/R17/R11 lock stays byte exact through writer, reader and tracking");
+ const continuityAnchorsBytes=JSON.stringify(continuityReceipt.anchors),continuityPathBytes=JSON.stringify(continuityReceipt.pathTape);
+ const continuityMigrated=readCbbMarketBehavior({independent,independentInputKey:"frozen-source",startsAt:start,targets,currentQuotes:refs,
+  anchors:continuityReceipt.anchors,previousPath:continuityReceipt.pathTape});
+ assert.deepEqual(continuityMigrated.receipt.anchors.quotes,continuityReceipt.anchors.quotes,"R11 exact native anchors remain reusable on an unlocked R16 refresh");
+ assert.equal(continuityMigrated.receipt.anchors.capturedAt,continuityReceipt.anchors.capturedAt);
+ assert.equal(continuityMigrated.receipt.anchors.independentInputKey,continuityReceipt.anchors.independentInputKey);
+ assert.equal(continuityMigrated.receipt.anchors.independentRelease,continuityReceipt.anchors.independentRelease);
+ assert.equal(JSON.stringify(continuityReceipt.anchors),continuityAnchorsBytes);assert.equal(JSON.stringify(continuityReceipt.pathTape),continuityPathBytes);
+ assert.equal(JSON.stringify(continuityPublic),continuityBytes,"unlocked anchor reuse never mutates the source locked payload");
  const jointMigrated=readCbbMarketBehavior({independent,independentInputKey:"same-alias-input",startsAt:start,targets,currentQuotes:refs,anchors:jointReceipt.anchors});
  assert.deepEqual(jointMigrated.receipt.anchors.quotes,jointReceipt.anchors.quotes,"R9 actual anchors survive the source-identity release");
  const migratedPrior=readCbbMarketBehavior({independent,independentInputKey:"new-r4-input",startsAt:start,targets,currentQuotes:refs,anchors:retailReceipt.anchors});
@@ -288,6 +340,6 @@ async function main(){
  assert.notEqual(priceDto.markets.first_inning.sharpStatus,"confirm","price-only promotion cannot imply identified sharp flow");
  const history=[{date:"2026-11-02T09:29:59Z"},{date:"2026-11-02T09:30:00Z"},{date:"2026-11-02T09:30:01Z"}] as Parameters<typeof cbbHistoryAtDecision>[0];
  assert.deepEqual(cbbHistoryAtDecision(history,at),history.slice(0,2),"old independent replay uses its own six-hour availability cutoff");
- console.log("PASS CBB joint market lock path: coherent current-source winner correction, exact grade/DTO, T-60 freezing, legacy R5/R10/R11/R12 writer-reader-tracking immutability and genuine native movement labels.");
+ console.log("PASS CBB joint market lock path: coherent current-source winner correction, exact grade/DTO, T-60 freezing, legacy R5/R10/R11/R12/R15 writer-reader-tracking immutability and genuine native movement labels.");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

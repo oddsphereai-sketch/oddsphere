@@ -1,0 +1,131 @@
+{
+  "scope": "Owner-directed functional correction; one demonstrated contextual-authority handoff defect. No accuracy or complete-reader claim.",
+  "baseSha": "2ffc05de7781aa7ba6dd6f0835ca94a8b8ad809a",
+  "releases": {
+    "independent": "R4 unchanged",
+    "model": "cbb_candidate_2026_11_04_r16_contextual_authority_handoff",
+    "grade": "cbb_2026_11_04_r18_contextual_authority_handoff",
+    "receipt": "cbb_market_behavior_2026_11_04_r12_contextual_authority_handoff",
+    "path": "R5 unchanged",
+    "board": "R19 contextual_authority_handoff",
+    "publisher": "R29 contextual_authority_handoff",
+    "tracking": "R17 contextual_authority_handoff",
+    "adapter": "R18 contextual_authority_handoff"
+  },
+  "rootCause": "chooseAxis returns an explicit retained/qualified_current_resistance decision, but current-profile selection replaces it with a prior net source stance. Prior spot checks established arithmetic consistency; some tests explicitly encoded current-law replacement and did not check this authority handoff.",
+  "change": "Preserve the genuinely matched retained decision after native-frame and opposite-winner checks. Keep current profiles as evidence, do not add invented hold points. Save the upstream relative interpretation and actual disposition on new decisions only.",
+  "causalRegression": {
+    "failedBefore": "selected != retained; one-point input became4.032493246890226",
+    "passedAfter": "Actual reader, one final law, all3 market probabilities/selection/price/EV and paired grade consequences.",
+    "syntheticPromotion": "No Play -> Lean",
+    "syntheticActionableDemotion": "Lean -> No Play",
+    "warning": "These are synthetic executable-contract probes, not actual-board changes."
+  },
+  "actualBoardImpact": {
+    "frozen": {
+      "games": 11,
+      "markets": 33,
+      "oldCounts": {
+        "No Play": 25,
+        "Lean": 6,
+        "Watchlist": 2
+      },
+      "newCounts": {
+        "No Play": 25,
+        "Lean": 6,
+        "Watchlist": 2
+      },
+      "promotions": 0,
+      "demotions": 0,
+      "actionablePromotions": 0,
+      "actionableDemotions": 0,
+      "newBest": 0,
+      "sideChanges": 0,
+      "scoreChanges": 0,
+      "probabilityChanges": 0,
+      "exactPriceChanges": 0,
+      "outcomeGapChanges": 0,
+      "maximumNumericOutcomeGapChange": 0,
+      "retainedHandOffGames": []
+    },
+    "laterSavedBoard": {
+      "games": 18,
+      "markets": 54,
+      "oldCounts": {
+        "No Play": 31,
+        "Lean": 18,
+        "Watchlist": 5
+      },
+      "newCounts": {
+        "No Play": 31,
+        "Lean": 18,
+        "Watchlist": 5
+      },
+      "promotions": 0,
+      "demotions": 0,
+      "actionablePromotions": 0,
+      "actionableDemotions": 0,
+      "newBest": 0,
+      "sideChanges": 0,
+      "scoreChanges": 0,
+      "probabilityChanges": 0,
+      "exactPriceChanges": 0,
+      "outcomeGapChanges": 0,
+      "maximumNumericOutcomeGapChange": 0,
+      "retainedHandOffGames": []
+    },
+    "oldBaselineExactGames": {
+      "frozen": 11,
+      "later": 18
+    },
+    "important": "No actual saved game activates this specific fix; current flatness is not resolved by this correction."
+  },
+  "integrity": {
+    "locks": "Exact prior R15/R17/R11 locks preserve stored DTO/writer/reader/tracking values; no added interpretation field on old locks. Original R11 anchors remain compatible.",
+    "controls": [
+      "mirrored pressure",
+      "current opposite winners remain unresolved",
+      "invalid native joint state",
+      "fabricated retained label",
+      "unbound/late/wrong-line pressure",
+      "mismatched current contract",
+      "existing static correction",
+      "existing tiny-juice continuity"
+    ],
+    "unchanged": [
+      "grade thresholds",
+      "stakes",
+      "provider calls and budgets",
+      "refresh schedule",
+      "single prediction_pipeline:cbb lease",
+      "writer ownership"
+    ]
+  },
+  "checks": {
+    "focused": "PASS",
+    "fullModelChangeGate": "PASS; PostgreSQL optional integration skipped because MARKET_BRAIN_POSTGRES_URL unset",
+    "typescript": "PASS",
+    "eslint": "PASS"
+  },
+  "independentReview": {
+    "A": "Test-gap audit and exact previous-release lock migration regression; no migration defect found.",
+    "C": "Independent11+18 game same-input replay with exact old numerical reproduction; zero board changes.",
+    "D": {
+      "status": "no_blocker_identified_for_the_scoped_qualified_retention_handoff_fix",
+      "checks": [
+        "New return is restricted to neutral/delta0, authority retained, reason qualified_current_resistance, nonempty authority IDs and actual professional held-response witnesses matching eligible current native quotes and episode direction.",
+        "Present per-book joint-frame/constraint validation and current professional winner-opposition checks remain before the retained return.",
+        "The retained result preserves the exact authentic baseline mean/dispersion and one law, not a newly chosen score delta or fitted source ratio.",
+        "Other interpreted relative outputs do not gain generic numerical precedence; static current-source fallback remains.",
+        "Existing tiny-juice joint-decision suite stays continuous near the source law and does not restore the unsupported35-point Butler law.",
+        "relativeInterpretation is an optional new decision trace; legacy stored payloads are not reconstructed by this change."
+      ],
+      "boundary": "This closes one proven erasure of an explicit contextual retain decision. Static fallback still adopts a whole current physical source law; applied/confirming relative interpretations can still be replaced by current-level selection. This is not a completed general interpretive numerical model, evidence of more accurate picks, or proof that every market circumstance is handled. Actual current-board counts and changes must be reported separately; the synthetic paired probes are not production promotion counts."
+    }
+  },
+  "knownRemainingMethodIssue": "The other applied/confirming relative reads can still be replaced by the explicit whole-current-source-law policy. This scoped repair is not a new contextual learned forecaster and does not close that broader conditional-inference design issue.",
+  "releaseRequirements": "Clean latest-main committed worktree, integration-safety, protected up-to-date PR, exact remote tree, production commit and next normal writer/reader/lock proof. No manual refresh is authorized by this artifact.",
+  "newPaidCalls": 0,
+  "providerRequestsInAudit": 0,
+  "databaseWritesInAudit": 0
+}
