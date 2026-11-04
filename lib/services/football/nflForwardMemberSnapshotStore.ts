@@ -10,7 +10,13 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 
 export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "nfl_forward_member_snapshot_2026_11_04_r65_pmf_mean_direction_diagnostic" as const;
+  "nfl_forward_member_snapshot_2026_11_04_r66_per_market_source_qualification" as const;
+const NFL_PMF_MEAN_PREDECESSOR = {
+  snapshot: "nfl_forward_member_snapshot_2026_11_04_r65_pmf_mean_direction_diagnostic",
+  fixture: "nfl_weekly_member_fixture_2026_11_04_r73_pmf_mean_direction_diagnostic",
+  member: "nfl_v1_member_release_2026_11_04_r57_pmf_mean_direction_diagnostic",
+  decision: "nfl_v1_daily_edge_decision_2026_11_04_r60_pmf_mean_direction_diagnostic",
+} as const;
 const NFL_UNCHANGED_ML_PREDECESSOR = {
   snapshot: "nfl_forward_member_snapshot_2026_11_04_r64_unchanged_ml_confirmation",
   fixture: "nfl_weekly_member_fixture_2026_11_04_r72_unchanged_ml_confirmation",
@@ -308,6 +314,7 @@ const NFL_RAW_SIGNAL_PREVIOUS_FIXTURE_RELEASE =
 const NFL_NONPUSH_PREVIOUS_FIXTURE_RELEASE =
   "nfl_weekly_member_fixture_2026_09_21_r26_locked_transition_continuity" as const;
 const NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES = [
+  NFL_PMF_MEAN_PREDECESSOR.snapshot,
   NFL_UNCHANGED_ML_PREDECESSOR.snapshot,
   NFL_ROUNDING_PRESSURE_PREDECESSOR.snapshot,
   NFL_MARKET_CONVICTION_PREDECESSOR.snapshot,
@@ -425,6 +432,11 @@ function nflForwardMemberSnapshotKeyForRelease(
   input: { season: number; week: number },
   snapshotRelease: string,
 ): string {
+  if (snapshotRelease === NFL_PMF_MEAN_PREDECESSOR.snapshot) {
+    return ["nfl", "daily-edge", input.season, input.week, snapshotRelease,
+      NFL_PMF_MEAN_PREDECESSOR.fixture, NFL_PMF_MEAN_PREDECESSOR.member,
+      NFL_PMF_MEAN_PREDECESSOR.decision].join("::");
+  }
   if (snapshotRelease === NFL_UNCHANGED_ML_PREDECESSOR.snapshot) {
     return ["nfl", "daily-edge", input.season, input.week, snapshotRelease,
       NFL_UNCHANGED_ML_PREDECESSOR.fixture, NFL_UNCHANGED_ML_PREDECESSOR.member,
@@ -902,6 +914,10 @@ function validateNflForwardMemberSnapshot(
     fixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE &&
     heldMemberFixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE) ||
     independentAxesPredecessorContract ||
+    (memberRelease === NFL_PMF_MEAN_PREDECESSOR.member &&
+      decisionRelease === NFL_PMF_MEAN_PREDECESSOR.decision &&
+      fixtureRelease === NFL_PMF_MEAN_PREDECESSOR.fixture &&
+      heldMemberFixtureRelease === NFL_PMF_MEAN_PREDECESSOR.fixture) ||
     (memberRelease === NFL_UNCHANGED_ML_PREDECESSOR.member &&
       decisionRelease === NFL_UNCHANGED_ML_PREDECESSOR.decision &&
       fixtureRelease === NFL_UNCHANGED_ML_PREDECESSOR.fixture &&

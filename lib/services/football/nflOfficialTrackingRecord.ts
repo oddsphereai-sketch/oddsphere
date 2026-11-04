@@ -202,6 +202,9 @@ export function buildNflImmutableT60RecoveryRecords(args: {
 }
 
 function coherenceArgs(payload: NflForwardEvidencePayload): Parameters<typeof assertFootballCrossMarketCoherence>[0] {
+  // Preserve the exact PMF-policy cohort when the current input release advances.
+  const pmfSideAuthority = payload.decisions.modelPromotionStatus === NFL_V1_MEMBER_RELEASE ||
+    payload.decisions.modelPromotionStatus === "nfl_v1_member_release_2026_11_04_r57_pmf_mean_direction_diagnostic";
   const evaluatedMarketsForCoherence = new Set(payload.decisions.evaluatedBets.map((decision) => decision.market));
   return {
     sport: "nfl",
@@ -223,11 +226,11 @@ function coherenceArgs(payload: NflForwardEvidencePayload): Parameters<typeof as
     decisions: payload.decisions.evaluatedBets,
     unavailableMarkets: NFL_TRACKED_MARKETS.filter((market) => !evaluatedMarketsForCoherence.has(market)),
     requireDecisionSideFromForecast: true,
-    nflPmfSideAuthority: payload.decisions.modelPromotionStatus === NFL_V1_MEMBER_RELEASE,
-    decisionSideProbabilityConvention: payload.decisions.modelPromotionStatus === NFL_V1_MEMBER_RELEASE ? "exclude_push" : undefined,
+    nflPmfSideAuthority: pmfSideAuthority,
+    decisionSideProbabilityConvention: pmfSideAuthority ? "exclude_push" : undefined,
     // Tracking consumes the exact writer-approved immutable T-60 payload. It
-    // uses the prospective PMF policy only for this exact member release.
-    // Prior immutable payloads retain their original mean/median contract.
+    // uses the PMF policy for the current input release and its exact R57
+    // predecessor. Earlier immutable payloads retain their original contract.
     publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
   };
 }

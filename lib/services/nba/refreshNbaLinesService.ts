@@ -36,6 +36,7 @@ import { normalizeTeamAbbr } from "../../providers/playbook/playbookTeamNormaliz
 import { OwlsInsightClient } from "../../providers/owls/owlsInsightClient";
 import {
   normalizeOwlsSharpBookOdds,
+  normalizeOwlsNamedBookOdds,
   type RawOwlsOddsResponse,
 } from "../../providers/owls/owlsSharpBookOdds";
 import { flagOpenersInHistoryPayload } from "../_lineHistoryOpenerHelper";
@@ -466,7 +467,83 @@ function managedBooksForCompleteScope(rows: readonly LineUpsertPayload[]): strin
   return ["bookmaker", "circa", "pinnacle"];
 }
 
+/** Coverage is a complete native consumer contract, not the presence of one
+ * side or a retail-only context book. Keep provider event/time together so
+ * separate observations cannot manufacture a pair. */
+function consumerBookFamily(book: string): string {
+  const value = book.trim().toLowerCase();
+  return value === "hardrockbet" ? "hardrock" : value;
+}
+function scopedConsumerPairs(rows: readonly SharpOddsRow[], games: GameRow[], teamById: Map<number, TeamRow>, availableAt: string) {
+  const cutoff = Date.parse(availableAt);
+  const groups = new Map<string, { bookScope: string; scope: string; rows: SharpOddsRow[]; payloads: PreparedLineUpsertPayload[]; observed: number }>();
+  for (const row of rows) {
+    if (!isNbaConsumerExecutionSportsbook(row.sportsbook)) continue;
+    const game = matchGame(row.home_team ?? "", row.away_team ?? "", games, teamById);
+    const market = normalizeMarket(row.market_type ?? row.market);
+    const observed = Date.parse(row.provider_timestamp ?? "");
+    const start = Date.parse(row.event_start_time ?? "");
+    if (!game || !market || !row.event_id || !Number.isFinite(observed) || !Number.isFinite(cutoff) || observed > cutoff ||
+        !Number.isFinite(start) || observed >= start || Math.abs(start - Date.parse(game.game_date)) > 18 * 3_600_000) continue;
+    const home = teamById.get(game.home_team_id ?? -1)?.display_name ?? "";
+    const away = teamById.get(game.away_team_id ?? -1)?.display_name ?? "";
+    const side = normalizeSide(row.side ?? row.selection_type, row.selection ?? row.outcome, home, away);
+    if (!side) continue;
+    const payload = buildLinePayload(row, game.id, market, side);
+    if (!payload || payload.odds_american === null || Math.abs(payload.odds_american) < 100 ||
+        market === "moneyline" && payload.line_value !== null) continue;
+    const scope = `${game.id}|${market}`, bookScope = `${scope}|${consumerBookFamily(row.sportsbook!)}`;
+    const key = `${bookScope}|${row.event_id}|${row.provider_timestamp}`;
+    const group = groups.get(key) ?? { bookScope, scope, rows: [], payloads: [], observed };
+    group.rows.push(row); group.payloads.push(payload); groups.set(key, group);
+  }
+  const latest = new Map<string, typeof groups extends Map<string, infer T> ? T : never>();
+  for (const group of groups.values()) {
+    if (!isCompleteExecutableBookPair(group.payloads)) continue;
+    const prior = latest.get(group.bookScope);
+    // Conflicting same-clock contracts are unavailable, rather than selecting
+    // convenient sides from separate provider events.
+    if (prior && prior.observed === group.observed && JSON.stringify(prior.payloads) !== JSON.stringify(group.payloads)) {
+      latest.set(group.bookScope, { ...group, rows: [], payloads: [] });
+    } else if (!prior || group.observed > prior.observed) latest.set(group.bookScope, group);
+  }
+  const complete = [...latest.values()].filter(group => group.rows.length > 0);
+  return { rows: complete.flatMap(group => group.rows), scopeKeys: new Set(complete.map(group => group.scope)),
+    bookScopeKeys: new Set(complete.map(group => group.bookScope)) };
+}
+function fillOwlsConsumerGaps(primaryRows: readonly SharpOddsRow[], nativeRows: readonly SharpOddsRow[],
+  games: GameRow[], teamById: Map<number, TeamRow>, primaryAvailableAt: string, nativeAvailableAt: string) {
+  const primary = scopedConsumerPairs(primaryRows, games, teamById, primaryAvailableAt);
+  const native = scopedConsumerPairs(nativeRows, games, teamById, nativeAvailableAt);
+  const bookScope = (row: SharpOddsRow) => {
+    const game = matchGame(row.home_team ?? "", row.away_team ?? "", games, teamById);
+    return game ? `${game.id}|${normalizeMarket(row.market_type ?? row.market)}|${consumerBookFamily(row.sportsbook!)}` : null;
+  };
+  const addedRows = native.rows.filter(row => !primary.bookScopeKeys.has(bookScope(row)!));
+  const addedScopes = new Set(addedRows.map(row => bookScope(row)!));
+  // An incomplete primary fragment cannot be spliced into the newly selected
+  // native pair by the final per-side main-line dedupe.
+  const rows = primaryRows.filter(row => !isNbaConsumerExecutionSportsbook(row.sportsbook) || !addedScopes.has(bookScope(row)!));
+  return { rows: [...rows, ...addedRows], addedRows };
+}
+function owlsConsumerRows(response: RawOwlsOddsResponse): SharpOddsRow[] {
+  // Keep native market update clocks when supplied. The sharp-only reader and
+  // its source interpretation remain unchanged.
+  const events = Array.isArray(response.data) ? response.data : Object.values(response.data ?? {}).flatMap(rows => rows ?? []);
+  const marketClockResponse: RawOwlsOddsResponse = { ...response, data: events.map(event => ({ ...event,
+    bookmakers: (event.bookmakers ?? []).flatMap(book => (book.markets ?? []).map(market => ({ ...book,
+      last_update: market.last_update ?? book.last_update, markets: [market] }))) })) };
+  return normalizeOwlsNamedBookOdds(marketClockResponse, "nba", [...NBA_CONSUMER_RETAIL_BOOKS].filter(isNbaConsumerExecutionSportsbook)).prices.map(row => ({
+    event_id: row.providerEventId, sportsbook: row.sportsbook, market_type: row.market, side: row.side,
+    line: row.line, odds_american: row.americanPrice, odds_decimal: row.decimalPrice,
+    home_team: row.homeTeam, away_team: row.awayTeam, event_start_time: row.scheduledStart ?? undefined,
+    provider_timestamp: row.observedAt, is_main_line: true,
+  }));
+}
 export const __NBA_LINES_TEST__ = {
+  scopedConsumerPairs,
+  fillOwlsConsumerGaps,
+  owlsConsumerRows,
   eventIdsForGames,
   eventTargetsForGames,
   matchGame,
@@ -564,9 +641,13 @@ export async function refreshNbaLines(
   let oddsRows: SharpOddsRow[] = [];
   const sharpGameIds = new Set<number>();
   const retailGameIds = new Set<number>();
-  const retailScopeKeys = new Set<string>();
+  let retailScopeKeys = new Set<string>();
+  let retainedOwlsConsumerRows: SharpOddsRow[] = [];
+  let owlsResponseAvailableAt = "";
   if (opts.owlsApiKey) {
     const response = await new OwlsInsightClient(opts.owlsApiKey).odds<RawOwlsOddsResponse>("nba");
+    owlsResponseAvailableAt = new Date().toISOString();
+    retainedOwlsConsumerRows = owlsConsumerRows(response.body);
     const coverage = normalizeOwlsSharpBookOdds(response.body, "nba");
     oddsRows = coverage.prices.flatMap((row) => {
       const game = matchGame(row.homeTeam, row.awayTeam, games, teamById);
@@ -630,7 +711,6 @@ export async function refreshNbaLines(
       const storedGame = storedGameByProviderId.get(quote.providerGameId);
       if (!providerGame || !storedGame) return [];
       retailGameIds.add(storedGame.id);
-      retailScopeKeys.add(`${storedGame.id}|${quote.market}`);
       return [{
         event_id: String(quote.providerGameId),
         sportsbook: quote.sportsbook,
@@ -646,6 +726,7 @@ export async function refreshNbaLines(
       }];
     });
     oddsRows.push(...retailRows);
+    retailScopeKeys = scopedConsumerPairs(retailRows, games, teamById, new Date().toISOString()).scopeKeys;
     const incompleteRetailGames = games.filter((game) =>
       NBA_CURRENT_LINE_MARKETS.some((market) => !retailScopeKeys.has(`${game.id}|${market}`)));
     if (incompleteRetailGames.length > 0) warnings.push(
@@ -687,7 +768,6 @@ export async function refreshNbaLines(
           !Number.isFinite(distanceMs) || distanceMs > 18 * 3_600_000
         ) return [];
         retailGameIds.add(storedGame.id);
-        retailScopeKeys.add(`${storedGame.id}|${quote.market}`);
         return [{
           event_id: quote.providerEventId,
           sportsbook: quote.sportsbook,
@@ -702,10 +782,22 @@ export async function refreshNbaLines(
           is_main_line: true,
         }];
       });
-      oddsRows.push(...fallbackRows);
-      log(`The Odds API normalized consumer fallback rows: ${fallbackRows.length}`);
+      const completeFallback = scopedConsumerPairs(fallbackRows, games, teamById, new Date().toISOString());
+      oddsRows.push(...completeFallback.rows);
+      retailScopeKeys = scopedConsumerPairs(oddsRows, games, teamById, new Date().toISOString()).scopeKeys;
+      log(`The Odds API normalized consumer fallback rows: ${completeFallback.rows.length}`);
     }
   }
+
+  // Reuse the already-fetched league response only after BDL/TOA. Fill an
+  // exact missing consumer book/market contract; never replace an intact
+  // primary pair or turn Circa/Pinnacle evidence into an executable offer.
+  const nativeGap = fillOwlsConsumerGaps(oddsRows, retainedOwlsConsumerRows, games, teamById,
+    new Date().toISOString(), owlsResponseAvailableAt);
+  oddsRows = nativeGap.rows;
+  for (const row of nativeGap.addedRows) retailGameIds.add(matchGame(row.home_team!, row.away_team!, games, teamById)!.id);
+  retailScopeKeys = scopedConsumerPairs(oddsRows, games, teamById, new Date().toISOString()).scopeKeys;
+  log(`Owls native consumer gap rows: ${nativeGap.addedRows.length}`);
 
   const consumerMissingScopes = missingRetailScopeKeys();
   if (consumerMissingScopes.size > 0) {

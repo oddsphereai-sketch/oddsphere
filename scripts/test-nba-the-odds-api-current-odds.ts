@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 import {
   fetchNbaTheOddsApiCurrentBoard,
+  nbaTheOddsApiSafeDiagnosticError,
   parseNbaTheOddsApiCurrentBoard,
 } from "../lib/services/nba/nbaTheOddsApiCurrentOdds";
 
@@ -42,6 +43,25 @@ async function main() {
     ["total", "over", 226.5], ["total", "under", 226.5],
   ]);
 
+  assert.equal(nbaTheOddsApiSafeDiagnosticError("failed apiKey=test-secret test-secret", "test-secret"), "failed apiKey=[redacted] [redacted]");
+  assert.equal(nbaTheOddsApiSafeDiagnosticError(null, "test-secret"), null);
+  assert.equal(nbaTheOddsApiSafeDiagnosticError("x".repeat(1000), null)?.length, 400);
+  let unauthorizedCalls = 0;
+  for (const apiKey of [undefined, "", "   "]) {
+    await assert.rejects(fetchNbaTheOddsApiCurrentBoard({ apiKey: apiKey as unknown as string,
+      fetchImpl: async () => { unauthorizedCalls++; throw new Error("network must not be called"); } }),
+    /requires a configured API key; no request was made/);
+  }
+  assert.equal(unauthorizedCalls, 0, "a keyless audit cannot masquerade as an invalid account/key response");
+  const longSecret = "secret-" + "z".repeat(220);
+  await assert.rejects(fetchNbaTheOddsApiCurrentBoard({ apiKey: longSecret,
+    fetchImpl: async () => new Response(`key=${longSecret}`, { status: 401 }) }),
+  error => error instanceof Error && error.message.includes("[redacted]") && !error.message.includes("secret-"),
+  "HTTP error text is redacted before truncation or propagation to any writer warning");
+  await assert.rejects(fetchNbaTheOddsApiCurrentBoard({ apiKey: "test+secret",
+    fetchImpl: async () => { throw new Error("failed https://example.test?apiKey=test%2Bsecret"); } }),
+  error => error instanceof Error && error.message.includes("[redacted]") && !error.message.includes("test%2Bsecret"),
+  "network errors cannot leak query credentials into shared diagnostics or caller logs");
   let requested = "";
   const fetched = await fetchNbaTheOddsApiCurrentBoard({
     apiKey: "test-key",
@@ -62,7 +82,7 @@ async function main() {
   assert.equal((route.match(/fetchNbaTheOddsApiCurrentBoard\(\{ apiKey: theOddsApiKey \}\)/g) ?? []).length, 1);
   assert.match(route, /getTheOddsApiCurrentBoard,/);
   assert.match(route, /theOddsApiCurrentPromise \?\?=/);
-  assert.match(route, /nba_daily_refresh_schedule_2026_11_03_r22_consumer_gap_continuity/);
+  assert.match(route, /nba_daily_refresh_schedule_2026_11_04_r23_native_consumer_pairs/);
 
   const splitSource = readFileSync(new URL("../lib/providers/real_api/sharpApiCurrentSplits.ts", import.meta.url), "utf8");
   assert.match(splitSource, /revalidateTag\("owls-current-splits", \{ expire: 0 \}\)/);
