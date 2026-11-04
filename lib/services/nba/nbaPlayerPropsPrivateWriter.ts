@@ -34,7 +34,7 @@ import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
 import { buildNbaPlayerPropsMemberPrices } from "./nbaPlayerPropsMemberPrices";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_11_04_r11_member_quote_authority" as const;
+  "nba_player_props_private_writer_2026_11_04_r12_settlement_catchup" as const;
 
 export function nbaPlayerPropsForecastIsPublishable(
   row: Pick<NbaPlayerPropsForwardDecision, "independentProjection" | "finalProjection">,
@@ -58,6 +58,7 @@ export type NbaPlayerPropsPrivateWriterResult = Readonly<{
   decisions: number;
   locked: number;
   findings: readonly string[];
+  settlement?:Awaited<ReturnType<typeof settleNbaPlayerPropsTrackedSlates>>|null;
 }>;
 
 export async function refreshNbaPlayerPropsPrivateCandidate(args: {
@@ -325,6 +326,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     featureRows: eligibleFeatures.length,
     decisions: lifecycle.snapshot.decisions.length,
     locked: lifecycle.snapshot.decisions.filter((row) => row.lockedAt !== null).length,
+    settlement,
     findings: [
       ...live.findings,
       ...(invalidForecasts.length > 0 ? [`invalid_nonpositive_forecasts_excluded:${invalidForecasts.length}`] : []),
