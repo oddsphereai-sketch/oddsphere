@@ -17,6 +17,8 @@ type Preview = {
   mlSource: string;
   puckRead: string;
   puckSource: string;
+  totalRead: string;
+  totalSource: string;
 };
 
 const gradeRank: Record<Verdict, number> = { pass: 0, watchlist: 1, lean: 2, best_angle: 3 };
@@ -31,7 +33,7 @@ async function main(): Promise<void> {
   const slateDate = process.argv.find((arg) => arg.startsWith("--date="))?.slice(7) ?? "2026-11-03";
   const previews: Preview[] = [];
   const messages: string[] = [];
-  const pattern = /^\s*\[dry-run\] (.+) (moneyline|total|spread)\/(home|away|over|under)\s+pick=(.*?)\s+prob=([\d.]+)\s+verdict=(\w+)\s+score=([\d.]+)-([\d.]+)\s+price=(-?\d+|null)\s+ml_read=([^\s]+)\s+ml_source=([^\s]+)\s+puck_read=([^\s]+)\s+puck_source=([^\s]+)/;
+  const pattern = /^\s*\[dry-run\] (.+) (moneyline|total|spread)\/(home|away|over|under)\s+pick=(.*?)\s+prob=([\d.]+)\s+verdict=(\w+)\s+score=([\d.]+)-([\d.]+)\s+price=(-?\d+|null)\s+ml_read=([^\s]+)\s+ml_source=([^\s]+)\s+puck_read=([^\s]+)\s+puck_source=([^\s]+)\s+total_read=([^\s]+)\s+total_source=([^\s]+)/;
   const result = await writeNhlPredictionRecords({
     slateDate,
     apply: false,
@@ -54,6 +56,8 @@ async function main(): Promise<void> {
         mlSource: match[11]!,
         puckRead: match[12]!,
         puckSource: match[13]!,
+        totalRead: match[14]!,
+        totalSource: match[15]!,
       });
     },
   });
@@ -62,7 +66,7 @@ async function main(): Promise<void> {
     .select("matchup,market,pick,side,play_grade,no_bet,published_at,snapshot_json")
     .eq("sport", "nhl")
     .eq("slate_date", slateDate)
-    .eq("model_version", "nhl_regular_2026_r23_owls_current_odds")
+    .eq("model_version", "nhl_regular_2026_r25_categorical_total_response")
     .order("published_at", { ascending: false });
   if (error) throw new Error(error.message);
   const baseline = new Map<string, (typeof data)[number]>();
@@ -92,6 +96,8 @@ async function main(): Promise<void> {
       mlSource: preview.mlSource,
       puckRead: preview.puckRead,
       puckSource: preview.puckSource,
+      totalRead: preview.totalRead,
+      totalSource: preview.totalSource,
     };
   });
   const games = [...new Set(previews.map((row) => row.matchup))];
@@ -99,7 +105,14 @@ async function main(): Promise<void> {
     .map((grade) => [grade, previews.filter((row) => row.verdict === grade).length]));
   const uniqueReads = Object.fromEntries(games.map((game) => {
     const row = previews.find((preview) => preview.matchup === game)!;
-    return [game, { moneyline: row.mlRead, moneylineSource: row.mlSource, puckLine: row.puckRead, puckLineSource: row.puckSource }];
+    return [game, {
+      moneyline: row.mlRead,
+      moneylineSource: row.mlSource,
+      puckLine: row.puckRead,
+      puckLineSource: row.puckSource,
+      total: row.totalRead,
+      totalSource: row.totalSource,
+    }];
   }));
   console.log(JSON.stringify({
     slateDate,

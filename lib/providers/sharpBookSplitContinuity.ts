@@ -73,6 +73,7 @@ export function applySharpBookSplitContinuity(
   let matchedGames = 0;
   let populatedMarkets = 0;
   for (const game of response.games) {
+    if (game.lockState === "locked" && !options.reconstructMissingLockedPreLock) continue;
     const lockedCutoffMs = game.lockState === "locked" && options.reconstructMissingLockedPreLock
       ? Date.parse(game.lockedAt ?? "")
       : null;

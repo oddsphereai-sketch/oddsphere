@@ -6816,15 +6816,58 @@ three-market pricing for both upcoming games. Predictions, prices, grades,
 locks, tracking, copy, labels, and layout are unchanged. Evidence and rollback:
 `docs/model-audits/2026-10-08-nhl-pregame-coverage-gate-r10.md`.
 
-## NHL regular-season champion (active from 2026-11-03)
+## NHL regular-season champion (active from 2026-11-04)
 
-- Model: `nhl_regular_2026_r25_categorical_total_response`
-- Calibration: `nhl_regular_calibration_2026_r25_categorical_total_response`
-- Decision: `nhl_regular_decision_2026_r25_categorical_total_response`
-- Reader: `nhl_daily_edge_reader_2026_10_27_r18_owls_same_book_movement`
+- Model: `nhl_regular_2026_r27_external_audited_sharp_reader`
+- Calibration: `nhl_regular_calibration_2026_r27_external_audited_sharp_reader`
+- Decision: `nhl_regular_decision_2026_r27_external_audited_sharp_reader`
+- Reader: `nhl_daily_edge_reader_2026_11_04_r20_identity_bound_reader_receipt`
+- Reader receipt: `nhl_reader_receipt_2026_11_04_r2_identity_bound_market_evidence`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
+
+The November 4 r27 release replaces r25's endpoint and target-excluded reader
+with an externally audited causal multi-professional-book episode arbiter. The
+independent model is the sole prior. Shared physical-book aliases prevent false
+breadth and enforce exact execution-book exclusion. Exact-contract paths
+quarantine stale, future, partial and ambiguous evidence. Identified
+professional splits carry distinct source-observation and local-availability
+clocks; conflicts veto public fallback, while a fresh fallback can replace a
+stale priority book. A clean post-availability response is evaluated on its
+causal leg even after earlier volatility. Flat holds remain contextual
+resistance with zero numerical authority. Opposed or reversed causal paths
+fail closed, one book authors amplitude, and no current ML/Total/spread level
+is blended or substituted into the forecast.
+Correlated Moneyline and puck-line episodes use their selected causal response
+clocks to choose one side-axis author; an earlier pre-pressure path move cannot
+win authority.
+
+Qualified ML, puck-line and main-Total innovations enter one information
+projection over one independent product-Poisson score distribution. That one
+distribution owns final scores, predictions and probabilities. Exact-price
+grades consume the final probability once; no categorical second bonus exists.
+An invalid or nonconvergent constraint set returns the exact independent PMF.
+Every new writer tuple freezes a canonical hash-bound and exact-identity-bound
+evidence receipt with quotes, trails, split clocks, selected/rejected
+professional sources, considered paths, rejection reasons, before/after
+decisions and final scores. Locked cards verify and render it before mutable
+data reads. Display priority preserves fresh neutral/conflicting sharp evidence
+while excluding invalid, future or stale rows; numerical authority remains a
+separate frozen selection. Legacy r23-r25 locks remain exact and are never rewritten.
+
+The release also permits incomplete same-day/future MoneyPuck file publication
+without discarding all prior paired games. Only exact earlier pairs replay and
+the existing settled-game ID gate still rejects missing historical coverage.
+On the final November 4 four-game / twelve-market rehearsal, r27 has zero errors,
+zero side changes, zero promotions, zero demotions and the same seven actionables
+(zero Best Angle, seven Lean, five Watchlist) as the latest r25 records.
+Current named paths are flat or otherwise non-authoritative after excluding each
+evaluated execution book, so no reader innovation changes a score on that
+snapshot. Paired functional tests cover promotions,
+demotions and score/pick consequences on all three markets. This is forward
+functional qualification, not a future-accuracy claim. Evidence and rollback:
+`docs/model-audits/2026-11-04-nhl-external-audited-sharp-reader-r27.md`.
 
 The November 3 r25 functional follow-up closes the remaining two-book Total
 interpretation gap found in the owner-requested live spot check. When

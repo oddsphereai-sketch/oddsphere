@@ -1,5 +1,6 @@
 import type { OddsTrailStopDto } from "../../../app/lab/lib/labTypes";
 import { canonicalizeNhlLineRows, selectNhlFreshCurrentLineBoard } from "./nhlLineBoard";
+import { canonicalNhlSportsbookFamily } from "./nhlSportsbookFamily";
 
 export type NhlPriceTrailRow = {
   market_type: string;
@@ -46,7 +47,7 @@ function latest(rows: NhlPriceTrailRow[]): NhlPriceTrailRow | null {
 }
 
 function bookRank(book: string): number {
-  const normalized = book.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normalized = canonicalNhlSportsbookFamily(book);
   const index = BOOK_PRIORITY.findIndex((candidate) => normalized.includes(candidate));
   return index === -1 ? BOOK_PRIORITY.length : index;
 }

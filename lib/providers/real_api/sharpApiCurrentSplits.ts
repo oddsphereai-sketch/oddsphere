@@ -23,12 +23,25 @@ type SupportedSport = Exclude<Sport, "soccer" | "ucl">;
 type SplitMarket = "moneyline" | "spread" | "total";
 type NamedBook = "circa" | "draftkings" | "consensus" | "betmgm";
 
-type SharpApiCurrentSplitFeed = {
+export type SharpApiCurrentSplitFeed = {
   source: "owls_current_splits" | "sharpapi_current_splits";
   release: typeof OWLS_CURRENT_SPLITS_RELEASE | typeof CURRENT_SPLITS_RELEASE | typeof PREVIOUS_CURRENT_SPLITS_RELEASE;
   sport: SupportedSport;
   fetchedAt: string;
   rows: Json[];
+};
+
+export type NhlIdentifiedProfessionalSplit = {
+  market: SplitMarket;
+  sourceBook: string;
+  /** Provider/source observation clock retained by the durable row. */
+  observedAt: string;
+  /** Local availability clock for the durable feed snapshot. */
+  receivedAt: string;
+  awayOrOverMoneyPct: number;
+  awayOrOverBetsPct: number;
+  homeOrUnderMoneyPct: number;
+  homeOrUnderBetsPct: number;
 };
 
 export type SharpApiCurrentSplitOverlayResult = {
@@ -181,6 +194,71 @@ export async function readStoredSharpApiCurrentSplits(
   return validateSharpApiCurrentSplitFeed(stored?.payload, sport);
 }
 
+/** Exact-game, exact-book NHL split extraction for the prediction writer.
+ * Every returned row is a complete money+ticket pair from one provider
+ * observation. No source, timestamp, market, or book is blended. */
+export function identifiedNhlProfessionalSplits(args: {
+  feed: SharpApiCurrentSplitFeed | null;
+  slateDate: string;
+  gameStartAt: string;
+  awayAbbr: string;
+  homeAbbr: string;
+  cutoffAt: string;
+}): NhlIdentifiedProfessionalSplit[] {
+  if (!args.feed || args.feed.sport !== "nhl") return [];
+  const accepted = acceptedDates(args.gameStartAt, args.slateDate);
+  const matching = args.feed.rows.filter((row) => {
+    if (normalize(text(row.league) ?? "") !== "nhl") return false;
+    const startAt = timestamp(row.event_start_time);
+    if (!startAt || !accepted.has(easternDate(startAt))) return false;
+    return teamMatches("nhl", row.away_team, args.awayAbbr)
+      && teamMatches("nhl", row.home_team, args.homeAbbr);
+  });
+  const eventIds = new Set(matching.map((row) => text(row.event_id)).filter((value): value is string => value !== null));
+  if (eventIds.size !== 1) return [];
+  const cutoffMs = Date.parse(args.cutoffAt);
+  if (!Number.isFinite(cutoffMs)) return [];
+  const out: NhlIdentifiedProfessionalSplit[] = [];
+  for (const market of ["moneyline", "spread", "total"] as const) {
+    for (const book of BOOK_PRIORITY) {
+      const rows = dedupeBookRows(
+        matching.filter((row) => normalize(text(row.sportsbook) ?? "") === book),
+        market,
+        cutoffMs,
+      );
+      if (rows.length !== 1) continue;
+      const row = rows[0]!;
+      const observedAt = timestamp(record(row._oddsphere_market_fetched_at)[market]) ?? timestamp(row.fetched_at);
+      if (!observedAt) continue;
+      // Keep the row's own receipt clock. The feed envelope can advance when
+      // newer rows are merged and must never make an older retained split fresh.
+      const receivedAt = timestamp(row._oddsphere_received_at) ?? timestamp(row.fetched_at) ?? observedAt;
+      const source = record(row[market]);
+      const firstKey = market === "total" ? "over" : "away";
+      const secondKey = market === "total" ? "under" : "home";
+      const bets = record(source.bets_pct);
+      const handle = record(source.handle_pct);
+      const firstMoney = percentage(handle[firstKey]);
+      const secondMoney = percentage(handle[secondKey]);
+      const firstBets = percentage(bets[firstKey]);
+      const secondBets = percentage(bets[secondKey]);
+      if (firstMoney === null || secondMoney === null || firstBets === null || secondBets === null
+        || !complementary(firstMoney, secondMoney) || !complementary(firstBets, secondBets)) continue;
+      out.push({
+        market,
+        sourceBook: book,
+        observedAt,
+        receivedAt,
+        awayOrOverMoneyPct: firstMoney,
+        awayOrOverBetsPct: firstBets,
+        homeOrUnderMoneyPct: secondMoney,
+        homeOrUnderBetsPct: secondBets,
+      });
+    }
+  }
+  return out;
+}
+
 export async function restoreStoredCompleteSharpApiCurrentSplitDisplay(
   response: DailyEdgeResponse,
   sport: Sport,
@@ -258,6 +336,7 @@ export function applySharpApiCurrentSplitOverlay(
     // CBB's stored locked member card is the entire public record. This new
     // identity rule may attach only to future/unlocked reader rows.
     if (feed.sport === "cbb" && (game.lockState === "locked" || game.lockedAt)) continue;
+    if (game.lockState === "locked" && !options.reconstructMissingLockedPreLock) continue;
     const lockedCutoffMs = game.lockState === "locked" && options.reconstructMissingLockedPreLock
       ? Date.parse(game.lockedAt ?? "")
       : null;

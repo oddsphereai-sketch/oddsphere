@@ -29,6 +29,7 @@ export type PublicSplitObservation = {
   public_money_pct: number | null;
   books_used?: number | null;
   observed_at?: string | null;
+  received_at?: string | null;
 };
 
 export type PublicSplitAgreementState =
@@ -42,6 +43,8 @@ export type PublicSplitModelConfidence = "high" | "medium" | "low" | "none";
 
 export type ResolvedPublicSplit = {
   displaySource: PublicSplitsProvider | null;
+  displayObservedAt: string | null;
+  displayReceivedAt: string | null;
   displayBettingPct: number | null;
   displayMoneyPct: number | null;
   displayBooksUsed: number | null;
@@ -149,6 +152,8 @@ export function resolvePublicSplit(opts: ResolvePublicSplitOptions): ResolvedPub
 
   return {
     displaySource: display?.provider ?? null,
+    displayObservedAt: display?.observed_at ?? null,
+    displayReceivedAt: display?.received_at ?? null,
     displayBettingPct: verifiedHundredSplitPct(display?.public_betting_pct),
     displayMoneyPct: verifiedHundredSplitPct(display?.public_money_pct),
     displayBooksUsed: display?.books_used ?? null,

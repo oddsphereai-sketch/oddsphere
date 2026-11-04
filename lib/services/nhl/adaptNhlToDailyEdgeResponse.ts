@@ -33,7 +33,7 @@ import type {
   KeyStatRow,
   MarketEdgeDto,
 } from "../../../app/lab/lib/labTypes";
-import type { Grade } from "../../types/domain/Grade";
+import type { Grade, MarketSignal, SignalType } from "../../types/domain/Grade";
 import type { Verdict } from "../verdictDerivation";
 import { SHARP_READ_SENTENCES, type SharpReadKey } from "../sharpReadSelector";
 import type {
@@ -41,7 +41,6 @@ import type {
   NhlModelOutput,
   NhlVerdictKey,
 } from "../../automodel/nhlRegularModelV1";
-import type { SharpNhlSplitsEvent } from "../../providers/nhl/_sharpApiNhlClient";
 import { americanToImplied } from "../../utils/odds";
 import type { ResolvedNhlSplitsEvent } from "./nhlResolvedSplits";
 
@@ -141,7 +140,11 @@ function buildPublicSplits(
   return arr;
 }
 
-export const __NHL_ADAPTER_TEST__ = { buildPublicSplits, logoFor };
+export const __NHL_ADAPTER_TEST__ = {
+  buildPublicSplits,
+  logoFor,
+  marketSignalFromRead,
+};
 
 /**
  * Build the keyStats rows for a market from the model's feature
@@ -268,25 +271,43 @@ function gradeFromVerdict(v: NhlVerdictKey): Grade | null {
 
 export type NhlWriterVerdicts = Partial<Record<"moneyline" | "total" | "puckline", NhlVerdictKey>>;
 
-function sharpReadFromSplits(
+function sharpReadFromModel(
   model: NhlModelOutput,
-  splits: SharpNhlSplitsEvent | null,
   homeAbbr: string,
 ): { key: SharpReadKey; sentence: string } {
-  const bets = splits?.moneyline?.bets_pct?.home;
-  const money = splits?.moneyline?.handle_pct?.home;
-  if (bets === null || bets === undefined || money === null || money === undefined) {
+  const read = model.layers.moneyline_market_read;
+  const marketSide = model.layers.moneyline_market_side;
+  if (read === "unavailable" || marketSide === null) {
     return { key: "no_data", sentence: SHARP_READ_SENTENCES.no_data };
   }
-  const homeSharpDifference = money - bets;
+  if (read === "unresolved") {
+    return { key: "mixed", sentence: SHARP_READ_SENTENCES.mixed };
+  }
+  if (read === "discovery") {
+    return { key: "light_movement", sentence: SHARP_READ_SENTENCES.light_movement };
+  }
   const pickedHome = model.moneyline.pick.startsWith(homeAbbr);
-  const selectedSideDifference = pickedHome ? homeSharpDifference : -homeSharpDifference;
-  const key: SharpReadKey = Math.abs(selectedSideDifference) < 0.05
-    ? "mixed"
-    : selectedSideDifference > 0
-      ? "support"
-      : "push_against";
+  const key: SharpReadKey = (pickedHome && marketSide === "home") || (!pickedHome && marketSide === "away")
+    ? "support"
+    : "push_against";
   return { key, sentence: SHARP_READ_SENTENCES[key] };
+}
+
+type NhlCategoricalRead = NhlModelOutput["layers"]["moneyline_market_read"];
+type NhlCategoricalSide = "home" | "away" | "over" | "under" | null;
+
+function marketSignalFromRead(
+  read: NhlCategoricalRead,
+  readSide: NhlCategoricalSide,
+  finalSide: Exclude<NhlCategoricalSide, null>,
+): MarketSignal {
+  if (read === "unavailable" || read === "unresolved" || readSide === null) return "market_neutral";
+  if (readSide !== finalSide) return "market_resistance";
+  return read === "discovery" ? "steam_alert" : "market_confirmed";
+}
+
+function signalTypeFromMarketSignal(signal: MarketSignal): SignalType {
+  return signal === "market_neutral" ? "model_only" : "balanced";
 }
 
 function timeShortEt(utcIso: string | null): string {
@@ -329,6 +350,7 @@ function buildPredictionDto(
   market: NhlModelOutput["moneyline"],
   priceComplete = true,
   writerVerdict?: NhlVerdictKey,
+  marketSignal: MarketSignal = "market_neutral",
 ): DailyEdgePredictionDto {
   const verdict = priceComplete ? (writerVerdict ?? market.verdict) : "pass";
   return {
@@ -336,8 +358,8 @@ function buildPredictionDto(
     confidence: market.confidence,
     sharpStatus: "mixed",
     grade: gradeFromVerdict(verdict),
-    signalType: null,
-    marketSignal: null,
+    signalType: signalTypeFromMarketSignal(marketSignal),
+    marketSignal,
   };
 }
 
@@ -346,9 +368,10 @@ function buildTotalDto(
   marketLine: number | null,
   priceComplete = true,
   writerVerdict?: NhlVerdictKey,
+  marketSignal: MarketSignal = "market_neutral",
 ): DailyEdgeTotalPredictionDto {
   return {
-    ...buildPredictionDto(market, priceComplete && marketLine !== null, writerVerdict),
+    ...buildPredictionDto(market, priceComplete && marketLine !== null, writerVerdict, marketSignal),
     // 2026-06-14: the displayed line is the MARKET consensus line — the same
     // value the pick label "OVER {marketLine}" is built from. It used to be
     // set to the model's expected_total_goals (a 5.879-style projection),
@@ -367,8 +390,9 @@ function buildMarketEdge(opts: {
   publicSplits: MarketEdgeDto["publicSplits"];
   keyStats: KeyStatRow[];
   writerVerdict?: NhlVerdictKey;
+  marketSignal: MarketSignal;
 }): MarketEdgeDto {
-  const { market, slot, modelTotal, marketLine, bundle, publicSplits, keyStats, writerVerdict } = opts;
+  const { market, slot, modelTotal, marketLine, bundle, publicSplits, keyStats, writerVerdict, marketSignal } = opts;
   const priceComplete = bundle.priceAmerican !== null && (slot === "ml" || marketLine !== null);
   const effectiveVerdict: NhlVerdictKey = priceComplete ? (writerVerdict ?? market.verdict) : "pass";
   const verdict = verdictKeyMap(effectiveVerdict);
@@ -398,8 +422,8 @@ function buildMarketEdge(opts: {
     pick: market.pick,
     confidence: market.confidence,
     grade: gradeFromVerdict(effectiveVerdict),
-    signalType: null,
-    marketSignal: null,
+    signalType: signalTypeFromMarketSignal(marketSignal),
+    marketSignal,
     sharpStatus: "mixed",
     held,
     verdict: { key: verdict, label: verdictLabelFromKey(verdict) },
@@ -510,6 +534,26 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
       : (input.status === "LIVE" || input.status === "CRIT" || input.status === "FINAL" || input.status === "OFF")
         ? "locked"
         : "open";
+  const mlPickIsHome = model.moneyline.pick.startsWith(input.homeAbbr);
+  const totalPickIsOver = model.total.pick.startsWith("OVER");
+  const plPickIsHome = model.puck_line.pick.startsWith(input.homeAbbr);
+  const marketSignals = {
+    moneyline: marketSignalFromRead(
+      model.layers.moneyline_market_read,
+      model.layers.moneyline_market_side,
+      mlPickIsHome ? "home" : "away",
+    ),
+    total: marketSignalFromRead(
+      model.layers.total_market_read,
+      model.layers.total_market_side,
+      totalPickIsOver ? "over" : "under",
+    ),
+    puckline: marketSignalFromRead(
+      model.layers.puck_line_market_read,
+      model.layers.puck_line_market_side,
+      plPickIsHome ? "home" : "away",
+    ),
+  } as const;
 
   return {
     id: `nhl-${input.externalId}`,
@@ -531,15 +575,12 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
     homeStarter: null,
     awayStarter: null,
     predictions: {
-      ml: buildPredictionDto(model.moneyline, input.mlBundle.priceAmerican !== null, input.writerVerdicts?.moneyline),
-      total: buildTotalDto(model.total, input.marketTotalLine, input.totalBundle.priceAmerican !== null, input.writerVerdicts?.total),
+      ml: buildPredictionDto(model.moneyline, input.mlBundle.priceAmerican !== null, input.writerVerdicts?.moneyline, marketSignals.moneyline),
+      total: buildTotalDto(model.total, input.marketTotalLine, input.totalBundle.priceAmerican !== null, input.writerVerdicts?.total, marketSignals.total),
       // Puck-line read piggybacks the shared third-market prediction slot.
-      nrfi: buildPredictionDto(model.puck_line, input.puckLineBundle.priceAmerican !== null && input.puckLineMarketLine !== null, input.writerVerdicts?.puckline),
+      nrfi: buildPredictionDto(model.puck_line, input.puckLineBundle.priceAmerican !== null && input.puckLineMarketLine !== null, input.writerVerdicts?.puckline, marketSignals.puckline),
     },
     markets: (() => {
-      const mlPickIsHome = model.moneyline.pick.startsWith(input.homeAbbr);
-      const totalPickIsOver = model.total.pick.startsWith("OVER");
-      const plPickIsHome = model.puck_line.pick.startsWith(input.homeAbbr);
       return {
         moneyline: buildMarketEdge({
           market: model.moneyline,
@@ -550,6 +591,7 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
           publicSplits: buildPublicSplits("ml", mlPickIsHome, false, input.splits, input.homeAbbr, input.awayAbbr),
           keyStats: buildKeyStats("ml", input.snapshot, model),
           writerVerdict: input.writerVerdicts?.moneyline,
+          marketSignal: marketSignals.moneyline,
         }),
         total: buildMarketEdge({
           market: model.total,
@@ -560,6 +602,7 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
           publicSplits: buildPublicSplits("total", false, totalPickIsOver, input.splits, input.homeAbbr, input.awayAbbr),
           keyStats: buildKeyStats("total", input.snapshot, model),
           writerVerdict: input.writerVerdicts?.total,
+          marketSignal: marketSignals.total,
         }),
         // first_inning slot carries the official puck-line read for NHL.
         first_inning: buildMarketEdge({
@@ -571,6 +614,7 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
           publicSplits: buildPublicSplits("puckline", plPickIsHome, false, input.splits, input.homeAbbr, input.awayAbbr),
           keyStats: buildKeyStats("puckline", input.snapshot, model),
           writerVerdict: input.writerVerdicts?.puckline,
+          marketSignal: marketSignals.puckline,
         }),
       };
     })(),
@@ -600,7 +644,7 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
       : null,
     breakdown: {
       verdict: { key: verdict, label: verdictLabelFromKey(verdict) },
-      sharpRead: sharpReadFromSplits(model, input.splits, input.homeAbbr),
+      sharpRead: sharpReadFromModel(model, input.homeAbbr),
       modelBreakdown: [
         `${input.awayAbbr} @ ${input.homeAbbr} ${model.inputs_summary.series ? `(${model.inputs_summary.series})` : ""}.`,
         `Model expected goal diff (home - away): ${model.expected_goal_diff.toFixed(2)} from team xG, goalie, special teams, rest, home ice, and series layers.`,
