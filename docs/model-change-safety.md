@@ -1,5 +1,36 @@
 # Model change safety protocol
 
+## Owner-directed CBB native counterpressure consequence — November 4
+
+The owner explicitly requested resolution and live publication of the remaining
+current-level override, then supplied NKU/SDAK as a whole-market spot check.
+This authorizes the scoped R17 model /R21 grade /R13 receipt /R22 board /R32
+publisher /R20 tracking /R21 adapter `native_counterpressure_handoff` repair.
+Independent R4/path R5 remain exact. Do not describe this as learned forecast
+calibration, universal sharp detection or guaranteed improved accuracy.
+
+A genuinely bound professional current against-money response that confirms the
+selected independent-relative side must be interpreted before the absolute book
+level. Retain the original forecast law without inventing a points bonus or
+claiming the source certifies its probability strength. Current native joint
+feasibility/opposite-winner conflict checks still run first; active opposite
+professional reactions and missing/unbound/future/wrong-contract/source data
+cannot qualify. Bare price movement does not relax the existing full-law
+strength safeguard. Identical pressure repetitions may retain only an earlier
+real current response, with original reaction clock and separate latest read;
+changed native state, cancellation and unresolved reversals interrupt it.
+
+The same qualified response may support the existing contrarian Lean lane at
+positive exact-price EV and unchanged3%/8% reserves. No automatic Best, new
+provider request/budget, schedule, writer, lease, stake or manual score blend.
+Every actual board change must be reported with same-input reproduction and
+paired full-reader actionable promotion/demotion controls. Exact R16/R20/R12
+locks and original writer stamps retain precedence. Required checks include
+mirrors, repeated/changed pressure, full path versus recent response, invalid
+joint contracts, negative value, source/receipt clocks, legacy locks, external
+review, full model-change gate, clean latest-main protected PR and normal live
+writer/publisher/reader/lock proof.
+
 ## Owner-directed CBB Moneyline value eligibility and active reader correction — November 4
 
 The owner requested repair of rigid Moneyline eligibility, genuine strong

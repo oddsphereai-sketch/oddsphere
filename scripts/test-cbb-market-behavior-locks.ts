@@ -1,3 +1,4 @@
+import {CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_MONEYLINE_VALUE_GRADE_RELEASE,CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_RECEIPT_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
 import {CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_RECEIPT_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
 import {CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_CONTINUITY_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_CONTINUITY_MARKET_BEHAVIOR_RECEIPT_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
 import {CBB_INFORMATIONAL_WATCHLIST_GRADE_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
@@ -55,7 +56,8 @@ async function main(){
  const tracked:Array<Record<string,unknown>>=[];
  const trackingDb={from:(table:string)=>table==="games"?{select:()=>{const q={eq:()=>q,maybeSingle:async()=>({data:{id:44,external_id:777,game_date:start,slate_date:"2026-11-02"},error:null})};return q;}}:{select:()=>{const q={eq:()=>q,then:(resolve:(r:unknown)=>unknown)=>resolve({data:tracked,error:null})};return q;},insert:async(row:Record<string,unknown>)=>{tracked.push(structuredClone(row));return {error:null};}}} as unknown as Parameters<typeof writeLockedCbbTracking>[1];
  assert.equal(await writeLockedCbbTracking(frozen.record,trackingDb),3);
- assert.ok(tracked.every(row=>row.model_version===CBB_MARKET_BEHAVIOR_MODEL_RELEASE&&row.calibration_version===CBB_MARKET_BEHAVIOR_GRADE_RELEASE));
+ assert.ok(tracked.every(row=>row.model_version===CBB_MARKET_BEHAVIOR_MODEL_RELEASE&&row.calibration_version===CBB_MARKET_BEHAVIOR_GRADE_RELEASE&&
+  row.model_used==="cbb_r17_native_counterpressure_handoff"&&(row.snapshot_json as Record<string,unknown>).release==="cbb_tracking_writer_2026_11_04_r20_native_counterpressure_handoff"));
  const trackingBytes=JSON.stringify(tracked);assert.equal(await writeLockedCbbTracking(frozen.record,trackingDb),0);assert.equal(JSON.stringify(tracked),trackingBytes);
  assert.equal(tracked.find(row=>row.market==="spread")?.line_value,-2.5);
  const corrupt=structuredClone(frozen.record);corrupt.snapshot.board.score.home+=1;
@@ -320,11 +322,21 @@ async function main(){
  assert.equal(continuityMigrated.receipt.anchors.independentRelease,continuityReceipt.anchors.independentRelease);
  assert.equal(JSON.stringify(continuityReceipt.anchors),continuityAnchorsBytes);assert.equal(JSON.stringify(continuityReceipt.pathTape),continuityPathBytes);
  assert.equal(JSON.stringify(continuityPublic),continuityBytes,"unlocked anchor reuse never mutates the source locked payload");
+ // R19 and R20 used the original R16/R12 forecast/receipt lineage. Preserve
+ // those identifiers rather than deriving them from the new current runtime.
+ function legacyHandoffBoard(board:CbbStoredMemberGame["snapshot"]["board"]){
+  board.modelRelease=CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_MODEL_RELEASE;
+  const receipt=board.marketContext.verifiedMarketRead!;
+  Object.assign(receipt,{release:CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_RECEIPT_RELEASE,modelRelease:CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_MODEL_RELEASE});
+  Object.assign(receipt.forecastIdentity,{release:CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_MODEL_RELEASE});
+  receipt.anchors.release=CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_RECEIPT_RELEASE;
+ }
  // Grade-only R20 must retain model R16 / receipt R12 identity and every
  // already-stored R19 classification, including the steep positive ML Watch.
  const informationalPublic=structuredClone(frozen.record);
  Object.assign(informationalPublic.snapshot.board,{release:"cbb_candidate_2026_11_04_r20_informational_watchlist",
   gradeRelease:CBB_INFORMATIONAL_WATCHLIST_GRADE_RELEASE});
+ legacyHandoffBoard(informationalPublic.snapshot.board);
  const informationalNoPlay=structuredClone(informationalPublic);
  informationalNoPlay.snapshot.board.rows.find(row=>row.market==="spread")!.grade="No Play";
  informationalNoPlay.memberGame.markets.first_inning.grade=null;
@@ -349,6 +361,7 @@ async function main(){
  assert.ok(Math.abs(charlotteMl.expectedValue!-.03179606475227198)<1e-12);
  const charlotteLegacyBoard=structuredClone(charlotteBoard);
  Object.assign(charlotteLegacyBoard,{release:"cbb_candidate_2026_11_04_r20_informational_watchlist",gradeRelease:CBB_INFORMATIONAL_WATCHLIST_GRADE_RELEASE});
+ legacyHandoffBoard(charlotteLegacyBoard);
  const legacyCharlotteMl=charlotteLegacyBoard.rows.find(row=>row.market==="moneyline")!;
  legacyCharlotteMl.grade="Watchlist";legacyCharlotteMl.reason="price_too_steep_for_actionable";
  stored=null;
@@ -357,9 +370,9 @@ async function main(){
  assert.equal(charlotteFrozen.memberGame.markets.moneyline.verdict.key,"watchlist");
  for(const [name,oldRecord] of [["stored No Play",informationalNoPlay],["negative-EV Watch",informationalPublic],["positive Charlotte ML Watch",charlotteFrozen]] as const){
   const oldBytes=JSON.stringify(oldRecord),oldWrites:number=writes;stored=oldRecord;
-  assert.equal(cbbLockedModelRelease(oldRecord.snapshot.board),CBB_MARKET_BEHAVIOR_MODEL_RELEASE);
+  assert.equal(cbbLockedModelRelease(oldRecord.snapshot.board),CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_MODEL_RELEASE);
   assert.equal(cbbLockedGradeRelease(oldRecord.snapshot.board),CBB_INFORMATIONAL_WATCHLIST_GRADE_RELEASE);
-  assert.equal(oldRecord.snapshot.board.marketContext.verifiedMarketRead!.release,CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE);
+  assert.equal(oldRecord.snapshot.board.marketContext.verifiedMarketRead!.release,CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_RECEIPT_RELEASE);
   assert.equal((await writeCbbMemberGame({game,candidate:charlotteBoard,homeLogo:null,awayLogo:null,now:"2026-11-02T19:10:00Z"},db)).written,false);
   assert.equal(writes,oldWrites);
   assert.equal(readCbbProvisionalSnapshot({locked:oldRecord.snapshot,unlocked:initial.record.snapshot}),oldRecord.snapshot);
@@ -367,7 +380,7 @@ async function main(){
   priorTracked.length=0;assert.equal(await writeLockedCbbTracking(oldRecord,priorTrackingDb),3);
   for(const trackedRow of priorTracked){
    const row=oldRecord.snapshot.board.rows.find(row=>row.market===trackedRow.market)!;
-   assert.equal(trackedRow.model_version,CBB_MARKET_BEHAVIOR_MODEL_RELEASE);
+   assert.equal(trackedRow.model_version,CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_MODEL_RELEASE);
    assert.equal(trackedRow.calibration_version,CBB_INFORMATIONAL_WATCHLIST_GRADE_RELEASE);
    assert.equal(trackedRow.model_used,"cbb_r16_contextual_authority_handoff");
    assert.equal(trackedRow.model_probability,row.probability);assert.equal(trackedRow.expected_value,row.expectedValue);assert.equal(trackedRow.odds_american,row.price);
@@ -379,6 +392,58 @@ async function main(){
   assert.equal(JSON.stringify(priorTracked),oldTrackingBytes,`${name}: original tracking stamp and grades stay exact`);
   assert.equal(JSON.stringify(oldRecord),oldBytes,`${name}: R19 lock remains byte exact after R20 writer/reader/tracking`);
  }
+ // Actual immediate R16/R20/R12 predecessor: an old steep-ML Lean and
+ // negative-EV informational Watch must survive the new numerical handoff.
+ const moneylineValueBoard=structuredClone(charlotteBoard);
+ Object.assign(moneylineValueBoard,{release:"cbb_candidate_2026_11_04_r21_moneyline_value_eligibility",gradeRelease:CBB_MONEYLINE_VALUE_GRADE_RELEASE});
+ legacyHandoffBoard(moneylineValueBoard);
+ const moneylineValueDto=adaptCbbProvisionalGame({game,snapshot:{...initial.record.snapshot,board:moneylineValueBoard},homeLogo:null,awayLogo:null,now:at});
+ assert.equal(moneylineValueDto.markets.moneyline.verdict.key,"lean");
+ const moneylineValueWatchDto=adaptCbbProvisionalGame({game,snapshot:{...initial.record.snapshot,board:{...informationalPublic.snapshot.board,gradeRelease:CBB_MONEYLINE_VALUE_GRADE_RELEASE}},homeLogo:null,awayLogo:null,now:at});
+ assert.equal(moneylineValueWatchDto.markets.first_inning.recommendationConfidence,null);
+ assert.ok(moneylineValueWatchDto.markets.first_inning.reviewFlags.includes("informational_non_actionable_price"));
+ stored=null;
+ await writeCbbMemberGame({game,candidate:moneylineValueBoard,homeLogo:null,awayLogo:null,now:at},db);
+ const moneylineValueFrozen=(await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:lock},db)).record;
+ const moneylineValueBytes=JSON.stringify(moneylineValueFrozen),moneylineValueWrites=writes;
+ assert.equal(cbbLockedModelRelease(moneylineValueFrozen.snapshot.board),CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_MODEL_RELEASE);
+ assert.equal(cbbLockedGradeRelease(moneylineValueFrozen.snapshot.board),CBB_MONEYLINE_VALUE_GRADE_RELEASE);
+ assert.equal(moneylineValueFrozen.snapshot.board.marketContext.verifiedMarketRead!.release,CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_RECEIPT_RELEASE);
+ const newerDecision=structuredClone(candidate);newerDecision.score.home=999;
+ for(const row of newerDecision.rows){row.grade="Watchlist";row.probability=.01;row.price=-999;}
+ assert.equal((await writeCbbMemberGame({game,candidate:newerDecision,homeLogo:null,awayLogo:null,now:"2026-11-02T19:11:00Z"},db)).written,false);
+ assert.equal(writes,moneylineValueWrites);
+ assert.equal(readCbbProvisionalSnapshot({locked:moneylineValueFrozen.snapshot,unlocked:initial.record.snapshot}),moneylineValueFrozen.snapshot);
+ assert.deepEqual(cbbMemberGameForReader(moneylineValueFrozen,game),moneylineValueFrozen.memberGame,"stored R16/R20/R12 DTO wins over a conflicting R17 candidate");
+ priorTracked.length=0;assert.equal(await writeLockedCbbTracking(moneylineValueFrozen,priorTrackingDb),3);
+ for(const trackedRow of priorTracked){
+  const row=moneylineValueFrozen.snapshot.board.rows.find(row=>row.market===trackedRow.market)!;
+  assert.equal(trackedRow.model_version,CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_MODEL_RELEASE);
+  assert.equal(trackedRow.calibration_version,CBB_MONEYLINE_VALUE_GRADE_RELEASE);
+  assert.equal(trackedRow.model_used,"cbb_r16_contextual_authority_handoff");
+  assert.equal(trackedRow.model_probability,row.probability);assert.equal(trackedRow.expected_value,row.expectedValue);assert.equal(trackedRow.odds_american,row.price);
+  (trackedRow.snapshot_json as Record<string,unknown>).release="cbb_tracking_writer_2026_11_04_r19_moneyline_value_eligibility";
+ }
+ const moneylineValueTrackingBytes=JSON.stringify(priorTracked);
+ assert.equal(await writeLockedCbbTracking(moneylineValueFrozen,priorTrackingDb),0);
+ assert.equal(JSON.stringify(priorTracked),moneylineValueTrackingBytes,"existing R16/R20 tracking tuple and R19 writer stamp stay exact");
+ assert.equal(JSON.stringify(moneylineValueFrozen),moneylineValueBytes,"R16/R20/R12 writer, reader and tracking do not mutate the original lock");
+ const handoffAnchorPublic=structuredClone(frozen.record);
+ Object.assign(handoffAnchorPublic.snapshot.board,{release:"cbb_candidate_2026_11_04_r21_moneyline_value_eligibility",gradeRelease:CBB_MONEYLINE_VALUE_GRADE_RELEASE});
+ legacyHandoffBoard(handoffAnchorPublic.snapshot.board);
+ const handoffAnchorPublicBytes=JSON.stringify(handoffAnchorPublic);
+ const handoffReceipt=handoffAnchorPublic.snapshot.board.marketContext.verifiedMarketRead!;
+ assert.ok(handoffReceipt.anchors.quotes.length>0,"exercise actual nonempty native R12 anchors");
+ assert.ok(handoffReceipt.pathTape.streams.length>0,"exercise retained nonempty source path");
+ const handoffAnchorsBytes=JSON.stringify(handoffReceipt.anchors),handoffPathBytes=JSON.stringify(handoffReceipt.pathTape);
+ const handoffMigrated=readCbbMarketBehavior({independent,independentInputKey:"frozen-source",startsAt:start,targets,currentQuotes:refs,anchors:handoffReceipt.anchors,previousPath:handoffReceipt.pathTape});
+ assert.deepEqual(handoffMigrated.receipt.anchors.quotes,handoffReceipt.anchors.quotes,"R12 exact anchors remain reusable after R17 handoff");
+ assert.equal(handoffMigrated.receipt.anchors.capturedAt,handoffReceipt.anchors.capturedAt);
+ assert.equal(handoffMigrated.receipt.anchors.independentInputKey,handoffReceipt.anchors.independentInputKey);
+ assert.equal(handoffMigrated.receipt.anchors.independentRelease,handoffReceipt.anchors.independentRelease);
+ assert.equal(handoffMigrated.receipt.release,CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE);
+ assert.equal(JSON.stringify(handoffReceipt.anchors),handoffAnchorsBytes);assert.equal(JSON.stringify(handoffReceipt.pathTape),handoffPathBytes);
+ assert.equal(JSON.stringify(handoffAnchorPublic),handoffAnchorPublicBytes,"future unlocked migration never rewrites the R12 source payload");
  const jointMigrated=readCbbMarketBehavior({independent,independentInputKey:"same-alias-input",startsAt:start,targets,currentQuotes:refs,anchors:jointReceipt.anchors});
  assert.deepEqual(jointMigrated.receipt.anchors.quotes,jointReceipt.anchors.quotes,"R9 actual anchors survive the source-identity release");
  const migratedPrior=readCbbMarketBehavior({independent,independentInputKey:"new-r4-input",startsAt:start,targets,currentQuotes:refs,anchors:retailReceipt.anchors});
@@ -415,6 +480,6 @@ async function main(){
  assert.notEqual(priceDto.markets.first_inning.sharpStatus,"confirm","price-only promotion cannot imply identified sharp flow");
  const history=[{date:"2026-11-02T09:29:59Z"},{date:"2026-11-02T09:30:00Z"},{date:"2026-11-02T09:30:01Z"}] as Parameters<typeof cbbHistoryAtDecision>[0];
  assert.deepEqual(cbbHistoryAtDecision(history,at),history.slice(0,2),"old independent replay uses its own six-hour availability cutoff");
- console.log("PASS CBB joint market lock path: coherent current-source winner correction, exact grade/DTO, T-60 freezing, legacy R5/R10/R11/R12/R15 writer-reader-tracking immutability and genuine native movement labels.");
+ console.log("PASS CBB joint market lock path: coherent current-source winner correction, exact grade/DTO, T-60 freezing, legacy R5/R10/R11/R12/R15/R16-R20-R12 writer-reader-tracking immutability and genuine native movement labels.");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

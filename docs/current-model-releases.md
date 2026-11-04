@@ -1,6 +1,39 @@
 # Current production model releases and qualified research candidates
 
-## CBB value-based Moneyline eligibility — November 4
+## CBB native counterpressure consequence — November 4
+
+The authoritative market model is
+`cbb_candidate_2026_11_04_r17_native_counterpressure_handoff`, with grade
+`cbb_2026_11_04_r21_native_counterpressure_handoff`, receipt R13, board R22,
+publisher R32, tracking R20 and adapter R21 `native_counterpressure_handoff`.
+Independent R4 and path R5 remain unchanged. This supersedes the R16/R20/R12
+current tuple below; every existing locked tuple keeps its original semantics.
+
+A selected/equivalent relative confirmation supported by an actual current
+professional book moving against its own opposite-side money retains the
+independent forecast and residual law. An unchanged opposite-favorite source
+level cannot silently replace that interpreted decision. The reaction must bind
+the current native contract, physical author, original pressure/arrival clocks
+and direction; inconsistent joint prices, unresolved current winner opposition
+and a current opposite professional reaction still prevent this exception.
+This is contextual prior retention, not certification of its probability by a
+split percentage. No money share is converted into score points. Bare juice or
+unbound/public splits retain the existing current-level fallback.
+
+An identical later pressure read binding only a held tail retains its earlier
+real still-resolved response, with the newer observation separate. Changed
+pressure/contract/identity and cancelled or contested paths cannot revive it.
+Qualified against-money support can earn a positive-value Lean through the same
+contrarian lane as a held quote; no automatic Best or reserve reduction. Native
+full-path evidence and the recent response remain separately inspectable.
+
+This repair does not estimate a learned residual between forecasts or claim all
+source probabilities are true. Current levels remain explicit fallback evidence
+when no qualifying contextual authority resolves them. No blend, fitted weight,
+new provider call, paid AI service, writer, cadence or lease change.
+Evidence: `docs/model-audits/2026-11-04-cbb-native-counterpressure-handoff.json`.
+
+## Prior CBB value-based Moneyline eligibility — November 4
 
 The authoritative calibration/grade is
 `cbb_2026_11_04_r20_moneyline_value_eligibility`, with board R21, publisher R31,

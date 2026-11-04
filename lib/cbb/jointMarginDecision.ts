@@ -9,6 +9,7 @@ import type {CbbForecast,CbbQuote} from "./types";
 import type {CbbBehaviorEpisode,CbbMarketBehaviorReceipt} from "./marketBehaviorCandidate";
 import type {CbbPressureDecision} from "./sourcePressureDecision";
 import type {readCbbMarketBehaviorPath} from "./marketBehaviorPath";
+import {cbbCurrentNativeReaction,cbbQualifiedCounterpressure} from "./nativeCounterpressure";
 
 type Axis=CbbMarketBehaviorReceipt["margin"];
 type Path=ReturnType<typeof readCbbMarketBehaviorPath>;
@@ -20,9 +21,9 @@ export type CbbJointMarginDecision={
  status:"applied"|"confirmed"|"retained"|"unresolved"|"unavailable";reason:string;sourceBook:string|null;
  sourceQuotes:CbbQuote[];authority:CbbSourceAuthority|null;
  impliedMargin:number|null;impliedMarginSd:number|null;
- numericAssumption:"same_book_current_joint_prices_or_single_contract_with_independent_shape"|"qualified_current_resistance_retains_forecast";
+ numericAssumption:"same_book_current_joint_prices_or_single_contract_with_independent_shape"|"qualified_current_resistance_retains_forecast"|"qualified_native_counterpressure_retains_forecast";
  /** Present only on new decisions; never reconstruct this on stored locks. */
- relativeInterpretation?:{read:Axis;disposition:"source_level_selected"|"independent_law_confirmed"|"current_resistance_retained"|"current_source_unresolved"|"no_current_profile"};
+ relativeInterpretation?:{read:Axis;disposition:"source_level_selected"|"independent_law_confirmed"|"current_resistance_retained"|"native_counterpressure_retained"|"current_source_unresolved"|"no_current_profile"};
  candidates:Array<{book:string;status:string;reason:string;margin:number|null;marginSd:number|null}>;
 };
 /** Current state is evidence in its own right. Native current resistance may
@@ -150,6 +151,33 @@ export function decideCbbJointMargin(args:{base:CbbForecast;current:CbbQuote[];e
   decision.authority=structuredClone(retained);decision.numericAssumption="qualified_current_resistance_retains_forecast";
   decision.relativeInterpretation!.disposition="current_resistance_retained";
   return {decision,margin:structuredClone(args.relative),marginSd:base.uncertainty.marginSd};
+ }
+ // An active own-book move AGAINST its money can confirm the independent
+ // side even while the book's absolute price still favors the other team.
+ // Interpret the reaction, rather than adopting that earlier price stance.
+ // This retains an existing forecast; it does not infer points/probability
+ // from money shares or certify that its probability equals a source price.
+ const priorDirection=sign(base.margin);
+ const relative=args.relative,relativeAuthors=relative.authority?.authorIds??[];
+ const counterpressure=priorDirection!==0&&relative.status==="confirming"&&relative.delta===0&&
+   relative.sourceDirection===priorDirection&&
+   !episodes.some(e=>e.market!=="total"&&e.direction===-priorDirection&&
+     relativeAuthors.some(id=>id.startsWith(`${e.book}:`)))&&
+   ["selected","equivalent"].includes(relative.authority?.status??"")&&
+   pressure.find(row=>row.market!=="total"&&relativeAuthors.some(id=>id.startsWith(`${row.book}:`))&&
+     profiles.some(profile=>profile.book===row.book)&&
+     episodes.some(e=>e.book===row.book&&e.market===row.market&&e.direction===priorDirection)&&
+     cbbQualifiedCounterpressure(row,current,base.asOf,priorDirection));
+ const opposingReaction=priorDirection!==0&&pressure.some(row=>row.market!=="total"&&
+   cbbCurrentNativeReaction(row,current,base.asOf,-priorDirection as 1|-1));
+ if(counterpressure&&!opposingReaction){
+  const source=profiles.find(profile=>profile.book===counterpressure.book)!;
+  decision.status="retained";decision.reason="qualified_native_counterpressure_precedes_current_level";
+  decision.authority=structuredClone(relative.authority!);decision.sourceBook=source.book;
+  decision.sourceQuotes=structuredClone(source.quotes);decision.impliedMargin=source.margin;decision.impliedMarginSd=source.marginSd;
+  decision.numericAssumption="qualified_native_counterpressure_retains_forecast";
+  decision.relativeInterpretation!.disposition="native_counterpressure_retained";
+  return {decision,margin:structuredClone(relative),marginSd:base.uncertainty.marginSd};
  }
  const ownEpisodes=episodes.filter(e=>e.book===chosen.book&&e.market!=="total"&&e.direction!==0);
  const confirmations=ownEpisodes.map(e=>e.market==="moneyline"?

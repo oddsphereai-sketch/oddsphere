@@ -1,0 +1,110 @@
+{
+  "scope": "Owner-directed functional current-native counterpressure interpretation repair; no accuracy claim or universal signal completeness assertion.",
+  "baseSha": "ebf3da4d32f24584c3ea4fae894442465f48cfe1",
+  "releases": {
+    "model": "R17_native_counterpressure_handoff",
+    "grade": "R21_native_counterpressure_handoff",
+    "receipt": "R13_native_counterpressure_handoff",
+    "board": "R22",
+    "publisher": "R32",
+    "tracking": "R20",
+    "adapter": "R21",
+    "independent": "R4 unchanged",
+    "path": "R5 unchanged"
+  },
+  "rootCauses": [
+    "Selected relative confirmation backed by a real professional against-money reaction was overwritten by the absolute current-source law.",
+    "Identical post-response pressure repeat bound only a held tail and erased the earlier still-current actual response.",
+    "Active against-money support was absent from the contrarian Lean lane while held opposite money was supported."
+  ],
+  "constraints": [
+    "whole-path confirmation plus genuine current own-source response, not a latest-tick-only forecast",
+    "same native quote/physical author/pressure/availability binding",
+    "joint inconsistency and current opposite-winner checks precede contextual retention",
+    "no active opposite professional reaction",
+    "no bare-juice independent-strength restoration",
+    "no money percentage to score conversion",
+    "no automatic Best or changed reserves",
+    "exact locked writer and reader precedence"
+  ],
+  "checks": {
+    "focused": "PASS including whole-path buyback, mirrored mixed-market rejection and moving-ML/flat-Spread admission",
+    "fullModelChange": "PASS final full verify:model-change including postverify; local optional PostgreSQL unset, remote PG proof required",
+    "types": "PASS final tsc --noEmit",
+    "sameInputImpact": "28/28 exact old reproduction;2 promotions/0 demotions; one game changes; synthetic adverse-value demotion paired",
+    "independentReview": "A and D PASS after correcting same-book cross-market piggyback; actual opposite movement rejected, flat spread does not block ML reaction. Whole-path and legacy locks passed.",
+    "lint": "PASS final ESLint and diff check"
+  },
+  "newProviderRequests": 0,
+  "newPaidServices": 0,
+  "writerChanges": 0,
+  "scheduleChanges": 0,
+  "knownBoundary": "Current-level source-law fallback remains explicit when contextual authority does not resolve it. This is not a learned probability calibration or a proof that all market interpretations are correct.",
+  "sameInputImpact": {
+    "attemptedGames": 28,
+    "includedGames": 28,
+    "excludedGames": 0,
+    "markets": 84,
+    "oldCounts": {
+      "Watchlist": 48,
+      "Lean": 36
+    },
+    "newCounts": {
+      "Lean": 38,
+      "Watchlist": 46
+    },
+    "actionablePromotions": 2,
+    "actionableDemotions": 0,
+    "sideChanges": 1,
+    "probabilityChanges": 2,
+    "exactPriceChanges": 1,
+    "expectedValueChanges": 2,
+    "pushChanges": 1,
+    "newBest": 0,
+    "gradeChanges": 2,
+    "nonMLGradeChanges": 1,
+    "numericAndSelectionChanges": 2,
+    "scoreChanges": 1,
+    "uncertaintyChanges": 1,
+    "coherenceIssues": [],
+    "today": {
+      "date": "2026-11-04",
+      "games": 10,
+      "markets": 30,
+      "oldCounts": {
+        "Watchlist": 26,
+        "Lean": 4
+      },
+      "newCounts": {
+        "Lean": 6,
+        "Watchlist": 24
+      },
+      "actionablePromotions": 2,
+      "actionableDemotions": 0
+    },
+    "nonMLDecisionChanges": 1,
+    "unaffectedGames": 27,
+    "sourcePressureContinuityOnlyAdditionalChanges": 0
+  },
+  "todayCounts": {
+    "games": 10,
+    "markets": 30,
+    "before": {
+      "Watchlist": 26,
+      "Lean": 4
+    },
+    "after": {
+      "Watchlist": 24,
+      "Lean": 6
+    }
+  },
+  "affectedGame": "NKU@SDAK: qualified current counterpressure retains SDAK independent law; SDAK +118 ML and +2.5 -110 spread become Lean. Other27 games unchanged. This is not a rule to promote NKU from its money share.",
+  "magnitudeBoundary": "Retained SDAK p62.6434% is the released independent forecast; the native book response proves direction/sequence, not that exact probability. Forward results must evaluate it as contextual retention.",
+  "newRegressionScenarios": [
+    "full original-to-current path differs from latest interval",
+    "NKU -1 to -2.5 to -2 does not become latest-tick-only retention",
+    "tiny unbound juice does not restore unsupported independent law",
+    "native response continuity does not invent a new response timestamp",
+    "flat spread is not opposite movement"
+  ]
+}
