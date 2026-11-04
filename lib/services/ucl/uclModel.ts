@@ -9,9 +9,12 @@ import type { UclCompetitionContext } from "./uclCompetitionContext";
 import { regulationScore } from "./uclCompetitionContext";
 import { UCL_PREVIEW_GRADE_RELEASE } from "./uclPreviewGrade";
 import { deriveUclStrengthScoreJoint, uclJointExpectedGoals } from "./uclEloConsensus";
+import { uclScoreDistribution } from "./uclScoreDistribution";
+import type { UclCurrentStrengthPrior } from "./uclCurrentStrengthPrior";
 import type { UclEloPair } from "./uclEloStrengthFoundation";
 
-export const UCL_MODEL_RELEASE = "ucl_goals_coherent_2026_11_04_r21_multibook_full_pregame_paths" as const;
+export const UCL_MODEL_RELEASE = "ucl_goals_coherent_2026_11_04_r22_current_strength_scoring_prior" as const;
+export const UCL_LEGACY_R21_MODEL_RELEASE = "ucl_goals_coherent_2026_11_04_r21_multibook_full_pregame_paths" as const;
 export const UCL_BASELINE_MODEL_RELEASE = "ucl_goals_coherent_2026_10_06_r7_target_excluded_opening_market_score" as const;
 export const UCL_CALIBRATION_RELEASE = UCL_PREVIEW_GRADE_RELEASE;
 export { UCL_COHERENT_MARKET_OUTCOME_RELEASE } from "./uclCoherentMarketOutcome";
@@ -60,7 +63,9 @@ export type UclPrediction = EplShadowPrediction & {
     homeMultiplier: number;
     awayMultiplier: number;
     neutralVenue: boolean;
-    strengthPrior: "local_public_elo_consensus" | "shared_ucl_cross_league_scale";
+    strengthPrior: "local_public_elo_consensus" | "shared_ucl_cross_league_scale" | "dated_current_strength_residual_prior";
+    currentStrengthPrior?: { release: string; source: UclCurrentStrengthPrior["source"]; coefficientPer400: number; homeRating: number|null; awayRating: number|null };
+    effectiveMatches: { home: number; away: number };
     opponentFit?: UclFit["opponentFit"];
   };
 };
@@ -164,7 +169,8 @@ export function fitUclModel(matches: EplTrainingMatch[], asOfIso: string): UclFi
  * venues and is evaluated against the actual opponent. Gamma mode-one priors
  * identify the attack/defense scales and retain the existing four-match prior
  * exposure. This is a statistical prior, not market evidence or a score bonus. */
-export function fitUclOpponentModel(matches: EplTrainingMatch[], asOfIso: string): UclFit {
+export function fitUclOpponentModel(matches: EplTrainingMatch[], asOfIso: string, prior?: UclCurrentStrengthPrior): UclFit {
+  if (prior && (!(Date.parse(prior.source.capturedAt) < Date.parse(asOfIso)) || !Number.isFinite(prior.coefficientPer400) || prior.coefficientPer400 <= 0)) throw Error("UCL strength prior unavailable before fixture");
   const asOf = Date.parse(asOfIso);
   const byId = new Map<number,EplTrainingMatch>();
   for (const m of matches) {
@@ -180,7 +186,14 @@ export function fitUclOpponentModel(matches: EplTrainingMatch[], asOfIso: string
   const rows = priorRows.map(m => ({ home: m.home_team_id, away: m.away_team_id,
     homeGoals: effectiveGoals(m.home_score!, m.home_xg), awayGoals: effectiveGoals(m.away_score!, m.away_xg),
     weight: Math.pow(.5, (asOf - Date.parse(m.date)) / 86_400_000 / UCL_MODEL_CONFIG.halfLifeDays) }));
-  const ids = [...new Set(rows.flatMap(m => [m.home, m.away]))];
+  const ids = [...new Set([...rows.flatMap(m => [m.home, m.away]), ...(prior?.ratings.keys() ?? [])])];
+  // Today's attested strength is prior knowledge for today's static ability,
+  // not a historical pre-match rating substituted into a replay. Mode-one
+  // residual Gamma priors keep precision independent of an arbitrary Elo zero.
+  const ratings = [...(prior?.ratings.values() ?? [])];
+  const reference = ratings.length ? ratings.reduce((s,v)=>s+v,0)/ratings.length : 0;
+  const offset = (id:number) => prior?.ratings.has(id) ? Math.exp(prior.coefficientPer400*(prior.ratings.get(id)!-reference)/400) : 1;
+  const pairOffset = (own:number,opponent:number) => offset(own)/offset(opponent);
   const attack = new Map(ids.map(id => [id, 1])), defense = new Map(ids.map(id => [id, 1]));
   const weight = rows.reduce((s,m) => s + m.weight, 0);
   let homeRate = weight ? rows.reduce((s,m) => s + m.weight * m.homeGoals, 0) / weight : 1.5;
@@ -189,38 +202,38 @@ export function fitUclOpponentModel(matches: EplTrainingMatch[], asOfIso: string
   homeRate = Math.max(1e-8, homeRate); awayRate = Math.max(1e-8, awayRate);
   const exposure = UCL_MODEL_CONFIG.shrinkageMatches * (homeRate + awayRate) / 2;
   let iterations = 0, converged = !rows.length;
-  for (; iterations < 256 && !converged; iterations++) {
+  for (; iterations < (prior ? 2048 : 256) && !converged; iterations++) {
     const before = [...attack.values(), ...defense.values(), homeRate, awayRate];
     for (const id of ids) {
       let scored = exposure, predicted = exposure;
       for (const m of rows) {
-        if (m.home === id) { scored += m.weight * m.homeGoals; predicted += m.weight * homeRate * defense.get(m.away)!; }
-        if (m.away === id) { scored += m.weight * m.awayGoals; predicted += m.weight * awayRate * defense.get(m.home)!; }
+        if (m.home === id) { scored += m.weight * m.homeGoals; predicted += m.weight * homeRate * pairOffset(m.home,m.away) * defense.get(m.away)!; }
+        if (m.away === id) { scored += m.weight * m.awayGoals; predicted += m.weight * awayRate * pairOffset(m.away,m.home) * defense.get(m.home)!; }
       }
       attack.set(id, scored / predicted);
     }
     for (const id of ids) {
       let conceded = exposure, predicted = exposure;
       for (const m of rows) {
-        if (m.home === id) { conceded += m.weight * m.awayGoals; predicted += m.weight * awayRate * attack.get(m.away)!; }
-        if (m.away === id) { conceded += m.weight * m.homeGoals; predicted += m.weight * homeRate * attack.get(m.home)!; }
+        if (m.home === id) { conceded += m.weight * m.awayGoals; predicted += m.weight * awayRate * pairOffset(m.away,m.home) * attack.get(m.away)!; }
+        if (m.away === id) { conceded += m.weight * m.homeGoals; predicted += m.weight * homeRate * pairOffset(m.home,m.away) * attack.get(m.home)!; }
       }
       defense.set(id, conceded / predicted);
     }
     if (weight) {
       homeRate = Math.max(1e-8, rows.reduce((s,m) => s + m.weight * m.homeGoals, 0)
-        / rows.reduce((s,m) => s + m.weight * attack.get(m.home)! * defense.get(m.away)!, 0));
+        / rows.reduce((s,m) => s + m.weight * pairOffset(m.home,m.away) * attack.get(m.home)! * defense.get(m.away)!, 0));
       awayRate = Math.max(1e-8, rows.reduce((s,m) => s + m.weight * m.awayGoals, 0)
-        / rows.reduce((s,m) => s + m.weight * attack.get(m.away)! * defense.get(m.home)!, 0));
+        / rows.reduce((s,m) => s + m.weight * pairOffset(m.away,m.home) * attack.get(m.away)! * defense.get(m.home)!, 0));
     }
     const after = [...attack.values(), ...defense.values(), homeRate, awayRate];
     converged = after.every((v,i) => Math.abs(Math.log(v / before[i]!)) < 1e-8);
   }
   if (!converged) throw new Error("UCL opponent-adjusted scoring fit did not converge");
   const strengths = new Map<number,UclStrength>();
-  for (const id of ids) strengths.set(id, { teamId: id, homeAttack: attack.get(id)!, awayAttack: attack.get(id)!,
-    homeDefense: defense.get(id)!, awayDefense: defense.get(id)!,
-    effectiveMatches: rows.reduce((s,m) => s + (m.home === id || m.away === id ? m.weight : 0), 0), source: "club_history" });
+  for (const id of ids) strengths.set(id, { teamId: id, homeAttack: attack.get(id)!*offset(id), awayAttack: attack.get(id)!*offset(id),
+    homeDefense: defense.get(id)!/offset(id), awayDefense: defense.get(id)!/offset(id),
+    effectiveMatches: rows.reduce((s,m) => s + (m.home === id || m.away === id ? m.weight : 0), 0), source: rows.some(m=>m.home===id||m.away===id) ? "club_history" : "promoted_proxy" });
   return { leagueHomeRate: homeRate, leagueAwayRate: awayRate, strengths,
     proxy: { homeAttack: 1, awayAttack: 1, homeDefense: 1, awayDefense: 1 },
     opponentFit: { iterations, converged, uniqueMatches: rows.length } };
@@ -230,13 +243,13 @@ function strengthFor(fit: UclFit, teamId: number): UclStrength {
   return fit.strengths.get(teamId) ?? { teamId, ...fit.proxy, effectiveMatches: 0, source: "promoted_proxy" };
 }
 
-function predictUclBaseline(fit: UclFit, homeTeamId: number, awayTeamId: number) {
+function predictUclBaseline(fit: UclFit, homeTeamId: number, awayTeamId: number, uncapped = false) {
   const home = strengthFor(fit, homeTeamId);
   const away = strengthFor(fit, awayTeamId);
   const minRate = fit.opponentFit ? 1e-8 : .2;
   return {
-    lambdaHome: Math.max(minRate, Math.min(3.8, fit.leagueHomeRate * home.homeAttack * away.awayDefense)),
-    lambdaAway: Math.max(minRate, Math.min(3.8, fit.leagueAwayRate * away.awayAttack * home.homeDefense)),
+    lambdaHome: Math.max(minRate, Math.min(uncapped ? Infinity : 3.8, fit.leagueHomeRate * home.homeAttack * away.awayDefense)),
+    lambdaAway: Math.max(minRate, Math.min(uncapped ? Infinity : 3.8, fit.leagueAwayRate * away.awayAttack * home.homeDefense)),
     homeStrengthSource: home.source,
     awayStrengthSource: away.source,
     confidence: home.source === "promoted_proxy" || away.source === "promoted_proxy" ? "limited" as const : "standard" as const,
@@ -345,25 +358,27 @@ type UclPredictionInput = {
 };
 
 function fitAndPredictUclInternal(
-  input: UclPredictionInput & { elo?: UclEloPair },
-  release: typeof UCL_MODEL_RELEASE | typeof UCL_BASELINE_MODEL_RELEASE,
+  input: UclPredictionInput & { elo?: UclEloPair; strengthPrior?: UclCurrentStrengthPrior },
+  release: typeof UCL_MODEL_RELEASE | typeof UCL_BASELINE_MODEL_RELEASE | typeof UCL_LEGACY_R21_MODEL_RELEASE,
 ) {
   const fit = release === UCL_BASELINE_MODEL_RELEASE ? fitUclModel(input.training, input.match.date)
-    : fitUclOpponentModel(input.training, input.match.date);
-  const baseline = predictUclBaseline(fit, input.match.home_team_id, input.match.away_team_id);
+    : fitUclOpponentModel(input.training, input.match.date, input.strengthPrior);
+  const baseline = predictUclBaseline(fit, input.match.home_team_id, input.match.away_team_id, !!input.strengthPrior);
   const rest = buildUclTravelRestContext(input.match, input.history);
   const neutralMultiplier = input.context.neutralVenue ? Math.sqrt(fit.leagueAwayRate / fit.leagueHomeRate) : 1;
   const homeMultiplier = fatigueMultiplier(rest.homeRestDays, rest.homeMatchesLast14Days) * neutralMultiplier;
   const awayMultiplier = fatigueMultiplier(rest.awayRestDays, rest.awayMatchesLast14Days)
-    * (rest.awayTravelKm !== null && rest.awayTravelKm >= 2_000 ? 0.96 : 1);
+    * (input.strengthPrior && input.context.neutralVenue ? 1/neutralMultiplier : 1)
+    * (!(input.strengthPrior && input.context.neutralVenue) && rest.awayTravelKm !== null && rest.awayTravelKm >= 2_000 ? 0.96 : 1);
   const minRate = fit.opponentFit ? 1e-8 : .2;
   const lambdaHome = Math.max(minRate, baseline.lambdaHome * homeMultiplier);
   const lambdaAway = Math.max(minRate, baseline.lambdaAway * awayMultiplier);
-  const baseJoint = bivariatePoissonScoreDistribution(lambdaHome, lambdaAway, UCL_MODEL_CONFIG.dixonColesTau);
-  const coherentJoint = input.elo ? deriveUclStrengthScoreJoint(baseJoint, input.elo) : undefined;
+  const baseJoint = input.strengthPrior ? uclScoreDistribution(lambdaHome,lambdaAway,UCL_MODEL_CONFIG.dixonColesTau)
+    : bivariatePoissonScoreDistribution(lambdaHome, lambdaAway, UCL_MODEL_CONFIG.dixonColesTau);
+  const coherentJoint = input.strengthPrior ? baseJoint : input.elo ? deriveUclStrengthScoreJoint(baseJoint, input.elo) : undefined;
   return {
     release,
-    calibrationRelease: UCL_CALIBRATION_RELEASE,
+    calibrationRelease: release === UCL_LEGACY_R21_MODEL_RELEASE ? "ucl_grade_policy_2026_11_04_r24_multibook_full_pregame_paths" as const : UCL_CALIBRATION_RELEASE,
     ...summarize(lambdaHome, lambdaAway, coherentJoint),
     homeStrengthSource: baseline.homeStrengthSource,
     awayStrengthSource: baseline.awayStrengthSource,
@@ -373,25 +388,26 @@ function fitAndPredictUclInternal(
       homeMultiplier,
       awayMultiplier,
       neutralVenue: input.context.neutralVenue === true,
-      strengthPrior: input.elo ? "local_public_elo_consensus" as const : "shared_ucl_cross_league_scale" as const,
+      effectiveMatches: { home: strengthFor(fit,input.match.home_team_id).effectiveMatches, away: strengthFor(fit,input.match.away_team_id).effectiveMatches },
+      ...(input.strengthPrior ? {currentStrengthPrior:{release:input.strengthPrior.release,source:input.strengthPrior.source,coefficientPer400:input.strengthPrior.coefficientPer400,
+        homeRating:input.strengthPrior.ratings.get(input.match.home_team_id)??null,awayRating:input.strengthPrior.ratings.get(input.match.away_team_id)??null}} : {}),
+      strengthPrior: input.strengthPrior ? "dated_current_strength_residual_prior" as const : input.elo ? "local_public_elo_consensus" as const : "shared_ucl_cross_league_scale" as const,
       ...(fit.opponentFit ? { opponentFit: fit.opponentFit } : {}),
     },
   };
 }
 
-/** Production callers pass the authenticated Elo pair and receive r8u. The
- * no-Elo overload exists only for release-pure legacy audit compatibility and
- * returns the r7 baseline instead of mis-stamping old logic as the active model. */
-export function fitAndPredictUcl(input: UclPredictionInput & { elo: UclEloPair }): UclPrediction;
+/** Only the dated current-strength path is the active release. Explicit legacy
+ * Elo and no-Elo calls remain release-pure offline comparators. */
+export function fitAndPredictUcl(input: UclPredictionInput & { strengthPrior: UclCurrentStrengthPrior }): UclPrediction;
+export function fitAndPredictUcl(input: UclPredictionInput & { elo: UclEloPair }): ReturnType<typeof fitAndPredictUclInternal>;
 export function fitAndPredictUcl(input: UclPredictionInput): ReturnType<typeof fitAndPredictUclInternal>;
-export function fitAndPredictUcl(input: UclPredictionInput & { elo?: UclEloPair }) {
-  return input.elo
-    ? fitAndPredictUclInternal(input, UCL_MODEL_RELEASE)
-    : fitAndPredictUclInternal(input, UCL_BASELINE_MODEL_RELEASE);
+export function fitAndPredictUcl(input: UclPredictionInput & { elo?: UclEloPair; strengthPrior?: UclCurrentStrengthPrior }): UclPrediction | ReturnType<typeof fitAndPredictUclInternal> {
+  return fitAndPredictUclInternal(input, input.strengthPrior ? UCL_MODEL_RELEASE : input.elo ? UCL_LEGACY_R21_MODEL_RELEASE : UCL_BASELINE_MODEL_RELEASE);
 }
 
 /** Historical r7 comparator only. Production must use fitAndPredictUcl with
- * an authenticated Elo foundation and cannot silently fall back to this path. */
+ * a dated current-strength prior and cannot silently publish this path. */
 export function fitAndPredictUclBaseline(input: UclPredictionInput) {
   return fitAndPredictUclInternal(input, UCL_BASELINE_MODEL_RELEASE);
 }

@@ -321,7 +321,7 @@ const noPathOutcome = deriveUclCoherentMarketOutcome({
 });
 assert.deepEqual(noPathOutcome.joint, noPathPrior, "missing market paths preserve the exact independent law");
 assert.equal("bttsShadow" in noPathOutcome.audit, false, "UCL persists one authoritative forecast");
-assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_04_r23_multibook_full_pregame_paths");
+assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_04_r24_current_strength_scoring_prior");
 assert.deepEqual(
   { train: UCL_CHRONOLOGICAL_MANIFEST.train, calibration: UCL_CHRONOLOGICAL_MANIFEST.calibration, holdout: UCL_CHRONOLOGICAL_MANIFEST.holdout, cutoff: UCL_CHRONOLOGICAL_MANIFEST.cutoff },
   { train: 185, calibration: 126, holdout: 63, cutoff: "2026-01-28T20:00:00.000Z" },
@@ -365,7 +365,7 @@ assert.equal(uclTeamsMatch("Sabah Masazir", "Sabah Baku FK"), true);
 assert.equal(uclTeamsMatch("FC Sabah Masazir", "Sabah"), true);
 assert.equal(uclTeamsMatch("Bodø/Glimt", "Bodo/Glimt"), true);
 assert.equal(UCL_SHARP_MARKET_IDENTITY_RELEASE, "ucl_sharp_market_identity_2026_10_22_r6_exact_diacritic_club_identity");
-assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_11_04_r12_shared_joint_scenario");
+assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_11_04_r13_current_strength_scoring_prior");
 const romaExpectedGoalsCard = {
   lockState: "open",
   projected: { away: 1.1, home: 3.3 },
@@ -523,8 +523,8 @@ const prediction = fitAndPredictUcl({
     sourceRelease: "ucl_elo_strength_foundation_2026_10_14_r1_local_public_consensus",
   },
 });
-assert.equal(prediction.release, UCL_MODEL_RELEASE);
-assert.equal(prediction.calibrationRelease, UCL_CALIBRATION_RELEASE);
+assert.equal(prediction.release, "ucl_goals_coherent_2026_11_04_r21_multibook_full_pregame_paths", "explicit old Elo caller stays a release-pure comparator");
+assert.equal(prediction.calibrationRelease, "ucl_grade_policy_2026_11_04_r24_multibook_full_pregame_paths");
 assert.ok(Math.abs(prediction.probabilities.home + prediction.probabilities.draw + prediction.probabilities.away - 1) < 1e-9);
 assert.ok(Math.abs(prediction.probabilities.over25 + prediction.probabilities.under25 - 1) < 1e-9);
 assert.ok(Math.abs(prediction.probabilities.bttsYes + prediction.probabilities.bttsNo - 1) < 1e-9);

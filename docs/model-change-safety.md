@@ -1,5 +1,45 @@
 # Model change safety protocol
 
+## Owner-directed UCL dated independent-strength continuation — November 4
+
+Daniel directed this chat to continue the independent scoring repair so that
+clubs with sparse history are not dragged toward one competition-average point.
+This continues his explicit functional-repair/forward-outcome direction: no
+shadow writer and no claim that these changes have proved a higher win rate.
+The scoped tuple is model R22 /grade R25 /coherent outcome R15 /projected score
+R13 /member lifecycle R24; evidence and rollback are recorded in
+`docs/model-audits/2026-11-04-ucl-current-strength-prior.md`.
+
+The active prior uses the original, dated official ClubElo source, not the stale
+September1 mirror whose post-June2025 values are a provisional continuation.
+One frozen goal-rate coefficient uses147/185 genuinely pre-match original-source
+2024-season pairs; missing clubs are not backfilled with today's ratings. Today's
+ratings are prior knowledge for today's static latent ability, not historical
+forecast covariates or independent evidence from overlapping goal results.
+Mode-one Gamma residuals retain the four-match prior exposure. The old fixed
+postfit Elo correction is removed so the strength input enters once. Unknown
+historical clubs retain an explicit cohort prior; required current clubs must
+map exactly. No market odds enter the independent fit. No No/Under quota or
+new grade thresholds are authorized.
+
+UCL-only adaptive support replaces the3.8 goal ceiling and0..8 tail clipping;
+invalid low-score-correction domains fail explicitly. Neutral-site intercepts
+are symmetric and no designated-away travel penalty is invented there. Actual
+weighted sample counts and dated source hashes are saved with the forecast.
+First valid daily inputs use the existing leased refresh/foundation lifecycle;
+source availability is response completion, never request start. Historical
+scaffolding cannot write under the new model. Existing self-consistent current
+and legacy locks restore exact stored fields after kickoff; a new contradictory
+proposal cannot claim that exception.
+
+The same relative market reader, exact-price grading policy, stakes, provider
+cadence, prediction_pipeline:soccer lease, sole writer and immutable tracking
+remain. Current-board promotions/demotions, exact current-team mapping, focused
+source/math/writer/reader tests, full model gate, independent reviews, clean
+latest-main protected PR and live normal-refresh/reader/lock verification remain
+required. This does not authorize an extra forecast refresh/provider cycle.
+
+
 ## Owner-directed moneyline evidence and strongest-tier correction — November 4
 
 The owner explicitly instructed: "review those moneyline restrictions and fix
