@@ -1,0 +1,24 @@
+name: CFB history transport proof
+on:
+  pull_request:
+    paths:
+      - 'lib/services/football/cfbForwardEvidenceStore.ts'
+      - 'lib/db/schema-migration-v58-cfb-bounded-history-page.sql'
+      - 'scripts/test-cfb-bounded-history*'
+      - '.github/workflows/cfb-history-memory-proof.yml'
+  merge_group:
+permissions:
+  contents: read
+jobs:
+  cfb-history-transport-proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm install --prefix "$RUNNER_TEMP/cfb-history-proof" --no-audit --no-fund --ignore-scripts @electric-sql/pglite@0.5.15
+      - run: node scripts/test-cfb-bounded-history-page-postgres.mjs "$RUNNER_TEMP/cfb-history-proof/node_modules/@electric-sql/pglite/dist/index.js"
+      - run: node --import tsx scripts/test-cfb-market-history-projection.ts && node --import tsx scripts/test-cfb-bounded-history-reader.ts
