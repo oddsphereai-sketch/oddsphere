@@ -98,8 +98,12 @@ export function cbbDecisionSplitContext(args:{game:CbbGame;allGames:readonly Cbb
       args.allGames.filter(other=>candidate.monthDay===monthDay(other.date)&&
         cbbSplitOrientation(candidate.awayName,candidate.homeName,names(other))!==null).length===1);
     if(matched.length===1)for(const market of ["moneyline","spread","total"] as const){
-      const source=matched[0].markets[market];if(!source||source.observedAt&&
-        (!Number.isFinite(Date.parse(source.observedAt))||Date.parse(source.observedAt)>Date.parse(feed.fetchedAt)))continue;
+      const source=matched[0].markets[market];if(!source)continue;
+      // The network collector stores each page's HTTP Date in observedAt.
+      // That is a page-capture clock, not the sportsbook's update time. Keep
+      // its own freshness bound: a fresh final page cannot renew an old page.
+      const pageCapturedAt=Date.parse(source.observedAt??feed.fetchedAt);
+      if(!Number.isFinite(pageCapturedAt)||pageCapturedAt>Date.parse(feed.fetchedAt)||at-pageCapturedAt>3*3600_000)continue;
       const picked=source.sides.map(side=>{
         const label=side.label.replace(/\s+[+-]\d+(?:\.\d+)?\s*$/g,"");
         const first=market==="total"?/^over\b/i.test(label):cbbSplitTeamMatches(label,names(args.game),"home");
@@ -113,7 +117,8 @@ export function cbbDecisionSplitContext(args:{game:CbbGame;allGames:readonly Cbb
       out.push({gameId:args.game.id,market,sourceBook:"draftkings_network",physicalFamily:"draftkings",
         sourceClass:"retail_network",provider:"draftkings_network",sourceEventId:matched[0].providerEventId,line:null,
         firstMoney:a.money,secondMoney:b.money,firstTickets:a.tickets,secondTickets:b.tickets,
-        observedAt:source.observedAt??null,availableBy:feed.fetchedAt,clockBasis:"capture_upper_bound",observationIds:[]});
+        observedAt:null,availableBy:feed.fetchedAt,receiptEarliest:new Date(pageCapturedAt).toISOString(),
+        clockBasis:"capture_upper_bound",observationIds:[]});
     }
   }
   // One latest state per physical family and market; the network and Owls

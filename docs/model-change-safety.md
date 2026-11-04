@@ -1,5 +1,33 @@
 # Model change safety protocol
 
+## Owner-directed three-gap CBB joint decision repair — November 3
+
+After three independent reviewers reproduced the remaining native/network clock
+bug, static market/model numerical veto and flat-Spread/ML numerical veto, the
+owner explicitly instructed: "please fix all three gaps, get the reader actually
+interpreting everything properly, run a focused external review, and get the
+corrections live." This authorizes the reviewed functional repair and forward
+outcome evaluation: independent R4 unchanged; market R13 /grade R15 /receipt R9
+/path R4 /board R16 /publisher R25 /tracking R13 /adapter R14.
+
+The selected current professional source can identify both margin and dispersion
+from its own ML/Spread law; source selection, genuine confirmation/fade and
+current-source opposition remain explicit. No fitted blend, point cap, market
+average or retroactive outcome qualification is introduced. This scoped
+permission covers the documented current-source reference default and original
+versus final uncertainty contract. The current14-game/42-market functional
+comparison has0 promotions,2 demotions and1 side change, actionables19→17;
+paired functional promotions and demotions remain required, with no quota.
+
+Existing grade reserves/price policy, independent training, provider cadence,
+stakes, sole prediction_pipeline:cbb lease and T60 first-admission rule remain
+unchanged. All existing R12/R14/R8 and earlier locked public payloads and
+tracking retain exact semantics. Do not reinterpret an old lock under the new
+joint law. Full/focused checks, independent source/consequence review,
+fresh-main protected PR, exact tree and actual live release/source/lock/reader
+verification remain mandatory. This is not a win-rate or exhaustive-future-case
+claim. Evidence: `docs/model-audits/2026-11-03-cbb-joint-native-decision-repair.json`.
+
 ## Owner-directed aligned CBB decisions and prospective New Orleans repair — November 3
 
 After the live R11/R13 repair, the owner explicitly instructed: "Fix that issue

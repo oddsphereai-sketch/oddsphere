@@ -30,7 +30,13 @@ function fixture(market:CbbMarket,state:'neutral'|'opposes'|'mixed'|'agrees'|'un
  if(options.incomplete)independent={...independent,inputStatus:'incomplete',issues:['fixture_incomplete']};
  const references=state==='unavailable'?[]:state==='mixed'?[quote(market,'pinnacle',-140,120),quote(market,'circa',120,-140)]:
   [quote(market,'pinnacle',...(state==='agrees'?[-140,120]:state==='opposes'?[120,-140]:[-110,-110]) as [number,number])];
- const result=readCbbMarketBehavior({independent,independentInputKey:'grade-reasons-fixture',startsAt:start,targets:[target],currentQuotes:references,anchors:null});
+ // This is a grade-reason regression matrix with a deliberately fixed final
+ // forecast. The separate integrated suites exercise current-law inference.
+ const args={independent,independentInputKey:'grade-reasons-fixture',startsAt:start,targets:[target],anchors:null};
+ const result=readCbbMarketBehavior({...args,currentQuotes:[]});
+ const sourceContext=readCbbMarketBehavior({...args,currentQuotes:references});
+ result.receipt.currentProfessionalQuotes=references;
+ result.receipt.pathPosture=sourceContext.receipt.pathPosture;
  const input={forecast:result.forecast,target,references,asOf:at};
  return {input,receipt:result.receipt,decision:gradeCbbReceivedMarket(input,result.receipt)};
 }

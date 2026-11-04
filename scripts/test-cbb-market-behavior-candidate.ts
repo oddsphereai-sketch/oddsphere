@@ -23,6 +23,7 @@ const original=[quote("moneyline",null,-150,130),quote("spread",-3.5),quote("tot
 const anchors=(quotes:CbbQuote[]=original,key="input-r3"):CbbMarketAnchors=>({release:CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,gameId:777,startsAt:start,
  independentRelease:CBB_CURRENT_SCORE_RELEASE,independentInputKey:key,capturedAt:anchorAt,quotes});
 const run=(currentQuotes:CbbQuote[],extra:Partial<Parameters<typeof readCbbMarketBehavior>[0]>={})=>readCbbMarketBehavior({independent:forecast(),independentInputKey:"input-r3",startsAt:start,targets,currentQuotes,anchors:anchors(),...extra});
+const exactFair=(q:CbbQuote)=>{const p=(n:number)=>n>0?100/(n+100):-n/(-n+100);return p(q.firstPrice)/(p(q.firstPrice)+p(q.secondPrice));};
 const current=[quote("moneyline",null,-170,145,"pinnacle",true),quote("spread",-4.5,-110,-110,"pinnacle",true),quote("total",151.5,-110,-110,"pinnacle",true)];
 const input=JSON.stringify({current,original,targets}),result=run(current),f=result.forecast;
 assert.equal(f.release,CBB_MARKET_BEHAVIOR_MODEL_RELEASE);assert.equal(f.margin,forecast().margin,"professional movement toward the independent margin confirms rather than double-counts");assert.ok(f.total>forecast().total);
@@ -43,7 +44,10 @@ assert.equal(scoreRevision.receipt.anchors.independentRelease,CBB_CURRENT_SCORE_
 assert.equal(scoreRevision.receipt.inputRevisionSinceAnchor,"changed");
 assert.deepEqual(scoreRevision.receipt.anchors.quotes,priorReleaseAnchors.quotes);
 const first=run([current[0]],{anchors:null});
-assert.equal(first.receipt.episodes.length,0);assert.deepEqual({...first.forecast,release:CBB_CURRENT_SCORE_RELEASE},forecast(),"first receipt has zero invented movement");
+assert.equal(first.receipt.episodes.length,0,"a first current level must not be presented as observed movement");
+assert.equal(first.receipt.jointMarginDecision?.status,"applied");
+assert.ok(Math.abs(first.forecast.homeWinProbability-exactFair(current[0]))<1e-8,"a verified first source level is still a decision input");
+assert.equal(first.forecast.uncertainty.marginSd,forecast().uncertainty.marginSd,"one contract retains the independent dispersion");
 const arriving=run(current,{anchors:first.receipt.anchors});
 assert.equal(arriving.receipt.anchors.quotes.length,3,"a new source/market gets an original anchor when it first arrives");
 const later=run(current.map(q=>({...q,providerObservedAt:"2026-11-02T15:25:00.000Z",fetchedAt:"2026-11-02T15:26:00.000Z"})),{anchors:arriving.receipt.anchors});
@@ -51,25 +55,33 @@ assert.equal(later.receipt.episodes.length,3,"new source anchors remain usable a
 const equalCutoff=run(current,{anchors:{...anchors(),capturedAt:at}});
 assert.equal(equalCutoff.receipt.margin.status,"confirming","ordered actual receipts can share a containing decision frame");
 const unchanged=run(original.map(q=>({...q,providerObservedAt:current[0].providerObservedAt,fetchedAt:current[0].fetchedAt})));
-assert.equal(unchanged.receipt.margin.status,"neutral");assert.deepEqual({...unchanged.forecast,release:CBB_CURRENT_SCORE_RELEASE},forecast(),"no net change preserves exact baseline fields");
+assert.equal(unchanged.receipt.margin.status,"applied");
+assert.ok(Math.abs(unchanged.forecast.homeWinProbability-exactFair(original[0]))<1e-8,"unchanged current prices can correct a starting-level disagreement");
+assert.ok(unchanged.receipt.episodes.every(e=>Math.abs(e.delta)<1e-8),"a level correction must not invent a historical move");
 const pureVig=run([quote("spread",-3.5,-120,-120,"pinnacle",true),quote("total",150.5,-120,-120,"pinnacle",true)]);
-assert.deepEqual({...pureVig.forecast,release:CBB_CURRENT_SCORE_RELEASE},forecast(),"a vig-only change does not invent point movement");
+assert.ok(pureVig.receipt.episodes.every(e=>Math.abs(e.delta)<1e-8),"a vig-only change does not invent point movement");
+assert.ok(Math.abs(pureVig.forecast.margin-cbbExactMarketCenter(forecast(),original[1],.5))<1e-8,"current fair level, not extra vig, owns the score correction");
 const anchorSpread=original[1],center=cbbExactMarketCenter(forecast(),anchorSpread,.5);
 const p=cbbThresholdProbabilities({...forecast(),margin:center},"spread",-4.5),fair=p.first/(p.first+p.second);
 const american=(implied:number)=>implied>=.5?-100*implied/(1-implied):100*(1-implied)/implied;
 const compensation=run([quote("spread",-4.5,american(fair*1.03),american((1-fair)*1.03),"pinnacle",true)]);
-assert.equal(compensation.receipt.margin.status,"neutral","line and counter-juice compensation is read together");
+assert.ok(Math.abs(compensation.receipt.episodes[0].delta)<1e-8,"line and counter-juice compensation is read together");
+assert.ok(Math.abs(compensation.forecast.margin-center)<1e-8);
 const oppositeMl=quote("moneyline",null,-110,-110,"pinnacle",true);
 const conflict=run([oppositeMl,current[1],current[2]]);
-assert.equal(conflict.receipt.margin.status,"confirming");assert.equal(conflict.receipt.margin.crossMarketDisagreement,true);assert.equal(conflict.forecast.margin,forecast().margin);assert.ok(conflict.forecast.total>forecast().total,"ML disagreement cannot erase a valid Spread interpretation or Total axis");
+assert.equal(conflict.receipt.margin.status,"unresolved");assert.equal(conflict.receipt.margin.crossMarketDisagreement,true);assert.equal(conflict.forecast.margin,forecast().margin);assert.ok(conflict.forecast.total>forecast().total,"inconsistent margin constraints retain the independent margin without erasing the independent Total axis");
 const bookConflict=run([current[1],quote("spread",-2.5,-110,-110,"circa",true)],{anchors:anchors([...original,quote("spread",-3.5,-110,-110,"circa")])});
-assert.equal(bookConflict.receipt.margin.status,"conflicting");assert.equal(bookConflict.forecast.margin,forecast().margin);
-assert.equal(bookConflict.receipt.margin.directionalEvidence,"opposed");assert.equal(bookConflict.receipt.margin.sourceDirection,null);
-assert.equal(unchanged.receipt.margin.directionalEvidence,"flat");assert.equal(unchanged.receipt.margin.sourceDirection,0);
+assert.equal(bookConflict.receipt.margin.status,"applied");
+assert.equal(bookConflict.receipt.jointMarginDecision?.authority?.reason,"current_native_source_preference");
+assert.ok(Math.abs(bookConflict.forecast.margin-cbbExactMarketCenter(forecast(),quote("spread",-2.5,-110,-110,"circa",true),.5))<1e-8,
+ "opposite historical moves with the same current winner use the declared whole-source policy, never a mean of books");
+assert.equal(unchanged.receipt.jointMarginDecision?.reason,"selected_current_native_source_law");
 const crossing=run([quote("spread",-3.5,-110,-110,"pinnacle",true)],{independent:forecast(-.2),anchors:anchors([quote("spread",3.5)])});
 assert.ok(crossing.forecast.margin>0&&crossing.forecast.homeWinProbability>.5,"qualified read can cross winner direction without an artificial cap");
 const unionExcluded=run(current,{targets:[...targets.slice(0,2),quote("total",150.5,-110,-110,"ps3838",true)]});
 assert.equal(unionExcluded.receipt.episodes.length,0,"all three targets exclude a family from ALL shared score dimensions");
+assert.equal(unionExcluded.forecast.margin,forecast().margin,"the new current-law path cannot regain authority through an excluded target family");
+assert.equal(unionExcluded.receipt.jointMarginDecision?.sourceQuotes.length,0);
 for(const bad of [{gameId:999},{phase:"opening" as const},{orientationVerified:false},{providerObservedAt:"2026-11-02T15:31:00Z"},{fetchedAt:"2026-11-02T15:31:00Z"},{providerObservedAt:"2026-11-02T12:00:00Z"}]){
  const invalid=run(current.map(q=>({...q,...bad})));assert.equal(invalid.receipt.episodes.length,0,JSON.stringify(bad));
  assert.deepEqual({...invalid.forecast,release:CBB_CURRENT_SCORE_RELEASE},forecast());
@@ -81,8 +93,9 @@ assert.equal(run([current[1]],{anchors:corruptAnchor.receipt.anchors}).receipt.e
 assert.throws(()=>run(current,{independent:{...forecast(),asOf:"2026-11-02T18:00:00Z"}}),/prelock/);
 const flow=(firstMoney:number,firstTickets:number):CbbBehaviorFlow=>({provider:"owls",gameId:777,sourceBook:"pinnacle",market:"spread",line:-3.5,
  firstMoney,secondMoney:1-firstMoney,firstTickets,secondTickets:1-firstTickets,sourceEventId:"ncaab:Away@Home-20261102",sourceIdentity:"independent_named_fixture_join",observedAt:"2026-11-02T15:10:00.000Z",fetchedAt:"2026-11-02T15:11:00.000Z",orientationVerified:true});
-const risk=run([quote("spread",-3.5,-115,-105,"pinnacle",true)],{independent:forecast(12),anchors:anchors([quote("spread",-3.5,-150,130)]),flows:[flow(.1,.6)]});
-const riskInput={forecast:risk.forecast,target:targets[1],references:[quote("spread",-3.5,-115,-105,"pinnacle",true)],asOf:at};
+const riskTarget=quote("spread",-3.5,125,-145,"draftkings",true);
+const risk=run([quote("spread",-3.5,-115,-105,"pinnacle",true)],{independent:forecast(12),targets:[riskTarget],anchors:anchors([quote("spread",-3.5,-150,130)]),flows:[flow(.1,.6)]});
+const riskInput={forecast:risk.forecast,target:riskTarget,references:[quote("spread",-3.5,-115,-105,"pinnacle",true)],asOf:at};
 assert.equal(gradeCbbProvisional(riskInput).grade,"Best Angle");assert.equal(gradeCbbMarketBehavior(riskInput,risk.receipt).grade,"Lean","one bound resisting source tempers Best without fabricating corroboration");
 const support=run([quote("spread",-3.5,-110,-110,"pinnacle",true)],{anchors:anchors([quote("spread",-3.5,120,-140)]),flows:[flow(.8,.4)]});
 const supportInput={forecast:support.forecast,target:targets[1],references:[quote("spread",-3.5,-110,-110,"pinnacle",true)],asOf:at};
@@ -98,16 +111,25 @@ for(const mutation of [{target:{...supportInput.target,sportsbook:"pinnacle"}},{
  assert.throws(()=>gradeCbbMarketBehavior({...supportInput,...mutation},support.receipt),/receipt mismatch/);
 const marketOpposition=[quote("moneyline",null,130,-152,"pinnacle",true),quote("spread",3,-109,-107,"pinnacle",true)];
 const arbitrated=run(marketOpposition,{independent:forecast(14),anchors:null});
-assert.equal(arbitrated.receipt.winnerArbitration.status,"context_only");
-assert.equal(arbitrated.forecast.margin,14,"static opposition invents no points and cannot copy a professional winner");
-assert.equal(arbitrated.forecast.homeWinProbability,forecast(14).homeWinProbability);
+assert.equal(arbitrated.receipt.winnerArbitration.status,"applied");
+assert.ok(arbitrated.forecast.margin<0,"a coherent current professional source can correct an opposite independent winner");
+assert.ok(Math.abs(arbitrated.forecast.homeWinProbability-exactFair(marketOpposition[0]))<1e-8);
+assert.notEqual(arbitrated.forecast.uncertainty.marginSd,forecast(14).uncertainty.marginSd);
+assert.deepEqual(arbitrated.receipt.originalIndependentUncertainty,forecast(14).uncertainty);
+assert.deepEqual(arbitrated.receipt.frozenUncertainty,arbitrated.forecast.uncertainty);
+assert.notStrictEqual(arbitrated.receipt.originalIndependentUncertainty,arbitrated.forecast.uncertainty,"original and final uncertainty own separate records");
+const sameWinnerLargeGap=run([quote("moneyline",null,-152,130,"pinnacle",true),quote("spread",-3,-107,-109,"pinnacle",true)],{independent:forecast(20),anchors:null});
+assert.ok(sameWinnerLargeGap.forecast.margin>0&&sameWinnerLargeGap.forecast.margin<4,"current-source disagreement corrects a large margin even when both inputs name the same winner");
+assert.equal(sameWinnerLargeGap.receipt.jointMarginDecision?.status,"applied");
+assert.ok(Math.abs(sameWinnerLargeGap.forecast.homeWinProbability-exactFair(quote("moneyline",null,-152,130,"pinnacle",true)))<1e-8);
 const mirror=run([quote("moneyline",null,-152,130,"pinnacle",true),quote("spread",-3,-107,-109,"pinnacle",true)],{independent:forecast(-14),anchors:null});
-assert.equal(mirror.receipt.winnerArbitration.status,"context_only");assert.equal(mirror.forecast.margin,-14);
+assert.equal(mirror.receipt.winnerArbitration.status,"applied");assert.ok(mirror.forecast.margin>0,"the opposite-winner repair is symmetric");
 const disputed=run([...marketOpposition,quote("moneyline",null,-150,130,"circa",true)],{independent:forecast(14),anchors:null});
 assert.equal(disputed.receipt.winnerArbitration.status,"conflicting");assert.equal(disputed.forecast.margin,14);
 const quarantinedWinner=run(marketOpposition,{independent:forecast(14),anchors:{...anchors([{...marketOpposition[1],firstPrice:-130,secondPrice:110}]),capturedAt:at}});
 assert.deepEqual(quarantinedWinner.receipt.anchors.quarantinedKeys,["pinnacle:spread"]);
-assert.equal(quarantinedWinner.forecast.margin,14);
+assert.equal(quarantinedWinner.receipt.currentProfessionalQuotes.some(q=>q.market==="spread"),false,"a quarantined spread cannot participate in joint current-law authority");
+assert.ok(quarantinedWinner.receipt.jointMarginDecision?.sourceQuotes.every(q=>q.market!=="spread"));
 assert.deepEqual(run(marketOpposition,{independent:forecast(14),anchors:{...anchors([{...marketOpposition[1],providerObservedAt:"2026-11-02T15:20:00+00:00",firstPrice:-130,secondPrice:110}]),capturedAt:at}}).receipt.anchors.quarantinedKeys,["pinnacle:spread"]);
 const ambiguousRef={...quote("spread",-3.5,-130,110),fetchedAt:current[1].fetchedAt};
 const quarantineGradeRead=run([ambiguousRef],{independent:forecast(12),anchors:anchors([original[1]])});
@@ -121,33 +143,37 @@ const preservedRefRead=run([ambiguousRef,goodRef],{independent:forecast(12),anch
 const preservedRefGrade=gradeCbbMarketBehavior({...quarantineGradeInput,forecast:preservedRefRead.forecast,references:[ambiguousRef,goodRef]},preservedRefRead.receipt);
 assert.deepEqual(preservedRefGrade.professionalReferenceQuotes,[goodRef],"unrelated verified reference remains exact");
 const justAbove=run(marketOpposition,{independent:forecast(.0001),anchors:null}),justBelow=run(marketOpposition,{independent:forecast(-.0001),anchors:null});
-assert.ok(Math.abs(justAbove.forecast.margin-justBelow.forecast.margin-.0002)<1e-10,"no sign-triggered market-copy discontinuity");
+assert.ok(Math.abs(justAbove.forecast.margin-justBelow.forecast.margin)<1e-8,"crossing the independent sign cannot trigger a discontinuous source-law selection");
 const unequal=run([current[1],quote("spread",-5.5,-110,-110,"circa",true)],{anchors:anchors([...original,quote("spread",-3.5,-110,-110,"circa")])});
 assert.equal(unequal.receipt.margin.status,"confirming","unequal observed moves that both confirm I agree on a zero numeric consequence");
 assert.equal(unequal.receipt.margin.directionalEvidence,"aligned");
-assert.equal(unequal.receipt.margin.sourceDirection,1);
+assert.equal(unequal.receipt.pathPosture.every(s=>s.market!=="spread"||s.recentDirection===1),true,"source posture preserves genuine movement independently of a confirming zero score shift");
 assert.equal(unequal.forecast.margin,forecast().margin);
 assert.equal(unequal.receipt.pathPosture.filter(s=>s.market==="spread"&&s.recentDirection===1).length,2,"all source posture survives numeric deferral");
 const sameRawDifferentMeaning=run([
  quote("spread",-9.5,-110,-110,"pinnacle",true),quote("spread",-2.5,-110,-110,"circa",true)],
  {anchors:anchors([quote("spread",-10.5,-110,-110,"pinnacle"),quote("spread",-3.5,-110,-110,"circa")])});
-assert.equal(sameRawDifferentMeaning.receipt.margin.status,"unresolved");
-assert.equal(sameRawDifferentMeaning.receipt.margin.reason,"overlapping_source_windows");
-assert.equal(sameRawDifferentMeaning.forecast.margin,forecast().margin,
- "equal raw movement cannot silently choose between confirmation and correction from different sources");
+assert.equal(sameRawDifferentMeaning.receipt.margin.status,"applied");
+assert.equal(sameRawDifferentMeaning.receipt.jointMarginDecision?.authority?.reason,"current_native_source_preference");
+assert.ok(Math.abs(sameRawDifferentMeaning.forecast.margin-bookConflict.forecast.margin)<1e-8,
+ "the current-level source choice is explicit even when equal historical raw moves had different independent-relative meanings");
 for(const market of ["spread","total"] as const)for(const sign of [1,-1] as const){
  const line=market==="spread"?0:150.5,step=market==="spread"?-sign:sign;
  const baseline=[quote(market,line,-110,-110,"pinnacle"),quote(market,line,-110,-110,"circa")];
  const agreeing=run([quote(market,line+step,-110,-110,"pinnacle",true),quote(market,line+2*step,-110,-110,"circa",true)],{anchors:anchors(baseline)});
  const axis=market==="spread"?agreeing.receipt.margin:agreeing.receipt.total;
- assert.equal(axis.status,market==="spread"&&sign===1?"confirming":"unresolved");assert.equal(axis.directionalEvidence,"aligned");assert.equal(axis.sourceDirection,sign);
- assert.equal(axis.delta,0,"directional agreement alone does not invent a scalar magnitude");
+ assert.equal(axis.status,market==="spread"?(sign===1?"confirming":"applied"):"unresolved");assert.equal(axis.directionalEvidence,"aligned");
+ if(market==="spread")assert.ok(Math.abs(agreeing.forecast.margin-(sign===1?forecast().margin:cbbExactMarketCenter(forecast(),quote(market,line+2*step,-110,-110,"circa",true),.5)))<1e-8,
+  "current-level margin authority selects one source without summing or averaging observed movements");
+ else assert.equal(axis.delta,0,"unchanged Total authority cannot invent a scalar magnitude");
  const opposed=run([quote(market,line+step,-110,-110,"pinnacle",true),quote(market,line-step,-110,-110,"circa",true)],{anchors:anchors(baseline)});
  const adverse=market==="spread"?opposed.receipt.margin:opposed.receipt.total;
- assert.equal(adverse.status,"conflicting");assert.equal(adverse.directionalEvidence,"opposed");assert.equal(adverse.sourceDirection,null);
+ assert.equal(adverse.status,market==="spread"?"unresolved":"conflicting");assert.equal(adverse.directionalEvidence,"opposed");assert.equal(adverse.sourceDirection,null);
  const sole=run([quote(market,line+step,-110,-110,"pinnacle",true),quote(market,line,-110,-110,"circa",true)],{anchors:anchors(baseline)});
  const moving=market==="spread"?sole.receipt.margin:sole.receipt.total;
- assert.equal(moving.status,market==="spread"&&sign===1?"confirming":"applied");assert.equal(moving.directionalEvidence,"single_source");assert.equal(moving.sourceDirection,sign);
+ assert.equal(moving.status,market==="spread"&&sign===1?"confirming":"applied");
+ if(market==="spread")assert.equal(sole.receipt.jointMarginDecision?.status,sign===1?"confirmed":"applied");
+ else {assert.equal(moving.directionalEvidence,"single_source");assert.equal(moving.sourceDirection,sign);}
 }
 // A durable JSONB round trip reorders keys without changing evidence. Bind
 // identical values while continuing to reject actual score/target tampering.
@@ -166,7 +192,7 @@ assert.equal(pricePromoted.grade,"Lean","qualified economic price path promotes 
 assert.equal(pricePromoted.economicPathConfirmation,true);assert.equal(pricePromoted.actualActionConfirmation,false,"price action cannot invent identified native flow");
 const sourceVigRead=run([quote("spread",-3.5,-115,-105,"pinnacle",true)],{anchors:anchors([quote("spread",-3.5,-115,-105)])});
 const sourceVig=gradeCbbMarketBehavior({forecast:sourceVigRead.forecast,target:targets[1],references:[quote("spread",-3.5,-115,-105,"pinnacle",true)],asOf:at},sourceVigRead.receipt);
-assert.equal(sourceVig.grade,"Lean","source-implied ordinary vig loss does not veto eligible independent model value");
+assert.equal(sourceVig.grade,"No Play","a current-level correction removes the independent-only edge when the executable price has negative value");
 assert.ok(sourceVig.professionalTargetEconomics[0].expectedValue<0);assert.equal(sourceVig.economicCorroboration,false);
 const valueTarget=quote("spread",-3.5,125,-145,"draftkings",true),valueRead=run([quote("spread",-3.5,-110,-110,"pinnacle",true)],{targets:[valueTarget],anchors:null});
 const valueGrade=gradeCbbMarketBehavior({forecast:valueRead.forecast,target:valueTarget,references:[quote("spread",-3.5,-110,-110,"pinnacle",true)],asOf:at},valueRead.receipt);
@@ -226,13 +252,14 @@ const twoOpposed=run([quote("spread",-3.5,-115,-105,"pinnacle",true),quote("spre
  independent:forecast(12),anchors:anchors([quote("spread",-3.5,-150,130),quote("spread",-3.5,-150,130,"circa")]),
  flows:[flow(.1,.6),{...flow(.1,.6),sourceBook:"circa"}]});
 const twoOpposedGrade=gradeCbbMarketBehavior({forecast:twoOpposed.forecast,target:targets[1],references:[quote("spread",-3.5,-115,-105,"pinnacle",true),quote("spread",-3.5,-115,-105,"circa",true)],asOf:at},twoOpposed.receipt);
-assert.equal(twoOpposedGrade.grade,"Lean","equal adverse transport already in final law cannot impose another Lean penalty");
+assert.equal(twoOpposedGrade.grade,"No Play","equal adverse current laws do not preserve a stale independent edge at a vig-negative target");
+assert.ok(twoOpposedGrade.expectedValue!<0);
 const twoPriceOnly=run([quote("spread",-3.5,-115,-105,"pinnacle",true),quote("spread",-3.5,-115,-105,"circa",true)],{
  independent:forecast(12),anchors:anchors([quote("spread",-3.5,-150,130),quote("spread",-3.5,-150,130,"circa")])});
-assert.equal(gradeCbbMarketBehavior({forecast:twoPriceOnly.forecast,target:targets[1],references:[quote("spread",-3.5,-115,-105,"pinnacle",true),quote("spread",-3.5,-115,-105,"circa",true)],asOf:at},twoPriceOnly.receipt).grade,"Lean","equal price-only adverse transport is not counted twice");
+assert.equal(gradeCbbMarketBehavior({forecast:twoPriceOnly.forecast,target:targets[1],references:[quote("spread",-3.5,-115,-105,"pinnacle",true),quote("spread",-3.5,-115,-105,"circa",true)],asOf:at},twoPriceOnly.receipt).grade,"No Play","a real loss of final exact-price value is distinct from a duplicated path penalty");
 const midway={...quote("spread",-3.5,-140,120,"pinnacle",true),providerObservedAt:"2026-11-02T15:10:00Z",fetchedAt:"2026-11-02T15:11:00Z"};
 const boughtBack=run([quote("spread",-3.5,-110,-110,"pinnacle",true)],{historyQuotes:[midway],anchors:anchors([quote("spread",-3.5,-110,-110)])});
-assert.equal(boughtBack.receipt.margin.status,"neutral");
+assert.equal(boughtBack.receipt.margin.status,"applied");assert.ok(Math.abs(boughtBack.receipt.episodes[0].delta)<1e-8,"buyback keeps its zero historical net while the current source level is applied once");
 assert.equal(boughtBack.receipt.pathPosture[0].pattern,"buyback");assert.equal(boughtBack.receipt.pathPosture[0].recentDirection,-1,"zero original-to-current net does not erase adverse buyback");
 const buybackGrade=gradeCbbMarketBehavior({forecast:boughtBack.forecast,target:valueTarget,references:[quote("spread",-3.5,-110,-110,"pinnacle",true)],asOf:at},run([quote("spread",-3.5,-110,-110,"pinnacle",true)],{targets:[valueTarget],historyQuotes:[midway],anchors:anchors([quote("spread",-3.5,-110,-110)])}).receipt);
 assert.notEqual(buybackGrade.grade,"Best Angle");assert.equal(buybackGrade.pathResistance,true);
@@ -257,7 +284,8 @@ const native=run([current[1]],{anchors:null,historyQuotes:[nativeAnchor]});
 assert.equal(native.receipt.margin.status,"confirming");assert.equal(native.receipt.anchors.quotes[0].fetchedAt,nativeAnchor.fetchedAt,"DB availability bound does not overwrite original collector clock");
 assert.deepEqual(native.receipt.anchors.quotes[0].canonicalReceipt,nativeAnchor.canonicalReceipt);
 const uncertainArrival=run([current[1]],{anchors:null,historyQuotes:[{...nativeAnchor,canonicalReceipt:{...nativeAnchor.canonicalReceipt,availableBy:"2026-11-02T15:25:00Z"}}]});
-assert.equal(uncertainArrival.forecast.margin,forecast().margin,"overlapping native receipt windows cannot invent chronological response");
+assert.equal(uncertainArrival.receipt.episodes.length,0,"overlapping native receipt windows cannot invent chronological response");
+assert.ok(Math.abs(uncertainArrival.forecast.margin-cbbExactMarketCenter(forecast(),current[1],.5))<1e-8,"an available current level remains usable without claiming an observed response");
 const economicInput={forecast:valueRead.forecast,target:valueTarget,references:[quote("spread",-3.5,-110,-110,"pinnacle",true)],asOf:at};
 for(const reference of [
  {...economicInput.references[0],canonicalReceipt:{...nativeAnchor.canonicalReceipt,availableBy:"2026-11-02T15:31:00Z"}},
@@ -353,7 +381,11 @@ for(const market of ["spread","total"] as const)for(const pickSign of [1,-1] as 
  assert.equal(aligned.grade.grade,"Best Angle","verified same-market action can still promote a valued Lean");
  const againstMoney=scenario(-pickSign,pickSign);assert.equal(againstMoney.read.receipt.pathPosture[0].flowResponse,"opposed");
  assert.equal(againstMoney.grade.pathResistance,false,"price resisting opposite-side money supports the final pick");assert.equal(againstMoney.grade.grade,"Best Angle");
- const withMoneyResisted=scenario(pickSign,-pickSign);assert.equal(withMoneyResisted.grade.pathResistance,true);
+ const withMoneyResisted=scenario(pickSign,-pickSign);
+ if(market==="spread"){
+  assert.equal(withMoneyResisted.grade.selection,pickSign===1?"second":"first","the current source law can correct to the opposite side of the original independent pick");
+  assert.equal(withMoneyResisted.grade.pathResistance,false,"response against the old pick is not mislabeled resistance to the corrected final pick");
+ }else assert.equal(withMoneyResisted.grade.pathResistance,true);
  const heldOpposite=scenario(-pickSign,0);assert.equal(heldOpposite.read.receipt.pathPosture[0].latestFlowMatched,true);
  assert.equal(heldOpposite.grade.pathResistance,false,"held opposite-side money is not unmatched opposition to the pick");assert.equal(heldOpposite.grade.grade,"Lean","held pressure alone is not premium professional value or verified action");
  const heldToward=scenario(pickSign,0);assert.equal(heldToward.grade.pathResistance,true,"source holding pressure toward the pick remains concern");assert.equal(heldToward.grade.grade,"Lean");
@@ -365,12 +397,13 @@ for(const pickSign of [1,-1] as const){
  const before=pickSign===1?[-150,130]:[130,-150],after=pickSign===1?[-115,-105]:[-105,-115];
  const a=quote("spread",0,after[0],after[1],"pinnacle",true),b=quote("spread",0,-110,-110,"circa",true);
  const unresolved=run([a,b],{independent,targets:[target],anchors:anchors([quote("spread",0,before[0],before[1],"pinnacle"),quote("spread",0,before[0],before[1],"circa")])});
- assert.equal(unresolved.receipt.margin.status,"unresolved");
+ assert.equal(unresolved.receipt.margin.status,"applied");
  assert.equal(unresolved.receipt.margin.directionalEvidence,"aligned");
- assert.equal(gradeCbbMarketBehavior({forecast:unresolved.forecast,target,references:[],asOf:at},unresolved.receipt).grade,"Watchlist","two physical unresolved adverse source paths can constrain Lean symmetrically");
+ assert.equal(unresolved.receipt.jointMarginDecision?.authority?.reason,"current_native_source_preference");
+ assert.equal(gradeCbbMarketBehavior({forecast:unresolved.forecast,target,references:[],asOf:at},unresolved.receipt).grade,"No Play","the explicit native current-level choice must not retain stale independent value at a negative-EV target");
  const equal=run([a,{...a,sportsbook:"circa"}],{independent,targets:[target],anchors:anchors([quote("spread",0,before[0],before[1],"pinnacle"),quote("spread",0,before[0],before[1],"circa")])});
  assert.equal(equal.receipt.margin.status,"applied");
- assert.equal(gradeCbbMarketBehavior({forecast:equal.forecast,target,references:[],asOf:at},equal.receipt).grade,"Lean","two equal resolved moves retain eligible Lean after exact law transport");
+ assert.equal(gradeCbbMarketBehavior({forecast:equal.forecast,target,references:[],asOf:at},equal.receipt).grade,"No Play","equivalent native current laws are applied once and the actual target still requires positive value");
 }
 for(const market of ["spread","total"] as const)for(const pickSign of [1,-1] as const){
  const line=market==="spread"?0:150.5,independent=market==="spread"?forecast(7*pickSign):forecast(0,pickSign===1?166:134);
@@ -425,4 +458,4 @@ const staleRetained=run([{...olderHttp,fetchedAt:"2026-11-02T16:34:00Z"}],{
  historyCompleteness:{price:false,split:false}});
 assert.equal(staleRetained.receipt.currentProfessionalQuotes.length,0,"retaining a known source pair does not refresh its native observation clock");
 assert.equal(staleRetained.forecast.margin,forecast().margin);
-console.log("PASS CBB received-market candidate: immutable anchors, exact response operators, path context, unresolved competition, static zero-point disagreement and economic/action grade separation.");
+console.log("PASS CBB received-market candidate: immutable anchors, exact source law, current-level winner correction, native path interpretation, explicit source competition and economic/action grade separation.");

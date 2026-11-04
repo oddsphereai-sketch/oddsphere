@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {cbbCanonicalBehaviorInputs} from "../lib/services/cbb/cbbCanonicalBehaviorInputs";
 import {readCbbMarketBehavior,gradeCbbMarketBehavior} from "../lib/cbb/marketBehaviorCandidate";
 import {CBB_CURRENT_SCORE_RELEASE} from "../lib/cbb/currentScoreRuntime";
-import {normalCdf} from "../lib/cbb/model";
+import {normalCdf,cbbThresholdProbabilities} from "../lib/cbb/model";
 import type {CbbForecast,CbbQuote} from "../lib/cbb/types";
 import { pairCbbCanonicalMarketEvidence, type CbbCanonicalPriceRow, type CbbCanonicalSplitRow } from "../lib/services/cbb/cbbCanonicalMarketEvidence";
 import type { CbbGame } from "../lib/cbb/types";
@@ -43,19 +43,45 @@ const current:CbbQuote={...{orientationVerified:true},gameId:777,provider:"owls"
  firstPrice:-110,secondPrice:-110,providerObservedAt:at(25),fetchedAt:at(26),phase:"current"};
 const target:CbbQuote={...current,sportsbook:"draftkings",line:6};
 function candidate(inputs:ReturnType<typeof cbbCanonicalBehaviorInputs>,asOf=decisionAt,
- previous?:ReturnType<typeof readCbbMarketBehavior>){
+ previous?:ReturnType<typeof readCbbMarketBehavior>,historyCompleteness?:{price:boolean;split:boolean}){
  return readCbbMarketBehavior({independent:forecast(asOf),independentInputKey:"fixture-independent-r3",startsAt:start,targets:[target],
   currentQuotes:[target,current],anchors:previous?.receipt.anchors??null,historyQuotes:inputs.historyQuotes,historyFlows:inputs.historyFlows,
-  previousPath:previous?.receipt.pathTape,quarantinedSources:previous?[]:inputs.quarantinedSources});
+  previousPath:previous?.receipt.pathTape,quarantinedSources:previous?[]:inputs.quarantinedSources,historyCompleteness});
 }
 function grade(result:ReturnType<typeof readCbbMarketBehavior>){
  return gradeCbbMarketBehavior({forecast:result.forecast,target,references:[current],asOf:result.forecast.asOf},result.receipt);
 }
 const cleanInputs=cbbCanonicalBehaviorInputs(read([...beforePrices,...afterPrices],[]));
 const clean=candidate(cleanInputs),cleanGrade=grade(clean);
-assert.equal(clean.forecast.margin,12,"a source moving toward the independent score confirms it without double-moving its location");
-assert.equal(clean.receipt.margin.status,"confirming");
+assert.equal(clean.receipt.margin.status,"applied");
+assert.equal(clean.receipt.jointMarginDecision?.status,"applied");
+assert.ok(clean.forecast.margin<0&&clean.forecast.homeWinProbability<.5,
+ "a current away-favorite source cannot confirm an independent home winner merely by moving towards it");
+const native=cbbThresholdProbabilities(clean.forecast,"spread",current.line);
+assert.ok(Math.abs(native.first/(native.first+native.second)-.5)<1e-8,
+ "the final law respects Circa's actual even-money native spread contract");
+assert.ok(Math.abs(clean.forecast.homeScore-clean.forecast.awayScore-clean.forecast.margin)<1e-8);
+assert.equal(clean.forecast.homeScore+clean.forecast.awayScore,150);
+assert.equal(cleanInputs.historyQuotes[0].providerObservedAt,at(0));
+assert.equal(cleanInputs.historyQuotes[0].fetchedAt,at(1),"preserve canonical run-start, not a substituted response time");
+assert.equal(cleanInputs.historyQuotes[0].canonicalReceipt.availableBy,"2026-11-02T15:01:05Z",
+ "the original DB availability upper bound remains separate from run-start");
 assert.ok(cleanGrade.professionalReferences>0);
+// Missing historical families do not nullify a valid current native contract,
+// but must not manufacture historical flow or actionable confirmation.
+const noHistory=cbbCanonicalBehaviorInputs(read([],[]));
+const partial=candidate(noHistory,decisionAt,undefined,{price:false,split:false}),partialGrade=grade(partial);
+assert.deepEqual(partial.receipt.historyCompleteness,{price:false,split:false});
+assert.equal(partial.receipt.jointMarginDecision?.status,"applied");
+assert.ok(partial.forecast.margin<0,"first-capture native away-favorite evidence remains an input without a full historical tape");
+assert.equal(partialGrade.actualActionConfirmation,false);
+assert.equal(partialGrade.economicPathConfirmation,false);
+// An actual malformed historical frame is different from missing history.
+// Its unsafe source identity cannot be revived by a clean direct endpoint.
+const oneSided=candidate(cbbCanonicalBehaviorInputs(read([beforePrices[0]],[])));
+assert.equal(oneSided.forecast.margin,12);
+assert.equal(grade(oneSided).professionalReferences,0);
+assert.ok(oneSided.receipt.anchors.quarantinedKeys?.includes("circa:spread"));
 for(const kind of ["price","split"] as const){
  const native=kind==="price"?read([...beforePrices,...middlePrices,{...middlePrices[0],id:203,american_price:-130},...afterPrices],[]):
   read([...beforePrices,...afterPrices],[...beforeSplits,...middleSplits,{...middleSplits[0],id:503,money_pct:.8},...afterSplits]);

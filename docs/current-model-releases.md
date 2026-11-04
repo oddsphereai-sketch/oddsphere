@@ -1,66 +1,65 @@
 # Current production model releases and qualified research candidates
 
-## CBB source-episode decision release — November 3
+## CBB joint native decision release — November 3
 
-The sole independent runtime now uses
-`cbb_candidate_2026_11_03_r4_verified_new_orleans_venue_prior` and the verified
-candidate-r4 artifact. The sole market path uses
-`cbb_candidate_2026_11_03_r12_aligned_native_reactions`, grade
-`cbb_2026_11_03_r14_aligned_native_reactions`, receipt R8, path R4, board R15,
-publisher R24, tracking R12 and member adapter R13. Canonical history R2 reads
-retail pressure context in a separate bounded family; canonical evidence R4
-never promotes those quotes into professional numeric experts. Reader evidence
-R11 preserves source/DB availability before decision time.
+The sole independent runtime remains
+`cbb_candidate_2026_11_03_r4_verified_new_orleans_venue_prior` (candidate-r4).
+The sole market path is now
+`cbb_candidate_2026_11_03_r13_joint_native_market_decision`, grade
+`cbb_2026_11_03_r15_joint_native_market_decision`, receipt R9, path R4,
+board R16, publisher R25, tracking R13 and adapter R14. Canonical history R2,
+evidence R4 and reader evidence R11 retain their bounded native contracts.
 
-The production spot checks after PR976 found that the retail journal records
-response completion in fetched_at, separately from ingestion-run start. R11/R13
-preserve both clocks and accept that actual producer contract; professional and
-split rows retain their exact run-start check. Both native sides must still
-share a response, provider time cannot exceed response completion, and DB
-availability must precede decision time. Prior model R10 /grade R12 /receipt R6
-locks and original anchors retain their exact semantics. Evidence:
-`docs/model-audits/2026-11-03-cbb-retail-response-receipt-repair.md`.
+This supersedes R12/R14/R8 inference, not its locked public records. The owner's
+three-gap repair explicitly makes the independent forecast a fallible input:
+current professional price levels can correct an opposite winner or a large
+same-winner margin disagreement without requiring a prior captured move.
+A selected physical book's current ML and Spread jointly identify margin and
+margin dispersion through the existing exact discrete/no-tie/push-aware law.
+A flat Spread cannot veto meaningful ML repricing. A single available contract
+uses the independent residual shape explicitly; a redundant win contract does
+not invent identified dispersion. Current inconsistent constraints or genuinely
+unresolved opposite-winner sources remain explicit uncertainty, without a
+silently applied old single-market correction.
 
-The NBA/NFL episode structure is adapted to the CBB residual law. Movements can
-confirm without moving a score, correct it, or cross it without a point cap.
-One physical source authors the consequence; followers do not add amplitude.
-Unequal aligned moves can be resolved by a verified contrarian hold or genuine
-latest observed repricing, without requiring first-mover proof. Current held
-pressure resisting old aligned net movement is an explicit retention read;
-it is not missing-authority silence. Refreshed unchanged prices do not count
-as repricing, and indistinguishable evidence remains honestly uncertain.
-There is no source average, minimum-effect fallback or book-name amplitude rank.
-Spread owns the margin under
-the fixed residual law; moving ML with a verified flat Spread is shape/confidence
-context, while genuinely absent Spread permits the priced ML fallback.
+Source selection remains distinct from numerical inversion. Actual source
+response/chronology distinguishes books before a static reference policy is
+used. When current books agree on the winner but there is no resolved author,
+select one whole native profile: complete ML/Spread first, then Circa,
+Pinnacle, Bookmaker. This is an explicit reference assumption, not an average,
+reliability weight, movement claim or proven sharp identity. Fresh opposing
+winner profiles require actual chronological supersession, not latest-update
+recency alone. Genuine independent-relative confirmation retains the original
+law only when the current winner and source contract do not contradict it;
+contested historical paths cannot become a blanket independent-model veto.
 
-Professional, retail and aggregate splits reach decisions before publication.
-Only an actual later same-source price establishes pressure response. Opposite
-money met by hold can support a contrarian read; toward-pick money held or
-opposed is resistance. Raw public majorities cannot create a sharp label or
-score bonus. Native off-target contracts remain usable through exact CBB
-target repricing. Verified confirmation may promote with zero score delta.
-Current invalid responses withhold only their affected axis and can recover;
-contradictory original sources retain persistent quarantine.
+Original independent uncertainty and final source-implied uncertainty are
+stored separately. Score, moneyline/spread probabilities, EV and grades use the
+one final law; no relative correction is added again after current-law adoption.
+Total retains the existing own-source interpretation. Numerical probability ties
+use the better exact payout, rather than floating-point noise choosing a side.
+Existing grade EV reserves/price eligibility remain unchanged; there is no
+claim of eliminating every numerical threshold in the product.
 
-Scores and all market probabilities/EVs/grades use the one final law. Earlier
-locks retain exact stored payloads and release precedence. There is no new
-provider request, collector, writer, cadence, fitted combination coefficient,
-absolute-level replacement or stake change. The owner explicitly authorized the
-prospective New Orleans input repair:123 exact BDL/ESPN venue matches restore
-its missing historical rating. Coefficients/correction/uncertainty are unchanged;
-the sequential refit can affect other opponents and is separately counted.
-Older R3 independent and R10/R11 market locks retain exact precedence. No
-existing lock is reconstructed, and no first forecast is admitted after T60.
-Static independent/current-level disagreement remains explicit evidence.
+Network HTTP dates are capture/freshness evidence, never verified bookmaker
+observation times. A newer network capture cannot displace a genuine native
+DraftKings own-contract split or fabricate a price response. Per-page freshness
+and one physical-family deduplication remain enforced. R11's retail journal
+response-completion clock repair remains active.
 
-The owner directed functional deployment with forward outcome evaluation.
-Publication still requires the focused/full checks, independent review,
-fresh-main protected PR and actual live writer/lock/reader proof. See
-`docs/model-audits/2026-11-03-cbb-independent-market-reader-repair.md` for the
-exact frozen-input impact and remaining boundaries; this is not a win-rate claim.
-The current follow-up and exact whole-board consequences are recorded in
-`docs/model-audits/2026-11-03-cbb-aligned-native-reactions.md`.
+All prior R12/R14/R8, R11/R13/R7 and earlier locks retain exact writer, reader,
+tracking, price and evidence precedence. Original R3/R4 market anchors persist.
+The verified New Orleans prior/venue repair remains prospective; no missed or
+locked historical card is reconstructed. One leased sport-scoped writer,
+provider cadence, bounded reads and stakes are unchanged.
+
+The saved current14-game/42-market functional comparison changes one side,
+with0 actionable promotions and2 demotions (19→17 actionables); paired
+promotion/demotion regression scenarios remain tested without a replacement
+quota. This is an owner-directed functional release for forward evaluation,
+not a prediction-accuracy claim. Full/focused checks, independent review,
+fresh-main protected PR and exact production/lock/reader proof remain required.
+Evidence: `docs/model-audits/2026-11-03-cbb-joint-native-decision-repair.json`.
 
 ## UCL public-split lock capture — November 3
 
