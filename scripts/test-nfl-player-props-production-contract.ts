@@ -190,7 +190,7 @@ const aliasReader = buildNflPlayerPropsMemberSnapshot(legacyAliasSnapshot);
 assert.deepEqual(aliasReader.memberDecisions.find(row => row.playerName === "Chigoziem Okonkwo"), lockedAlias, "the reader renders the exact legacy locked alias payload first");
 assert.equal(JSON.stringify(legacyAliasSnapshot), lockedAliasBefore, "reader alias handling cannot mutate a stored lock");
 const lockedAliasWriter = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 9, evaluatedAt: "2026-11-04T13:00:00Z",
-  previous: { ...legacyAliasSnapshot, board: boardRows([resolvedAliasDecision, lockedAlias]) }, nextBoard: boardRows([resolvedAliasDecision]) });
+  previous: { ...legacyAliasSnapshot, board: { ...boardRows([resolvedAliasDecision, lockedAlias]), publicationEnabled: true, trackingEnabled: true } }, nextBoard: boardRows([resolvedAliasDecision]) });
 assert.deepEqual(lockedAliasWriter.board.decisions.find(row => row.playerName === "Chigoziem Okonkwo"), lockedAlias, "the writer preserves the complete prior locked alias record even when the current feed omits it");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_11_04_r53_verified_alias_duplicates");
 assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_11_04_r69_verified_alias_display");
