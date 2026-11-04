@@ -1,0 +1,69 @@
+{
+  "scope": "Remove owner-rejected R17 full-independent-forecast selection switch. This restoration is not completion of unified market inference.",
+  "baseSha": "f6ed5a10ab8834bc1164e5d66eca1132c607d7a0",
+  "releaseTuple": {
+    "model": "R18",
+    "grade": "R22",
+    "receipt": "R14",
+    "board": "R23",
+    "publisher": "R33",
+    "tracking": "R21",
+    "adapter": "R22",
+    "suffix": "current_source_forecast_restoration",
+    "independent": "R4 unchanged",
+    "path": "R5 unchanged"
+  },
+  "change": "Delete the counterpressure-only prior takeover, restoring preceding current-source forecast selection. Keep causal pressure continuity, contrarian grade evidence, Watchlist/ML price fixes and pending schedule visibility.",
+  "reason": "Directional market response does not quantify or certify the whole independent probability law; user rejected this hand-written selection policy.",
+  "locks": "Exact R17/R21/R13 payloads and original stamps remain frozen; no actual historical correction.",
+  "tests": "Focused restoration, paired promotion/demotion and legacy locks required; full gate/types/lint and protected live verification required.",
+  "newProviderRequests": 0,
+  "newWriters": 0,
+  "newSchedules": 0,
+  "knownUnfinishedWork": "A unified conditional forecast must interpret independent and all market context without choosing complete component forecasts through ad hoc switches. That numerical method has not been completed.",
+  "sameInputImpact": {
+    "attemptedGames": 37,
+    "includedGames": 37,
+    "excludedGames": 0,
+    "markets": 111,
+    "oldCounts": {
+      "Watchlist": 52,
+      "Lean": 57,
+      "Held": 2
+    },
+    "newCounts": {
+      "Watchlist": 53,
+      "Lean": 56,
+      "Held": 2
+    },
+    "actionablePromotions": 0,
+    "actionableDemotions": 1,
+    "sideChanges": 1,
+    "probabilityChanges": 2,
+    "exactPriceChanges": 1,
+    "expectedValueChanges": 2,
+    "pushChanges": 0,
+    "newBest": 0,
+    "gradeChanges": 1,
+    "nonMLGradeChanges": 1,
+    "numericAndSelectionChanges": 2,
+    "scoreChanges": 1,
+    "uncertaintyChanges": 1,
+    "coherenceIssues": [],
+    "today": {
+      "games": 10,
+      "markets": 30,
+      "oldCounts": {
+        "Watchlist": 23,
+        "Lean": 7
+      },
+      "newCounts": {
+        "Watchlist": 24,
+        "Lean": 6
+      }
+    },
+    "unchangedGames": 36
+  },
+  "actualImpact": "All37/111 old R17 baseline decisions reproduce exactly, including2 Held. Only NKU changes; SDAKspreadLean demotes to Watch. Today7->6Lean, noactualpromotions; other36games unchanged. Paired genuine promotion is tested using a different executable spread contract, not fabricated on the live board.",
+  "review": "Independent A source review and D regression review pass; exactR17locktest/TSC passed. Full model gate and publication/live proof required."
+}

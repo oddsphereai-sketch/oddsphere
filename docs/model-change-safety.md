@@ -1,5 +1,24 @@
 # Model change safety protocol
 
+## Owner-directed removal of CBB forecast-selection switch — November 4
+
+The owner explicitly rejected the R17 hand-written rule selecting the full
+independent forecast from a counterpressure pattern. Remove that exception
+under new model R18 /grade R22 /receipt R14 /board R23 /publisher R33 /tracking
+R21 /adapter R22 `current_source_forecast_restoration`. This restoration must
+not be presented as completion of the requested unified contextual forecaster.
+
+Preserve causal native evidence and its original clocks, the existing grade
+inputs, Watchlist and Moneyline value repairs, and all actual R17 locked public
+records. No retrospective correction of a lock is authorized. Tests must prove
+that a response direction alone cannot choose the whole independent law, exact
+old/new quoted p/EV/grades, paired legitimate actionable promotion/demotion,
+unchanged unrelated markets and R17 writer/reader/tracking precedence. Report
+any actual actionable reduction openly; do not fabricate compensating plays.
+Full model checks, independent source review, latest-main clean protected PR
+and normal production writer/reader/lock verification remain required.
+No new provider request, writer, refresh schedule, lease, price or stake policy.
+
 ## Owner-directed CBB native counterpressure consequence — November 4
 
 The owner explicitly requested resolution and live publication of the remaining
