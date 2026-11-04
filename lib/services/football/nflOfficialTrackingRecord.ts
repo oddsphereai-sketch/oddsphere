@@ -13,6 +13,7 @@ import {
 } from "./footballMarketScopedTracking";
 import {
   NFL_V1_PRODUCTION_CALIBRATION_RELEASE,
+  NFL_V1_MEMBER_RELEASE,
   NFL_V1_PRODUCTION_DECISION_RELEASE,
 } from "./nflV1ProductionDecision";
 import type { NflRegularDecisionMarket, NflRegularOutcomeConfidence } from "./nflRegularDecisionEvidence";
@@ -222,9 +223,11 @@ function coherenceArgs(payload: NflForwardEvidencePayload): Parameters<typeof as
     decisions: payload.decisions.evaluatedBets,
     unavailableMarkets: NFL_TRACKED_MARKETS.filter((market) => !evaluatedMarketsForCoherence.has(market)),
     requireDecisionSideFromForecast: true,
+    nflPmfSideAuthority: payload.decisions.modelPromotionStatus === NFL_V1_MEMBER_RELEASE,
+    decisionSideProbabilityConvention: payload.decisions.modelPromotionStatus === NFL_V1_MEMBER_RELEASE ? "exclude_push" : undefined,
     // Tracking consumes the exact writer-approved immutable T-60 payload. It
-    // must use the same NFL mean/median tolerance as publication or a valid
-    // payload can publish successfully and then fail at the tracking boundary.
+    // uses the prospective PMF policy only for this exact member release.
+    // Prior immutable payloads retain their original mean/median contract.
     publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
   };
 }

@@ -14,7 +14,7 @@ import { readNflMarketPathAdjudication, type NflMarketPathAdjudication } from ".
 import { buildNflMarketQualification, type NflMarketQualificationReceipt } from "./nflMarketQualification";
 import type { NflPreviewBookOdds } from "./balldontlieNflPreviewSlate";
 
-export const NFL_MARKET_INNOVATION_RELEASE = "nfl_market_innovation_2026_11_04_r4_unchanged_ml_confirmation" as const;
+export const NFL_MARKET_INNOVATION_RELEASE = "nfl_market_innovation_2026_11_04_r5_pmf_mean_direction_diagnostic" as const;
 type Market = "moneyline" | "spread" | "total";
 type Book = "circa" | "pinnacle";
 type Episode = NflNamedMoneylineEpisode | NflPricedLineEpisode;

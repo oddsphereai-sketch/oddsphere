@@ -5,7 +5,7 @@ import { assessNflMarketGradeConfirmation, type NflMarketGradeConfirmation,
   type NflMarketGradePromotionContext } from "./nflMarketGradeConfirmation";
 
 export const NFL_MARKET_INNOVATION_POSTURE_RELEASE =
-  "nfl_market_innovation_posture_2026_11_04_r4_unchanged_ml_confirmation" as const;
+  "nfl_market_innovation_posture_2026_11_04_r5_pmf_mean_direction_diagnostic" as const;
 
 export type NflMarketInnovationPostureReceipt = {
   release: typeof NFL_MARKET_INNOVATION_POSTURE_RELEASE;

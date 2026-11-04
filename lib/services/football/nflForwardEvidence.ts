@@ -244,7 +244,8 @@ export type NflForwardEvidencePayload = {
       | "nfl_v1_member_release_2026_11_02_r53_source_qualified_market_read"
       | "nfl_v1_member_release_2026_11_02_r54_market_conviction_grades"
       | "nfl_v1_member_release_2026_11_02_r55_published_rounding_pressure"
-      | "nfl_v1_member_release_2026_11_04_r56_unchanged_ml_confirmation";
+      | "nfl_v1_member_release_2026_11_04_r56_unchanged_ml_confirmation"
+      | "nfl_v1_member_release_2026_11_04_r57_pmf_mean_direction_diagnostic";
     publicationEnabled: boolean;
     /** True only after the authoritative regular/postseason T-60 boundary validates the complete tuple. */
     trackingEnabled: boolean;

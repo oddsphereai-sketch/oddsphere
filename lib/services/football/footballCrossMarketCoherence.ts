@@ -1,5 +1,5 @@
 export const FOOTBALL_CROSS_MARKET_COHERENCE_RELEASE =
-  "football_cross_market_coherence_2026_11_01_r14_push_aware_nfl_ev" as const;
+  "football_cross_market_coherence_2026_11_04_r15_nfl_pmf_mean_diagnostic" as const;
 
 const EPSILON = 1e-9;
 const EV_TOLERANCE = 1e-8;
@@ -59,6 +59,8 @@ export type FootballCoherenceIssueCode =
   | "decision_fair_probability"
   | "decision_side_identity"
   | "decision_forecast_side_disagreement"
+  | "decision_pmf_probability_mismatch"
+  | "decision_pmf_push_mismatch"
   | "decision_quote"
   | "decision_ev_mismatch"
   | "decision_execution_status_mismatch"
@@ -74,6 +76,13 @@ export type FootballCoherenceExplanation = {
   code: "price_or_threshold_divergence";
   markets: ["moneyline", "spread"];
   detail: string;
+} | {
+  code: "pmf_mean_direction_divergence";
+  markets: [FootballCoherenceMarket];
+  detail: string;
+  metadata: { pmfSide: FootballCoherenceSide; meanSide: FootballCoherenceSide;
+    selectedProbability: number; pushProbability: number; line: number | null;
+    expectedAwayPoints: number; expectedHomePoints: number; meanDistance: number };
 };
 
 export type FootballCoherenceReport = {
@@ -126,6 +135,9 @@ export function auditFootballCrossMarketCoherence(args: {
   unavailableMarkets?: FootballCoherenceMarket[];
   allowWholeGameOperationalHold?: boolean;
   requireDecisionSideFromForecast?: boolean;
+  /** Prospective NFL only: exact PMF probability/settlement is authoritative;
+   * line-relative mean/median disagreement is explanatory, never a score edit. */
+  nflPmfSideAuthority?: boolean;
   allowPmfVerifiedProbabilityEndpoints?: boolean;
   publicScoreDirectionTolerancePoints?: number;
   allowForecastSideCalibrationFamilies?: string[];
@@ -164,25 +176,54 @@ export function auditFootballCrossMarketCoherence(args: {
     fatalIssues,
   }));
   const byMarket = new Map(normalized.map((decision) => [decision.market, decision]));
-  if (args.requireDecisionSideFromForecast) {
+  const nflPmfSideAuthority = args.sport === "nfl" && args.nflPmfSideAuthority === true;
+  if (args.requireDecisionSideFromForecast || nflPmfSideAuthority) {
     const scoreDirectionTolerance =
       args.publicScoreDirectionTolerancePoints ?? DEFAULT_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS;
     for (const decision of normalized) {
       if (!decision.selectedSide || decision.market !== "moneyline" && decision.line === null) continue;
       if (
-        decision.calibrationFamily &&
+        !nflPmfSideAuthority && decision.calibrationFamily &&
         args.allowForecastSideCalibrationFamilies?.includes(decision.calibrationFamily)
       ) continue;
       const forecastSide = selectedForecastSideAtDecision(
         args.forecast,
         decision,
-        args.decisionSideProbabilityConvention ?? "half_push",
+        nflPmfSideAuthority ? "exclude_push" : args.decisionSideProbabilityConvention ?? "half_push",
       );
       if (forecastSide === null) {
         fatalIssues.push({
           code: "decision_forecast_side_disagreement",
           detail: `${decision.market} cannot be verified against the released joint PMF.`,
         });
+      } else if (nflPmfSideAuthority) {
+        if (forecastSide.pmf !== decision.selectedSide) {
+          fatalIssues.push({ code: "decision_forecast_side_disagreement",
+            detail: `${decision.market} decision ${decision.selectedSide}; released PMF selects ${forecastSide.pmf}; line ${decision.line}.` });
+        }
+        const mass = releasedNflDecisionMass(args.forecast, decision);
+        if (!mass) {
+          fatalIssues.push({ code: "decision_forecast_side_disagreement",
+            detail: `${decision.market} exact probability/refund mass cannot be verified against the released PMF.` });
+          continue;
+        }
+        const probabilityMatches = Math.abs(decision.modelProbability - mass.selectedProbability) <= EV_TOLERANCE;
+        const pushMatches = Math.abs((decision.pushProbability ?? 0) - mass.pushProbability) <= EV_TOLERANCE;
+        if (!probabilityMatches) fatalIssues.push({ code: "decision_pmf_probability_mismatch",
+          detail: `${decision.market} decision probability ${decision.modelProbability}; released PMF conditional probability ${mass.selectedProbability}; line ${decision.line}.` });
+        if (!pushMatches) fatalIssues.push({ code: "decision_pmf_push_mismatch",
+          detail: `${decision.market} decision refund mass ${decision.pushProbability ?? 0}; released PMF refund mass ${mass.pushProbability}; line ${decision.line}.` });
+        if (forecastSide.pmf === decision.selectedSide && probabilityMatches && pushMatches &&
+            decision.market !== "moneyline" && forecastSide.mean !== decision.selectedSide) {
+          explanations.push({ code: "pmf_mean_direction_divergence", markets: [decision.market],
+            detail: `${decision.market} ${decision.selectedSide} has released PMF probability ${mass.selectedProbability}; ` +
+              `the same distribution's mean points ${forecastSide.mean} at line ${decision.line} ` +
+              `(distance ${forecastSide.meanDistance}). The mean score and PMF-selected pick are preserved.`,
+            metadata: { pmfSide: forecastSide.pmf, meanSide: forecastSide.mean,
+              selectedProbability: mass.selectedProbability, pushProbability: mass.pushProbability, line: decision.line,
+              expectedAwayPoints: args.forecast.expectedAwayPoints, expectedHomePoints: args.forecast.expectedHomePoints,
+              meanDistance: forecastSide.meanDistance } });
+        }
       } else if (
         forecastSide.pmf !== decision.selectedSide ||
         forecastSide.meanDistance > scoreDirectionTolerance && forecastSide.mean !== decision.selectedSide
@@ -290,6 +331,38 @@ function selectedForecastSideAtDecision(
     mean: expectedMarginHome + homeSpread >= 0 ? "home" : "away",
     meanDistance: Math.abs(expectedMarginHome + homeSpread),
   };
+}
+
+/** Verify the actual selected probability and refund mass, not just the name
+ * of the more likely side. NFL ML conditions on a decided game with no refund
+ * field; spread/total retain their unconditional exact-line refund mass. */
+function releasedNflDecisionMass(
+  forecast: FootballCoherenceForecast,
+  decision: ReturnType<typeof normalizeDecision>,
+): { selectedProbability: number; pushProbability: number } | null {
+  const rows = forecast.pmf && forecast.pmf.length > 0
+    ? forecast.pmf.map(cell => ({ score: decision.market === "total"
+        ? cell.home + cell.away : cell.home - cell.away, probability: cell.probability }))
+    : (() => {
+      const distribution = decision.market === "total" ? forecast.totalDistribution : forecast.marginDistribution;
+      return distribution?.values.map((score,index) => ({ score, probability: distribution.probabilities[index]! }));
+    })();
+  if (!rows?.length || rows.some(row => !Number.isFinite(row.score) || !Number.isFinite(row.probability) || row.probability < 0) ||
+      Math.abs(rows.reduce((sum,row) => sum + row.probability,0) - 1) > 0.000002) return null;
+  const threshold = decision.market === "moneyline" ? 0 : decision.market === "total" ? decision.line
+    : decision.selectedSide === "home" ? -decision.line! : decision.line;
+  if (threshold === null || !Number.isFinite(threshold)) return null;
+  let positive=0, negative=0, push=0;
+  for (const row of rows) {
+    if (row.score > threshold + EPSILON) positive += row.probability;
+    else if (row.score < threshold - EPSILON) negative += row.probability;
+    else push += row.probability;
+  }
+  const decided=positive+negative;
+  if (decided <= EPSILON) return null;
+  const first = decision.market === "total" ? decision.selectedSide === "over" : decision.selectedSide === "home";
+  return { selectedProbability: (first ? positive : negative) / decided,
+    pushProbability: decision.market === "moneyline" ? 0 : push };
 }
 
 function distributionSideProbability(
