@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { planNflPlayerPropsRefresh } from "../lib/services/football/nflPlayerPropsCadence";
 import type { NflPlayerPropsProductionSnapshot } from "../lib/services/football/nflPlayerPropsProductionContract";
+import { NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE } from "../lib/services/football/nflPlayerPropsProductionContract";
 
 const NOW = "2026-10-07T16:00:00.000Z";
 
@@ -113,7 +114,7 @@ function snapshot(args: { generatedAt: string; lockAt: string }): Pick<NflPlayer
     ? new Date(Date.parse(args.lockAt) + 60 * 60_000).toISOString()
     : "2026-10-11T17:00:00.000Z";
   return {
-    release: "nfl_player_props_member_2026_10_28_r52_owls_reference_prices",
+    release: NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE,
     generatedAt: args.generatedAt,
     board: {
       decisions: [{ state: "unlocked", scheduledStart, lockAt: args.lockAt }],

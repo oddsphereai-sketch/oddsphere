@@ -1,5 +1,21 @@
 # Current production model releases and qualified research candidates
 
+## NFL props verified alias display — November 4
+
+Writer r69 `nfl_player_props_writer_2026_11_04_r69_verified_alias_display`,
+member r53 `nfl_player_props_member_2026_11_04_r53_verified_alias_duplicates`,
+and lifecycle r35 `nfl_player_props_member_lifecycle_2026_11_04_r35_verified_alias_duplicates`
+remove an unlocked unresolved Chigoziem Okonkwo duplicate only when the same exact
+game/market/line/side already has a resolved Chig Okonkwo Washington prediction.
+The authority must uniquely identify BALLDONTLIE player734 on WAS. Missing,
+ambiguous, wrong-game/team/player or different-line/side replacements cannot
+remove the exception. The complete source/decision board and health findings
+remain stored; every actual prediction field is unchanged. All locked aliases
+retain exact writer and reader precedence even if the current feed omits them.
+Model/calibration/runtime/decision releases, grades, actionables, source prices,
+provider requests, cadence, lease and settlement remain unchanged. Evidence:
+`docs/model-audits/2026-11-04-nfl-props-verified-alias-display.md`.
+
 ## NFL player-props verified participation settlement — November 4
 
 Sole writer /tracking /settlement advance to

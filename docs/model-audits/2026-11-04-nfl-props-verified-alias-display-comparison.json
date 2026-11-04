@@ -1,0 +1,78 @@
+{
+  "at": "2026-11-04T14:07:18.237Z",
+  "sourceCapturedAt": "2026-11-04T13:52:15.486Z",
+  "readOnly": true,
+  "productionWrites": 0,
+  "providerRequests": 0,
+  "beforeRows": 1078,
+  "afterRows": 1074,
+  "removedRows": [
+    {
+      "gameId": "1392344",
+      "player": "Chigoziem Okonkwo",
+      "market": "receiving_yards",
+      "line": 30.5,
+      "side": "over",
+      "grade": "No Play",
+      "state": "unlocked",
+      "holds": [
+        "historical_identity_unmatched",
+        "independent_same_line_confirmation_missing",
+        "roster_identity_unmatched",
+        "team_game_identity_unmatched"
+      ]
+    },
+    {
+      "gameId": "1392344",
+      "player": "Chigoziem Okonkwo",
+      "market": "receiving_yards",
+      "line": 30.5,
+      "side": "under",
+      "grade": "No Play",
+      "state": "unlocked",
+      "holds": [
+        "historical_identity_unmatched",
+        "independent_same_line_confirmation_missing",
+        "roster_identity_unmatched",
+        "team_game_identity_unmatched"
+      ]
+    },
+    {
+      "gameId": "1392344",
+      "player": "Chigoziem Okonkwo",
+      "market": "receptions",
+      "line": 3.5,
+      "side": "over",
+      "grade": "No Play",
+      "state": "unlocked",
+      "holds": [
+        "historical_identity_unmatched",
+        "independent_same_line_confirmation_missing",
+        "roster_identity_unmatched",
+        "team_game_identity_unmatched"
+      ]
+    },
+    {
+      "gameId": "1392344",
+      "player": "Chigoziem Okonkwo",
+      "market": "receptions",
+      "line": 3.5,
+      "side": "under",
+      "grade": "No Play",
+      "state": "unlocked",
+      "holds": [
+        "historical_identity_unmatched",
+        "independent_same_line_confirmation_missing",
+        "roster_identity_unmatched",
+        "team_game_identity_unmatched"
+      ]
+    }
+  ],
+  "actionablesBefore": 67,
+  "actionablesAfter": 67,
+  "promotions": 0,
+  "demotions": 0,
+  "sideChanges": 0,
+  "retainedDecisionFieldsUnchanged": true,
+  "storedSourceUnchanged": true
+}
