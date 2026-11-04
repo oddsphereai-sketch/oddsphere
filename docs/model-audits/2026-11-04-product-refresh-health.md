@@ -68,6 +68,48 @@ precedence; no migration or historical update is performed.
 
 ## Verification and remaining boundaries
 
+### Additional NFL props settlement gap
+
+The props-specific ledger check at12:47 UTC found208 pending NFL records in28
+completed games:194 missing player IDs and14 populated IDs. Null-ID games were
+consuming the18-game settlement allowance before newer usable-ID games could
+run. MLB has zero pending prop records. This finding is distinct from the
+already-settled Daily Edge record join above.
+
+Settlement r4 excludes null IDs before pagination and game budgeting; unresolved
+historical identities are counted by an exact metadata query and persisted as a
+specific refresh-health warning. The same sole writer r67 captures missing IDs
+for new tracking inserts only from one unique same-game/start/team/name roster
+record observed before T60, with provenance beside the unchanged decision.
+Tracking r41 remains insert-only; it cannot repair an existing legacy null ID.
+The model/calibration/member/decision releases and all forecast fields remain
+unchanged. No extra provider request is added; routine settlement avoids the
+unresolvable28-game historical scan and can reach the six usable-ID games.
+
+The recovery operator delegates to the same bounded settler under the existing
+`prediction_pipeline:nfl` lease. It is read-only by default. Apply requires the
+owner-approved audit's exact SHA256, restricts updates to the reviewed record
+IDs, rechecks each official outcome/identity against that audit before writing,
+and verifies every protected locked field hash before and after. It updates
+only result, actual value and settlement timestamps: even the original null
+provider IDs and complete snapshot JSON stay unchanged. Historical recovery
+is never enabled by ordinary cron calls.
+
+The actual28-request official dry run proposes171 outcomes and leaves23
+unmatched records untouched. Audit artifact:
+`/private/tmp/oddsphere-nfl-props-settlement-owner-review-20261104.json`, SHA256
+`9daef9f56184503c05478bf3af24cd064845f51da31a138fd48a05f118ee3e6d`.
+The separate current-state check matches13 of14 populated-ID records; the
+remaining player has no official stat row and is not assigned an invented zero
+or void. Historical recovery requires explicit owner approval, requested in
+the model-health chat; this document does not assert that it has run.
+
+Focused coverage includes more than a full page of null IDs before usable
+records, exact same-game/team/name identity, duplicate names, wrong teams,
+wrong games, nonfinal status, pre/post-cutoff roster timestamps, original-ID
+precedence, read-only previews, outcome-only update fields and complete legacy
+insert-only precedence.
+
 Required full model-change verification; TypeScript; focused deep-audit,
 actual mocked MLB route, refresh telemetry, NBA current-price provenance,
 production readiness, private tracking and complete locked-ladder precedence

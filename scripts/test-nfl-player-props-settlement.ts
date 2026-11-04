@@ -25,14 +25,17 @@ function clientFor(
         select() {
           let cutoff = "";
           let requireIdentity = false;
+          let approvedIds: Set<number> | null = null;
           const query = {
             eq() { return query; },
             not(field: string, operator: string, value: unknown) { assert.deepEqual([field, operator, value], ["provider_player_id", "is", null]); requireIdentity = true; return query; },
+            in(field: string, values: number[]) { assert.equal(field, "id"); approvedIds = new Set(values); return query; },
             lte(field: string, value: string) { assert.equal(field, "locked_at"); cutoff = value; onCutoff?.(value); return query; },
             order(field: string, options: { ascending: boolean }) { assert.equal(field, "locked_at"); assert.equal(options.ascending, true); return query; },
             async limit(value: number) {
               assert.equal(value, NFL_PLAYER_PROPS_SETTLEMENT_MAX_RECORDS_PER_CYCLE);
-              return { data: rows.filter((row) => row.locked_at <= cutoff && (!requireIdentity || row.provider_player_id !== null)).slice(0, value), error: null };
+              return { data: rows.filter((row) => row.locked_at <= cutoff && (!requireIdentity || row.provider_player_id !== null)
+                && (!approvedIds || approvedIds.has(row.id))).slice(0, value), error: null };
             },
           };
           return query;
@@ -114,6 +117,32 @@ async function main(): Promise<void> {
   assert.equal(recoverable.apiCalls, 1, "unresolved games cannot consume the bounded provider budget");
   assert.equal(recoverable.settled, 3, "more than one page of null identities cannot starve valid records");
   assert.ok(recoverableUpdates.every(update => update.id !== null && update.id < 10_000), "legacy unresolved identities remain untouched");
+  const historical = { ...backlog[0]!, id: 671, provider_game_id: "game", provider_player_id: null,
+    player_name: "Amon-Ra St. Brown", team: "DET" };
+  const historicalBefore = JSON.stringify(historical);
+  const historicalUpdates: Array<{ values: Record<string, unknown>; id: number | null }> = [];
+  const proposals: unknown[] = [];
+  const official = { player: { id: 7, first_name: "Amon Ra", last_name: "St Brown" },
+    team: { abbreviation: "DET" }, game: { id: "game", status_state: "final" }, receptions: 4 };
+  const recovery = (stats: unknown[], apply = false) => settleNflPlayerPropsRecords({
+    client: clientFor([historical], historicalUpdates), apiKey: "test", now: "2026-09-02T17:00:00Z",
+    recoverMissingIdentityRecordIds: [671], apply, onProposal: proposal => proposals.push(proposal),
+    fetchImpl: async () => new Response(JSON.stringify({ data: stats, meta: {} }), { status: 200 }),
+  });
+  const preview = await recovery([official]);
+  assert.equal(preview.settled, 0);
+  assert.equal(historicalUpdates.length, 0, "the review audit cannot write any result");
+  assert.deepEqual(proposals, [{ id: 671, gameId: "game", resolvedPlayerId: "7", actual: 4, result: "win" }]);
+  for (const stats of [
+    [official, { ...official, player: { ...official.player, id: 8 } }],
+    [{ ...official, team: { abbreviation: "GB" } }],
+    [{ ...official, game: { id: "other", status_state: "final" } }],
+    [{ ...official, game: { id: "game", status_state: "in_progress" } }],
+  ]) { proposals.length = 0; await recovery(stats); assert.equal(proposals.length, 0, "ambiguous/wrong-team/wrong-game/nonfinal recovery is rejected"); }
+  await recovery([official], true);
+  assert.deepEqual(Object.keys(historicalUpdates[0]!.values).sort(), ["actual_value", "result", "settled_at", "updated_at"],
+    "approved recovery can only fill outcomes; original identity, snapshot, line, price and model fields remain immutable");
+  assert.equal(JSON.stringify(historical), historicalBefore);
   console.log("NFL player-props exact-market settlement and push semantics passed.");
 }
 
