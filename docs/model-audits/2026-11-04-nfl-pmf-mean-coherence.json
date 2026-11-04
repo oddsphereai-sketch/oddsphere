@@ -3,6 +3,7 @@
   "startingBase": "955f4d15f3005c67a1b3741c56dcd6c308172f9c",
   "authorization": "Review and repair overly rigid moneyline restrictions; complete live publication without manufactured picks or bypassing real contradictions",
   "releaseIdentifiers": [
+    "football_cross_market_coherence_2026_11_04_r15_nfl_pmf_mean_diagnostic",
     "nfl_forward_evidence_writer_2026_11_04_r108_pmf_mean_direction_diagnostic",
     "nfl_forward_member_snapshot_2026_11_04_r65_pmf_mean_direction_diagnostic",
     "nfl_full_game_evidence_runtime_2026_11_04_r18_pmf_mean_direction_diagnostic",
@@ -41,7 +42,20 @@
     "syntheticPlaysAdded": 0,
     "storedCurrentRowsForOfflineComparison": 14,
     "priorHeldGameRows": 1,
-    "status": "pending exact same-input coherence replay"
+    "status": "14/14 exact stored current payloads pass stronger PMF/push checks without mutation; prior held game remains separate old LKG",
+    "currentGamesPassed": 14,
+    "allCurrentUnchanged": true,
+    "gradeCountsUnchanged": {
+      "No Play": 16,
+      "Best Angle": 8,
+      "Watchlist": 9,
+      "Lean": 9
+    },
+    "promotions": 0,
+    "demotions": 0,
+    "scoreProbabilitySideChanges": 0,
+    "evidence": "/private/tmp/nfl-pmf-coherence-current-audit-20261104.json",
+    "notClaimed": "Fresh failed ARI/SEA payload was not persisted; synthetic scenario reproduces its reported mean/direction discrepancy and actual fresh game must pass after deployment."
   },
   "lockedBaseline": {
     "records": 639,
@@ -49,6 +63,20 @@
     "path": "/private/tmp/moneyline-market-confirmation-lock-confidence-baseline-20261104.json"
   },
   "validation": {
-    "status": "in progress; not published"
+    "status": "full model gate and focused independent review passed before latest-base integration; not published",
+    "fullGate": "npm run verify:model-change passed",
+    "focused": "football coherence, prospective tracking, R64/R63 snapshot and fixture, unchanged-full-law ML promotion passed",
+    "TypeScript": "passed --noEmit --incremental false",
+    "ESLint": "0 errors, 7 warnings in existing declarations",
+    "independentReview": [
+      "A implemented exact PMF side/probability/refund verification and replayed14storedproductiontuples",
+      "B independently reproduced skew acceptance and wrong probability/push/side/mean rejection; verified tracking legacy precedence",
+      "C added and tested exact R64/R63 snapshot and locked-payload compatibility",
+      "Root reviewed shared policy boundaries, release tuple, source/reader publication and same-input grade preservation"
+    ],
+    "providerRequestsForOfflineChecks": 0,
+    "databaseWritesForOfflineChecks": 0,
+    "performanceClaim": false,
+    "optionalLocalPostgres": "not run: MARKET_BRAIN_POSTGRES_URL unset; hosted required proof before merge"
   }
 }

@@ -26,6 +26,7 @@ not a claim of increased accuracy or permission to override genuine contradictio
 
 Current exact runtime identifiers:
 
+- `football_cross_market_coherence_2026_11_04_r15_nfl_pmf_mean_diagnostic`
 - `nfl_forward_evidence_writer_2026_11_04_r108_pmf_mean_direction_diagnostic`
 - `nfl_forward_member_snapshot_2026_11_04_r65_pmf_mean_direction_diagnostic`
 - `nfl_full_game_evidence_runtime_2026_11_04_r18_pmf_mean_direction_diagnostic`

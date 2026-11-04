@@ -414,7 +414,7 @@ assert.equal(falsifiedLagT60.lockedAt, null);
 assert.ok(falsifiedLagT60.health.blockingReasons.includes("t60_capture_late"));
 
 const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
-assert.match(writer, /nfl_forward_evidence_writer_2026_11_04_r107_unchanged_ml_confirmation/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_11_04_r108_pmf_mean_direction_diagnostic/);
 assert.match(writer, /availabilityArbitrationShadow/);
 assert.match(writer, /\.\.\.shadowMoneyline\.health\.blockingReasons/);
 assert.equal((writer.match(/readNflPlayerPropsCurrentSeasonState\(/g) ?? []).length, 1);
