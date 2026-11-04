@@ -18,6 +18,9 @@ response after split availability is evaluated on that causal leg even when
 the earlier path was volatile. A flat hold can supply contextual resistance
 but has zero numerical authority. Unresolved, opposed, stale, future, partial,
 bought-back and reversed causal evidence fails closed.
+When correlated Moneyline and puck-line episodes agree, their persisted causal
+post-availability move clocks—not earlier global path moves—select the sole
+side-axis author.
 
 Qualified Moneyline, exact puck-line and exact main-Total innovations are
 reconciled once in one product-Poisson information projection. One final joint
@@ -25,8 +28,9 @@ distribution owns scores, sides and probabilities; exact-price grades consume
 those final probabilities once. Infeasible or nonconvergent constraints return
 the exact independent distribution. The sole existing writer freezes a
 hash-bound, identity-bound, size-bounded three-market receipt. It records every
-professional split as selected or rejected, while the locked member display
-renders only the exact fresh source that authorized pressure. Locked cards
+professional split as selected or rejected. The locked member display separately
+retains fresh neutral or conflicting evidence while excluding invalid, future or
+stale rows; only selected evidence can authorize a model consequence. Locked cards
 verify and render the receipt before mutable dependencies; legacy locks retain
 their exact stored tuples and are never rewritten.
 

@@ -6779,6 +6779,9 @@ causal leg even after earlier volatility. Flat holds remain contextual
 resistance with zero numerical authority. Opposed or reversed causal paths
 fail closed, one book authors amplitude, and no current ML/Total/spread level
 is blended or substituted into the forecast.
+Correlated Moneyline and puck-line episodes use their selected causal response
+clocks to choose one side-axis author; an earlier pre-pressure path move cannot
+win authority.
 
 Qualified ML, puck-line and main-Total innovations enter one information
 projection over one independent product-Poisson score distribution. That one
@@ -6789,8 +6792,9 @@ Every new writer tuple freezes a canonical hash-bound and exact-identity-bound
 evidence receipt with quotes, trails, split clocks, selected/rejected
 professional sources, considered paths, rejection reasons, before/after
 decisions and final scores. Locked cards verify and render it before mutable
-data reads and display only the fresh professional source that actually
-authorized pressure. Legacy r23-r25 locks remain exact and are never rewritten.
+data reads. Display priority preserves fresh neutral/conflicting sharp evidence
+while excluding invalid, future or stale rows; numerical authority remains a
+separate frozen selection. Legacy r23-r25 locks remain exact and are never rewritten.
 
 The release also permits incomplete same-day/future MoneyPuck file publication
 without discarding all prior paired games. Only exact earlier pairs replay and
