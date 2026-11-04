@@ -6,10 +6,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { supabase } from "../../lib/db/supabase";
 import { acquireCronJobLease, releaseCronJobLease } from "../../lib/cron/leases";
-import { settleNflPlayerPropsRecords, type NflPropsSettlementProposal } from "../../lib/services/football/nflPlayerPropsSettlement";
+import { NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, settleNflPlayerPropsRecords, type NflPropsSettlementProposal } from "../../lib/services/football/nflPlayerPropsSettlement";
 
 type Row = Record<string, unknown>;
-type Audit = { kind: "nfl_props_settlement_identity_recovery_v1"; createdAt: string; readOnly: true;
+type Audit = { kind: "nfl_props_settlement_identity_recovery_v2"; settlementRelease: typeof NFL_PLAYER_PROPS_SETTLEMENT_RELEASE; createdAt: string; readOnly: true;
   proposals: NflPropsSettlementProposal[]; unmatchedRecordIds: number[]; protectedHashes: Record<string, string> };
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const protectedHash = (row: Row) => digest(JSON.stringify(Object.fromEntries(Object.entries(row)
@@ -42,11 +42,15 @@ async function main() {
   if (!auditPath || !process.env.BALLDONTLIE_API_KEY) throw new Error("--audit and configured provider credentials are required.");
   const apply = process.argv.includes("--apply");
   if (!apply) {
-    const rows = await loadRows();
+    const selected = flag("record-ids");
+    const ids = selected?.split(",").map(Number);
+    if (ids && (ids.length > 1_000 || ids.some(id => !Number.isSafeInteger(id) || id <= 0) || new Set(ids).size !== ids.length)) throw new Error("Invalid bounded recovery record IDs.");
+    const rows = await loadRows(ids);
+    if (ids && (rows.length !== ids.length || rows.some(row => row.result !== "pending"))) throw new Error("Selected recovery cohort is incomplete or no longer pending.");
     const proposals: NflPropsSettlementProposal[] = [];
     const outcomes = await run(rows, false, proposal => proposals.push(proposal));
     const matched = new Set(proposals.map(proposal => proposal.id));
-    const audit: Audit = { kind: "nfl_props_settlement_identity_recovery_v1", createdAt: new Date().toISOString(), readOnly: true,
+    const audit: Audit = { kind: "nfl_props_settlement_identity_recovery_v2", settlementRelease: NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, createdAt: new Date().toISOString(), readOnly: true,
       proposals, unmatchedRecordIds: rows.filter(row => !matched.has(Number(row.id))).map(row => Number(row.id)),
       protectedHashes: Object.fromEntries(rows.map(row => [String(row.id), protectedHash(row)])) };
     const json = `${JSON.stringify(audit, null, 2)}\n`;
@@ -58,7 +62,7 @@ async function main() {
   const json = readFileSync(auditPath, "utf8");
   if (!flag("approved-sha") || digest(json) !== flag("approved-sha")) throw new Error("Owner-reviewed audit digest is required and must match exactly.");
   const audit = JSON.parse(json) as Audit;
-  if (audit.kind !== "nfl_props_settlement_identity_recovery_v1" || audit.readOnly !== true
+  if (audit.kind !== "nfl_props_settlement_identity_recovery_v2" || audit.settlementRelease !== NFL_PLAYER_PROPS_SETTLEMENT_RELEASE || audit.readOnly !== true
     || !Array.isArray(audit.proposals) || audit.proposals.length === 0 || audit.proposals.length > 1_000) throw new Error("Invalid approved audit.");
   const approved = new Map(audit.proposals.map(proposal => [proposal.id, proposal]));
   if (approved.size !== audit.proposals.length) throw new Error("Duplicate approved record.");
@@ -68,7 +72,7 @@ async function main() {
   try {
     const rows = await loadRows([...approved.keys()]);
     if (rows.length !== approved.size) throw new Error("Approved cohort changed or is incomplete.");
-    for (const row of rows) if (protectedHash(row) !== audit.protectedHashes[String(row.id)] || row.provider_player_id !== null) {
+    for (const row of rows) if (protectedHash(row) !== audit.protectedHashes[String(row.id)]) {
       throw new Error(`Locked evidence changed for ${row.id}; obtain a fresh audit before continuing.`);
     }
     const proposals: NflPropsSettlementProposal[] = [];
@@ -79,6 +83,10 @@ async function main() {
     });
     const after = await loadRows([...approved.keys()]);
     if (after.some(row => protectedHash(row) !== audit.protectedHashes[String(row.id)])) throw new Error("Protected locked fields changed during recovery.");
+    if (after.some(row => {
+      const expected = approved.get(Number(row.id))!;
+      return row.result !== expected.result || Number(row.actual_value) !== expected.actual;
+    })) throw new Error("A recovered outcome differs from the approved official result.");
     const resultPath = `${auditPath}.applied-${runId}.json`;
     writeFileSync(resultPath, `${JSON.stringify({ at: new Date().toISOString(), approvedAuditSha256: digest(json),
       proposals, outcomes, protectedLockedFieldsUnchanged: true,

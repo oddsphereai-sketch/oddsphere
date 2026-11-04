@@ -1,5 +1,27 @@
 # Current production model releases and qualified research candidates
 
+## NFL player-props verified participation settlement — November 4
+
+Sole writer /tracking /settlement advance to
+`nfl_player_props_writer_2026_11_04_r68_verified_participation` /
+`nfl_player_props_tracking_2026_11_04_r42_suffix_roster_identity` /
+`nfl_player_props_settlement_2026_11_04_r5_verified_participation`.
+These supersede r67/r41/r4 below for future operational cycles only.
+Conventional trailing name suffixes may differ between quote and roster feeds,
+but recovery still requires a unique exact-game/team identity. Positive official
+final-game snap counts can establish zero-stat participation when the complete
+exact-game box-score response omits the player. Missing, zero, malformed,
+wrong-game/team or nonfinal participation never becomes an invented zero or void.
+Snap reads occur only for otherwise unresolved supported markets, at most two
+100-row pages per game and eighteen games per cycle. The declared worst-case
+incremental request ceiling is132; ordinary quote collection/cadence is unchanged.
+Historical missing identities remain excluded from ordinary cron settlement.
+Owner-approved recovery is bounded by exact IDs, release, audit SHA and protected
+field hashes. Even original null IDs and snapshot JSON remain unchanged.
+Forecast/model/calibration/decision/member semantics are unchanged; promotions,
+demotions, side changes and actionable-board impact are all zero.
+Evidence: `docs/model-audits/2026-11-04-nfl-remaining-props-participation.md`.
+
 ## NFL player-props settlement identity continuity — November 4
 
 Sole writer /tracking capture /settlement are
