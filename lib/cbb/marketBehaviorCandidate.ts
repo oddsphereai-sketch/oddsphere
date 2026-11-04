@@ -5,7 +5,7 @@ import {readCbbMarketBehaviorPath,expandCbbMarketBehaviorPathStream,cbbPublished
 import {cbbEvidenceAvailableAt,cbbEvidenceProvablyBefore,cbbEvidenceReceiptBounds} from "./marketReceiptTime";
 import { gradeCbbProvisional } from "./provisionalGradePolicy";
 import {gradeCbbReceivedMarket} from "./marketBehaviorGrade";
-import { CBB_CURRENT_SCORE_RELEASE } from "./currentScoreRuntime";
+import { CBB_CURRENT_SCORE_RELEASE,CBB_PREVIOUS_CURRENT_SCORE_RELEASE } from "./currentScoreRuntime";
 import type { CbbForecast,CbbMarket,CbbQuote,CbbCanonicalReceipt } from "./types";
 import type {CbbDecisionSplitContext} from "./decisionSplitContext";
 import {interpretCbbRelativeMarketMove,type CbbRelativeMarketInterpretation} from "./marketEpisodeInterpretation";
@@ -17,17 +17,20 @@ export const CBB_PRIOR_MARKET_BEHAVIOR_MODEL_RELEASE="cbb_candidate_2026_11_03_r
 export const CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE="cbb_candidate_2026_11_03_r10_observed_episode_authority" as const;
 export const CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_03_r12_contextual_episode_decisions" as const;
 export const CBB_EPISODE_MARKET_BEHAVIOR_RECEIPT_RELEASE="cbb_market_behavior_2026_11_03_r6_observed_episode_decisions" as const;
-export const CBB_MARKET_BEHAVIOR_MODEL_RELEASE="cbb_candidate_2026_11_03_r11_retail_response_receipts" as const;
-export const CBB_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_03_r13_retail_response_receipts" as const;
+export const CBB_RETAIL_MARKET_BEHAVIOR_MODEL_RELEASE="cbb_candidate_2026_11_03_r11_retail_response_receipts" as const;
+export const CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_03_r13_retail_response_receipts" as const;
+export const CBB_RETAIL_MARKET_BEHAVIOR_RECEIPT_RELEASE="cbb_market_behavior_2026_11_03_r7_retail_response_receipts" as const;
+export const CBB_MARKET_BEHAVIOR_MODEL_RELEASE="cbb_candidate_2026_11_03_r12_aligned_native_reactions" as const;
+export const CBB_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_03_r14_aligned_native_reactions" as const;
 export const CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_03_r8_new_orleans_prior_input" as const;
 export const CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_03_r7_verified_action_or_professional_value_best" as const;
 export const CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_03_r6_exact_decision_gate_reasons" as const;
 export const CBB_OLDER_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_02_r5_resolved_price_not_double_penalized" as const;
-export const CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE="cbb_market_behavior_2026_11_03_r7_retail_response_receipts" as const;
+export const CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE="cbb_market_behavior_2026_11_03_r8_aligned_native_reactions" as const;
 const priority=["circa","pinnacle","bookmaker"];
 export const cbbBookFamily=(book:string)=>["pinnacle","ps3838"].includes(book.toLowerCase())?"pinnacle":book.toLowerCase();
 type AttestedQuote=CbbQuote&{orientationVerified?:boolean};
-export type CbbMarketAnchors={release:typeof CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_EPISODE_MARKET_BEHAVIOR_RECEIPT_RELEASE|"cbb_market_behavior_2026_11_03_r4_new_orleans_prior_input"|"cbb_market_behavior_2026_11_03_r3_direction_and_magnitude"|"cbb_market_behavior_2026_11_02_r2_received_source_path"|"cbb_market_behavior_2026_11_02_r1_same_book_economics";gameId:number;startsAt:string;
+export type CbbMarketAnchors={release:typeof CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_RETAIL_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_EPISODE_MARKET_BEHAVIOR_RECEIPT_RELEASE|"cbb_market_behavior_2026_11_03_r4_new_orleans_prior_input"|"cbb_market_behavior_2026_11_03_r3_direction_and_magnitude"|"cbb_market_behavior_2026_11_02_r2_received_source_path"|"cbb_market_behavior_2026_11_02_r1_same_book_economics";gameId:number;startsAt:string;
   independentRelease:string;independentInputKey:string;capturedAt:string;quotes:Array<CbbQuote&{anchorCapturedAt?:string}>;quarantinedKeys?:string[]};
 export type CbbBehaviorFlow={provider:"owls";gameId:number;sourceBook:string;market:CbbMarket;line:number|null;
   firstMoney:number;secondMoney:number;firstTickets:number;secondTickets:number;
@@ -94,7 +97,7 @@ function mlMargin(base:CbbForecast,anchor:CbbQuote,current:CbbQuote):number{
 const emptyAxis=(reason:string):AxisRead=>({status:"unavailable",delta:0,sourceBook:null,sourceMarket:null,reason,sourceDirection:null,directionalEvidence:"unavailable"});
 /** The existing CBB single-book Spread owner is retained. No source-name
  * amplitude priority, averaging, or smaller-effect fallback resolves competition. */
-function chooseAxis(episodes:CbbBehaviorEpisode[],axis:"margin"|"total",base:CbbForecast,path:ReturnType<typeof readCbbMarketBehaviorPath>):AxisRead{
+function chooseAxis(episodes:CbbBehaviorEpisode[],axis:"margin"|"total",base:CbbForecast,path:ReturnType<typeof readCbbMarketBehaviorPath>,pressure:readonly CbbPressureDecision[]):AxisRead{
   const effect=(selected:CbbBehaviorEpisode):Pick<CbbRelativeMarketInterpretation,"kind"|"scoreDelta">=>{
     if(selected.market!=="moneyline"){
       const center=(q:CbbQuote)=>cbbExactMarketCenter(base,q,fair(q));
@@ -129,7 +132,14 @@ function chooseAxis(episodes:CbbBehaviorEpisode[],axis:"margin"|"total",base:Cbb
       beforeSourceAt:Date.parse(first.before.providerObservedAt),afterSourceAt:Date.parse(first.after.providerObservedAt),
       beforeEarliest:cbbEvidenceReceiptBounds(first.before).earliest,beforeAvailableBy:cbbEvidenceAvailableAt(first.before),afterAvailableBy:cbbEvidenceAvailableAt(first.after),
       currentSourceAt:Date.parse(candidate.current.providerObservedAt),currentAvailableBy:cbbEvidenceAvailableAt(candidate.current),
+      repricedSourceAt:moving.length?Date.parse(moving.at(-1)!.after.providerObservedAt):null,
       currentDirection:stream.recentDirection,resolved:["ongoing","resumed","reversed"].includes(stream.currentResolution)&&stream.recentDirection===candidate.direction,
+      qualifiedContrarianHold:pressure.some(p=>p.book===candidate.book&&p.market===candidate.market&&
+        p.sourceClass==="professional_adjacent_named_book"&&p.resolution==="held"&&p.moneyDirection===-candidate.direction&&
+        p.current&&tuple(p.current)===tuple(candidate.current)&&Date.parse(p.current.providerObservedAt)===Date.parse(candidate.current.providerObservedAt)),
+      qualifiedNetResistance:pressure.some(p=>p.book===candidate.book&&p.market===candidate.market&&
+        p.sourceClass==="professional_adjacent_named_book"&&p.resolution==="held"&&p.moneyDirection===candidate.direction&&
+        p.current&&tuple(p.current)===tuple(candidate.current)&&Date.parse(p.current.providerObservedAt)===Date.parse(candidate.current.providerObservedAt)),
       qualifiedReaction:stream.boundFlows.some(flow=>["ongoing","resumed","reversed"].includes(flow.currentResolution)&&
         flow.currentUnresolvedDirection===candidate.direction&&flow.flowDirection===candidate.direction)}];
   });
@@ -138,6 +148,11 @@ function chooseAxis(episodes:CbbBehaviorEpisode[],axis:"margin"|"total",base:Cbb
     const opposed=new Set(candidates.map(candidate=>candidate.direction)).size>1;
     return {...emptyAxis(authority?.reason??"economic_onset_unavailable"),status:opposed?"conflicting":"unresolved",
       sourceDirection:opposed?null:candidates[0].direction,directionalEvidence:opposed?"opposed":"aligned",authority,crossMarketDisagreement};
+  }
+  if(authority?.status==="retained"){
+    const source=candidates.find(candidate=>`${candidate.book}:${candidate.market}`===authority.selectedId);
+    return {status:"neutral",delta:0,sourceBook:source?.book??null,sourceMarket:source?.market??null,reason:"current_native_pressure_resists_old_net_move",
+      sourceDirection:candidates[0].direction,directionalEvidence:"aligned",authority,crossMarketDisagreement};
   }
   const selected=candidates.find(candidate=>`${candidate.book}:${candidate.market}`===authority?.selectedId);
   if(selected){
@@ -207,7 +222,7 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
   historyQuotes?:CbbQuote[];historyFlows?:CbbBehaviorFlow[];previousPath?:CbbMarketBehaviorPathTape|null;quarantinedSources?:CbbSourcePathQuarantine[];
   historyCompleteness?:{price:boolean;split:boolean}}){
   const base=args.independent,at=Date.parse(base.asOf),start=Date.parse(args.startsAt);
-  if(base.release!==CBB_CURRENT_SCORE_RELEASE||!args.independentInputKey||![at,start].every(Number.isFinite)||at>=start-3600_000)
+  if(![CBB_CURRENT_SCORE_RELEASE,CBB_PREVIOUS_CURRENT_SCORE_RELEASE].includes(base.release as typeof CBB_CURRENT_SCORE_RELEASE)||!args.independentInputKey||![at,start].every(Number.isFinite)||at>=start-3600_000)
     throw new Error("CBB market behavior requires current independent release and an open prelock fixture");
   if(args.targets.some(q=>q.gameId!==base.gameId))throw new Error("CBB market target identity mismatch");
   if(args.splitContext?.some(row=>row.gameId!==base.gameId||!Number.isFinite(Date.parse(row.availableBy))||Date.parse(row.availableBy)>at))
@@ -230,8 +245,8 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
       cbbBookFamily(q.sportsbook)===cbbBookFamily(stream.book)&&q.market===stream.market))??[];
   const current=latestQuotes([...retainedQuotes,...(args.historyQuotes??[]),...args.currentQuotes],base,at,excluded);
   const previous=args.anchors;
-  const reusable=previous&&[CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_RECEIPT_RELEASE,"cbb_market_behavior_2026_11_03_r4_new_orleans_prior_input","cbb_market_behavior_2026_11_03_r3_direction_and_magnitude","cbb_market_behavior_2026_11_02_r2_received_source_path","cbb_market_behavior_2026_11_02_r1_same_book_economics"].includes(previous.release)&&previous.gameId===base.gameId&&
-    previous.startsAt===args.startsAt&&previous.independentRelease===base.release&&
+  const reusable=previous&&[CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_RECEIPT_RELEASE,"cbb_market_behavior_2026_11_03_r4_new_orleans_prior_input","cbb_market_behavior_2026_11_03_r3_direction_and_magnitude","cbb_market_behavior_2026_11_02_r2_received_source_path","cbb_market_behavior_2026_11_02_r1_same_book_economics"].includes(previous.release)&&previous.gameId===base.gameId&&
+    previous.startsAt===args.startsAt&&[base.release,CBB_PREVIOUS_CURRENT_SCORE_RELEASE].includes(previous.independentRelease)&&
     Number.isFinite(Date.parse(previous.capturedAt))&&Date.parse(previous.capturedAt)<=at;
   const originals=reusable?previous.quotes.filter(q=>validQuote(q,base,Date.parse(q.anchorCapturedAt??previous.capturedAt),new Set(),false)):[];
   // A newly observed source starts at its earliest genuine available native
@@ -295,7 +310,10 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
   // A contradictory original receipt disqualifies the source from ALL
   // forecast authority, including the current-level winner arbitration.
   const winnerArbitration=adjudicateWinner(base,current.filter(q=>!quarantined.has(`${cbbBookFamily(q.sportsbook)}:${q.market}`)&&!withheldCurrent.has(`${cbbBookFamily(q.sportsbook)}:${q.market}`)));
-  let margin=chooseAxis(episodes,"margin",base,path),total=chooseAxis(episodes,"total",base,path);
+  const pressureDecisions=readCbbSourcePressure({forecast:base,rows:args.splitContext??[],
+    quotes:[...anchors.quotes,...retainedQuotes,...(args.historyQuotes??[]),...(args.contextQuotes??[]),...args.currentQuotes],
+    quarantinedKeys:[...quarantined,...withheldCurrent,...(args.quarantinedSources??[]).map(q=>`${q.book}:${q.market}`)]});
+  let margin=chooseAxis(episodes,"margin",base,path,pressureDecisions),total=chooseAxis(episodes,"total",base,path,pressureDecisions);
   let nextMargin=base.margin+margin.delta,nextTotal=base.total+total.delta;
   if(!Number.isFinite(nextMargin)||!Number.isFinite(nextTotal)||nextTotal<=Math.abs(nextMargin)){
     margin=emptyAxis("incoherent_score_consequence");total=emptyAxis("incoherent_score_consequence");nextMargin=base.margin;nextTotal=base.total;
@@ -313,9 +331,7 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
     inputRevisionSinceAnchor:anchors.independentInputKey===args.independentInputKey?"same":"changed",sourceProblems,
     excludedFamilies,anchors,episodes,pathTape:path.tape,pathPosture,splitContext:structuredClone(args.splitContext??[]),
     withheldCurrentSources:structuredClone(args.currentSourceProblems??[]),
-    pressureDecisions:readCbbSourcePressure({forecast:base,rows:args.splitContext??[],
-      quotes:[...anchors.quotes,...retainedQuotes,...(args.historyQuotes??[]),...(args.contextQuotes??[]),...args.currentQuotes],
-      quarantinedKeys:[...quarantined,...withheldCurrent,...(args.quarantinedSources??[]).map(q=>`${q.book}:${q.market}`)]}),
+    pressureDecisions,
     historyCompleteness:args.historyCompleteness?{...args.historyCompleteness}:{price:true,split:true},
     historyMode:args.historyCompleteness?"canonical_history":"direct_stream",
     numericPathAssumption:"independent_relative_original_to_current_response",margin,total,winnerArbitration,independentScore:score(base),finalScore:score(forecast)};

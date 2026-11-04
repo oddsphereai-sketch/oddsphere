@@ -1,5 +1,31 @@
 # Model change safety protocol
 
+## Owner-directed aligned CBB decisions and prospective New Orleans repair — November 3
+
+After the live R11/R13 repair, the owner explicitly instructed: "Fix that issue
+and then spot check agian and fixx the rest of the issues" and requested the
+LSU–New Orleans missing-input repair "just for the futurre." This authorizes
+the same scoped live functional repair and forward evaluation: market R12,
+grade R14, receipt R8, board R15, publisher R24, tracking R12 and adapter R13,
+with the source-verified independent R4 prior and venue/training identity repair.
+
+Aligned unequal source movements no longer require first-mover proof when a
+verified own-source response or genuine latest observed economic repricing
+distinguishes the interpretation. A hold against opposing money may select an
+actual native episode; a current hold resisting an old net move can explicitly
+retain the forecast when no resolved new repricing owns a correction. No point
+bonus, weighted blend, minimum-move cap or refreshed-quote ordering is added.
+
+The New Orleans input repair uses123 retained source-verified historical venue
+flags and the unchanged fitter/parameters. It is prospective: existing stored
+locks, tracking fields, old independent R3 inputs and R11/R13 receipts remain
+exact. Original R3 raw market anchors survive the new prior. The sole existing
+writer and T60 admission rule prohibit late or retrospective game insertion.
+No stake/provider cadence change or second writer is authorized. Full/focused
+functional checks, paired promotion/demotion coverage, actual whole-board
+counts, independent review, protected fresh-main publication and live proof
+remain mandatory. Evidence: `docs/model-audits/2026-11-03-cbb-aligned-native-reactions.md`.
+
 ## CBB live spot-check receipt correction — November 3
 
 The owner's explicit instruction to deploy the CBB repair, spot-check real games

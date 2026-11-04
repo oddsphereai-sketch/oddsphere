@@ -2,10 +2,12 @@
 
 ## CBB source-episode decision release — November 3
 
-This repair keeps independent R3 and its score artifact. The sole CBB path uses
-market model `cbb_candidate_2026_11_03_r11_retail_response_receipts`, grade
-`cbb_2026_11_03_r13_retail_response_receipts`, receipt R7, path R4, board R14,
-publisher R23, tracking R11 and member adapter R12. Canonical history R2 reads
+The sole independent runtime now uses
+`cbb_candidate_2026_11_03_r4_verified_new_orleans_venue_prior` and the verified
+candidate-r4 artifact. The sole market path uses
+`cbb_candidate_2026_11_03_r12_aligned_native_reactions`, grade
+`cbb_2026_11_03_r14_aligned_native_reactions`, receipt R8, path R4, board R15,
+publisher R24, tracking R12 and member adapter R13. Canonical history R2 reads
 retail pressure context in a separate bounded family; canonical evidence R4
 never promotes those quotes into professional numeric experts. Reader evidence
 R11 preserves source/DB availability before decision time.
@@ -22,9 +24,13 @@ locks and original anchors retain their exact semantics. Evidence:
 The NBA/NFL episode structure is adapted to the CBB residual law. Movements can
 confirm without moving a score, correct it, or cross it without a point cap.
 One physical source authors the consequence; followers do not add amplitude.
-Unequal aligned moves are resolved by demonstrated observation order or a
-unique qualified own-source response, not a source average or book-name rank.
-Ambiguous overlapping windows remain explicit. Spread owns the margin under
+Unequal aligned moves can be resolved by a verified contrarian hold or genuine
+latest observed repricing, without requiring first-mover proof. Current held
+pressure resisting old aligned net movement is an explicit retention read;
+it is not missing-authority silence. Refreshed unchanged prices do not count
+as repricing, and indistinguishable evidence remains honestly uncertain.
+There is no source average, minimum-effect fallback or book-name amplitude rank.
+Spread owns the margin under
 the fixed residual law; moving ML with a verified flat Spread is shape/confidence
 context, while genuinely absent Spread permits the priced ML fallback.
 
@@ -40,8 +46,12 @@ contradictory original sources retain persistent quarantine.
 Scores and all market probabilities/EVs/grades use the one final law. Earlier
 locks retain exact stored payloads and release precedence. There is no new
 provider request, collector, writer, cadence, fitted combination coefficient,
-absolute-level replacement or stake change. The separate New Orleans prior
-candidate remains offline; its priced input hold is a preexisting limitation.
+absolute-level replacement or stake change. The owner explicitly authorized the
+prospective New Orleans input repair:123 exact BDL/ESPN venue matches restore
+its missing historical rating. Coefficients/correction/uncertainty are unchanged;
+the sequential refit can affect other opponents and is separately counted.
+Older R3 independent and R10/R11 market locks retain exact precedence. No
+existing lock is reconstructed, and no first forecast is admitted after T60.
 Static independent/current-level disagreement remains explicit evidence.
 
 The owner directed functional deployment with forward outcome evaluation.
@@ -49,6 +59,8 @@ Publication still requires the focused/full checks, independent review,
 fresh-main protected PR and actual live writer/lock/reader proof. See
 `docs/model-audits/2026-11-03-cbb-independent-market-reader-repair.md` for the
 exact frozen-input impact and remaining boundaries; this is not a win-rate claim.
+The current follow-up and exact whole-board consequences are recorded in
+`docs/model-audits/2026-11-03-cbb-aligned-native-reactions.md`.
 
 ## UCL public-split lock capture — November 3
 

@@ -6,6 +6,7 @@ import {pairCbbCanonicalMarketEvidence} from "../../lib/services/cbb/cbbCanonica
 import {cbbCanonicalBehaviorInputs} from "../../lib/services/cbb/cbbCanonicalBehaviorInputs";
 import {readCbbCapturedPublicSplits} from "../../lib/services/cbb/cbbReaderMarketEvidence";
 import {cbbDecisionSplitContext} from "../../lib/cbb/decisionSplitContext";
+import {readCbbCurrentTraining} from "../../lib/services/cbb/cbbCurrentSeasonTraining";
 import type {cbbCurrentSplitEvidence} from "../../lib/cbb/owlsSplitEvidence";
 import type {CbbGame} from "../../lib/cbb/types";
 async function main(){
@@ -14,16 +15,20 @@ async function main(){
  const seed=JSON.parse(fs.readFileSync(seedPath,"utf8"));
  const ids:number[]=[...new Set<number>(seed.rows.map((r:{payload:{snapshot:{gameId:number}}})=>r.payload.snapshot.gameId))];
  if(!ids.length||ids.length>100||ids.some(id=>!Number.isSafeInteger(id)))throw new Error("Invalid bounded fixture seed");
- const [snapshots,health]=await Promise.all([
-  supabase.from("lab_response_snapshots").select("snapshot_key,payload,generated_at,updated_at").in("snapshot_key",ids.map(id=>`cbb::member-game::${id}`)),
+ const allOpen=process.argv.includes("--all-open");
+ const [snapshots,health,training]=await Promise.all([
+  allOpen?supabase.from("lab_response_snapshots").select("snapshot_key,payload,generated_at,updated_at").like("snapshot_key","cbb::member-game::%").limit(1000):
+   supabase.from("lab_response_snapshots").select("snapshot_key,payload,generated_at,updated_at").in("snapshot_key",ids.map(id=>`cbb::member-game::${id}`)),
   supabase.from("data_refresh_log").select("refresh_started_at,refresh_completed_at,refresh_status,error_message,records_updated,api_calls_made")
    .eq("sport","cbb").eq("data_source","cbb_daily_refresh").order("refresh_started_at",{ascending:false}).limit(2),
+  readCbbCurrentTraining(2026,supabase),
  ]);
  if(snapshots.error||health.error)throw new Error("Stored CBB snapshot/health audit failed");
- const rows=snapshots.data??[],open=rows.filter(row=>!row.payload.snapshot.lockedAt);
+ if(allOpen&&(snapshots.data?.length??0)>=1000)throw new Error("Full open-board row bound reached");
+ const rows=(snapshots.data??[]).filter(row=>!allOpen||!row.payload.snapshot.lockedAt),open=rows.filter(row=>!row.payload.snapshot.lockedAt);
  const cutoff=open.map(row=>row.payload.snapshot.board.asOf).sort().at(-1);
  const games:CbbGame[]=open.map(row=>{
-  const p=row.payload,s=p.snapshot,b=s.board,i=b.marketContext.retainedLevelInput?.independent,m=p.memberGame;
+  const p=row.payload,s=p.snapshot,b=s.board,i=b.marketContext.verifiedMarketRead?.forecastIdentity??b.marketContext.retainedLevelInput?.independent,m=p.memberGame;
   if(!i)throw new Error("Missing retained original independent identity");
   const team=(id:number,college:string|null,full_name:string,abbreviation:string)=>({id,college,full_name,name:full_name,abbreviation,conference_id:null});
   return {id:s.gameId,date:s.startsAt,season:2026,status:"pre",period:0,home_score:0,away_score:0,
@@ -49,7 +54,7 @@ async function main(){
     completeness:{price:history.price.complete,split:history.split.complete}};
   }
  }
- const out={capturedAt:new Date().toISOString(),scope:"stored_current_inputs_only_no_prediction_or_database_write",rows,contextByGame,
+ const out={capturedAt:new Date().toISOString(),scope:"stored_current_inputs_only_no_prediction_or_database_write",rows,contextByGame,training,
   health:health.data,coverage,publicRows,providerRequests:0,databaseWrites:0,
   retailNetworkScope:"No new network request; only native stored split contexts and bounded public capture are joined"};
  fs.writeFileSync(outputPath,JSON.stringify(out),{flag:"wx",mode:0o600});
