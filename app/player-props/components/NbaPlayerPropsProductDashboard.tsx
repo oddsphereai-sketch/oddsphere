@@ -238,14 +238,6 @@ function SameBookMovement({ row }: { row: Row }) {
   const supportsPick = movementSupportsSide(row);
   const directionTone = supportsPick ? "text-emerald-300" : "text-amber-300";
   const currentTone = supportsPick ? "emerald" : "amber";
-  const lineMoved = movement.openingLine !== movement.currentLine || (movement.priorLine !== null && movement.priorLine !== movement.openingLine);
-  const values = lineMoved
-    ? [movement.openingLine, movement.priorLine, movement.currentLine]
-    : [impliedProbability(movement.openingPrice) * 100, movement.priorPrice === null ? null : impliedProbability(movement.priorPrice) * 100, impliedProbability(movement.currentPrice) * 100];
-  const points = values.flatMap((value, index) => value === null ? [] : [{ x: index * 160 + 40, value }]);
-  const low = lineMoved ? Math.min(...points.map((point) => point.value)) - 1 : 0;
-  const high = lineMoved ? Math.max(...points.map((point) => point.value)) + 1 : 100;
-  const coordinates = points.map((point) => `${point.x},${82 - (point.value - low) / (high - low) * 54}`).join(" ");
   return <section className="mt-4 rounded-lg border border-white/[0.09] bg-black/25 p-3" aria-label={`${book(movement.sportsbook)} same-book market movement`}>
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div>
@@ -253,14 +245,6 @@ function SameBookMovement({ row }: { row: Row }) {
         <p className="mt-0.5 text-[7px] font-semibold text-gray-600">{book(movement.sportsbook)} · {capitalize(row.side)} {row.line}</p>
       </div>
       <span className={`text-[7px] font-black uppercase tracking-wider ${hasTrail ? directionTone : "text-gray-500"}`}>{hasTrail ? movementLabel(row) : "Current quote"}</span>
-    </div>
-    <div className="mt-3 rounded-lg border border-white/[0.07] bg-black/20 px-3 pt-2">
-      <p className="text-[9px] text-gray-500">{lineMoved ? "Prop line" : "Book implied chance at the same line"} · recorded states</p>
-      <svg viewBox="0 0 400 100" role="img" aria-label={`${book(movement.sportsbook)} ${lineMoved ? "line" : "implied chance"} at opening, prior when available, and current quote`} className="h-20 w-full">
-        <line x1="40" x2="360" y1="82" y2="82" stroke="#374151" strokeDasharray="3 5" />
-        <polyline points={coordinates} fill="none" stroke="#7dd3fc" strokeWidth="2.5" />
-        {points.map((point) => <circle key={point.x} cx={point.x} cy={82 - (point.value - low) / (high - low) * 54} r="4" fill="#7dd3fc" />)}
-      </svg>
     </div>
     <div className="mt-3 overflow-hidden rounded-lg border border-white/[0.07] bg-black/25">
       <div className="grid grid-cols-[3.25rem_repeat(3,minmax(0,1fr))] border-b border-white/[0.06] bg-white/[0.025]">
@@ -270,7 +254,6 @@ function SameBookMovement({ row }: { row: Row }) {
       <PropMovementTrack label="Line" values={[movement.openingLine, movement.priorLine, movement.currentLine]} currentTone={currentTone} />
       <PropMovementTrack label="Odds" values={[movement.openingPrice, movement.priorPrice, movement.currentPrice]} formatValue={price} currentTone={currentTone} />
     </div>
-    <p className="mt-2 text-[9px] leading-relaxed text-gray-600">Recorded opening, prior, and current states only; the line does not imply intervening quotes.</p>
     {!hasTrail ? <p className="mt-1 text-[9px] leading-relaxed text-gray-600">No earlier different same-book quote is stored.</p> : null}
   </section>;
 }
@@ -374,7 +357,6 @@ function teamColor(team: string): string { return TEAM_COLORS[team] ?? "#7c3aed"
 const TEAM_COLORS: Record<string, string> = { ATL: "#E03A3E", BOS: "#007A33", BKN: "#000000", CHA: "#1D1160", CHI: "#CE1141", CLE: "#860038", DAL: "#00538C", DEN: "#0E2240", DET: "#C8102E", GSW: "#1D428A", HOU: "#CE1141", IND: "#002D62", LAC: "#C8102E", LAL: "#552583", MEM: "#5D76A9", MIA: "#98002E", MIL: "#00471B", MIN: "#0C2340", NOP: "#0C2340", NYK: "#006BB6", OKC: "#007AC1", ORL: "#0077C0", PHI: "#006BB6", PHX: "#1D1160", POR: "#E03A3E", SAC: "#5A2D81", SAS: "#C4CED4", TOR: "#CE1141", UTA: "#002B5C", WAS: "#002B5C" };
 function book(value: string): string { const labels: Record<string, string> = { bet365: "bet365", betmgm: "BetMGM", betparx: "betPARX", betrivers: "BetRivers", caesars: "Caesars", draftkings: "DraftKings", fanduel: "FanDuel", novig: "NoVig", pinnacle: "Pinnacle", polymarket: "Polymarket" }; return labels[value.toLowerCase()] ?? value; }
 function price(value: number): string { return value > 0 ? `+${value}` : String(value); }
-function impliedProbability(value: number): number { return value > 0 ? 100 / (value + 100) : Math.abs(value) / (Math.abs(value) + 100); }
 function percent(value: number): string { return `${(value * 100).toFixed(1)}%`; }
 function movementLabel(row: Row): string {
   if (!row.movement) return "";
