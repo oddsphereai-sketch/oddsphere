@@ -14,7 +14,7 @@ const pending = [
 const updates: Array<{ values: Record<string, unknown>; id: number | null }> = [];
 let settlementCutoff: string | null = null;
 function clientFor(
-  rows: ReadonlyArray<(typeof pending)[number] | { id: number; provider_game_id: string; provider_player_id: string; market: string; line: number; side: "under"; locked_at: string }>,
+  rows: ReadonlyArray<(typeof pending)[number] | { id: number; provider_game_id: string; provider_player_id: string | null; market: string; line: number; side: "under"; locked_at: string }>,
   recordedUpdates: Array<{ values: Record<string, unknown>; id: number | null }>,
   onCutoff?: (value: string) => void,
 ): SupabaseClient {
@@ -24,13 +24,15 @@ function clientFor(
       return {
         select() {
           let cutoff = "";
+          let requireIdentity = false;
           const query = {
             eq() { return query; },
+            not(field: string, operator: string, value: unknown) { assert.deepEqual([field, operator, value], ["provider_player_id", "is", null]); requireIdentity = true; return query; },
             lte(field: string, value: string) { assert.equal(field, "locked_at"); cutoff = value; onCutoff?.(value); return query; },
             order(field: string, options: { ascending: boolean }) { assert.equal(field, "locked_at"); assert.equal(options.ascending, true); return query; },
             async limit(value: number) {
               assert.equal(value, NFL_PLAYER_PROPS_SETTLEMENT_MAX_RECORDS_PER_CYCLE);
-              return { data: rows.filter((row) => row.locked_at <= cutoff).slice(0, value), error: null };
+              return { data: rows.filter((row) => row.locked_at <= cutoff && (!requireIdentity || row.provider_player_id !== null)).slice(0, value), error: null };
             },
           };
           return query;
@@ -101,6 +103,17 @@ async function main(): Promise<void> {
   assert.equal(bounded.deferredGames, 2);
   assert.equal(bounded.apiCalls, NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE);
   assert.deepEqual(requestedGames, backlog.slice(0, NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE).map((row) => row.provider_game_id));
+  const blockedRows = Array.from({ length: 1_100 }, (_, index) => ({
+    ...backlog[0]!, id: 10_000 + index, provider_game_id: `unresolved-${index}`, provider_player_id: null,
+  }));
+  const recoverableUpdates: Array<{ values: Record<string, unknown>; id: number | null }> = [];
+  const recoverable = await settleNflPlayerPropsRecords({
+    client: clientFor([...blockedRows, ...pending], recoverableUpdates), apiKey: "test",
+    now: "2026-09-02T17:00:00.000Z", fetchImpl,
+  });
+  assert.equal(recoverable.apiCalls, 1, "unresolved games cannot consume the bounded provider budget");
+  assert.equal(recoverable.settled, 3, "more than one page of null identities cannot starve valid records");
+  assert.ok(recoverableUpdates.every(update => update.id !== null && update.id < 10_000), "legacy unresolved identities remain untouched");
   console.log("NFL player-props exact-market settlement and push semantics passed.");
 }
 

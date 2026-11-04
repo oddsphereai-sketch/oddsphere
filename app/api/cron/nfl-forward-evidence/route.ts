@@ -134,7 +134,8 @@ export async function GET(request: Request): Promise<Response> {
     const playerPropsCriticalHealth = playerProps?.healthFindings.filter((finding) =>
       finding === "NFL_PLAYER_PROPS_SOURCE_AWARE_REFERENCE_OFFERS_UNAVAILABLE"
       || finding === "NFL_PLAYER_PROPS_REFERENCE_OFFER_CACHE_FAILED"
-      || finding === "NFL_PLAYER_PROPS_PRIVATE_TRACKING_CAPTURE_FAILED") ?? [];
+      || finding === "NFL_PLAYER_PROPS_PRIVATE_TRACKING_CAPTURE_FAILED"
+      || finding.startsWith("NFL_PLAYER_PROPS_SETTLEMENT_IDENTITY_UNRESOLVED:")) ?? [];
     const marketBrainDetails = marketBrainCaptureRequested || marketBrainConfigurationError !== null
       ? {
           market_brain_capture_requested: marketBrainCaptureRequested,

@@ -46,6 +46,7 @@ import {
   NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE,
   NFL_PLAYER_PROPS_SETTLEMENT_RELEASE,
   settleNflPlayerPropsRecords,
+  countNflPlayerPropsUnresolvedSettlementIdentities,
 } from "./nflPlayerPropsSettlement";
 import {
   nflPlayerPropsOverUnderMarketKey,
@@ -70,7 +71,7 @@ import {
 } from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_10_28_r66_owls_reference_prices" as const;
+  "nfl_player_props_writer_2026_11_04_r67_settlement_identity_continuity" as const;
 export const NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES = 60 as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
@@ -174,6 +175,7 @@ export type NflPlayerPropsWriterResult = {
   settlementProcessedGames: number;
   settlementDeferredGames: number;
   settledRecords: number;
+  unresolvedSettlementIdentities: number;
   apiCallsMaximum: number;
   healthFindings: string[];
   forecastTelemetry: NflPlayerPropsForecastTelemetry;
@@ -433,7 +435,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
   if (args.apply) {
     await writeNflPlayerPropsCurrentSeasonState({ client: args.client, state: currentSeason.state });
     await writeNflPlayerPropsSnapshot({ client: args.client, snapshot, source: NFL_PLAYER_PROPS_WRITER_RELEASE });
-    await writeLockedNflPlayerPropsTracking({ client: args.client, snapshot });
+    await writeLockedNflPlayerPropsTracking({ client: args.client, snapshot, context });
     closingPricesUpdated = await updateNflPlayerPropsClosingPrices({ client: args.client, production: snapshot, observations: eligibleSnapshot });
     if (completeSourceAwareReferenceOffers.length > 0) {
       try {
@@ -476,6 +478,8 @@ export async function runNflPlayerPropsProductionWriter(args: {
   const settlement = args.apply
     ? await settleNflPlayerPropsRecords({ client: args.client, apiKey: args.ballDontLieApiKey, now: args.now, fetchImpl: args.fetchImpl })
     : { pending: 0, eligible: 0, eligibleGames: 0, processedGames: 0, deferredGames: 0, recordReadLimitReached: false, settled: 0, apiCalls: 0 };
+  const unresolvedSettlementIdentities = args.apply
+    ? await countNflPlayerPropsUnresolvedSettlementIdentities(args.client, args.now) : 0;
   // The private diagnostic archive is also last and failure-isolated. It
   // records every already-locked decision, including No Plays and alternate
   // lines, without changing the public board or the official actionable ledger.
@@ -542,6 +546,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
     settlementProcessedGames: settlement.processedGames,
     settlementDeferredGames: settlement.deferredGames,
     settledRecords: settlement.settled,
+    unresolvedSettlementIdentities,
     apiCallsMaximum,
     forecastTelemetry: summarizeNflPlayerPropsForecastTelemetry(snapshot),
     marketObserverCapture,
@@ -553,6 +558,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
       ...context.healthHolds,
       ...(settlement.deferredGames > 0 ? [`NFL_PLAYER_PROPS_SETTLEMENT_GAMES_DEFERRED:${settlement.deferredGames}`] : []),
       ...(settlement.recordReadLimitReached ? ["NFL_PLAYER_PROPS_SETTLEMENT_RECORD_READ_LIMIT_REACHED"] : []),
+      ...(unresolvedSettlementIdentities > 0 ? [`NFL_PLAYER_PROPS_SETTLEMENT_IDENTITY_UNRESOLVED:${unresolvedSettlementIdentities}`] : []),
       ...(marketObserverCapture?.error ? ["NFL_PLAYER_PROPS_MARKET_OBSERVER_CAPTURE_FAILED"] : []),
       ...(observerClosingPriceError ? ["NFL_PLAYER_PROPS_OBSERVER_CLOSING_PRICE_RECOVERY_FAILED"] : []),
       ...(privateTrackingCapture?.error ? ["NFL_PLAYER_PROPS_PRIVATE_TRACKING_CAPTURE_FAILED"] : []),

@@ -1,5 +1,22 @@
 # Current production model releases and qualified research candidates
 
+## NFL player-props settlement identity continuity — November 4
+
+Sole writer /tracking capture /settlement are
+`nfl_player_props_writer_2026_11_04_r67_settlement_identity_continuity` /
+`nfl_player_props_tracking_2026_11_04_r41_pregame_roster_identity` /
+`nfl_player_props_settlement_2026_11_04_r4_identity_queue_isolation`.
+New tracking inserts may retain a missing quote player ID from a unique exact
+game/start/team/name BALLDONTLIE roster captured before T60, alongside original
+decision bytes and explicit provenance. Existing records use insert-only
+conflict precedence, including legacy null IDs. The settlement query excludes
+null IDs before its1000-row/18-game bounds so unresolvable old rows cannot
+starve resolvable ones. Missing legacy IDs remain a visible health finding;
+historical identity corrections require separate owner approval. Forecasts,
+model/calibration/decision/member releases, picks, grades, prices, stakes,
+provider limits, cadence and shared NFL lease remain unchanged.
+Evidence: `docs/model-audits/2026-11-04-product-refresh-health.md`.
+
 ## NBA player-props member quote authority — November 4
 
 Sole writer is `nba_player_props_private_writer_2026_11_04_r11_member_quote_authority`.
