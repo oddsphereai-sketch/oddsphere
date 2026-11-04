@@ -1,0 +1,210 @@
+{
+  "schemaVersion": "market_reader_semantic_spotcheck_v1",
+  "createdAt": "2026-11-04T22:45:22.123340+00:00",
+  "purpose": "Distinguish truthful evidence, defensible inference, numerical transmission, economic eligibility and display. Executing code or coherent arithmetic alone never certifies a market decision.",
+  "scopeLimits": {
+    "noOutcomeInspectionDuringPregameSemanticReview": true,
+    "noClaimOfExhaustiveScenarioKnowledge": true,
+    "noGradeQuotas": true,
+    "evidenceAcquisition": "Use only authorized sources and budgets; this standard does not authorize provider, API or database calls.",
+    "documentEffect": "Documentation only; no production model, threshold, policy or release change."
+  },
+  "outcomeCodes": {
+    "SUPPORTED_SCOPED": "Specific proposition supported within explicit source/time/contract/assumption limits; not accuracy certification.",
+    "STRUCTURAL_DEFECT": "Declared inference is overwritten, unsupported magnitude is injected, or causal dependency breaks before final outputs.",
+    "DATA_INTEGRITY_DEFECT": "Identity, native contract, arrival clock, availability, dedup, truncation or normalization is demonstrably wrong.",
+    "DISPLAY_DEFECT": "Stored law/price/grade is sound within scope but presentation misstates it, hides valid coverage or implies a bet.",
+    "UNRESOLVED_METHOD": "Available evidence does not justify the selected magnitude/shape or reconcile material competing interpretations.",
+    "UNVERIFIED_DATA": "Required source artifact is absent; upstream absence has not been proved.",
+    "NOT_APPLICABLE": "Explicitly outside reviewed claim."
+  },
+  "decisionRule": {
+    "noOverallPassFromPartialChecks": true,
+    "unknownMagnitudeResult": "UNRESOLVED_METHOD",
+    "factsVersusMagnitude": "An own-book response may support a directional interpretation without certifying a full score distribution, independent probability or stake.",
+    "subjectiveForecastAssumptions": "Must be labeled uncalibrated, separately from quote-identified quantities; reviewer may not present narrative as calibrated probability.",
+    "counterevidencePolicy": "Retain and explain all material conflicting facts. Do not replace judgment with a source-count quorum or treat missing confirmation as proof of opposition."
+  },
+  "stages": [
+    {
+      "id": "A_BLIND_RAW_FIRST",
+      "beforeSeeing": [
+        "finalScore",
+        "finalProbability",
+        "finalPick",
+        "finalGrade",
+        "productionReason"
+      ],
+      "freezeRequired": true,
+      "requiredFields": [
+        "caseId",
+        "gameIdentity",
+        "orientation",
+        "decisionCutoff",
+        "rawArtifactSha256",
+        "evidenceAvailableAtCutoff",
+        "reviewerPriorExposure",
+        "blindPacketSha256"
+      ],
+      "perBookPerContractRequired": [
+        "sourceClass",
+        "providerEventIdentity",
+        "market",
+        "ownContractLine",
+        "bothSidePrices",
+        "nativeObservedAt",
+        "requestStartedAt",
+        "retrievedAt",
+        "availableUpperBound",
+        "clockPrecision",
+        "allRetainedPriceStates",
+        "allRetainedSplitStates",
+        "receiptIdentity",
+        "dedupOrConflictState",
+        "coverageStart",
+        "coverageEnd",
+        "truncation",
+        "missingIntervals"
+      ],
+      "interpretationRequired": [
+        "firstRetainedToCurrentNet",
+        "latestRealPriceLeg",
+        "intermediateReversalAndBuyback",
+        "currentLevelAtExactTarget",
+        "holdVersusNoLaterResponse",
+        "moneyVersusTicketsSeparately",
+        "splitNativeLineVersusTargetLine",
+        "pressureAvailabilityBeforeAndAfterResponse",
+        "unchangedRereadVersusNewPressure",
+        "physicalBookIndependence",
+        "professionalVersusRetailVersusAggregateRole",
+        "crossMarketAgreementAndDisagreement",
+        "counterevidence",
+        "unknowns"
+      ],
+      "prohibitedClaims": [
+        "first retained quote is opening without proof",
+        "same share percentage proves new dollars arrived",
+        "aggregate pressure identifies sharp bettor intent",
+        "retrieval refreshes native observation clock",
+        "unbound pressure proves held",
+        "missing normalized quote proves upstream did not offer",
+        "current source law is uniquely true outcome law"
+      ],
+      "requirements": [
+        "A genuinely blind review excludes already exposed final picks, grades, probabilities and scores from its initial packet. Record prior exposure honestly.",
+        "Already exposed retrospective work cannot count as independent blind evidence. It can still diagnose source facts, structural defects and unsupported magnitude when labeled retrospective.",
+        "Read each physical book separately before comparing books: native full retained path, net movement, most recent actual leg, current level, source class and both clocks. If history is truncated, do not call the retained start the opening.",
+        "Separate pressure native observation, actual availability and own-book baseline/later response. A later collection of unchanged shares is not a new money arrival or a new response."
+      ]
+    },
+    {
+      "id": "B_FREEZE_INDEPENDENT_INFERENCE",
+      "independentForecastRole": "One fallible pre-existing input; neither automatically accepted nor discarded.",
+      "requiredFields": [
+        "independentInputIdentityAndAsOf",
+        "independentScoresAndLaw",
+        "independentKnownLimitations",
+        "directionalReadByMarket",
+        "currentLevelCounterevidence",
+        "forecastMagnitudeIdentification",
+        "proposedNumericConsequenceOrUnresolved",
+        "structuralAssumptions",
+        "uncertainty",
+        "predictionVersusBetValue"
+      ],
+      "requirements": [
+        "Quantified consequence must follow a stated identifiable or explicitly subjective inference, not a named pattern switching the complete independent prior.",
+        "Freeze the source interpretation before exposing final outputs. If outputs were previously seen, mark retrospective contaminated rather than claiming blind independence.",
+        "No fixed model/book ratio, guessed movement-to-points coefficient, invented bettor identity, or certainty from a majority vote."
+      ]
+    },
+    {
+      "id": "C_EXPOSE_AND_TRACE_OUTPUTS",
+      "requiredFields": [
+        "productionInferenceClaim",
+        "chosenMarginAndTotalAndShape",
+        "scoreIdentities",
+        "moneylineProbability",
+        "spreadProbabilityAtTarget",
+        "totalProbabilityAtTarget",
+        "pushAndTieConvention",
+        "selectedPicks",
+        "executionBookLineAndBothPrices",
+        "quoteAvailableAtDecision",
+        "exactPayoutEV",
+        "gradeAndReasons",
+        "evidenceToNumericTrace",
+        "counterevidenceDisposition",
+        "storedLockPrecedence"
+      ],
+      "tests": [
+        "Recompute probabilities from the actual final law at the exact selected contract; unconditional mean direction need not equal PMF pick under skew.",
+        "Recompute EV as pWin*netProfitPerUnit-pLoss; account for push/refund and conditional probability conventions, do not silently use pWin+pLoss=1 when not true.",
+        "Compare declared inference to actual final margin/total/dispersion/picks. A preserved explanation with overwritten consequence is structural failure.",
+        "Changing ML while spread stays flat must still enter joint checks; movement is distinct from current level and native ML+spread consistency.",
+        "Grade must describe bet eligibility separately from readable information. Watch is not actionable; Lean/Best require their actual existing economic and resistance rules.",
+        "Lock writer and reader preserve exact historical payload/grades/evidence/model_used with no new interpretation.",
+        "Paired controls: mirror orientation, no response, late response, changed contract/identity, real opposing latest leg/buyback, repeated identical native observation, static current level only."
+      ],
+      "requirements": [
+        "Review moneyline, spread and total together for every assigned game; identify cross-market consequences and preserve each market's exact selection, law-derived probability, price, payout EV and grade.",
+        "Report whether all three market outputs follow the declared inference; if one axis was intentionally unchanged, name why. Do not treat a correct grade as proof that its upstream probability was justified.",
+        "Preserve exact locked public payloads and source identities. Review current unlocked semantics separately; no historical correction is authorized by this standard."
+      ]
+    }
+  ],
+  "missingDataDiagnosis": {
+    "order": [
+      "raw response present and fixture identity correct?",
+      "normalizer admits exact school/event/time/market?",
+      "storage preserves arrival/native identity?",
+      "reader consumes fields with correct as-of?",
+      "provider fetch scope and cache cover requested event?"
+    ],
+    "absenceLabels": [
+      "proven consumer omission",
+      "proven source response lacked offer at captured retrieval only",
+      "unverified upstream coverage",
+      "native stale",
+      "availability unknown"
+    ],
+    "noFabrication": true
+  },
+  "reportContract": {
+    "perCase": [
+      "rawEvidenceVerdict",
+      "directionalInterpretationVerdict",
+      "magnitudeVerdict",
+      "numericalTransmissionVerdict",
+      "economicGradeVerdict",
+      "displayVerdict",
+      "lockVerdict",
+      "strongestFinding",
+      "counterevidence",
+      "unknowns",
+      "disposition"
+    ],
+    "countImpacts": [
+      "sameInputBaselineReproduced",
+      "gamesMarketsReviewed",
+      "gradesBeforeAfter",
+      "actionablePromotionsDemotions",
+      "sideChanges",
+      "scoreProbabilityPriceChanges",
+      "newBest",
+      "unresolvedCounts",
+      "excludedInputs"
+    ],
+    "separateCrossSnapshotFromSameInput": true,
+    "publicationClaims": "Do not call coherent outputs market-correct; name exact supported scope and unresolved method.",
+    "reviewObligationsNotRuntimeGates": true
+  },
+  "authority": {
+    "kind": "review_obligations_only",
+    "statement": "These are review obligations, not runtime activation gates, quotas, source-vote rules or forecasting rules. This document does not activate a model, prescribe weights or require more actionable plays.",
+    "sourceCredibility": "Evaluate source provenance, native contract, timing, role and specific evidence. Credibility and source roles are not fixed forecasting weights or a book-count quorum.",
+    "unknownMagnitude": "UNRESOLVED_METHOD is a review finding, not an instruction to suppress, change, or fabricate a production forecast or grade.",
+    "semanticClaimBoundary": "Arithmetic coherence, passing tests and code executing as designed do not establish correct market interpretation or forecast magnitude."
+  }
+}

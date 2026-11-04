@@ -1,5 +1,15 @@
 # Model change safety protocol
 
+Before asserting market-reader correctness, read and apply
+[`market-reader-spotcheck-standard.json`](market-reader-spotcheck-standard.json).
+Review raw native evidence before seeing final outputs, then trace the inference
+through scores, probabilities, all three market picks and grades. Arithmetic
+coherence alone is not semantic correctness; unknown magnitude remains
+`UNRESOLVED_METHOD`. Retrospective reviews must disclose prior exposure and
+cannot count as blind evidence. These are review obligations, not runtime
+activation gates, quotas, source weights or forecasting rules. Stored locked
+public records retain exact precedence.
+
 ## Owner-directed removal of CBB forecast-selection switch — November 4
 
 The owner explicitly rejected the R17 hand-written rule selecting the full
