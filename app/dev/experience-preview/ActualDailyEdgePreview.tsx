@@ -67,6 +67,7 @@ import {
 } from "@/app/lab/lib/marketPulsePresentation";
 import { firstInningSupportTone } from "@/app/lab/lib/firstInningPresentation";
 import { soccerForecastSemantics } from "@/app/lab/lib/soccerForecastSemantics";
+import { soccerPublishedScorePresentation } from "@/app/lab/lib/soccerPublishedScorePresentation";
 import {
   resolveFirstInningMarketPulseMovement,
   resolvePointLineMarketPulseMovement,
@@ -1127,11 +1128,24 @@ function matchResultScoreOutlook(game: DailyEdgeGameDto, market: MarketEdgeDto) 
 
 function soccerScoreContext(game: DailyEdgeGameDto, marketKey: MarketKey, market: MarketEdgeDto) {
   const projection = game.soccerProjection!;
+  const published = soccerPublishedScorePresentation(game);
+  if (published) return {
+    expectedGoals: projection.expectedGoals,
+    displayedScore: published.score,
+    medianTotal: projection.medianTotal,
+    mostLikelyTotal: projection.mostLikelyTotal,
+    scenario: published.scenario,
+    heading: "Projected score",
+    badge: "Same model · Match Result",
+    scenarioLabel: "illustrative scenario",
+    exactLegacyLock: false,
+  };
   const resultOutlook = marketKey === "moneyline" ? matchResultScoreOutlook(game, market) : null;
   if (resultOutlook) {
     const exactLegacyLock = !projection.matchResultOutlook && Boolean(lockedLegacyScoreOutlook(game));
     return {
       expectedGoals: resultOutlook.expectedGoals,
+      displayedScore: resultOutlook.expectedGoals,
       medianTotal: resultOutlook.medianTotal,
       mostLikelyTotal: resultOutlook.mostLikelyTotal,
       scenario: resultOutlook.likelyScore,
@@ -1143,6 +1157,7 @@ function soccerScoreContext(game: DailyEdgeGameDto, marketKey: MarketKey, market
   }
   return {
     expectedGoals: projection.expectedGoals,
+    displayedScore: projection.expectedGoals,
     medianTotal: projection.medianTotal,
     mostLikelyTotal: projection.mostLikelyTotal,
     scenario: projection.representativeScore,
@@ -1179,13 +1194,13 @@ function QuickRead({ game, market, marketKey, sport, illustrativeSample = false 
   const soccerProjection = sport === "soccer" ? game.soccerProjection ?? null : null;
   const matchResultScoreRefreshing = marketKey === "moneyline" && Boolean(soccerProjection && !matchResultScoreOutlook(game, market));
   const soccerScore = soccerProjection ? soccerScoreContext(game, marketKey, market) : null;
-  const soccerSemantics = soccerProjection ? soccerForecastSemantics(game, market, marketKey) : null;
+  const soccerSemantics = soccerProjection && !soccerPublishedScorePresentation(game) ? soccerForecastSemantics(game, market, marketKey) : null;
   const primaryProjectedAway = football && game.footballProjection
     ? game.footballProjection.expectedAwayPoints
-    : soccerScore?.expectedGoals.away ?? game.projected.away;
+    : soccerScore?.displayedScore.away ?? game.projected.away;
   const primaryProjectedHome = football && game.footballProjection
     ? game.footballProjection.expectedHomePoints
-    : soccerScore?.expectedGoals.home ?? game.projected.home;
+    : soccerScore?.displayedScore.home ?? game.projected.home;
   const heldCurrentPrice = currentDisplayedPrice(market);
   const modelPredictionLabel = dailyEdgeOutcomeForecastLabel({ game, market, marketKey, sport });
   const exactPriceSelection = dailyEdgeExactPriceSelectionLabel({ market, marketKey });
@@ -1233,16 +1248,16 @@ function SoccerTotalForecast({ market, projection }: { market: MarketEdgeDto; pr
   const context = market.soccerTotalContext;
   if (!context || !projection) return null;
   const outcome = (label: string, probability: number, selected: boolean) => <div className={`rounded-lg border p-3 text-center ${selected ? "border-emerald-300/25 bg-emerald-400/[0.07]" : "border-white/[0.07] bg-black/20"}`}><p className="text-[8px] font-black uppercase tracking-wider text-gray-500">{label} {context.line}</p><p className={`mt-1 font-mono text-xl font-black ${selected ? "text-emerald-200" : "text-white"}`}>{(probability * 100).toFixed(1)}%</p></div>;
-  return <section className="mt-3 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.025] p-3"><div className="flex items-end justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-emerald-200">Total forecast</p><p className="mt-1 text-[11px] font-black text-white">Dedicated Over/Under probabilities</p></div><span className="text-right"><span className="block text-[7px] font-black uppercase text-gray-600">Goal outlook</span><strong className="font-mono text-base text-white">{context.projected_total.toFixed(2)}</strong></span></div><div className="mt-3 grid grid-cols-2 gap-2">{outcome("Over", context.over_p, context.displayed_side === "over")}{outcome("Under", context.under_p, context.displayed_side === "under")}</div><p className="mt-2 text-[8px] leading-relaxed text-gray-500">The probabilities above set the Total pick. The goal outlook, median {projection.medianTotal}, and most likely total {projection.mostLikelyTotal} are separate scoring context.</p></section>;
+  return <section className="mt-3 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.025] p-3"><div className="flex items-end justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-emerald-200">Total forecast</p><p className="mt-1 text-[11px] font-black text-white">Dedicated Over/Under probabilities</p></div><span className="text-right"><span className="block text-[7px] font-black uppercase text-gray-600">Goal outlook</span><strong className="font-mono text-base text-white">{context.projected_total.toFixed(2)}</strong></span></div><div className="mt-3 grid grid-cols-2 gap-2">{outcome("Over", context.over_p, context.displayed_side === "over")}{outcome("Under", context.under_p, context.displayed_side === "under")}</div><p className="mt-2 text-[8px] leading-relaxed text-gray-500">{projection.coherentScorePresentation ? "The Total pick and score outlook come from the same final market-informed score distribution." : <>The probabilities above set the Total pick. The goal outlook, median {projection.medianTotal}, and most likely total {projection.mostLikelyTotal} are separate scoring context.</>}</p></section>;
 }
 
 function SoccerBttsForecast({ market, projection, game }: { market: MarketEdgeDto; projection: DailyEdgeGameDto["soccerProjection"]; game: DailyEdgeGameDto }) {
   const context = market.soccerBttsContext;
   if (!context || !projection) return null;
-  const awayScores = 1 - Math.exp(-projection.expectedGoals.away);
-  const homeScores = 1 - Math.exp(-projection.expectedGoals.home);
+  const awayScores = projection.teamToScoreProbabilities?.away ?? 1 - Math.exp(-projection.expectedGoals.away);
+  const homeScores = projection.teamToScoreProbabilities?.home ?? 1 - Math.exp(-projection.expectedGoals.home);
   const outcome = (label: string, probability: number, selected: boolean) => <div className={`rounded-lg border p-3 text-center ${selected ? "border-emerald-300/25 bg-emerald-400/[0.07]" : "border-white/[0.07] bg-black/20"}`}><p className="text-[8px] font-black uppercase tracking-wider text-gray-500">{label}</p><p className={`mt-1 font-mono text-xl font-black ${selected ? "text-emerald-200" : "text-white"}`}>{(probability * 100).toFixed(1)}%</p></div>;
-  return <section className="mt-3 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.025] p-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-emerald-200">Both teams to score forecast</p><p className="mt-1 text-[11px] font-black text-white">Dedicated Yes/No probabilities</p></div><div className="mt-3 grid grid-cols-2 gap-2">{outcome("Yes", context.yes_p, context.displayed_side === "yes")}{outcome("No", context.no_p, context.displayed_side === "no")}</div><div className="mt-2 grid grid-cols-2 gap-2 text-[8px]"><p className="rounded-md border border-white/[0.06] bg-black/20 px-2 py-1.5 text-gray-500"><strong className="text-gray-200">{game.awayTeam}</strong> goal-outlook score chance · {(awayScores * 100).toFixed(0)}%</p><p className="rounded-md border border-white/[0.06] bg-black/20 px-2 py-1.5 text-gray-500"><strong className="text-gray-200">{game.homeTeam}</strong> goal-outlook score chance · {(homeScores * 100).toFixed(0)}%</p></div><p className="mt-2 text-[8px] leading-relaxed text-gray-500">The Yes/No probabilities above set the BTTS pick. Team scoring chances are separate goal-outlook context.</p></section>;
+  return <section className="mt-3 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.025] p-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-emerald-200">Both teams to score forecast</p><p className="mt-1 text-[11px] font-black text-white">Dedicated Yes/No probabilities</p></div><div className="mt-3 grid grid-cols-2 gap-2">{outcome("Yes", context.yes_p, context.displayed_side === "yes")}{outcome("No", context.no_p, context.displayed_side === "no")}</div><div className="mt-2 grid grid-cols-2 gap-2 text-[8px]"><p className="rounded-md border border-white/[0.06] bg-black/20 px-2 py-1.5 text-gray-500"><strong className="text-gray-200">{game.awayTeam}</strong> goal-outlook score chance · {(awayScores * 100).toFixed(0)}%</p><p className="rounded-md border border-white/[0.06] bg-black/20 px-2 py-1.5 text-gray-500"><strong className="text-gray-200">{game.homeTeam}</strong> goal-outlook score chance · {(homeScores * 100).toFixed(0)}%</p></div><p className="mt-2 text-[8px] leading-relaxed text-gray-500">{projection.coherentScorePresentation ? "BTTS and each team’s scoring chance come from the same final score distribution." : "The Yes/No probabilities above set the BTTS pick. Team scoring chances are separate goal-outlook context."}</p></section>;
 }
 
 function soccerForecastReliability(probability: number): { label: string; actual: number; sample: number; caution?: string } {
@@ -2530,6 +2545,13 @@ function CoreDecisionSnapshot({ game, market, marketKey }: { game: DailyEdgeGame
     }
     const score = soccerScoreContext(game, marketKey, market);
     const marketNumber = marketKey === "moneyline" ? formatAmerican(currentDisplayedPrice(market)) : market.line === null ? "—" : formatNumber(market.line);
+    const published = soccerPublishedScorePresentation(game);
+    if (published) return <div className="mt-2 grid grid-cols-2 gap-2">
+      <ProofCell label="Projected score" value={`${published.score.away.toFixed(1)} · ${published.score.home.toFixed(1)}`} note="Same final forecast across all three markets" tone="violet" />
+      <ProofCell label="Expected goals" value={`${score.expectedGoals.away.toFixed(2)} · ${score.expectedGoals.home.toFixed(2)}`} note="Averages across possible scores" tone="violet" />
+      <ProofCell label="Illustrative scenario" value={published.scenario ? `${game.awayTeam} ${published.scenario.away} · ${game.homeTeam} ${published.scenario.home}` : "No shared scenario"} note={published.scenarioProbability === null ? "No exact score satisfies every selected direction" : `${(published.scenarioProbability * 100).toFixed(1)}% exact-score probability`} tone="gray" />
+      <ProofCell label={marketKey === "moneyline" ? "Current price" : "Market line"} value={marketNumber} note={market.currentPriceSportsbook ? formatSportsbook(market.currentPriceSportsbook) : market.marketSource ?? "Source unavailable"} tone="gray" />
+    </div>;
     return <div className="mt-2 grid grid-cols-2 gap-2"><ProofCell label={marketKey === "moneyline" ? score.exactLegacyLock ? "Locked score projection" : "Match Result score outlook" : "Goal outlook"} value={`${score.expectedGoals.away.toFixed(2)} · ${score.expectedGoals.home.toFixed(2)}`} note={marketKey === "moneyline" ? score.exactLegacyLock ? "Exact immutable member snapshot" : "Same model as Match Result probabilities" : "Away · home scoring context"} tone="violet" /><ProofCell label={marketKey === "moneyline" ? "Match Result total" : "Goal-outlook total"} value={`Median ${score.medianTotal} · Mode ${score.mostLikelyTotal}`} note={`Mean ${(score.expectedGoals.away + score.expectedGoals.home).toFixed(2)} · scoring context`} tone="violet" /><ProofCell label={marketKey === "moneyline" ? "Most likely score" : "Illustrative scenario"} value={score.scenario ? `${game.awayTeam} ${score.scenario.away} · ${game.homeTeam} ${score.scenario.home}` : "No shared scenario"} note={marketKey === "moneyline" ? score.exactLegacyLock ? "Stored at lock; never recomputed" : "Generated by the active Match Result head" : projection.representativeScoreProbability === null ? "Market-specific forecasts remain separate" : `${(projection.representativeScoreProbability * 100).toFixed(1)}% in the goal outlook · not a shared forecast source`} tone="gray" /><ProofCell label={marketKey === "moneyline" ? "Current price" : "Market line"} value={marketNumber} note={marketKey === "moneyline" && market.currentPriceSportsbook ? formatSportsbook(market.currentPriceSportsbook) : market.marketSource ?? "Source unavailable"} tone="gray" /></div>;
   }
   if (projectionIsUnavailable(game)) {
@@ -2936,7 +2958,7 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
         {sport !== "cfb" ? <p className="mt-3 line-clamp-2 text-[12px] leading-relaxed text-gray-400">{footballOutcome ? headline.held ? dailyEdgeHeldGuide(headline) : `The ${game.footballOnlyProjection ? "primary market-informed outcome forecast" : "discrete football model"} favors ${footballOutcome.winner}; the ${headlineVerdict.label} Bet grade separately evaluates the exact ${marketLabelFor(headlineKey, sport)} price.` : currentAwareGuidedGuide(headline, game.decisionLine)}</p> : null}
         <div className="mt-3 flex items-baseline gap-2">
           <span className="text-[9px] font-black uppercase tracking-wider text-gray-600">{soccerScore ? boardScoreMarketKey === "moneyline" ? "Result score outlook" : "Goal outlook" : sport === "nfl" || sport === "cfb" || illustrativeSample ? "Expected score" : "Proj"}</span>
-          {projectionIsUnavailable(game) ? <span className="text-[12px] font-bold text-amber-200/75">No model score available</span> : soccerMoneylineScoreRefreshing ? <span className="text-[12px] font-bold text-amber-200/75">Refreshing · conflicting goals context withheld</span> : <span className="text-[12px] text-gray-400">{game.awayTeam} <strong className="text-[13px] text-white">{footballExpectedAway === null ? formatNumber(soccerScore?.expectedGoals.away ?? game.projected.away) : footballExpectedAway.toFixed(1)}</strong> <span className="mx-1 text-gray-700">·</span> {game.homeTeam} <strong className="text-[13px] text-white">{footballExpectedHome === null ? formatNumber(soccerScore?.expectedGoals.home ?? game.projected.home) : footballExpectedHome.toFixed(1)}</strong>{(sport === "nfl" || sport === "cfb") && footballExpectedAway !== null && footballExpectedHome !== null ? <span className="ml-2 text-[9px] text-gray-600">Representative {game.projected.away}–{game.projected.home}</span> : representativeScore ? <span className="ml-2 text-[9px] text-gray-600">Representative {representativeScore.away}–{representativeScore.home}</span> : soccerScore?.scenario ? <span className="ml-2 text-[9px] text-gray-600">{boardScoreMarketKey === "moneyline" ? "Mode" : "Illustration"} {soccerScore.scenario.away}–{soccerScore.scenario.home}</span> : null}</span>}
+          {projectionIsUnavailable(game) ? <span className="text-[12px] font-bold text-amber-200/75">No model score available</span> : soccerMoneylineScoreRefreshing ? <span className="text-[12px] font-bold text-amber-200/75">Refreshing · conflicting goals context withheld</span> : <span className="text-[12px] text-gray-400">{game.awayTeam} <strong className="text-[13px] text-white">{footballExpectedAway === null ? formatNumber(soccerScore?.displayedScore.away ?? game.projected.away) : footballExpectedAway.toFixed(1)}</strong> <span className="mx-1 text-gray-700">·</span> {game.homeTeam} <strong className="text-[13px] text-white">{footballExpectedHome === null ? formatNumber(soccerScore?.displayedScore.home ?? game.projected.home) : footballExpectedHome.toFixed(1)}</strong>{(sport === "nfl" || sport === "cfb") && footballExpectedAway !== null && footballExpectedHome !== null ? <span className="ml-2 text-[9px] text-gray-600">Representative {game.projected.away}–{game.projected.home}</span> : representativeScore ? <span className="ml-2 text-[9px] text-gray-600">Representative {representativeScore.away}–{representativeScore.home}</span> : soccerScore?.scenario ? <span className="ml-2 text-[9px] text-gray-600">{soccerPublishedScorePresentation(game) ? "Illustration" : boardScoreMarketKey === "moneyline" ? "Mode" : "Illustration"} {soccerScore.scenario.away}–{soccerScore.scenario.home}</span> : null}</span>}
         </div>
         <div className="mt-auto pt-3">
           <div className="flex items-center justify-between gap-1 overflow-hidden text-[9px] font-black uppercase tracking-[0.06em]">

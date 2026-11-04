@@ -30,6 +30,13 @@ export async function testUclNativeRecoveryBuilder(){
   let journal:EplStoredPriceObservation[]=[];
   const board=await buildUclDailyEdgePreview(slate,{cacheNamespace:'test-ucl-native-recovery',cacheIdentity:'actual18-native-recovery',captureAllBookPrices:rows=>{journal=rows;},marketProvider:{loadFixture:async f=>{assert.ok(f.providerId);calls.set(f.providerId,(calls.get(f.providerId)??0)+1);return fixtures.get(f.providerId)!;}}});
   assert.equal(board.games.length,18);
+  for(const game of board.games){
+   const projection=game.soccerProjection!;
+   assert.deepEqual(projection.coherentScorePresentation?.score,game.projected,'published card and every reader tab use one captured presentation');
+   assert.deepEqual(projection.coherentScorePresentation?.scenario,projection.representativeScore,'scenario is derived from the actual final joint law, never manufactured');
+   assert.equal(projection.coherentScorePresentation?.scenarioProbability,projection.representativeScoreProbability,'a conditional illustrative scenario is not relabeled the unconditional most likely score');
+   assert.ok(projection.teamToScoreProbabilities&&projection.teamToScoreProbabilities.home>=projection.goalOutlookProbabilities!.bttsYes&&projection.teamToScoreProbabilities.away>=projection.goalOutlookProbabilities!.bttsYes,'individual scoring marginals and BTTS follow the same law');
+  }
   for(const id of[4243843,4438978]){
    const g=board.games.find(g=>g.external_id===id)!;
    assert.equal(calls.get(id),id===4438978?2:1,'only actual incomplete fixtures take the normal bounded retry');
@@ -91,6 +98,14 @@ export async function testUclNativeRecoveryBuilder(){
   assert.equal(recoveryCalls,2);
   assert.deepEqual(unownedBoard.games[0]!.soccerModelProvenance?.eligibleAlternativeBooks,[],
    'primary attestations cannot authorize different selected recovery native rows, even when their global ID matches');
+  const elapsedKickoff=new Date(Date.parse(receipt.capturedAt)-60_000).toISOString();
+  const elapsed=await buildUclDailyEdgePreview({...slate,matches:slate.matches.map(m=>({...m,kickoff:elapsedKickoff}))},
+   {cacheNamespace:'test-ucl-elapsed-without-stored-lock',cacheIdentity:'fresh-base-is-not-an-immutable-lock',marketProvider:{loadFixture:async f=>fixtures.get(f.providerId!)!}});
+  assert.ok(elapsed.games.some(g=>g.lockState==='locked'&&g.lockedAt===null),'regression fixture exercises a fresh elapsed DTO, not a stored member lock');
+  for(const g of elapsed.games){
+   assert.equal(g.id,`soccer-ucl-${g.external_id}`,'a fresh elapsed base card still receives UCL identity mapping before downstream immutable-lock reconstruction');
+   assert.ok(g.soccerModelProvenance?.projectedScoreRelease?.startsWith('ucl_projected_score_'),'elapsed metadata must not leak the EPL adapter identity');
+  }
   console.log('PASS full UCL18-fixture native-source→bounded recovery→final reader/score/grade builder; both complementary catalogs retain market authority.');
  }finally{mock.timers.reset();}
 }
