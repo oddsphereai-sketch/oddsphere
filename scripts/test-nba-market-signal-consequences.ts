@@ -1,5 +1,6 @@
 /** Functional production-path scenarios, not historical prediction testing. */
 import assert from "node:assert/strict";
+import "./test-nba-own-book-pressure";
 import { runNbaAutoModelV2 } from "../lib/automodel/nba/nbaAutoModelV2";
 import type { NbaPortableModelArtifact } from "../lib/automodel/nba/nbaPortableScoreModel";
 import type { NbaGameSnapshot, NbaTeamRatingPack } from "../lib/automodel/nba/types";
@@ -236,7 +237,10 @@ assert.equal(tightFavorite.candidate.picks.moneyline, "home",
 assert.equal(tightFavorite.candidate.picks.spread, "away");
 assert.equal(tightFavorite.candidate.final.marginHome, 1.5);
 assert.equal(tightFavorite.candidate.final.total, 220, "side resistance alone does not invent a Total move");
-assert.ok(tightFavorite.candidate.marketConsequence!.pressure.every(p => p.reaction === "opposed" && p.side === "home"));
+assert.ok(tightFavorite.candidate.marketConsequence!.pressure.some(p => p.source === "circa" && p.reaction === "opposed" && p.side === "home"));
+assert.ok(tightFavorite.candidate.marketConsequence!.pressure.filter(p => p.source === "consensus")
+  .every(p => p.reaction === "unmatched_quote_context" && p.reactionBook === null && p.side === "home"),
+  "public favorite concentration remains context without claiming money arrived at a particular book");
 assert.ok(tightFavorite.candidate.marketConsequence!.pressure.every(p => p.basis === "handle_concentration" && p.gapPp === 0 && p.majoritySide === "home" && p.differentialSide === null),
   "80/80 concentration survives zero money-minus-ticket gap; it is not mislabeled differential evidence");
 assert.ok(tightFavorite.intel.ml.named_book_posture!.opposingSources.includes("circa"));

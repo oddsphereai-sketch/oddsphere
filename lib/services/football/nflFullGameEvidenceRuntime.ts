@@ -23,7 +23,7 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_FULL_GAME_EVIDENCE_RUNTIME_RELEASE =
-  "nfl_full_game_evidence_runtime_2026_11_02_r16_published_rounding_pressure" as const;
+  "nfl_full_game_evidence_runtime_2026_11_04_r17_unchanged_ml_confirmation" as const;
 
 type Market = "moneyline" | "spread" | "total";
 

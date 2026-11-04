@@ -11,7 +11,11 @@ import {
 } from "./cfbMemberFixture";
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE =
+  "cfb_forward_member_snapshot_2026_11_04_r61_moneyline_resistance_guard" as const;
+const CFB_RESISTANCE_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
   "cfb_forward_member_snapshot_2026_10_31_r60_market_evidence_integrity" as const;
+const CFB_RESISTANCE_PREVIOUS_MEMBER_FIXTURE_RELEASE =
+  "cfb_v1_member_fixture_2026_10_31_r100_market_evidence_integrity" as const;
 const CFB_MARKET_EVIDENCE_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
   "cfb_forward_member_snapshot_2026_10_30_r59_paired_price_context" as const;
 const CFB_MARKET_EVIDENCE_PREVIOUS_MEMBER_FIXTURE_RELEASE =
@@ -53,7 +57,7 @@ export const CFB_PREVIOUS_EVIDENCE_RELEASE =
 export const CFB_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_14_r63_correct_qb_final_winner_coordinator" as const;
 export const CFB_MEMBER_SNAPSHOT_READER_RELEASE =
-  "cfb_member_snapshot_reader_2026_10_31_r45_market_evidence_integrity" as const;
+  "cfb_member_snapshot_reader_2026_11_04_r46_moneyline_resistance_guard" as const;
 const CFB_LATE_PREGAME_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
   "cfb_forward_member_snapshot_2026_10_14_r50_late_pregame_lock_recovery" as const;
 const CFB_LATE_PREGAME_PREVIOUS_MEMBER_FIXTURE_RELEASE =
@@ -129,6 +133,12 @@ type SnapshotRow = {
 };
 
 const SUPPORTED_MEMBER_SNAPSHOT_RELEASES = [
+  {
+    snapshotRelease: CFB_RESISTANCE_PREVIOUS_MEMBER_SNAPSHOT_RELEASE,
+    fixtureRelease: CFB_RESISTANCE_PREVIOUS_MEMBER_FIXTURE_RELEASE,
+    evidenceRelease: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+    memberRelease: CFB_FORWARD_MEMBER_RELEASE,
+  },
   {
     snapshotRelease: CFB_MARKET_EVIDENCE_PREVIOUS_MEMBER_SNAPSHOT_RELEASE,
     fixtureRelease: CFB_MARKET_EVIDENCE_PREVIOUS_MEMBER_FIXTURE_RELEASE,

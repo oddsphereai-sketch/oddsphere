@@ -1,0 +1,841 @@
+{
+  "scope": "Owner-directed functional moneyline evidence/premium-tier correction; no historical accuracy tournament or quota tuning",
+  "authorization": "Review/fix restrictions keeping genuinely strong market-supported picks from Best Angle, without just loosening for more plays.",
+  "startingBase": "1c2dd053ac133f7fb226818d60411ea75b191614",
+  "sports": [
+    "nba",
+    "nfl",
+    "nhl",
+    "cfb"
+  ],
+  "unchangedSports": [
+    "cbb",
+    "epl",
+    "ucl",
+    "mlb",
+    "wnba"
+  ],
+  "changes": {
+    "nba": "Public aggregate pressure cannot be attributed to a physical professional book; exact own-book evidence retains causal authority. Original unlocked knowledge survives exact predecessor model migration.",
+    "nfl": "A fully unchanged qualified law may earn Best through an actual source-bound opposite-pressure hold, current source economics, coherent usable comparators and a subsequent exact executable receipt.",
+    "nhl": "An already-qualified Best may survive ordinary70%/-200walls only with hash/identity/quote-bound actual professional confirmation and source value, retaining5ppmodel reserve.",
+    "cfb": "The expensive-favorite Watchlist-to-Lean branch now respects the existing resistance veto; clean counterpart still promotes."
+  },
+  "runtimeReleases": {
+    "NBA": {
+      "NBA_MODEL_RELEASE": "nba_professional_unified_2026_11_04_r34_own_book_pressure",
+      "NBA_MARKET_MARRIAGE_RELEASE": "nba_market_marriage_2026_11_04_r36_own_book_pressure",
+      "NBA_GRADE_POLICY_RELEASE": "nba_grade_policy_2026_11_04_r25_own_book_pressure"
+    },
+    "NBApressure": {
+      "NBA_MARKET_CONSEQUENCE_RELEASE": "nba_market_consequence_2026_11_04_r7_own_book_pressure"
+    },
+    "NBAposture": {
+      "NBA_NAMED_BOOK_POSTURE_RELEASE": "nba_named_book_posture_2026_11_04_r9_own_book_pressure"
+    },
+    "NFL": {
+      "NFL_V1_PRODUCTION_MODEL_RELEASE": "nfl_v1_daily_edge_model_2026_11_04_r51_unchanged_ml_confirmation",
+      "NFL_V1_PRODUCTION_CALIBRATION_RELEASE": "nfl_v1_daily_edge_calibration_2026_11_04_r50_unchanged_ml_confirmation",
+      "NFL_V1_PRODUCTION_DECISION_RELEASE": "nfl_v1_daily_edge_decision_2026_11_04_r59_unchanged_ml_confirmation",
+      "NFL_V1_GRADE_POLICY_RELEASE": "nfl_v1_grade_policy_2026_11_04_r59_unchanged_ml_confirmation",
+      "NFL_V1_MEMBER_RELEASE": "nfl_v1_member_release_2026_11_04_r56_unchanged_ml_confirmation"
+    },
+    "NFLinnovation": {
+      "NFL_MARKET_INNOVATION_RELEASE": "nfl_market_innovation_2026_11_04_r4_unchanged_ml_confirmation"
+    },
+    "NFLsnapshot": {
+      "NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE": "nfl_forward_member_snapshot_2026_11_04_r64_unchanged_ml_confirmation"
+    },
+    "CFB": {
+      "CFB_V1_BASE_SCORE_ARTIFACT_RELEASE": "cfb_professional_weekly_runtime_2026_10_01_r7_compact48",
+      "CFB_V1_BASE_MODEL_RELEASE": "cfb_professional_independent_score_model_2026_10_01_r7_compact48",
+      "CFB_V1_BASE_DISTRIBUTION_RELEASE": "cfb_professional_empirical_joint_distribution_2026_10_01_r7_compact48",
+      "CFB_V1_BASE_PROBABILITY_RELEASE": "cfb_professional_joint_probability_2026_10_01_r7_compact48",
+      "CFB_V1_BASE_REPRESENTATIVE_SCORE_RELEASE": "cfb_professional_reachable_score_2026_10_01_r7_compact48",
+      "CFB_V1_SCORE_ARTIFACT_RELEASE": "cfb_v1_joint_score_runtime_2026_10_27_r27_near_tie_pmf_winner_coherence",
+      "CFB_V1_MODEL_RELEASE": "cfb_v1_professional_score_model_2026_10_27_r26_near_tie_pmf_winner_coherence",
+      "CFB_V1_DISTRIBUTION_RELEASE": "cfb_v1_professional_joint_distribution_2026_10_27_r24_near_tie_pmf_winner_coherence",
+      "CFB_V1_PROBABILITY_RELEASE": "cfb_v1_professional_joint_probability_2026_10_27_r28_near_tie_pmf_winner_coherence",
+      "CFB_V1_REPRESENTATIVE_SCORE_RELEASE": "cfb_v1_professional_reachable_score_2026_10_27_r24_near_tie_pmf_winner_coherence",
+      "CFB_V1_CALIBRATION_RELEASE": "cfb_v1_exact_price_calibration_2026_11_04_r32_moneyline_resistance_guard",
+      "CFB_V1_GRADE_POLICY_RELEASE": "cfb_v1_composite_grade_policy_2026_11_04_r30_moneyline_resistance_guard",
+      "CFB_V1_DECISION_RELEASE": "cfb_v1_daily_edge_decision_2026_11_04_r59_moneyline_resistance_guard",
+      "CFB_V1_DECISION_SCHEMA_RELEASE": "cfb_v1_exact_price_decision_tuple_2026_10_31_r45_market_evidence_integrity"
+    },
+    "CFBsnapshot": {
+      "CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE": "cfb_forward_member_snapshot_2026_11_04_r61_moneyline_resistance_guard",
+      "CFB_MEMBER_SNAPSHOT_READER_RELEASE": "cfb_member_snapshot_reader_2026_11_04_r46_moneyline_resistance_guard"
+    },
+    "NHL": {
+      "NHL_REGULAR_MODEL_RELEASE": "nhl_regular_2026_r28_exact_price_professional_best",
+      "NHL_REGULAR_CALIBRATION_RELEASE": "nhl_regular_calibration_2026_r28_exact_price_professional_best",
+      "NHL_REGULAR_DECISION_RELEASE": "nhl_regular_decision_2026_r28_exact_price_professional_best"
+    },
+    "NHLreceipt": {
+      "NHL_READER_RECEIPT_RELEASE": "nhl_reader_receipt_2026_11_04_r3_exact_price_professional_best"
+    }
+  },
+  "unchangedEconomics": [
+    "No NBA confidence/edge/steep-price threshold relaxed",
+    "NFL existing59% probability,2%modelEV and\u2212200 price eligibility retained; qualifiedunchangedroute usesactualprofessionalvalue",
+    "NHL existing5ppmodel-vs-impliedreserve retained; negative sourceEV/\u2212900/actualopposition never bypassed",
+    "No CFB numericthreshold/quorum/sourcefeedmigrationchange"
+  ],
+  "writers": "Existing sole sport-scoped prediction_pipeline writers and cadence; no new writer/provider requests/stakes",
+  "lockedBaseline": {
+    "records": 639,
+    "bySport": {
+      "nba": 153,
+      "nhl": 144,
+      "cfb": 300,
+      "nfl": 42
+    },
+    "artifact": "/private/tmp/moneyline-market-confirmation-lock-baseline-20261104.json"
+  },
+  "sameInputImpact": {
+    "nba": {
+      "scope": "file_only_same_input_receipt_semantic_replay_no_outcomes_no_provider_no_writes",
+      "capturedAt": "2026-11-04T13:04:01.838Z",
+      "games": 14,
+      "markets": 42,
+      "before": {
+        "moneyline": {
+          "watch": 6,
+          "lean": 8
+        },
+        "spread": {
+          "lean": 7,
+          "watch": 7
+        },
+        "total": {
+          "watch": 9,
+          "lean": 5
+        }
+      },
+      "after": {
+        "moneyline": {
+          "watch": 6,
+          "lean": 7,
+          "best_angle": 1
+        },
+        "spread": {
+          "lean": 7,
+          "watch": 7
+        },
+        "total": {
+          "watch": 9,
+          "lean": 5
+        }
+      },
+      "promotions": 0,
+      "demotions": 0,
+      "tierPromotions": 1,
+      "tierDemotions": 0,
+      "scoresSidesProbabilitiesPricesChanged": 0,
+      "changed": [
+        {
+          "id": 535245,
+          "gameId": 401909928,
+          "matchup": "UTAH @ NO",
+          "market": "moneyline",
+          "pick": "NO ML",
+          "probability": 0.7584752809594169,
+          "price": -205,
+          "EV": 0.12846322289083978,
+          "before": "lean",
+          "after": "best_angle",
+          "beforeRisk": [
+            "consensus:circa:held_under_pressure",
+            "consensus:pinnacle:held_under_pressure"
+          ],
+          "afterRisk": [],
+          "support": [
+            "pinnacle"
+          ],
+          "opposition": []
+        }
+      ]
+    },
+    "cfb": {
+      "scope": "bounded saved CFB member-board review plus exact raw-writer guard-input replay for the only2open affected-branch receipts; not a full forecast replay or performance backtest",
+      "providerRequests": 0,
+      "databaseWrites": 0,
+      "savedBoardGames": 108,
+      "openGames": 106,
+      "lockedGames": 2,
+      "currentOpenMoneylineGrades": {
+        "Lean": 8,
+        "Watchlist": 50,
+        "Best Angle": 1,
+        "No Play": 47
+      },
+      "guardPromotionReceiptRows": [
+        {
+          "gameId": "cfb-458113",
+          "matchup": "OHIO@AKR",
+          "lockState": "locked",
+          "price": -520,
+          "modelProbability": 0.8608577551009202,
+          "marketFairProbability": 0.8116567453785554,
+          "writerMovementDirection": "support",
+          "reviewFlags": [
+            "favorite_price_caps_confidence_at_watchlist",
+            "bounded_market_evidence_support",
+            "displayed_quote_bet",
+            "spread_value_can_exceed_moneyline_price_value",
+            "moneyline_market_confirmed_favorite_lean",
+            "quarterback_starter_projected_not_confirmed",
+            "injury_feed_unavailable"
+          ],
+          "displayedMarketRead": {
+            "status": "aligned",
+            "label": "Market Support",
+            "tone": "emerald",
+            "copy": "Market signals support OHIO."
+          },
+          "exactWriterDirectionInputsAvailable": false,
+          "reviewStatus": "locked record preserved; no guard replay or mutable-source reconstruction performed"
+        },
+        {
+          "gameId": "cfb-458471",
+          "matchup": "JMU@USM",
+          "lockState": "open",
+          "price": -650,
+          "modelProbability": 0.8696233599994676,
+          "marketFairProbability": 0.830714459889272,
+          "writerMovementDirection": "neutral",
+          "reviewFlags": [
+            "favorite_price_caps_confidence_at_watchlist",
+            "bounded_market_evidence_support",
+            "displayed_quote_bet",
+            "spread_value_can_exceed_moneyline_price_value",
+            "moneyline_market_confirmed_favorite_lean",
+            "quarterback_starter_projected_not_confirmed"
+          ],
+          "displayedMarketRead": {
+            "status": "mixed",
+            "label": "Mixed",
+            "tone": "gray",
+            "copy": "Consensus splits support JMU, but sharp book splits show resistance."
+          },
+          "exactWriterDirectionInputsAvailable": true,
+          "exactWriterEvidenceCapturedAt": "2026-11-04T12:35:47.148+00:00",
+          "exactWriterDirections": {
+            "sharpDirection": "unknown",
+            "publicDirection": "neutral",
+            "movementDirection": "neutral"
+          },
+          "guardReplayGrade": "Lean"
+        },
+        {
+          "gameId": "cfb-458477",
+          "matchup": "ULM@ARST",
+          "lockState": "open",
+          "price": -650,
+          "modelProbability": 0.8768245043341228,
+          "marketFairProbability": 0.8396813339836037,
+          "writerMovementDirection": "neutral",
+          "reviewFlags": [
+            "favorite_price_caps_confidence_at_watchlist",
+            "bounded_market_evidence_resistance",
+            "displayed_quote_bet",
+            "spread_value_can_exceed_moneyline_price_value",
+            "moneyline_market_confirmed_favorite_lean",
+            "quarterback_starter_projected_not_confirmed",
+            "injury_feed_unavailable"
+          ],
+          "displayedMarketRead": {
+            "status": "aligned",
+            "label": "Market Support",
+            "tone": "emerald",
+            "copy": "Market signals support ARST."
+          },
+          "exactWriterDirectionInputsAvailable": true,
+          "exactWriterEvidenceCapturedAt": "2026-11-04T12:40:42.927+00:00",
+          "exactWriterDirections": {
+            "sharpDirection": "unknown",
+            "publicDirection": "neutral",
+            "movementDirection": "neutral"
+          },
+          "guardReplayGrade": "Lean"
+        }
+      ],
+      "boardImpactLimit": "Full106open-game member board has only2affected-branchpromotionreceipts. Exact latest rawwriterpayloads at/before boardpublication were read for both. Both retain sharpDirectionunknown/publicDirectionneutral/movementDirectionneutral and remainLean under the repairedguard. Neither displayedstaleSharpBookSplits nor bounded holisticadjustment sign is substituted for the exact guardinput. Allother104open rows lack the changedbranchreason and are unaffected. LockedOHIO preserved.",
+      "pairedRegression": "Clean -250,p=.75,fair=.70,+EV Watch\u2192Lean retained; eachindividual resistance and all3resistance stayWatch. NegativeEV staysWatch. Reader/writer preserve exact oldR58lock and readerR60snapshot.",
+      "rawWriterReadQueries": 2,
+      "rawWriterReplay": [
+        {
+          "gameId": "458471",
+          "capturedAt": "2026-11-04T12:35:47.148+00:00",
+          "pick": "JMU",
+          "input": {
+            "market": "moneyline",
+            "finalGrade": "Watchlist",
+            "probabilityGrade": "Best Angle",
+            "executionStatus": "bet",
+            "expectedValue": 0.003411569230154926,
+            "modelProbability": 0.8696233599994676,
+            "marketFairProbability": 0.830714459889272,
+            "evaluatedPrice": -650,
+            "evaluatedLine": null,
+            "sharpDirection": "unknown",
+            "publicDirection": "neutral",
+            "movementDirection": "neutral",
+            "reasonCodes": [
+              "favorite_price_caps_confidence_at_watchlist",
+              "bounded_market_evidence_support",
+              "displayed_quote_bet",
+              "spread_value_can_exceed_moneyline_price_value"
+            ],
+            "calibrationFamily": "authoritative_market_sharp_pmf_identity"
+          },
+          "originalGrade": "Lean",
+          "candidateGrade": "Lean"
+        },
+        {
+          "gameId": "458477",
+          "capturedAt": "2026-11-04T12:40:42.927+00:00",
+          "pick": "ARST",
+          "input": {
+            "market": "moneyline",
+            "finalGrade": "Watchlist",
+            "probabilityGrade": "Best Angle",
+            "executionStatus": "bet",
+            "expectedValue": 0.011720581923987894,
+            "modelProbability": 0.8768245043341228,
+            "marketFairProbability": 0.8396813339836037,
+            "evaluatedPrice": -650,
+            "evaluatedLine": null,
+            "sharpDirection": "unknown",
+            "publicDirection": "neutral",
+            "movementDirection": "neutral",
+            "reasonCodes": [
+              "favorite_price_caps_confidence_at_watchlist",
+              "bounded_market_evidence_resistance",
+              "displayed_quote_bet",
+              "spread_value_can_exceed_moneyline_price_value"
+            ],
+            "calibrationFamily": "authoritative_market_sharp_pmf_identity"
+          },
+          "originalGrade": "Lean",
+          "candidateGrade": "Lean"
+        }
+      ],
+      "exactBoardImpact": {
+        "openGames": 106,
+        "moneylinePromotions": 0,
+        "moneylineDemotions": 0,
+        "currentLeans": 8,
+        "candidateLeans": 8,
+        "currentBest": 1,
+        "candidateBest": 1,
+        "lockedGamesMutated": 0
+      }
+    },
+    "nhl": {
+      "source": "/private/tmp/moneyline-nhl-current-receipts-20261104.json",
+      "capturedAt": "2026-11-04T13:42:50.029Z",
+      "scope": "pure_same_input_prospective_r28_grade_comparison_actual_r27_rows_no_provider_or_writer_calls",
+      "games": [
+        {
+          "externalId": 2026020247,
+          "matchup": "OTT@BUF",
+          "quote": {
+            "side": "home",
+            "line_value": null,
+            "sportsbook": "circa",
+            "market_type": "moneyline",
+            "observed_at": "2026-11-04T13:34:42.900296+00:00",
+            "odds_american": -124
+          },
+          "rawModelVerdict": "watchlist",
+          "legacyR2ExceptionResult": "watchlist",
+          "professionalSplits": 0,
+          "sourceInterpretation": {
+            "side": "away",
+            "state": "resistance",
+            "reasonCodes": [
+              "qualified_split_response"
+            ],
+            "pressureBasis": "money_differential",
+            "selectedMoveAt": null,
+            "authoritySource": "independent",
+            "appliedInnovation": 0,
+            "observedInnovation": 0
+          },
+          "modelExactPriceEdge": -0.02159678316980085,
+          "proofPathCount": 2,
+          "receiptBytes": 10003,
+          "comparisons": [
+            {
+              "market": "moneyline",
+              "before": "watchlist",
+              "after": "watchlist",
+              "pick": "BUF ML",
+              "probability": 0.5319746454016278
+            },
+            {
+              "market": "total",
+              "before": "lean",
+              "after": "lean",
+              "pick": "UNDER 6.5",
+              "probability": 0.5596784197695178
+            },
+            {
+              "market": "spread",
+              "before": "lean",
+              "after": "lean",
+              "pick": "OTT +1.5",
+              "probability": 0.7084855412824165
+            }
+          ],
+          "sourceProofPaths": 2,
+          "sourceProofObservations": 8,
+          "addedSourcePathJsonBytes": 1282,
+          "originalR2ReceiptJsonBytes": 11586,
+          "receiptBytesScope": "Pure grade rehearsal rebuild omits raw execution history unavailable outside stored trails; do not treat reconstructed size as full writer size. Original receipt size and added native-path bytes are separately reported."
+        },
+        {
+          "externalId": 2026020250,
+          "matchup": "CGY@SEA",
+          "quote": {
+            "side": "home",
+            "line_value": null,
+            "sportsbook": "circa",
+            "market_type": "moneyline",
+            "observed_at": "2026-11-04T13:34:42.900296+00:00",
+            "odds_american": -129
+          },
+          "rawModelVerdict": "lean",
+          "legacyR2ExceptionResult": "lean",
+          "professionalSplits": 0,
+          "sourceInterpretation": {
+            "side": "away",
+            "state": "resistance",
+            "reasonCodes": [
+              "qualified_split_response"
+            ],
+            "pressureBasis": "consensus",
+            "selectedMoveAt": null,
+            "authoritySource": "independent",
+            "appliedInnovation": 0,
+            "observedInnovation": 0
+          },
+          "modelExactPriceEdge": 0.017800770062569637,
+          "proofPathCount": 2,
+          "receiptBytes": 10163,
+          "comparisons": [
+            {
+              "market": "moneyline",
+              "before": "lean",
+              "after": "lean",
+              "pick": "SEA ML",
+              "probability": 0.581119547355146
+            },
+            {
+              "market": "total",
+              "before": "lean",
+              "after": "lean",
+              "pick": "OVER 6.0",
+              "probability": 0.5273994795524893
+            },
+            {
+              "market": "spread",
+              "before": "watchlist",
+              "after": "watchlist",
+              "pick": "CGY +1.5",
+              "probability": 0.6646148021784689
+            }
+          ],
+          "sourceProofPaths": 2,
+          "sourceProofObservations": 10,
+          "addedSourcePathJsonBytes": 1410,
+          "originalR2ReceiptJsonBytes": 16320,
+          "receiptBytesScope": "Pure grade rehearsal rebuild omits raw execution history unavailable outside stored trails; do not treat reconstructed size as full writer size. Original receipt size and added native-path bytes are separately reported."
+        },
+        {
+          "externalId": 2026020248,
+          "matchup": "CHI@FLA",
+          "quote": {
+            "side": "home",
+            "line_value": null,
+            "sportsbook": "circa",
+            "market_type": "moneyline",
+            "observed_at": "2026-11-04T13:34:42.900296+00:00",
+            "odds_american": -249
+          },
+          "rawModelVerdict": "lean",
+          "legacyR2ExceptionResult": "lean",
+          "professionalSplits": 0,
+          "sourceInterpretation": {
+            "side": "away",
+            "state": "resistance",
+            "reasonCodes": [
+              "qualified_split_response"
+            ],
+            "pressureBasis": "consensus",
+            "selectedMoveAt": null,
+            "authoritySource": "independent",
+            "appliedInnovation": 0,
+            "observedInnovation": 0
+          },
+          "modelExactPriceEdge": 0.012557097228637737,
+          "proofPathCount": 2,
+          "receiptBytes": 10092,
+          "comparisons": [
+            {
+              "market": "moneyline",
+              "before": "lean",
+              "after": "lean",
+              "pick": "FLA ML",
+              "probability": 0.7260241459392395
+            },
+            {
+              "market": "total",
+              "before": "watchlist",
+              "after": "watchlist",
+              "pick": "UNDER 6.0",
+              "probability": 0.5166684512680958
+            },
+            {
+              "market": "spread",
+              "before": "watchlist",
+              "after": "watchlist",
+              "pick": "CHI +1.5",
+              "probability": 0.529170620003026
+            }
+          ],
+          "sourceProofPaths": 2,
+          "sourceProofObservations": 9,
+          "addedSourcePathJsonBytes": 1377,
+          "originalR2ReceiptJsonBytes": 15044,
+          "receiptBytesScope": "Pure grade rehearsal rebuild omits raw execution history unavailable outside stored trails; do not treat reconstructed size as full writer size. Original receipt size and added native-path bytes are separately reported."
+        },
+        {
+          "externalId": 2026020249,
+          "matchup": "SJS@LAK",
+          "quote": {
+            "side": "home",
+            "line_value": null,
+            "sportsbook": "pinnacle",
+            "market_type": "moneyline",
+            "observed_at": "2026-11-04T13:34:42.900296+00:00",
+            "odds_american": -154
+          },
+          "rawModelVerdict": "best_angle",
+          "legacyR2ExceptionResult": "lean",
+          "professionalSplits": 0,
+          "sourceInterpretation": {
+            "side": "home",
+            "state": "resistance",
+            "reasonCodes": [
+              "qualified_split_response"
+            ],
+            "pressureBasis": "money_differential",
+            "selectedMoveAt": null,
+            "authoritySource": "independent",
+            "appliedInnovation": 0,
+            "observedInnovation": 0
+          },
+          "modelExactPriceEdge": 0.06931479751060321,
+          "proofPathCount": 2,
+          "receiptBytes": 10235,
+          "comparisons": [
+            {
+              "market": "moneyline",
+              "before": "lean",
+              "after": "lean",
+              "pick": "LAK ML",
+              "probability": 0.6756140101090284
+            },
+            {
+              "market": "total",
+              "before": "lean",
+              "after": "lean",
+              "pick": "OVER 6.0",
+              "probability": 0.531540436729374
+            },
+            {
+              "market": "spread",
+              "before": "watchlist",
+              "after": "watchlist",
+              "pick": "SJS +1.5",
+              "probability": 0.5770311474998464
+            }
+          ],
+          "sourceProofPaths": 2,
+          "sourceProofObservations": 11,
+          "addedSourcePathJsonBytes": 1483,
+          "originalR2ReceiptJsonBytes": 15550,
+          "receiptBytesScope": "Pure grade rehearsal rebuild omits raw execution history unavailable outside stored trails; do not treat reconstructed size as full writer size. Original receipt size and added native-path bytes are separately reported."
+        }
+      ],
+      "promotions": 0,
+      "demotions": 0,
+      "beforeCounts": {
+        "watchlist": 5,
+        "lean": 7
+      },
+      "afterCounts": {
+        "watchlist": 5,
+        "lean": 7
+      },
+      "legacyInputSha256": "8693dfa8ecfacadbebe1a4c120275aa4af9801d846ff0ac441dbe1cd8490ffec",
+      "legacyUnchanged": true,
+      "sourceProofCost": "Retains existing in-memory professional ML paths only; zero new provider/database read or cadence. Existing64KiB receipt ceiling remains enforced. No R2 record is rewritten."
+    },
+    "nfl": {
+      "scope": "Current saved NFL member-board eligibility impact only, not a raw-evidence replay or historical/backtest; no providers/database writes. No causal source proof is reconstructed from member prose/public splits.",
+      "input": "/private/tmp/daily-edge-best-angle-football-decoded-20261104.json",
+      "capturedAt": "2026-11-04T13:03:02.989Z",
+      "sourceBoardAt": "2026-11-04T12:51:10.975+00:00",
+      "route": "qualified_unchanged_moneyline_opposite_pressure_hold",
+      "limitation": "Saved member DTO has no full bound original/final law, complete raw native paired source history and pressure/quote availability needed by the new route. Such missing proof cannot authorize a promotion. Existing Bests remain unchanged; IND/MIN Lean probabilities independently fail retained59% premium floor.",
+      "markets": 15,
+      "oldGrades": {
+        "Best Angle": 2,
+        "Lean": 2,
+        "Watchlist": 0,
+        "No Play": 11
+      },
+      "newGrades": {
+        "Best Angle": 2,
+        "Lean": 2,
+        "Watchlist": 0,
+        "No Play": 11
+      },
+      "promotions": 0,
+      "demotions": 0,
+      "sideChanges": 0,
+      "probabilityChanges": 0,
+      "priceChanges": 0,
+      "rows": [
+        {
+          "gameId": "nfl-1392337",
+          "game": "JAX @ BAL",
+          "pick": "JAX",
+          "price": -500,
+          "probability": 0.5672868918448675,
+          "marketFairProbability": 0.8079148906662362,
+          "oldGrade": "No Play",
+          "newGrade": "No Play",
+          "promotion": false,
+          "reason": "new_route_not_substantiated_by_member_DTO_no_bound_original_law_raw_native_pairs_and_pressure_availability",
+          "locked": false
+        },
+        {
+          "gameId": "nfl-1392338",
+          "game": "CIN @ ATL",
+          "pick": "CIN",
+          "price": -164,
+          "probability": 0.6003718469947225,
+          "marketFairProbability": 0.5976273676436563,
+          "oldGrade": "No Play",
+          "newGrade": "No Play",
+          "promotion": false,
+          "reason": "new_route_not_substantiated_by_member_DTO_no_bound_original_law_raw_native_pairs_and_pressure_availability",
+          "locked": false
+        },
+        {
+          "gameId": "nfl-1392343",
+          "game": "NYG @ PHI",
+          "pick": "NYG",
+          "price": -165,
+          "probability": 0.5436010556232012,
+          "marketFairProbability": 0.6123397493799648,
+          "oldGrade": "No Play",
+          "newGrade": "No Play",
+          "promotion": false,
+          "reason": "new_route_not_substantiated_by_member_DTO_no_bound_original_law_raw_native_pairs_and_pressure_availability",
+          "locked": false
+        },
+        {
+          "gameId": "nfl-1392344",
+          "game": "LAR @ WSH",
+          "pick": "LAR",
+          "price": -235,
+          "probability": 0.6685570092220373,
+          "marketFairProbability": 0.6828073696988983,
+          "oldGrade": "No Play",
+          "newGrade": "No Play",
+          "promotion": false,
+          "reason": "new_route_not_substantiated_by_member_DTO_no_bound_original_law_raw_native_pairs_and_pressure_availability",
+          "locked": false
+        },
+        {
+          "gameId": "nfl-1392340",
+          "game": "NYJ @ KC",
+          "pick": "KC",
+          "price": -500,
+          "probability": 0.8104002088216451,
+          "marketFairProbability": 0.8010212202524659,
+          "oldGrade": "No Play",
+          "newGrade": "No Play",
+          "promotion": false,
+          "reason": "new_route_not_substantiated_by_member_DTO_no_bound_original_law_raw_native_pairs_and_pressure_availability",
+          "locked": false
+        },
+        {
+          "gameId": "nfl-1392339",
+          "game": "DAL @ IND",
+          "pick": "IND",
+          "price": 230,
+          "probability": 0.5388469980596337,
+          "marketFairProbability": 0.30228709955637945,
+          "oldGrade": "Lean",
+          "newGrade": "Lean",
+          "promotion": false,
+          "reason": "below_existing_59pct_premium_probability",
+          "locked": false
+        },
+        {
+          "gameId": "nfl-1392341",
+          "game": "DET @ MIA",
+          "pick": "DET",
+          "price": -325,
+          "probability": 0.646411981681514,
+          "marketFairProbability": 0.74160228553283,
+          "oldGrade": "No Play",
+          "newGrade": "No Play",
+          "promotion": false,
+          "reason": "new_route_not_substantiated_by_member_DTO_no_bound_original_law_raw_native_pairs_and_pressure_availability",
+          "locked": false
+        },
+        {
+          "gameId": "nfl-1392342",
+          "game": "CLE @ NO",
+          "pick": "NO",
+          "price": -115,
+          "probability": 0.5248121705092446,
+          "marketFairProbability": 0.5221978573073508,
+          "oldGrade": "No Play",
+          "newGrade": "No Play",
+          "promotion": false,
+          "reason": "new_route_not_substantiated_by_member_DTO_no_bound_original_law_raw_native_pairs_and_pressure_availability",
+          "locked": false
+        },
+        {
+          "gameId": "nfl-1392345",
+          "game": "DEN @ CAR",
+          "pick": "DEN",
+          "price": -148,
+          "probability": 0.6385751034577227,
+          "marketFairProbability": 0.5794068608752011,
+          "oldGrade": "Best Angle",
+          "newGrade": "Best Angle",
+          "promotion": false,
+          "reason": "new_route_not_substantiated_by_member_DTO_no_bound_original_law_raw_native_pairs_and_pressure_availability",
+          "locked": false
+        },
+        {
+          "gameId": "nfl-1392346",
+          "game": "HOU @ LAC",
+          "pick": "HOU",
+          "price": -213,
+          "probability": 0.5631148818882358,
+          "marketFairProbability": 0.6614489689002161,
+          "oldGrade": "No Play",
+          "newGrade": "No Play",
+          "promotion": false,
+          "reason": "new_route_not_substantiated_by_member_DTO_no_bound_original_law_raw_native_pairs_and_pressure_availability",
+          "locked": false
+        },
+        {
+          "gameId": "nfl-1392347",
+          "game": "LV @ SF",
+          "pick": "SF",
+          "price": -480,
+          "probability": 0.7212306373074265,
+          "marketFairProbability": 0.7994457125160357,
+          "oldGrade": "No Play",
+          "newGrade": "No Play",
+          "promotion": false,
+          "reason": "new_route_not_substantiated_by_member_DTO_no_bound_original_law_raw_native_pairs_and_pressure_availability",
+          "locked": false
+        },
+        {
+          "gameId": "nfl-1392349",
+          "game": "ARI @ SEA",
+          "pick": "SEA",
+          "price": -650,
+          "probability": 0.7479478271683703,
+          "marketFairProbability": 0.8365277646387554,
+          "oldGrade": "No Play",
+          "newGrade": "No Play",
+          "promotion": false,
+          "reason": "new_route_not_substantiated_by_member_DTO_no_bound_original_law_raw_native_pairs_and_pressure_availability",
+          "locked": false
+        },
+        {
+          "gameId": "nfl-1392348",
+          "game": "GB @ NE",
+          "pick": "NE",
+          "price": -158,
+          "probability": 0.6725843727516719,
+          "marketFairProbability": 0.6040074135064584,
+          "oldGrade": "Best Angle",
+          "newGrade": "Best Angle",
+          "promotion": false,
+          "reason": "new_route_not_substantiated_by_member_DTO_no_bound_original_law_raw_native_pairs_and_pressure_availability",
+          "locked": false
+        },
+        {
+          "gameId": "nfl-1392350",
+          "game": "TB @ CHI",
+          "pick": "CHI",
+          "price": -275,
+          "probability": 0.7195000238957004,
+          "marketFairProbability": 0.709276623930902,
+          "oldGrade": "No Play",
+          "newGrade": "No Play",
+          "promotion": false,
+          "reason": "new_route_not_substantiated_by_member_DTO_no_bound_original_law_raw_native_pairs_and_pressure_availability",
+          "locked": false
+        },
+        {
+          "gameId": "nfl-1392351",
+          "game": "BUF @ MIN",
+          "pick": "MIN",
+          "price": 155,
+          "probability": 0.5331459969439524,
+          "marketFairProbability": 0.38568542227542096,
+          "oldGrade": "Lean",
+          "newGrade": "Lean",
+          "promotion": false,
+          "reason": "below_existing_59pct_premium_probability",
+          "locked": false
+        }
+      ]
+    }
+  },
+  "validation": {
+    "state": "Full model-change gate, affected focused tests, TypeScript and independent cross-reviews passed before publication",
+    "fullGate": "npm run verify:model-change",
+    "focusedNBA": 11,
+    "focusedNFL": "unchanged confirmation, price history, splits, posture, writer and exact predecessor lock suites",
+    "focusedNHL": "new premium proof and existing episode/pressure/joint/receipt/model suites",
+    "focusedCFB": "paired resistance guard, production and legacy snapshot suites",
+    "TypeScript": "passed --noEmit --incremental false",
+    "ESLint": "0errors; pre-existing unused declarations plus intentionally discarded receipt hash warnings",
+    "diffCheck": "passed",
+    "historicalAccuracyClaim": false,
+    "productionChanged": false,
+    "localOptionalPostgres": "skipped: MARKET_BRAIN_POSTGRES_URL unset; no SQL/schema change",
+    "independentReview": [
+      "B reviewed NBA attribution/statehandoff and all42marketcomparison",
+      "B independently reproduced+verified NFLfuture-comparator rejection",
+      "A reviewed NHL causal receipt/price eligibility and CFBguard+legacycompatibility",
+      "Root reviewed source/clock boundaries and validated639-row locked baseline"
+    ]
+  },
+  "rollback": "Complete prior sport tuple NBA R33/R35/R24/R6/postureR8; NFL R50/R49/R58/memberR55/fixtureR71/snapshotR63; NHL R27/receiptR2; CFB decisionR58/calR31/policyR29/fixtureR100/snapshotR60/readerR45/writerR148. Preserve records locked under either release.",
+  "integration": {
+    "latestBase": "bb78dbe41c5e4ee4dc18d168162d5d53fbd97752",
+    "incomingRelease": "UCL PR987 multibook/presentation",
+    "overlappingFiles": [
+      "docs/current-model-releases.md",
+      "docs/model-change-safety.md"
+    ],
+    "resolution": "Both scoped release entries retained intact; no runtime overlap. Full model gate/types rerun on combined tree before publishing."
+  }
+}

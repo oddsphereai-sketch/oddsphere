@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NflPreviewBookOdds } from "./balldontlieNflPreviewSlate";
 
 export const NFL_OWLS_NAMED_PRICE_HISTORY_RELEASE =
-  "nfl_owls_named_price_history_2026_10_31_r1_exact_paired_chronology" as const;
+  "nfl_owls_named_price_history_2026_11_04_r2_moneyline_availability_bound" as const;
 
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 64;
@@ -23,6 +23,8 @@ export type NflOwlsNamedPriceRow = {
   american_price: number | null;
   provider_timestamp: string | null;
   fetched_at: string;
+  /** Durable availability upper bound; older offline rows may lack it. */
+  inserted_at?: string;
 };
 
 export type NflOwlsNamedPriceHistory = {
@@ -57,7 +59,7 @@ export async function readNflOwlsNamedPriceHistory(args: {
   let queries = 1;
   for (let page = 0; page < MAX_PAGES && lastId < maximumId; page++) {
     const result = await args.client.from("market_price_observations_v2")
-      .select("id,canonical_event_id,provider,provider_event_id,ingestion_run_id,sportsbook,market_type,selection_key,line,american_price,provider_timestamp,fetched_at")
+      .select("id,canonical_event_id,provider,provider_event_id,ingestion_run_id,sportsbook,market_type,selection_key,line,american_price,provider_timestamp,fetched_at,inserted_at")
       .eq("league", "nfl").eq("provider", "owls")
       .in("canonical_event_id", gameIds).in("sportsbook", [...BOOKS])
       .lte("fetched_at", args.evaluatedAt)
@@ -96,7 +98,7 @@ export function pairNflOwlsNamedPriceRows(
   let rejectedPairs = 0;
   const paired = new Map<string, {
     gameId: string; sportsbook: string; runId: string; eventId: string;
-    sourceAt: string; fetchedAt: string;
+    sourceAt: string; fetchedAt: string; availableAt?: string;
     markets: {
       moneyline?: NflPreviewBookOdds["moneyline"];
       spread?: NflPreviewBookOdds["spread"];
@@ -137,6 +139,10 @@ export function pairNflOwlsNamedPriceRows(
       markets: {},
     };
     entry.fetchedAt = latestTime(entry.fetchedAt, secondSide.fetched_at);
+    if (market === "moneyline" && [firstSide,secondSide].every(row =>
+      Number.isFinite(Date.parse(row.inserted_at ?? "")) && Date.parse(row.inserted_at!) >= Date.parse(row.provider_timestamp!))) {
+      entry.availableAt = latestTime(firstSide.inserted_at!,secondSide.inserted_at!);
+    }
     if (market === "moneyline") entry.markets.moneyline = { awayPrice: firstPrice, homePrice: secondPrice };
     else if (market === "spread") entry.markets.spread = {
       awayLine: firstLine!, awayPrice: firstPrice, homeLine: secondLine!, homePrice: secondPrice,
@@ -155,6 +161,7 @@ export function pairNflOwlsNamedPriceRows(
       provider: "owls",
       sportsbook: entry.sportsbook,
       observedAt: entry.sourceAt,
+      ...(entry.availableAt ? { availableAt: entry.availableAt } : {}),
       targetEligible: false,
       marketSelection: { moneyline: "main_line", spread: "main_line", total: "main_line" },
       marketObservedAt: Object.fromEntries(Object.keys(entry.markets).map((market) => [market, entry.sourceAt])),

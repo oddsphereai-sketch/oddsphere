@@ -1,5 +1,41 @@
 # Model change safety protocol
 
+## Owner-directed moneyline evidence and strongest-tier correction — November 4
+
+The owner explicitly instructed: "review those moneyline restrictions and fix
+anything that's too rigid or keeping a genuinely strong market-supported pick
+from Best Angle. Don't just loosen things to get more plays."
+
+This scoped functional correction covers NBA own-book pressure attribution,
+NFL unchanged-full-law professional confirmation, NHL source/quote-bound premium
+eligibility, and the CFB expensive-favorite resistance guard. It does not tune on
+settled results, widen numerical floors to increase play counts, add a model,
+writer, provider request, schedule, stake or shadow candidate to production, or
+change scores/probabilities. The existing sport-scoped `prediction_pipeline`
+leases and authoritative publication paths remain unchanged.
+
+NBA retains public context but removes invented same-book causal attribution.
+NFL requires an actual native professional opposite-pressure/held-pair sequence
+and subsequent executable receipt, while preserving existing premium economics.
+NHL's exception requires the validated source receipt and positive professional
+exact-target economics; independent confidence alone cannot defeat the tier walls.
+CFB retains its tested clean promotion and now rejects that same branch when
+legitimate source resistance is present. Unavailable/conflicting evidence never
+qualifies a promotion by default. These are prospective functional changes under
+the owner's repair/forward-evaluation direction, not claims of proven prediction
+accuracy or authority to relax other markets.
+
+The current release registry records the four complete runtime tuples. Exact prior
+NBA R33/R6 state, NFL R63, NHL R27/R2 and CFB R60 locked member payloads and tracking
+remain authoritative. Read-only baseline hashes cover639 recent locked records.
+Publication requires the full model-change gate, focused positive/negative and
+legacy-lock tests, actual board-count/source checks, independent review,
+fresh-main integration safety, protected PR checks, exact production-tree proof
+and normal writer/reader/lock verification. Keep any unverified behavior offline;
+never rewrite locks or persist a shadow candidate. Rollback is the complete prior
+sport tuple, preserving records already locked under either release. Evidence:
+`docs/model-audits/2026-11-04-moneyline-market-confirmation.json`.
+
 ## Owner-directed UCL multibook/full-pregame and score-presentation continuation — November 4
 
 After the R20 spot check, Daniel explicitly directed this chat to continue repairing

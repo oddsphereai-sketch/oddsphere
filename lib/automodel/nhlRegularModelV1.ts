@@ -9,11 +9,12 @@ import type {
   NhlSplitPressureReceipt,
 } from "../services/nhl/nhlMarketEpisodeArbiter";
 
-export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r27_external_audited_sharp_reader" as const;
-export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r27_external_audited_sharp_reader" as const;
-export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r27_external_audited_sharp_reader" as const;
+export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r28_exact_price_professional_best" as const;
+export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r28_exact_price_professional_best" as const;
+export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r28_exact_price_professional_best" as const;
 export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
   NHL_REGULAR_MODEL_RELEASE,
+  "nhl_regular_2026_r27_external_audited_sharp_reader",
   "nhl_regular_2026_r26_causal_joint_market_reader",
   "nhl_regular_2026_r25_categorical_total_response",
   "nhl_regular_2026_r24_categorical_market_consequence",
@@ -34,6 +35,7 @@ export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
 ] as const;
 export const NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES = [
   NHL_REGULAR_CALIBRATION_RELEASE,
+  "nhl_regular_calibration_2026_r27_external_audited_sharp_reader",
   "nhl_regular_calibration_2026_r26_causal_joint_market_reader",
   "nhl_regular_calibration_2026_r25_categorical_total_response",
   "nhl_regular_calibration_2026_r24_categorical_market_consequence",
