@@ -1,0 +1,27 @@
+{
+  "scope": "Read-only CBB schedule presentation; no forecast, probability, grade, price, stake, source ingestion or prediction-writer behavior changes.",
+  "baseSha": "fe0f678e379500979285af092acbd0fb4a2c991d",
+  "modelIdentifiers": "R17 model / R21 grade / R13 receipt / R32 publisher unchanged",
+  "rootCauses": [
+    "The active member route explicitly removed cbbRollingSchedule even though the canonical schedule and sole-writer eligible IDs were available.",
+    "The active EdgeBoard computed pending CBB games but passed an empty schedule into chronological merging, making its existing pending cards unreachable."
+  ],
+  "repair": [
+    "Attach the bounded canonical database-only schedule through a 120-second shared Data Cache and existing read deadline; apply sole-writer eligible scope and exclude already published IDs.",
+    "Render pending cards only under All; include them in visible/search/All counts while reporting analyzed and pending separately.",
+    "Keep pending identity/start/status distinct from betting outputs; never assign a price, score, probability, pick or play grade."
+  ],
+  "observedSchedule": {
+    "date": "2026-11-04 America/New_York",
+    "canonicalAndFreeScheduleFixtures": 26,
+    "analyzed": 10,
+    "scheduleOnly": 16,
+    "source": "Prior bounded canonical DB and ESPN groups50 schedule audit; current per-game unpriced/incomplete reasons remain unproven."
+  },
+  "immutability": "Existing analyzed DTOs, locked values and stored payloads are neither reconstructed nor mutated; optional schedule failure retains the analyzed board.",
+  "classificationBoundary": "Adding identity-only pending rows is presentation, not model input, market selection or a new prediction writer. No model/calibration identifier changes are needed.",
+  "newProviderRequests": 0,
+  "databaseWrites": 0,
+  "newPollingJobs": 0,
+  "checks": "PASS actual EdgeBoard SSR26/10/16 and pending-only/grade-filter exclusion, cached attachment eligibility/dedup/locked DTO/failure tests, existing daily-slate/rolling tests, TypeScript, ESLint and diff checks. Independent A implementation review and D source review pass. Full model regression is running; protected current-main PR and actual live board proof remain required."
+}
