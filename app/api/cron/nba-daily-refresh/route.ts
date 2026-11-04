@@ -59,8 +59,9 @@ import {
   refreshNbaTeamRatings,
 } from "@/lib/services/nba/refreshNbaTeamRatingsService";
 import { refreshNbaLines } from "@/lib/services/nba/refreshNbaLinesService";
-import { fetchNbaTheOddsApiCurrentBoard } from "@/lib/services/nba/nbaTheOddsApiCurrentOdds";
+import { fetchNbaTheOddsApiCurrentBoard, nbaTheOddsApiSafeDiagnosticError } from "@/lib/services/nba/nbaTheOddsApiCurrentOdds";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
+import { upsertLabResponseSnapshot } from "@/lib/services/labResponseSnapshots";
 import {
   loadNbaRollingSchedule,
   nbaScheduleSeedDates,
@@ -71,7 +72,7 @@ import { nbaPlayerPropsSlateDate } from "@/lib/services/nba/nbaPlayerPropsLifecy
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
 const NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV = "NBA_PLAYER_PROPS_PRIVATE_WRITER_ENABLED";
-const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_11_03_r22_consumer_gap_continuity";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_11_04_r23_native_consumer_pairs";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year
@@ -381,8 +382,31 @@ export async function GET(request: Request): Promise<Response> {
       } : {
         requests: theOddsApiCurrentPromise ? 1 : 0,
         configured: Boolean(theOddsApiKey),
-        error: theOddsApiCurrentError,
+        error: nbaTheOddsApiSafeDiagnosticError(theOddsApiCurrentError, theOddsApiKey),
       };
+      // Retain bounded, non-secret diagnostics from this existing leased run.
+      // No second provider request, timer, model writer or schema is introduced.
+      const providerDiagnostics = await upsertLabResponseSnapshot({
+        snapshotKey: "nba::provider-diagnostics::current",
+        kind: "daily_edge",
+        sport: "nba",
+        slateDate: etDateDashed,
+        payloadVersion: NBA_DAILY_REFRESH_RELEASE,
+        source: "nba_daily_refresh_provider_diagnostics",
+        ttlMs: 60 * 60_000,
+        staleMs: 24 * 60 * 60_000,
+        payload: {
+          release: NBA_DAILY_REFRESH_RELEASE,
+          checkedAt: new Date().toISOString(),
+          theOddsApiConfigured: Boolean(theOddsApiKey),
+          theOddsApi: stepDetails.the_odds_api_current,
+          lineScopes: lineResults.map(entry => ({ date: entry.date, games: entry.result.gamesInDb,
+            missingConsumerOffers: entry.result.errors.filter(error => error.startsWith("NBA consumer execution prices unavailable")) })),
+        },
+      });
+      stepDetails.provider_diagnostics = { ok: providerDiagnostics.ok,
+        snapshotKey: providerDiagnostics.snapshotKey };
+      if (!providerDiagnostics.ok) partial = true;
       const lineTotals = lineResults.reduce(
         (total, entry) => ({
           gamesInDb: total.gamesInDb + entry.result.gamesInDb,

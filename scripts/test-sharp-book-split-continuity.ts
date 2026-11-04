@@ -301,3 +301,61 @@ for (const sourceBook of ["circa", "draftkings", "draftkings_network", "betmgm",
  }
 }
 console.log("PASS explicit named-source authority: Circa professional; DraftKings/BetMGM retail; consensus public; unknown unclassified; both sides retained, zero regrading and exact locked bytes.");
+
+const nbaClockBoard = response(); nbaClockBoard.sport = "nba";
+const nbaClockGame = nbaClockBoard.games[0]!; nbaClockGame.sport = "nba";
+nbaClockGame.lockState = "open"; nbaClockGame.lockedAt = null;
+const nbaClockSection = section("Sharp Book Splits", "2026-09-20T18:44:03.791Z", [62,38], [54,46], "circa");
+nbaClockSection.rows.forEach(row => { row.freshnessCheckedAt = "2026-09-20T20:09:55.439Z"; row.isStale = true; row.staleAfterMinutes = 75; });
+const nbaClockFeed = structuredClone(retained); nbaClockFeed.sport = "nba";
+nbaClockFeed.games[0]!.markets.moneyline = nbaClockSection;
+assert.equal(applySharpBookSplitContinuity(nbaClockBoard, nbaClockFeed, Date.parse("2026-09-20T20:10:00Z")).populatedMarkets, 1);
+assert.deepEqual(nbaClockGame.markets.moneyline.sportsbookSplits, nbaClockSection,
+  "NBA continuity preserves exact native/receipt clocks and source-age stale state");
+const capturedNbaClockFeed = __TEST__.captureFeed(nbaClockBoard, "nba", null);
+assert.deepEqual(capturedNbaClockFeed.games[0]!.markets.moneyline, nbaClockSection,
+  "continuity writer cannot strip native clock fields from the next feed");
+for (const lockState of ["locked", "open"] as const) {
+  const lockedNba = structuredClone(nbaClockBoard);lockedNba.games[0]!.lockState=lockState;
+  lockedNba.games[0]!.lockedAt="2026-09-20T20:00:00Z";
+  const before=JSON.stringify(lockedNba);
+  applySharpBookSplitContinuity(lockedNba,nbaClockFeed,Date.now(),{reconstructMissingLockedPreLock:true});
+  restoreCompleteSharpBookSplitDisplay(lockedNba,nbaClockFeed);
+  assert.equal(JSON.stringify(lockedNba),before,"NBA immutable locked fields cannot be rebuilt from current source clocks");
+}
+
+const transportOnlyCache = structuredClone(nbaClockFeed);
+const transportOnlySection = transportOnlyCache.games[0]!.markets.moneyline!;
+transportOnlySection.sourceObservedAt = "2026-09-20T20:09:55.439Z";
+transportOnlySection.lastUpdated = null;
+transportOnlySection.rows.forEach(row => { row.observedAt = null; row.freshnessCheckedAt = null; row.isStale = false; });
+const sourceBoundBefore = JSON.stringify(nbaClockGame.markets.moneyline.sportsbookSplits);
+applySharpBookSplitContinuity(nbaClockBoard,transportOnlyCache,Date.parse("2026-09-20T20:10:00Z"));
+assert.equal(JSON.stringify(nbaClockGame.markets.moneyline.sportsbookSplits),sourceBoundBefore,
+  "legacy transport-only continuity cannot overwrite newly built honest native source clocks");
+
+
+// A source can age after a valid capture without any new provider response.
+const freshNbaCache = structuredClone(nbaClockFeed);
+const freshCachedSection = freshNbaCache.games[0]!.markets.moneyline!;
+freshCachedSection.sourceObservedAt = "2026-09-20T19:44:03.791Z";
+freshCachedSection.lastUpdated = "2026-09-20T19:44:03.791Z";
+freshCachedSection.rows.forEach(row => { row.observedAt = "2026-09-20T19:44:03.791Z";
+  row.freshnessCheckedAt = "2026-09-20T20:09:55.439Z"; row.isStale = false; });
+const exactCache = JSON.stringify(freshNbaCache);
+for (const restore of [false,true]) {
+  const board = response();board.sport="nba";board.games[0]!.sport="nba";
+  board.games[0]!.lockState="open";board.games[0]!.lockedAt=null;
+  board.games[0]!.markets.moneyline.sharpBookAvailability={status:"complete",message:"Available",lastUpdated:freshCachedSection.lastUpdated};
+  const checkAt=Date.parse("2026-09-20T23:00:00Z");
+  if (restore) restoreCompleteSharpBookSplitDisplay(board,freshNbaCache,checkAt);
+  else applySharpBookSplitContinuity(board,freshNbaCache,checkAt);
+  const section=board.games[0]!.markets.moneyline.sportsbookSplits!;
+  assert.ok(section.rows.every(row=>row.isStale===true),"unlocked cached native reads must age at the actual later check");
+  assert.equal(section.sourceObservedAt,freshCachedSection.sourceObservedAt);
+  assert.equal(section.lastUpdated,freshCachedSection.lastUpdated);
+  assert.deepEqual(section.rows.map(row=>[row.observedAt,row.freshnessCheckedAt]),
+    freshCachedSection.rows.map(row=>[row.observedAt,row.freshnessCheckedAt]),"aging never restamps source or receipt");
+  assert.equal(board.games[0]!.markets.moneyline.sharpBookAvailability!.status,"stale");
+  assert.equal(JSON.stringify(freshNbaCache),exactCache,"current aging cannot mutate stored feed bytes");
+}
