@@ -6758,13 +6758,30 @@ locks, tracking, copy, labels, and layout are unchanged. Evidence and rollback:
 
 ## NHL regular-season champion (active from 2026-11-03)
 
-- Model: `nhl_regular_2026_r24_categorical_market_consequence`
-- Calibration: `nhl_regular_calibration_2026_r24_categorical_market_consequence`
-- Decision: `nhl_regular_decision_2026_r24_categorical_market_consequence`
+- Model: `nhl_regular_2026_r25_categorical_total_response`
+- Calibration: `nhl_regular_calibration_2026_r25_categorical_total_response`
+- Decision: `nhl_regular_decision_2026_r25_categorical_total_response`
 - Reader: `nhl_daily_edge_reader_2026_10_27_r18_owls_same_book_movement`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
+
+The November 3 r25 functional follow-up closes the remaining two-book Total
+interpretation gap found in the owner-requested live spot check. When
+target-book exclusion leaves too few comparison books, a complete Circa or
+Pinnacle Total pair now supplies a no-vig economic axis across line changes.
+Only stable material response plus complete split pressure may confirm or
+resist; flat, sub-material, mixed, incomplete, bought-back and reversed paths
+remain unresolved. Qualified movement is applied once as an innovation from
+the independent Total, and the margin is re-solved to preserve the incumbent
+Moneyline probability. The complete target-excluded professional board remains
+primary, so the fallback cannot double-count it. The exact current unlocked
+two-game / six-market comparison has zero errors, zero pick changes, zero
+promotions, zero demotions and an unchanged four actionables. ANA-VAN's apparent
+6.5-to-7 move is correctly rejected as buyback; CAR-NSH's stable Under response
+is sub-material and remains unresolved. Locked r23/r24 payloads retain exact
+precedence. Evidence and rollback:
+`docs/model-audits/2026-11-03-nhl-categorical-total-response-r25.md`.
 
 The November 3 r24 functional repair keeps the independent NHL model
 market-free and makes the qualified market reader consequential without a

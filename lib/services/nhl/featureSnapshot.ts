@@ -368,6 +368,64 @@ function totalLineByBook(lines: DbLineRow[]): Map<string, number> {
   return out;
 }
 
+type TotalAxisPoint = { line: number; overProbability: number; axis: number };
+
+/**
+ * Express a complete two-sided Total quote on one continuous economic axis.
+ * The line owns the whole-goal component while the no-vig price carries the
+ * within-line component. This prevents a 6.5 Over -140 -> 7 Over +110 move
+ * from being misread as a raw half-goal jump when most of that change is the
+ * book transporting price across the new contract.
+ */
+function totalAxisByBook(lines: DbLineRow[]): Map<string, TotalAxisPoint> {
+  const byBook = new Map<string, DbLineRow[]>();
+  for (const line of lines) {
+    if (line.market_type !== "total" || (line.side !== "over" && line.side !== "under")) continue;
+    const book = normalizedBook(line.sportsbook);
+    byBook.set(book, [...(byBook.get(book) ?? []), line]);
+  }
+  const out = new Map<string, TotalAxisPoint>();
+  for (const [book, rows] of byBook) {
+    const candidates = rows.flatMap((over) => {
+      if (over.side !== "over" || over.line_value === null) return [];
+      const under = rows.find((row) => (
+        row.side === "under"
+        && row.line_value !== null
+        && Math.abs(row.line_value - over.line_value!) < 0.01
+      ));
+      if (!under) return [];
+      const overProbability = over.implied_probability ?? americanToImplied(over.odds_american);
+      const underProbability = under.implied_probability ?? americanToImplied(under.odds_american);
+      if (overProbability === null || underProbability === null || overProbability + underProbability <= 0) return [];
+      const noVigOver = overProbability / (overProbability + underProbability);
+      return [{
+        line: over.line_value,
+        overProbability: noVigOver,
+        axis: over.line_value + 5 * (noVigOver - 0.5),
+      }];
+    });
+    const selected = candidates.sort((a, b) => Math.abs(a.line - 6) - Math.abs(b.line - 6))[0];
+    if (selected) out.set(book, selected);
+  }
+  return out;
+}
+
+function completeTotalAxisSequence(historyLines: DbLineRow[], book: string): number[] {
+  const byObservation = new Map<string, DbLineRow[]>();
+  for (const row of historyLines) {
+    if (row.market_type !== "total" || normalizedBook(row.sportsbook) !== book) continue;
+    const observedAt = row.observed_at ?? "";
+    if (!Number.isFinite(Date.parse(observedAt))) continue;
+    byObservation.set(observedAt, [...(byObservation.get(observedAt) ?? []), row]);
+  }
+  return [...byObservation.entries()]
+    .sort((a, b) => Date.parse(a[0]) - Date.parse(b[0]))
+    .flatMap(([, rows]) => {
+      const point = totalAxisByBook(rows).get(book);
+      return point === undefined ? [] : [point.axis];
+    });
+}
+
 function preferredCommonBook(current: ReadonlyMap<string, number>, opening: ReadonlyMap<string, number>): string | null {
   const common = [...current.keys()].filter((book) => opening.has(book));
   if (common.length === 0) return null;
@@ -394,6 +452,10 @@ export function selectSameBookNhlMovement(
   homePuckProbMoveSourceClass: "named" | "broad" | null;
   homePuckProbMovePathState: NhlProbabilityPathState;
   totalMove: number | null;
+  totalAxisMove: number | null;
+  totalAxisMoveSportsbook: string | null;
+  totalAxisMoveSourceClass: "named" | "broad" | null;
+  totalAxisMovePathState: NhlProbabilityPathState;
 } {
   const currentMl = completeMlByBook(currentLines);
   const openingMl = completeMlByBook(openingLines);
@@ -409,11 +471,18 @@ export function selectSameBookNhlMovement(
   const puckBook = preferredCommonBook(currentPuck, openingPuck);
   const currentTotals = totalLineByBook(currentLines);
   const openingTotals = totalLineByBook(openingLines);
-  const totalBook = preferredCommonBook(currentTotals, openingTotals);
+  const currentTotalAxes = totalAxisByBook(currentLines);
+  const openingTotalAxes = totalAxisByBook(openingLines);
+  const totalBook = preferredCommonBook(
+    new Map([...currentTotalAxes].map(([book, point]) => [book, point.axis])),
+    new Map([...openingTotalAxes].map(([book, point]) => [book, point.axis])),
+  );
   const mlOpen = mlBook === null ? null : openingMl.get(mlBook)!;
   const mlCurrent = mlBook === null ? null : currentMl.get(mlBook)!;
   const puckOpen = puckBook === null ? null : openingPuck.get(puckBook)!;
   const puckCurrent = puckBook === null ? null : currentPuck.get(puckBook)!;
+  const totalAxisOpen = totalBook === null ? null : openingTotalAxes.get(totalBook)?.axis ?? null;
+  const totalAxisCurrent = totalBook === null ? null : currentTotalAxes.get(totalBook)?.axis ?? null;
   return {
     homeProbMove: mlOpen === null || mlCurrent === null ? null : mlCurrent - mlOpen,
     homeProbMoveSportsbook: mlBook,
@@ -441,6 +510,18 @@ export function selectSameBookNhlMovement(
         spreadPair: currentPuckPair,
       })),
     totalMove: totalBook === null ? null : currentTotals.get(totalBook)! - openingTotals.get(totalBook)!,
+    totalAxisMove: totalAxisOpen === null || totalAxisCurrent === null ? null : totalAxisCurrent - totalAxisOpen,
+    totalAxisMoveSportsbook: totalBook,
+    totalAxisMoveSourceClass: totalBook === null
+      ? null
+      : SHARP_BOOK_PRIORITY.some((book) => totalBook.includes(book)) ? "named" : "broad",
+    totalAxisMovePathState: totalAxisOpen === null || totalAxisCurrent === null || totalBook === null
+      ? "unavailable"
+      : classifyProbabilityPath(
+        totalAxisOpen,
+        totalAxisCurrent,
+        completeTotalAxisSequence(historyLines, totalBook),
+      ),
   };
 }
 
@@ -828,6 +909,10 @@ export async function buildNhlFeatureSnapshot(
       same_book_home_puck_prob_move_source_class: sameBookMovement.homePuckProbMoveSourceClass,
       same_book_home_puck_prob_move_path_state: sameBookMovement.homePuckProbMovePathState,
       same_book_total_move: sameBookMovement.totalMove,
+      same_book_total_axis_move: sameBookMovement.totalAxisMove,
+      same_book_total_axis_move_sportsbook: sameBookMovement.totalAxisMoveSportsbook,
+      same_book_total_axis_move_source_class: sameBookMovement.totalAxisMoveSourceClass,
+      same_book_total_axis_move_path_state: sameBookMovement.totalAxisMovePathState,
       market_home_puck_line: marketPuckLine.home,
       market_away_puck_line: marketPuckLine.away,
       market_home_puck_prob: marketPuckProbabilities.home,
