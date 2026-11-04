@@ -1,0 +1,2283 @@
+{
+  "scope": "Single frozen11-game/33-market replay. Original publisher cutoff16:32:38.327Z. Exact stored independent forecast input is held fixed; no refit/backtest/providers/DB writes.",
+  "startingBase": "37677a23a7d5603ec5014c3cd7ccd98ffc0cdc22",
+  "summary": {
+    "games": 11,
+    "markets": 33,
+    "baselineMismatches": 0,
+    "baselineScoreMismatches": 0,
+    "oldCounts": {
+      "No Play": 21,
+      "Lean": 8,
+      "Watchlist": 4
+    },
+    "newCounts": {
+      "No Play": 25,
+      "Lean": 6,
+      "Watchlist": 2
+    },
+    "promotions": 0,
+    "demotions": 4,
+    "newBest": 0,
+    "sideChanges": 1,
+    "scoreChanges": 3,
+    "restoredPressureFrontiers": 33
+  },
+  "providerRequestsForReplay": 0,
+  "databaseWritesForReplay": 0,
+  "fullLocalReplaySha256": "c1cc67d82fb3771d43e21508acc5ada7cb7f616116bfac72d4536ca02a1ae83c",
+  "games": [
+    {
+      "gameId": 10882621,
+      "game": "NKU@SDAK",
+      "asOf": "2026-11-04T16:32:38.327Z",
+      "baselineScoreMatch": true,
+      "rawSourcePayloadUnchanged": true,
+      "sha256": "41759aecebceae9e45871866f2428d3a3b48e4f47a6ea7e7f728ab5f3c51fabd",
+      "beforeScore": {
+        "away": 82.55647825070974,
+        "home": 80.55076456333282,
+        "total": 163.10724281404256,
+        "margin": -2.0057136873769177,
+        "homeWinProbability": 0.4379562043795621
+      },
+      "afterScore": {
+        "home": 80.55076456333282,
+        "away": 82.55647825070974,
+        "margin": -2.0057136873769177,
+        "total": 163.10724281404256,
+        "homeWinProbability": 0.4379562043795621
+      },
+      "sourcePairCoverage": {
+        "price": 138,
+        "retail": 70,
+        "split": 138,
+        "quarantine": []
+      },
+      "comparisons": [
+        {
+          "market": "moneyline",
+          "baselineMatch": true,
+          "before": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "second",
+            "price": -148,
+            "probability": 0.5620437956204378,
+            "pushProbability": 0,
+            "expectedValue": -0.05819688301440146,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 2,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "second",
+            "price": -148,
+            "probability": 0.5620437956204378,
+            "pushProbability": 0,
+            "expectedValue": -0.05819688301440146,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 2,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        },
+        {
+          "market": "spread",
+          "baselineMatch": true,
+          "before": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": 2.5,
+            "selection": "first",
+            "price": -108,
+            "probability": 0.5000000000000002,
+            "pushProbability": 0,
+            "expectedValue": -0.0370370370370367,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 2,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": 2.5,
+            "selection": "first",
+            "price": -108,
+            "probability": 0.5000000000000002,
+            "pushProbability": 0,
+            "expectedValue": -0.0370370370370367,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 2,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        },
+        {
+          "market": "total",
+          "baselineMatch": true,
+          "before": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 162.5,
+            "selection": "first",
+            "price": -108,
+            "probability": 0.5142525575241246,
+            "pushProbability": 0,
+            "expectedValue": -0.00958766699057495,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 2,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 162.5,
+            "selection": "first",
+            "price": -108,
+            "probability": 0.5142525575241246,
+            "pushProbability": 0,
+            "expectedValue": -0.00958766699057495,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 2,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        }
+      ],
+      "selectedSource": {
+        "before": "circa",
+        "after": "circa",
+        "beforeReason": "selected_current_native_source_law",
+        "afterReason": "selected_current_native_source_law"
+      },
+      "restoredResponses": [
+        {
+          "book": "circa",
+          "market": "moneyline",
+          "sourceClass": "professional_adjacent_named_book",
+          "sourceAt": "2026-11-04T16:18:13.359+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:00.978Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:N Kentucky@South Dakota-20261105",
+            "line": null
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:N Kentucky@South Dakota-20261105",
+            "line": null
+          }
+        },
+        {
+          "book": "circa",
+          "market": "spread",
+          "sourceClass": "professional_adjacent_named_book",
+          "sourceAt": "2026-11-04T16:18:13.359+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:00.978Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:N Kentucky@South Dakota-20261105",
+            "line": 2.5
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:N Kentucky@South Dakota-20261105",
+            "line": 2.5
+          }
+        },
+        {
+          "book": "circa",
+          "market": "total",
+          "sourceClass": "professional_adjacent_named_book",
+          "sourceAt": "2026-11-04T16:18:13.359+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:00.978Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:N Kentucky@South Dakota-20261105",
+            "line": 162
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:N Kentucky@South Dakota-20261105",
+            "line": 162.5
+          }
+        }
+      ]
+    },
+    {
+      "gameId": 10882625,
+      "game": "SELA@AUB",
+      "asOf": "2026-11-04T16:32:38.327Z",
+      "baselineScoreMatch": true,
+      "rawSourcePayloadUnchanged": true,
+      "sha256": "942fd16a343bd6434b1dca569fa7df704aaf354c1b2dd518be6c71b7c0b3e2ef",
+      "beforeScore": {
+        "away": 63.293186604349685,
+        "home": 88.23455501546489,
+        "total": 151.52774161981458,
+        "margin": 24.9413684111152,
+        "homeWinProbability": 0.9838038311110617
+      },
+      "afterScore": {
+        "home": 90.18734193223918,
+        "away": 61.3403996875754,
+        "margin": 28.846942244663772,
+        "total": 151.52774161981458,
+        "homeWinProbability": 0.9932266651105894
+      },
+      "sourcePairCoverage": {
+        "price": 12,
+        "retail": 53,
+        "split": 69,
+        "quarantine": []
+      },
+      "comparisons": [
+        {
+          "market": "moneyline",
+          "baselineMatch": true,
+          "before": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "first",
+            "price": -100000,
+            "probability": 0.9838038311110617,
+            "pushProbability": 0,
+            "expectedValue": -0.015212365057827205,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 0,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "first",
+            "price": -100000,
+            "probability": 0.9932266651105894,
+            "pushProbability": 0,
+            "expectedValue": -0.005780108224299975,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 0,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        },
+        {
+          "market": "spread",
+          "baselineMatch": true,
+          "before": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": -29.5,
+            "selection": "second",
+            "price": -112,
+            "probability": 0.6480676719509703,
+            "pushProbability": 0,
+            "expectedValue": 0.22669952190719384,
+            "grade": "Lean",
+            "reason": "positive_model_value_without_qualified_action_confirmation",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": true,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": -29.5,
+            "selection": "second",
+            "price": -112,
+            "probability": 0.5210685882508022,
+            "pushProbability": 0,
+            "expectedValue": -0.01369160081098153,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        },
+        {
+          "market": "total",
+          "baselineMatch": true,
+          "before": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 151.5,
+            "selection": "first",
+            "price": -110,
+            "probability": 0.5006512619929728,
+            "pushProbability": 5.551115123125783e-17,
+            "expectedValue": -0.04421122710432457,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 151.5,
+            "selection": "first",
+            "price": -110,
+            "probability": 0.5006512619929728,
+            "pushProbability": 5.551115123125783e-17,
+            "expectedValue": -0.04421122710432457,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        }
+      ],
+      "selectedSource": {
+        "before": "pinnacle",
+        "after": "pinnacle",
+        "beforeReason": "native_path_and_current_contract_confirm_independent",
+        "afterReason": "selected_current_native_source_law"
+      },
+      "restoredResponses": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:SE Louisiana@Auburn-20261105",
+            "line": null
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:SE Louisiana@Auburn-20261105",
+            "line": -29.5
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:SE Louisiana@Auburn-20261105",
+            "line": 151.5
+          }
+        }
+      ]
+    },
+    {
+      "gameId": 10882626,
+      "game": "RAD@CAL",
+      "asOf": "2026-11-04T16:32:38.327Z",
+      "baselineScoreMatch": true,
+      "rawSourcePayloadUnchanged": true,
+      "sha256": "8e9fd5849348a536fcaf10629b5d8b161b9aaf431a7018bef1a7e8d014e3a6d4",
+      "beforeScore": {
+        "away": 67.13814792623488,
+        "home": 83.37609929486725,
+        "total": 150.51424722110212,
+        "margin": 16.237951368632366,
+        "homeWinProbability": 0.9194578056658429
+      },
+      "afterScore": {
+        "home": 83.37609929486725,
+        "away": 67.13814792623488,
+        "margin": 16.237951368632366,
+        "total": 150.51424722110212,
+        "homeWinProbability": 0.9194578056658429
+      },
+      "sourcePairCoverage": {
+        "price": 12,
+        "retail": 69,
+        "split": 69,
+        "quarantine": []
+      },
+      "comparisons": [
+        {
+          "market": "moneyline",
+          "baselineMatch": true,
+          "before": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "first",
+            "price": -1800,
+            "probability": 0.9194578056658429,
+            "pushProbability": 0,
+            "expectedValue": -0.029461205130499164,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 0,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "first",
+            "price": -1800,
+            "probability": 0.9194578056658429,
+            "pushProbability": 0,
+            "expectedValue": -0.029461205130499164,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 0,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        },
+        {
+          "market": "spread",
+          "baselineMatch": true,
+          "before": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": -16.5,
+            "selection": "second",
+            "price": -112,
+            "probability": 0.5022258825624357,
+            "pushProbability": 0,
+            "expectedValue": -0.049358150863961,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": -16.5,
+            "selection": "second",
+            "price": -112,
+            "probability": 0.5022258825624357,
+            "pushProbability": 0,
+            "expectedValue": -0.049358150863961,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        },
+        {
+          "market": "total",
+          "baselineMatch": true,
+          "before": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 157.5,
+            "selection": "second",
+            "price": -115,
+            "probability": 0.6594922671817297,
+            "pushProbability": 0,
+            "expectedValue": 0.23296380386149462,
+            "grade": "Lean",
+            "reason": "positive_model_value_without_qualified_action_confirmation",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 157.5,
+            "selection": "second",
+            "price": -115,
+            "probability": 0.6594922671817297,
+            "pushProbability": 0,
+            "expectedValue": 0.23296380386149462,
+            "grade": "Lean",
+            "reason": "positive_model_value_without_qualified_action_confirmation",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        }
+      ],
+      "selectedSource": {
+        "before": "pinnacle",
+        "after": "pinnacle",
+        "beforeReason": "selected_current_native_source_law",
+        "afterReason": "selected_current_native_source_law"
+      },
+      "restoredResponses": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:Radford@California-20261105",
+            "line": null
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:Radford@California-20261105",
+            "line": -16.5
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:Radford@California-20261105",
+            "line": 157.5
+          }
+        }
+      ]
+    },
+    {
+      "gameId": 10882627,
+      "game": "MILW@SCU",
+      "asOf": "2026-11-04T16:32:38.327Z",
+      "baselineScoreMatch": true,
+      "rawSourcePayloadUnchanged": true,
+      "sha256": "d5964042ae26754efa066c15fa57f3b5bc93bc36cc2796237ceb4e42a1b2cf30",
+      "beforeScore": {
+        "away": 71.70741639036656,
+        "home": 88.51656120285482,
+        "total": 160.22397759322138,
+        "margin": 16.809144812488263,
+        "homeWinProbability": 0.922671353251318
+      },
+      "afterScore": {
+        "home": 88.51656120285482,
+        "away": 71.70741639036656,
+        "margin": 16.809144812488263,
+        "total": 160.22397759322138,
+        "homeWinProbability": 0.922671353251318
+      },
+      "sourcePairCoverage": {
+        "price": 115,
+        "retail": 66,
+        "split": 138,
+        "quarantine": []
+      },
+      "comparisons": [
+        {
+          "market": "moneyline",
+          "baselineMatch": true,
+          "before": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "first",
+            "price": -2100,
+            "probability": 0.922671353251318,
+            "pushProbability": 0,
+            "expectedValue": -0.03339191564147639,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:31:51.716Z"
+          },
+          "after": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "first",
+            "price": -2100,
+            "probability": 0.922671353251318,
+            "pushProbability": 0,
+            "expectedValue": -0.03339191564147639,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:31:51.716Z"
+          }
+        },
+        {
+          "market": "spread",
+          "baselineMatch": true,
+          "before": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": -16.5,
+            "selection": "first",
+            "price": -118,
+            "probability": 0.5166825379348534,
+            "pushProbability": 0,
+            "expectedValue": -0.045450904493236965,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 2,
+            "quoteObservedAt": "2026-11-04T16:31:51.716Z"
+          },
+          "after": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": -16.5,
+            "selection": "first",
+            "price": -118,
+            "probability": 0.5166825379348534,
+            "pushProbability": 0,
+            "expectedValue": -0.045450904493236965,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 2,
+            "quoteObservedAt": "2026-11-04T16:31:51.716Z"
+          }
+        },
+        {
+          "market": "total",
+          "baselineMatch": true,
+          "before": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 161.5,
+            "selection": "second",
+            "price": -112,
+            "probability": 0.5299276340140743,
+            "pushProbability": 0,
+            "expectedValue": 0.0030773072409263635,
+            "grade": "Watchlist",
+            "reason": "edge_below_actionable_reserve",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 2,
+            "quoteObservedAt": "2026-11-04T16:31:51.716Z"
+          },
+          "after": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 161.5,
+            "selection": "second",
+            "price": -112,
+            "probability": 0.5299276340140743,
+            "pushProbability": 0,
+            "expectedValue": 0.0030773072409263635,
+            "grade": "Watchlist",
+            "reason": "edge_below_actionable_reserve",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 2,
+            "quoteObservedAt": "2026-11-04T16:31:51.716Z"
+          }
+        }
+      ],
+      "selectedSource": {
+        "before": "circa",
+        "after": "circa",
+        "beforeReason": "selected_current_native_source_law",
+        "afterReason": "selected_current_native_source_law"
+      },
+      "restoredResponses": [
+        {
+          "book": "circa",
+          "market": "moneyline",
+          "sourceClass": "professional_adjacent_named_book",
+          "sourceAt": "2026-11-04T16:18:16.75+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:00.978Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:Milwaukee@Santa Clara-20261105",
+            "line": null
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:Milwaukee@Santa Clara-20261105",
+            "line": null
+          }
+        },
+        {
+          "book": "circa",
+          "market": "spread",
+          "sourceClass": "professional_adjacent_named_book",
+          "sourceAt": "2026-11-04T16:18:16.75+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:00.978Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:Milwaukee@Santa Clara-20261105",
+            "line": -17
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:Milwaukee@Santa Clara-20261105",
+            "line": -16.5
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:Milwaukee@Santa Clara-20261105",
+            "line": 161.5
+          }
+        }
+      ]
+    },
+    {
+      "gameId": 10882634,
+      "game": "UMES@HPU",
+      "asOf": "2026-11-04T16:32:38.327Z",
+      "baselineScoreMatch": true,
+      "rawSourcePayloadUnchanged": true,
+      "sha256": "79c7a218a7724eb201cfa959000e65e3bbc3962d88f83b4492df5995d4398def",
+      "beforeScore": {
+        "away": 58.55693277162201,
+        "home": 81.77276810882341,
+        "total": 140.32970088044542,
+        "margin": 23.215835337201398,
+        "homeWinProbability": 0.9769077322612523
+      },
+      "afterScore": {
+        "home": 81.77276810882341,
+        "away": 58.55693277162201,
+        "margin": 23.215835337201398,
+        "total": 140.32970088044542,
+        "homeWinProbability": 0.9769077322612523
+      },
+      "sourcePairCoverage": {
+        "price": 0,
+        "retail": 0,
+        "split": 0,
+        "quarantine": []
+      },
+      "comparisons": [
+        {
+          "market": "moneyline",
+          "baselineMatch": true,
+          "before": {
+            "market": "moneyline",
+            "targetBook": "fanduel",
+            "line": null,
+            "selection": "first",
+            "price": -100000,
+            "probability": 0.9769077322612523,
+            "pushProbability": 0,
+            "expectedValue": -0.02211536000648648,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 0,
+            "quoteObservedAt": "2026-11-04T16:32:07.285Z"
+          },
+          "after": {
+            "market": "moneyline",
+            "targetBook": "fanduel",
+            "line": null,
+            "selection": "first",
+            "price": -100000,
+            "probability": 0.9769077322612523,
+            "pushProbability": 0,
+            "expectedValue": -0.02211536000648648,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 0,
+            "quoteObservedAt": "2026-11-04T16:32:07.285Z"
+          }
+        },
+        {
+          "market": "spread",
+          "baselineMatch": true,
+          "before": {
+            "market": "spread",
+            "targetBook": "fanduel",
+            "line": -34.5,
+            "selection": "second",
+            "price": -110,
+            "probability": 0.8279904738893394,
+            "pushProbability": 0,
+            "expectedValue": 0.5807090865160116,
+            "grade": "Lean",
+            "reason": "positive_model_value_without_qualified_action_confirmation",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 0,
+            "quoteObservedAt": "2026-11-04T16:32:07.285Z"
+          },
+          "after": {
+            "market": "spread",
+            "targetBook": "fanduel",
+            "line": -34.5,
+            "selection": "second",
+            "price": -110,
+            "probability": 0.8279904738893394,
+            "pushProbability": 0,
+            "expectedValue": 0.5807090865160116,
+            "grade": "Lean",
+            "reason": "positive_model_value_without_qualified_action_confirmation",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 0,
+            "quoteObservedAt": "2026-11-04T16:32:07.285Z"
+          }
+        },
+        {
+          "market": "total",
+          "baselineMatch": true,
+          "before": {
+            "market": "total",
+            "targetBook": "fanduel",
+            "line": 147.5,
+            "selection": "second",
+            "price": -110,
+            "probability": 0.6634646841150097,
+            "pushProbability": 0,
+            "expectedValue": 0.26661439694683664,
+            "grade": "Lean",
+            "reason": "positive_model_value_without_qualified_action_confirmation",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 0,
+            "quoteObservedAt": "2026-11-04T16:32:07.285Z"
+          },
+          "after": {
+            "market": "total",
+            "targetBook": "fanduel",
+            "line": 147.5,
+            "selection": "second",
+            "price": -110,
+            "probability": 0.6634646841150097,
+            "pushProbability": 0,
+            "expectedValue": 0.26661439694683664,
+            "grade": "Lean",
+            "reason": "positive_model_value_without_qualified_action_confirmation",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 0,
+            "quoteObservedAt": "2026-11-04T16:32:07.285Z"
+          }
+        }
+      ],
+      "selectedSource": {
+        "before": null,
+        "after": null,
+        "beforeReason": "no_current_professional_margin_contract",
+        "afterReason": "no_current_professional_margin_contract"
+      },
+      "restoredResponses": []
+    },
+    {
+      "gameId": 10882635,
+      "game": "LONG@JOES",
+      "asOf": "2026-11-04T16:32:38.327Z",
+      "baselineScoreMatch": true,
+      "rawSourcePayloadUnchanged": true,
+      "sha256": "4887dc38a49dc31c4869b3d3dde2b2e1dec92c83366ad2e5f07a4ad9a2072cba",
+      "beforeScore": {
+        "away": 70.23621580954436,
+        "home": 80.87331585470857,
+        "total": 151.10953166425293,
+        "margin": 10.63710004516421,
+        "homeWinProbability": 0.836807928913192
+      },
+      "afterScore": {
+        "home": 80.87331585470857,
+        "away": 70.23621580954436,
+        "margin": 10.63710004516421,
+        "total": 151.10953166425293,
+        "homeWinProbability": 0.836807928913192
+      },
+      "sourcePairCoverage": {
+        "price": 18,
+        "retail": 70,
+        "split": 69,
+        "quarantine": []
+      },
+      "comparisons": [
+        {
+          "market": "moneyline",
+          "baselineMatch": true,
+          "before": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "first",
+            "price": -625,
+            "probability": 0.836807928913192,
+            "pushProbability": 0,
+            "expectedValue": -0.029302802460697275,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.741Z"
+          },
+          "after": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "first",
+            "price": -625,
+            "probability": 0.836807928913192,
+            "pushProbability": 0,
+            "expectedValue": -0.029302802460697275,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.741Z"
+          }
+        },
+        {
+          "market": "spread",
+          "baselineMatch": true,
+          "before": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": -10.5,
+            "selection": "first",
+            "price": -115,
+            "probability": 0.5166179207657535,
+            "pushProbability": 5.680014193254812e-17,
+            "expectedValue": -0.03414910465533022,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.741Z"
+          },
+          "after": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": -10.5,
+            "selection": "first",
+            "price": -115,
+            "probability": 0.5166179207657535,
+            "pushProbability": 5.680014193254812e-17,
+            "expectedValue": -0.03414910465533022,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.741Z"
+          }
+        },
+        {
+          "market": "total",
+          "baselineMatch": true,
+          "before": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 151.5,
+            "selection": "second",
+            "price": -115,
+            "probability": 0.5091658083518219,
+            "pushProbability": 0,
+            "expectedValue": -0.04808131482050687,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.741Z"
+          },
+          "after": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 151.5,
+            "selection": "second",
+            "price": -115,
+            "probability": 0.5091658083518219,
+            "pushProbability": 0,
+            "expectedValue": -0.04808131482050687,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.741Z"
+          }
+        }
+      ],
+      "selectedSource": {
+        "before": "pinnacle",
+        "after": "pinnacle",
+        "beforeReason": "selected_current_native_source_law",
+        "afterReason": "selected_current_native_source_law"
+      },
+      "restoredResponses": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:Longwood@Saint Joseph's-20261105",
+            "line": null
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:Longwood@Saint Joseph's-20261105",
+            "line": -10.5
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:Longwood@Saint Joseph's-20261105",
+            "line": 151.5
+          }
+        }
+      ]
+    },
+    {
+      "gameId": 10882636,
+      "game": "FDU@BUT",
+      "asOf": "2026-11-04T16:32:38.327Z",
+      "baselineScoreMatch": true,
+      "rawSourcePayloadUnchanged": true,
+      "sha256": "55c9a243fb53be493e1c0e8abaa9863bdc336dbb2493ee3f38d92ef5997ec773",
+      "beforeScore": {
+        "away": 61.49538108125421,
+        "home": 96.87394795298414,
+        "total": 158.36932903423835,
+        "margin": 35.37856687172993,
+        "homeWinProbability": 0.9987329088993343
+      },
+      "afterScore": {
+        "home": 92.98395202699481,
+        "away": 65.38537700724353,
+        "margin": 27.59857501975128,
+        "total": 158.36932903423835,
+        "homeWinProbability": 0.9909557434381284
+      },
+      "sourcePairCoverage": {
+        "price": 12,
+        "retail": 36,
+        "split": 69,
+        "quarantine": []
+      },
+      "comparisons": [
+        {
+          "market": "moneyline",
+          "baselineMatch": true,
+          "before": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "first",
+            "price": -50000,
+            "probability": 0.9987329088993343,
+            "pushProbability": 0,
+            "expectedValue": 0.0007303747171329726,
+            "grade": "Watchlist",
+            "reason": "edge_below_actionable_reserve",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 0,
+            "quoteObservedAt": "2026-11-04T16:32:11.741Z"
+          },
+          "after": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "first",
+            "price": -50000,
+            "probability": 0.9909557434381284,
+            "pushProbability": 0,
+            "expectedValue": -0.00706234507499532,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 0,
+            "quoteObservedAt": "2026-11-04T16:32:11.741Z"
+          }
+        },
+        {
+          "market": "spread",
+          "baselineMatch": true,
+          "before": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": -27.5,
+            "selection": "first",
+            "price": -110,
+            "probability": 0.7466406467012253,
+            "pushProbability": 0,
+            "expectedValue": 0.4254048709750665,
+            "grade": "Lean",
+            "reason": "positive_model_value_without_qualified_action_confirmation",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.741Z"
+          },
+          "after": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": -27.5,
+            "selection": "first",
+            "price": -110,
+            "probability": 0.5044523597506679,
+            "pushProbability": 0,
+            "expectedValue": -0.03695458593054307,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.741Z"
+          }
+        },
+        {
+          "market": "total",
+          "baselineMatch": true,
+          "before": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 156.5,
+            "selection": "first",
+            "price": -108,
+            "probability": 0.5437957690786837,
+            "pushProbability": 0,
+            "expectedValue": 0.0473103700774648,
+            "grade": "Watchlist",
+            "reason": "professional_opposition",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.741Z"
+          },
+          "after": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 156.5,
+            "selection": "first",
+            "price": -108,
+            "probability": 0.5437957690786837,
+            "pushProbability": 0,
+            "expectedValue": 0.0473103700774648,
+            "grade": "Watchlist",
+            "reason": "professional_opposition",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.741Z"
+          }
+        }
+      ],
+      "selectedSource": {
+        "before": "pinnacle",
+        "after": "pinnacle",
+        "beforeReason": "native_path_and_current_contract_confirm_independent",
+        "afterReason": "selected_current_native_source_law"
+      },
+      "restoredResponses": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:FDU@Butler-20261105",
+            "line": null
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:FDU@Butler-20261105",
+            "line": -27.5
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:FDU@Butler-20261105",
+            "line": 156.5
+          }
+        }
+      ]
+    },
+    {
+      "gameId": 10882641,
+      "game": "CSUN@WICH",
+      "asOf": "2026-11-04T16:32:38.327Z",
+      "baselineScoreMatch": true,
+      "rawSourcePayloadUnchanged": true,
+      "sha256": "a86e854be0632169285037bf6c01e5da1eb7bd7642c4c88cd5c81e4f66acf4fc",
+      "beforeScore": {
+        "away": 71.94483946489508,
+        "home": 88.9242484913561,
+        "total": 160.86908795625118,
+        "margin": 16.979409026461017,
+        "homeWinProbability": 0.9284868452448536
+      },
+      "afterScore": {
+        "home": 87.84480964091668,
+        "away": 73.0242783153345,
+        "margin": 14.820531325582177,
+        "total": 160.86908795625118,
+        "homeWinProbability": 0.9028278255950658
+      },
+      "sourcePairCoverage": {
+        "price": 45,
+        "retail": 69,
+        "split": 45,
+        "quarantine": []
+      },
+      "comparisons": [
+        {
+          "market": "moneyline",
+          "baselineMatch": true,
+          "before": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "first",
+            "price": -1600,
+            "probability": 0.9284868452448536,
+            "pushProbability": 0,
+            "expectedValue": -0.013482726927343064,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": true,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "first",
+            "price": -1600,
+            "probability": 0.9028278255950658,
+            "pushProbability": 0,
+            "expectedValue": -0.040745435305242585,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        },
+        {
+          "market": "spread",
+          "baselineMatch": true,
+          "before": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": -15.5,
+            "selection": "first",
+            "price": -102,
+            "probability": 0.5562708072768309,
+            "pushProbability": 0,
+            "expectedValue": 0.1016343438227435,
+            "grade": "Watchlist",
+            "reason": "professional_opposition",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": true,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": -15.5,
+            "selection": "second",
+            "price": -118,
+            "probability": 0.5156894928904286,
+            "pushProbability": 0,
+            "expectedValue": -0.04728551313463186,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        },
+        {
+          "market": "total",
+          "baselineMatch": true,
+          "before": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 160.5,
+            "selection": "first",
+            "price": -112,
+            "probability": 0.508664009703691,
+            "pushProbability": 5.551115123125783e-17,
+            "expectedValue": -0.03717169591801345,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": true,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 160.5,
+            "selection": "first",
+            "price": -112,
+            "probability": 0.508664009703691,
+            "pushProbability": 5.551115123125783e-17,
+            "expectedValue": -0.03717169591801345,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": true,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        }
+      ],
+      "selectedSource": {
+        "before": "pinnacle",
+        "after": "pinnacle",
+        "beforeReason": "native_path_and_current_contract_confirm_independent",
+        "afterReason": "selected_current_native_source_law"
+      },
+      "restoredResponses": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:CSU Northridge@Wichita St-20261105",
+            "line": null
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:CSU Northridge@Wichita St-20261105",
+            "line": 160.5
+          }
+        }
+      ]
+    },
+    {
+      "gameId": 10882643,
+      "game": "QUC@LMU",
+      "asOf": "2026-11-04T16:32:38.327Z",
+      "baselineScoreMatch": true,
+      "rawSourcePayloadUnchanged": true,
+      "sha256": "cb23dbb11f45f3008bd5437b931c12bb23375c19f9dcc1b880136a815021734a",
+      "beforeScore": {
+        "away": 77.58306836076997,
+        "home": 85.55737446677725,
+        "total": 163.14044282754722,
+        "margin": 7.9743061060072815,
+        "homeWinProbability": 0.7574886371275071
+      },
+      "afterScore": {
+        "home": 85.55737446677725,
+        "away": 77.58306836076997,
+        "margin": 7.9743061060072815,
+        "total": 163.14044282754722,
+        "homeWinProbability": 0.7574886371275071
+      },
+      "sourcePairCoverage": {
+        "price": 18,
+        "retail": 67,
+        "split": 45,
+        "quarantine": []
+      },
+      "comparisons": [
+        {
+          "market": "moneyline",
+          "baselineMatch": true,
+          "before": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "first",
+            "price": -355,
+            "probability": 0.7574886371275071,
+            "pushProbability": 0,
+            "expectedValue": -0.029134281991504918,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "first",
+            "price": -355,
+            "probability": 0.7574886371275071,
+            "pushProbability": 0,
+            "expectedValue": -0.029134281991504918,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        },
+        {
+          "market": "spread",
+          "baselineMatch": true,
+          "before": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": -8.5,
+            "selection": "second",
+            "price": -118,
+            "probability": 0.5044523597506677,
+            "pushProbability": 0,
+            "expectedValue": -0.06804564046063072,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": -8.5,
+            "selection": "second",
+            "price": -118,
+            "probability": 0.5044523597506677,
+            "pushProbability": 0,
+            "expectedValue": -0.06804564046063072,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        },
+        {
+          "market": "total",
+          "baselineMatch": true,
+          "before": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 160.5,
+            "selection": "first",
+            "price": -115,
+            "probability": 0.5617380976417783,
+            "pushProbability": 0,
+            "expectedValue": 0.05020600863462893,
+            "grade": "Lean",
+            "reason": "positive_model_value_without_qualified_action_confirmation",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 160.5,
+            "selection": "first",
+            "price": -115,
+            "probability": 0.5617380976417783,
+            "pushProbability": 0,
+            "expectedValue": 0.05020600863462893,
+            "grade": "Lean",
+            "reason": "positive_model_value_without_qualified_action_confirmation",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        }
+      ],
+      "selectedSource": {
+        "before": "pinnacle",
+        "after": "pinnacle",
+        "beforeReason": "selected_current_native_source_law",
+        "afterReason": "selected_current_native_source_law"
+      },
+      "restoredResponses": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:Queens University@LMU-20261105",
+            "line": null
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:Queens University@LMU-20261105",
+            "line": -8.5
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:Queens University@LMU-20261105",
+            "line": 160.5
+          }
+        }
+      ]
+    },
+    {
+      "gameId": 10882644,
+      "game": "NDSU@SMC",
+      "asOf": "2026-11-04T16:32:38.327Z",
+      "baselineScoreMatch": true,
+      "rawSourcePayloadUnchanged": true,
+      "sha256": "654889284000e78415a20515386b255818461f12114b630bbb67d56562cbea76",
+      "beforeScore": {
+        "away": 65.5986665685418,
+        "home": 78.58296450064657,
+        "total": 144.18163106918837,
+        "margin": 12.98429793210476,
+        "homeWinProbability": 0.8776447536259526
+      },
+      "afterScore": {
+        "home": 78.58296450064657,
+        "away": 65.5986665685418,
+        "margin": 12.98429793210476,
+        "total": 144.18163106918837,
+        "homeWinProbability": 0.8776447536259526
+      },
+      "sourcePairCoverage": {
+        "price": 45,
+        "retail": 72,
+        "split": 45,
+        "quarantine": []
+      },
+      "comparisons": [
+        {
+          "market": "moneyline",
+          "baselineMatch": true,
+          "before": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "first",
+            "price": -1050,
+            "probability": 0.8776447536259526,
+            "pushProbability": 0,
+            "expectedValue": -0.03877003174300428,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "first",
+            "price": -1050,
+            "probability": 0.8776447536259526,
+            "pushProbability": 0,
+            "expectedValue": -0.03877003174300428,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        },
+        {
+          "market": "spread",
+          "baselineMatch": true,
+          "before": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": -13.5,
+            "selection": "second",
+            "price": -110,
+            "probability": 0.5089094796863861,
+            "pushProbability": 0,
+            "expectedValue": -0.02844553878053563,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": -13.5,
+            "selection": "second",
+            "price": -110,
+            "probability": 0.5089094796863861,
+            "pushProbability": 0,
+            "expectedValue": -0.02844553878053563,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        },
+        {
+          "market": "total",
+          "baselineMatch": true,
+          "before": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 148.5,
+            "selection": "second",
+            "price": -115,
+            "probability": 0.6002966794556419,
+            "pushProbability": 0,
+            "expectedValue": 0.12229379202576529,
+            "grade": "Lean",
+            "reason": "positive_model_value_without_qualified_action_confirmation",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": true,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 148.5,
+            "selection": "second",
+            "price": -115,
+            "probability": 0.6002966794556419,
+            "pushProbability": 0,
+            "expectedValue": 0.12229379202576529,
+            "grade": "Lean",
+            "reason": "positive_model_value_without_qualified_action_confirmation",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 1,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        }
+      ],
+      "selectedSource": {
+        "before": "pinnacle",
+        "after": "pinnacle",
+        "beforeReason": "selected_current_native_source_law",
+        "afterReason": "selected_current_native_source_law"
+      },
+      "restoredResponses": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:N Dakota St@Saint Mary's-20261105",
+            "line": null
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:N Dakota St@Saint Mary's-20261105",
+            "line": -13.5
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:N Dakota St@Saint Mary's-20261105",
+            "line": 148.5
+          }
+        }
+      ]
+    },
+    {
+      "gameId": 10882769,
+      "game": "CONN@MICH",
+      "asOf": "2026-11-04T16:32:38.327Z",
+      "baselineScoreMatch": true,
+      "rawSourcePayloadUnchanged": true,
+      "sha256": "2c312777d38be1f2020e00519d4ca63793e512e8c751a2f01780ecc3eff8818f",
+      "beforeScore": {
+        "away": 72.9227660888603,
+        "home": 72.65029129403968,
+        "total": 145.57305738289998,
+        "margin": -0.2724747948206287,
+        "homeWinProbability": 0.4905437661587246
+      },
+      "afterScore": {
+        "home": 72.65029129403968,
+        "away": 72.9227660888603,
+        "margin": -0.2724747948206287,
+        "total": 145.57305738289998,
+        "homeWinProbability": 0.4905437661587246
+      },
+      "sourcePairCoverage": {
+        "price": 0,
+        "retail": 36,
+        "split": 46,
+        "quarantine": []
+      },
+      "comparisons": [
+        {
+          "market": "moneyline",
+          "baselineMatch": true,
+          "before": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "second",
+            "price": -230,
+            "probability": 0.5094562338412754,
+            "pushProbability": 0,
+            "expectedValue": -0.2690410557929527,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 0,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "moneyline",
+            "targetBook": "draftkings",
+            "line": null,
+            "selection": "second",
+            "price": -230,
+            "probability": 0.5094562338412754,
+            "pushProbability": 0,
+            "expectedValue": -0.2690410557929527,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": true,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 0,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        },
+        {
+          "market": "spread",
+          "baselineMatch": true,
+          "before": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": 5.5,
+            "selection": "first",
+            "price": -112,
+            "probability": 0.6585463820582396,
+            "pushProbability": 0,
+            "expectedValue": 0.24653422318166768,
+            "grade": "Lean",
+            "reason": "positive_model_value_without_qualified_action_confirmation",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 0,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "spread",
+            "targetBook": "draftkings",
+            "line": 5.5,
+            "selection": "first",
+            "price": -112,
+            "probability": 0.6585463820582396,
+            "pushProbability": 0,
+            "expectedValue": 0.24653422318166768,
+            "grade": "Lean",
+            "reason": "positive_model_value_without_qualified_action_confirmation",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 0,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        },
+        {
+          "market": "total",
+          "baselineMatch": true,
+          "before": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 146.5,
+            "selection": "second",
+            "price": -110,
+            "probability": 0.5217500344545201,
+            "pushProbability": 0,
+            "expectedValue": -0.0039317524050071495,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 0,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          },
+          "after": {
+            "market": "total",
+            "targetBook": "draftkings",
+            "line": 146.5,
+            "selection": "second",
+            "price": -110,
+            "probability": 0.5217500344545201,
+            "pushProbability": 0,
+            "expectedValue": -0.0039317524050071495,
+            "grade": "No Play",
+            "reason": "non_positive_exact_price_value",
+            "pathResistance": false,
+            "actualActionConfirmation": false,
+            "economicPathConfirmation": false,
+            "economicCorroboration": false,
+            "professionalReferences": 0,
+            "quoteObservedAt": "2026-11-04T16:32:11.742Z"
+          }
+        }
+      ],
+      "selectedSource": {
+        "before": null,
+        "after": null,
+        "beforeReason": "no_current_professional_margin_contract",
+        "afterReason": "no_current_professional_margin_contract"
+      },
+      "restoredResponses": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:UConn@Michigan-20261107",
+            "line": null
+          }
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "sourceClass": "retail_named_book",
+          "sourceAt": "2026-11-04T16:26:50.33+00:00",
+          "availableBy": "2026-11-04T16:30:27.270053+00:00",
+          "reaction": "held",
+          "resolution": "held",
+          "latestObservation": {
+            "sourceAt": "2026-11-04T16:31:53.034Z",
+            "availableBy": "2026-11-04T16:32:36.187Z",
+            "sourceEventId": "ncaab:UConn@Michigan-20261107",
+            "line": 5.5
+          }
+        }
+      ]
+    }
+  ],
+  "evidence": {},
+  "sourceCapture": {
+    "decisionCutoff": "2026-11-04T16:32:38.327Z",
+    "memberSnapshotCapturedAt": "2026-11-04T16:33:57.015Z",
+    "memberSnapshotSha256": "2f6b49dc927edd11678392365289a18c794cd1d19f92c86ff618f13dbea0f2c6",
+    "canonicalHistorySha256": "3d02d5784e98c7d7cc6f7080471720da165f9bcc8f1bd15c0d2249e2a62acbbb",
+    "canonicalAsOf": "2026-11-04T16:32:38.327Z",
+    "canonicalProfessionalPriceRows": 830,
+    "canonicalRetailPriceRows": 1216,
+    "canonicalSplitRows": 1466,
+    "allCanonicalFamiliesComplete": true,
+    "providerRequests": 0,
+    "databaseWrites": 0
+  },
+  "independentReview": {
+    "sourceCoverage": "reviewB:11games/29validprofessionalpairs; none dropped",
+    "fullReplay": "reviewC:all33exact decisions and11scorelaws",
+    "adversarial": "reviewD:all33EV calculations; eventidentity/currentconflict/submillisecond regressions fixed",
+    "report": "/private/tmp/cbb-final-independent-review-d-20261104.json"
+  }
+}

@@ -17,14 +17,20 @@ function independent(margin:number):CbbForecast{
 }
 const quote=(center:number,book="circa",current=false):CbbQuote=>({gameId:1,market:"spread",line:-center,
  firstPrice:-110,secondPrice:-110,sportsbook:book,provider:"owls",phase:"current",orientationVerified:true,
- providerObservedAt:current?"2026-11-03T18:20:00Z":"2026-11-03T18:00:00Z",
- fetchedAt:current?"2026-11-03T18:21:00Z":"2026-11-03T18:01:00Z",
- requestedAt:current?"2026-11-03T18:25:00Z":undefined} as CbbQuote);
+ providerObservedAt:current?(book==="fanduel"?"2026-11-03T18:24:00Z":"2026-11-03T18:20:00Z"):"2026-11-03T18:00:00Z",
+ fetchedAt:current?(book==="fanduel"?"2026-11-03T18:26:00Z":"2026-11-03T18:21:00Z"):"2026-11-03T18:01:00Z",
+ requestedAt:current?(book==="fanduel"?"2026-11-03T18:25:00Z":"2026-11-03T18:20:30Z"):undefined} as CbbQuote);
+const american=(probability:number)=>probability>=.5?-100*probability/(1-probability):100*(1-probability)/probability;
+function supportedSource(center:number,margin:number){
+ const source=quote(center,"circa",true),p=cbbThresholdProbabilities(independent(margin),"spread",source.line);
+ const fair=p.first/(p.first+p.second);
+ return {...source,firstPrice:american(fair*1.04),secondPrice:american((1-fair)*1.04)};
+}
 const context=(money:number):CbbDecisionSplitContext=>({gameId:1,market:"spread",sourceBook:"circa",physicalFamily:"circa",sourceClass:"professional_adjacent_named_book",provider:"owls",
  sourceEventId:"ncaab:A@B-20261103",line:0,firstMoney:money,secondMoney:1-money,firstTickets:.5,secondTickets:.5,
  observedAt:"2026-11-03T18:10:00Z",availableBy:"2026-11-03T18:11:00Z",clockBasis:"verified_provider_observation",observationIds:[]});
-function run(i:number,a:number,c:number,targetCenter:number,pressure:CbbDecisionSplitContext[]=[]){
- const base=independent(i),target={...quote(targetCenter,"fanduel",true),fetchedAt:"2026-11-03T18:26:00Z",providerObservedAt:"2026-11-03T18:24:00Z"},before=quote(a),current=quote(c,"circa",true);
+function run(i:number,a:number,c:number,targetCenter:number,pressure:CbbDecisionSplitContext[]=[],sourceMargin?:number){
+ const base=independent(i),target=quote(targetCenter,"fanduel",true),before=quote(a),current=sourceMargin===undefined?quote(c,"circa",true):supportedSource(c,sourceMargin);
  const read=readCbbMarketBehavior({independent:base,independentInputKey:"unchanged-stats",startsAt:start,targets:[target],currentQuotes:[current,target],splitContext:pressure,
  anchors:{release:CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,gameId:1,startsAt:start,independentRelease:base.release,independentInputKey:"unchanged-stats",capturedAt:before.fetchedAt,quotes:[before]}});
  const board=buildCbbProvisionalBoard(read.forecast,[target,current],{marketBehavior:read.receipt});
@@ -42,12 +48,15 @@ for(const i of [-3,3]){
  assert.ok(Math.abs(r.board.score.home-r.board.score.away-r.board.score.margin)<1e-9);
  assert.ok(Math.abs(r.board.score.home+r.board.score.away-r.board.score.total)<1e-9);
 }
-const confirmed=run(7,0,3.5,3.5,[context(.8)]);
+const confirmed=run(7,0,3.5,3.5,[context(.8)],7);
 assert.equal(confirmed.read.forecast.margin,7);assert.equal(confirmed.read.receipt.margin.status,"confirming");
 assert.equal(confirmed.row.actualActionConfirmation,true,"verified native off-target money/reaction can confirm with zero score displacement");
 assert.equal(confirmed.row.grade,"Best Angle");
-const noFlow=run(7,0,3.5,3.5);
-assert.equal(noFlow.row.grade,"Lean","a price-only confirmation has a real Lean lane without invented action");
+const noFlow=run(7,0,3.5,6,[],7);
+assert.equal(noFlow.read.forecast.margin,7);
+assert.equal(noFlow.row.actualActionConfirmation,false);
+assert.ok(noFlow.row.expectedValue!>=.03&&noFlow.row.expectedValue!<.08,"the executable contract has Lean value rather than premium value");
+assert.equal(noFlow.row.grade,"Lean","a quantitatively supported price-only confirmation retains its Lean lane without invented action");
 const alignedTarget={...quote(1.5,"fanduel",true),fetchedAt:"2026-11-03T18:26:00Z",providerObservedAt:"2026-11-03T18:24:00Z"};
 const alignedRead=readCbbMarketBehavior({independent:independent(0),independentInputKey:"aligned",startsAt:start,targets:[alignedTarget],
  currentQuotes:[quote(8.5,"circa",true),{...quote(12.5,"pinnacle",true),providerObservedAt:"2026-11-03T18:23:00Z",fetchedAt:"2026-11-03T18:24:00Z"}],
@@ -74,11 +83,12 @@ assert.equal(oppositeHeld.row.grade,"Lean","book holding against opposite money 
 assert.equal(oppositeHeld.row.pathResistance,false);
 const towardHeld=run(7,0,0,-2,[context(.8)]);
 assert.equal(towardHeld.row.pathResistance,true);assert.notEqual(towardHeld.row.grade,"Best Angle");
-const aggregate=run(7,0,3.5,3.5,[{...context(.2),sourceClass:"multi_book_consensus",sourceBook:"consensus",physicalFamily:"playbook_consensus",line:null}]);
+const aggregate=run(7,0,3.5,6,[{...context(.2),sourceClass:"multi_book_consensus",sourceBook:"consensus",physicalFamily:"playbook_consensus",line:null}],7);
 assert.equal(aggregate.row.actualActionConfirmation,false);assert.equal(aggregate.row.pathResistance,false,"public majority without an own-book response cannot veto a qualified price interpretation");
 assert.equal(aggregate.read.forecast.margin,noFlow.read.forecast.margin);
-const changedPrice=run(7,0,3.5,10.5,[context(.8)]);
-assert.notEqual(changedPrice.row.grade,"Best Angle","the same signal cannot retain a premium after losing value at a different executable contract");
+const changedPrice=run(7,0,3.5,7.5,[context(.8)],7);
+assert.ok(changedPrice.row.expectedValue!<0,"moving the executable threshold to the model center removes the prior price advantage");
+assert.equal(changedPrice.row.grade,"No Play","the same signal cannot retain a premium after losing value at a different executable contract");
 const stillOpposite=run(7,-4.5,-1.5,0);
 assert.equal(stillOpposite.read.receipt.margin.status,"applied","movement toward the independent score is not confirmation while the actual current winner remains opposite");
 assert.ok(stillOpposite.read.forecast.margin<0&&stillOpposite.read.forecast.homeWinProbability<.5);
@@ -94,7 +104,7 @@ assert.equal(badSpread.receipt.margin.status,"unavailable");assert.equal(badSpre
 assert.equal(badSpread.receipt.anchors.quarantinedKeys?.includes("circa:spread"),false,"transient current failure is not permanent original-source corruption");
 const recovered=readCbbMarketBehavior({...common,anchors:badSpread.receipt.anchors,previousPath:badSpread.receipt.pathTape});
 assert.equal(recovered.receipt.margin.status,"applied","a later valid response recovers without deleting immutable anchors");
-const converging=readCbbMarketBehavior({...common,independent:independent(7),currentQuotes:[quote(5,"circa",true),quote(9,"pinnacle",true)],
+const converging=readCbbMarketBehavior({...common,independent:independent(7),currentQuotes:[supportedSource(5,7),quote(9,"pinnacle",true)],
  anchors:{...common.anchors,quotes:[quote(3),quote(10,"pinnacle")]}});
 assert.equal(converging.receipt.margin.status,"confirming");
 assert.equal(converging.forecast.margin,7,"opposite raw moves can confirm the independent law when the explicitly selected current source agrees on winner and cover");

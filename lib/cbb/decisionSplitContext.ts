@@ -1,3 +1,4 @@
+import {cbbAvailabilityUpperBoundMs} from "./marketReceiptTime";
 import {cbbSplitOrientation,cbbSplitTeamMatches} from "./exactSplitIdentity";
 import type {CbbGame,CbbMarket} from "./types";
 import type {cbbCurrentSplitEvidence} from "./owlsSplitEvidence";
@@ -14,6 +15,10 @@ export type CbbDecisionSplitContext={
   clockBasis:"verified_provider_observation"|"db_inserted_upper_bound"|"capture_upper_bound";
   observationIds:readonly (number|string)[];
   receiptEarliest?:string;
+  /** Earlier native states, retained as history rather than extra source votes. */
+  sourceHistory?:CbbDecisionSplitContext[];
+  /** Explicit current ambiguity; never revive an older response behind it. */
+  sourceConflict?:"same_native_clock";
 };
 export type CbbDecisionSplitRead={sourceBook:string;sourceClass:CbbDecisionSplitContext["sourceClass"];
   contract:"exact"|"off_contract"|"line_unavailable";money:"supports"|"opposes"|"balanced"|"unavailable";
@@ -36,7 +41,7 @@ export function readCbbDecisionSplits(rows:readonly CbbDecisionSplitContext[],ma
 const valid=(n:number|null)=>n===null||Number.isFinite(n)&&n>=0&&n<=1;
 const coherent=(a:number|null,b:number|null)=>a===null&&b===null||a!==null&&b!==null&&Math.abs(a+b-1)<=.03;
 const qualified=(r:CbbDecisionSplitContext,at:number)=>{
-  const received=Date.parse(r.availableBy),observed=r.observedAt===null?received:Date.parse(r.observedAt);
+  const received=cbbAvailabilityUpperBoundMs(r.availableBy),observed=r.observedAt===null?received:Date.parse(r.observedAt);
   return Number.isFinite(received)&&Number.isFinite(observed)&&observed<=received&&received<=at&&at-observed<=3*3600_000&&
     [r.firstMoney,r.secondMoney,r.firstTickets,r.secondTickets].every(valid)&&
     coherent(r.firstMoney,r.secondMoney)&&coherent(r.firstTickets,r.secondTickets)&&
@@ -57,7 +62,7 @@ export function cbbDecisionSplitContext(args:{game:CbbGame;allGames:readonly Cbb
   const out:CbbDecisionSplitContext[]=[];
   const directGroups=new Map<string,typeof args.direct.rows>();
   for(const row of args.direct.rows){if(!["circa","draftkings","betmgm"].includes(row.sourceBook))continue;
-    const key=JSON.stringify([row.sourceBook,row.market,row.observedAt,row.sourceLine]);
+    const key=JSON.stringify([row.sourceBook,row.market,row.observedAt,row.sourceLine,row.fetchedAt,row.sourceEventId]);
     directGroups.set(key,[...(directGroups.get(key)??[]),row]);}
   for(const group of directGroups.values()){
     const first=group.filter(row=>row.selection==="first"),second=group.filter(row=>row.selection==="second");
@@ -121,6 +126,13 @@ export function cbbDecisionSplitContext(args:{game:CbbGame;allGames:readonly Cbb
         clockBasis:"capture_upper_bound",observationIds:[]});
     }
   }
+  return cbbSelectDecisionSplitFrontiers(out,args.asOf);
+}
+
+/** Latest source context plus bounded prior native states; no extra votes. */
+export function cbbSelectDecisionSplitFrontiers(rows:readonly CbbDecisionSplitContext[],asOf:string):CbbDecisionSplitContext[]{
+  const at=Date.parse(asOf);
+  const out=rows.flatMap(row=>{const {sourceHistory,...current}=row;return [...(sourceHistory??[]),current];});
   // One latest state per physical family and market; the network and Owls
   // DraftKings observations never become independent votes.
   const families=new Map<string,CbbDecisionSplitContext[]>();
@@ -134,10 +146,28 @@ export function cbbDecisionSplitContext(args:{game:CbbGame;allGames:readonly Cbb
     const candidates=known.length?known:rows;
     const sourceTime=(row:CbbDecisionSplitContext)=>Date.parse(row.observedAt??row.availableBy);
     const newest=Math.max(...candidates.map(sourceTime));
-    const contemporaries=candidates.filter(row=>sourceTime(row)===newest);
-    const economic=(row:CbbDecisionSplitContext)=>JSON.stringify([row.line,row.firstMoney,row.secondMoney,row.firstTickets,row.secondTickets]);
-    if(new Set(contemporaries.map(economic)).size!==1)continue;
-    latest.push(contemporaries.sort((a,b)=>Date.parse(a.availableBy)-Date.parse(b.availableBy))[0]);
+    const economic=(row:CbbDecisionSplitContext)=>JSON.stringify([row.sourceEventId,row.line,row.firstMoney,row.secondMoney,row.firstTickets,row.secondTickets]);
+    const history:CbbDecisionSplitContext[]=[];
+    let currentConflict=false;
+    for(const time of [...new Set(candidates.map(sourceTime))].sort((a,b)=>a-b)){
+      const contemporaries=candidates.filter(row=>sourceTime(row)===time);
+      if(new Set(contemporaries.map(economic)).size!==1){
+        if(time===newest)currentConflict=true;
+        // Keep an older ambiguity as an interruption. Dropping it would
+        // falsely certify an unchanged pressure state across that clock.
+        history.push(...contemporaries);continue;
+      }
+      history.push(contemporaries.sort((a,b)=>Date.parse(a.availableBy)-Date.parse(b.availableBy))[0]);
+    }
+    if(!history.length)continue;
+    if(currentConflict){
+      const current=history.at(-1)!;
+      latest.push({...current,line:null,sourceEventId:null,firstMoney:null,secondMoney:null,firstTickets:null,secondTickets:null,
+        sourceConflict:"same_native_clock",sourceHistory:history});
+      continue;
+    }
+    const current=history.at(-1)!;
+    latest.push({...current,...(known.length&&history.length>1?{sourceHistory:history.slice(0,-1)}:{})});
   }
   return latest.sort((a,b)=>a.market.localeCompare(b.market)||a.physicalFamily.localeCompare(b.physicalFamily));
 }

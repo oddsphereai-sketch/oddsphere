@@ -390,6 +390,7 @@ export async function GET(request: Request): Promise<Response> {
           theOddsApiConfigured: Boolean(theOddsApiKey),
           theOddsApi: stepDetails.the_odds_api_current,
           lineScopes: lineResults.map(entry => ({ date: entry.date, games: entry.result.gamesInDb,
+            consumerSourceCoverage: entry.result.consumerSourceCoverage ?? null,
             missingConsumerOffers: entry.result.errors.filter(error => error.startsWith("NBA consumer execution prices unavailable")) })),
         },
       });

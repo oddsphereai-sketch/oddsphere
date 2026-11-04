@@ -31,6 +31,63 @@ coverage/clock/knowledge/lock tests, the full model gate, independent reviews,
 fresh-main protected PR and normal production writer/reader/lock verification are
 required. Evidence: `docs/model-audits/2026-11-04-nba-paid-consumer-book-coverage.json`.
 
+## Owner-directed CBB response continuity and source-law support repair — November 4
+
+The owner requested complete current-board price/source checks, several independent
+AI reviews, and correction of evidence that fails to affect final projections,
+picks and grades properly. This continues the explicit functional-repair and
+forward-evaluation direction in this chat; no settled-outcome qualification,
+shadow writer, forced Best Angle count or new grading definition is introduced.
+
+The scoped release is market model R15 /grade R17 /receipt R11 /path R5 /
+board R18 /publisher R27 /tracking R16 /adapter R16. The independently fitted
+R4 prior is unchanged. This repair preserves the original qualified response
+across an exact unchanged native pressure reread, without claiming the new read
+has a later price response. Changed pressure, contracts, event identity, ambiguous
+native states and subsequent buyback interrupt that continuity. A source can
+confirm the whole independent margin law only when its available exact contracts
+support that law's actual preferred-outcome probability strength. Merely crossing
+50% cannot restore a much stronger independent forecast.
+
+Current-source identity, response availability, one physical source frontier,
+target-family exclusion, exact-price grading, original stored locks, source
+budgets, schedules and prediction_pipeline:cbb lease remain mandatory. Grade
+reserve/price/tier thresholds remain unchanged. Paired held/contrarian-response
+tests must preserve both legitimate promotion and demotion behavior. All 11 games
+and 33 current markets require a causal same-input comparison, promotion/demotion
+counts, independent review, focused/full checks, fresh-main protected PR and live
+normal-writer/reader/coverage/lock verification before completion.
+
+Evidence: `docs/model-audits/2026-11-04-cbb-response-frontier-law-support.md`.
+
+## Owner-directed prospective UCL graph-clock repair — November 4
+
+The owner explicitly reported Real Madrid's locked MR graph missing the sportsbook
+trace and requested: "It's already locked, but it should be fixed in general so
+it stops happening." This authorizes the future-only capture-clock correction;
+it does not authorize modifying that existing locked game or reconstructing a
+missing locked field. Stored evidence reproduces request-start locked_at before
+the actual completed quote timestamps, causing the strict chart to reject four
+valid-book trails. The repair corrects the producer rather than weakening that
+guard or replacing missing data with copy.
+
+The same UCL writer uses one completed-input time for future captured_at/locked_at
+and subsequent due-lock verification. A writer-clock assertion rejects an
+unlocked/new tuple containing later quote clocks; existing stored locks retain
+exact fields and precedence. Version the writer asR1 and member lifecycle asR25,
+with modelR22/gradeR25/outcomeR15/projected-scoreR13 unchanged. This is a
+non-numerical publication repair: same-input forecasts/prices/grades and board
+counts must be identical, so no actionable demotion rule or substitute promotion
+is introduced. No new source request, refresh, schedule, writer or sport lease.
+
+Focused actual-fixture two-source charts, negative stale-clock, route-crossing,
+writer/reader lock, and shared-default regressions plus full verify:model-change,
+production build/types/lint, independent review, clean latest-main protected PR
+and live source/clock/legacy-hash proof remain required. The next normal scheduled
+cycle applies the repair; earlier extra-refresh approvals are already used.
+Evidence: `docs/model-audits/2026-11-04-ucl-sportsbook-graph-clock.md`.
+
+
 ## Owner-directed NFL/NBA available-source repair and all-game review — November 4
 
 The owner directed: "fix the NFL split-qualification and NBA future-game price

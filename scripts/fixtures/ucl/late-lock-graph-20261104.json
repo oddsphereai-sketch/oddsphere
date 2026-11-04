@@ -1,0 +1,1761 @@
+{
+  "at": "2026-11-04T16:55:49.061Z",
+  "source": "existing locked member and pre-lock display archive; no provider calls",
+  "rows": [
+    {
+      "game": {
+        "external_id": 4438969,
+        "sport": "soccer",
+        "awayTeam": "RMA",
+        "homeTeam": "AEK",
+        "gameStartAt": "2026-11-04T17:45:00.000Z",
+        "lockState": "locked",
+        "lockedAt": "2026-11-04T16:47:34.581+00:00",
+        "scheduledLockAt": "2026-11-04T16:45:00.000Z",
+        "status": {
+          "linesLocked": true,
+          "lineupConfirmed": true,
+          "marketDataLimited": false,
+          "sharpSignalPending": true
+        },
+        "soccerProjection": {
+          "likelyScore": {
+            "away": 3,
+            "home": 1
+          },
+          "medianTotal": 4,
+          "expectedGoals": {
+            "away": 3.098965212325408,
+            "home": 1.074937283380487
+          },
+          "mostLikelyTotal": 4,
+          "matchResultOutlook": {
+            "likelyScore": {
+              "away": 3,
+              "home": 1
+            },
+            "medianTotal": 4,
+            "expectedGoals": {
+              "away": 3.098965212325408,
+              "home": 1.074937283380487
+            },
+            "mostLikelyTotal": 4,
+            "likelyScoreProbability": 0.0844491967554262
+          },
+          "representativeScore": {
+            "away": 3,
+            "home": 1
+          },
+          "likelyScoreProbability": 0.0844491967554262,
+          "goalOutlookProbabilities": {
+            "away": 0.7856502749555528,
+            "draw": 0.13180450963508,
+            "home": 0.08254521540936711,
+            "bttsNo": 0.36549406051026845,
+            "over25": 0.7873475049276452,
+            "bttsYes": 0.6345059394897316,
+            "under25": 0.21265249507235506
+          },
+          "teamToScoreProbabilities": {
+            "away": 0.9581285940313391,
+            "home": 0.657075569352719
+          },
+          "coherentScorePresentation": {
+            "score": {
+              "away": 3.098965212325408,
+              "home": 1.074937283380487
+            },
+            "release": "ucl_projected_score_2026_11_04_r13_current_strength_scoring_prior",
+            "scenario": {
+              "away": 3,
+              "home": 1
+            },
+            "scenarioProbability": 0.0844491967554262
+          },
+          "representativeScoreProbability": 0.0844491967554262
+        },
+        "soccerModelProvenance": {},
+        "markets": {
+          "total": {
+            "held": false,
+            "line": 2.5,
+            "pick": "Over",
+            "verdict": {
+              "key": "lean",
+              "label": "Lean"
+            },
+            "riskLine": "The forecast clears its confidence floor and the existing positive exact-price value lane.",
+            "modelProb": 0.7873475049276452,
+            "oddsTrail": [
+              {
+                "line": 2.5,
+                "label": "first",
+                "source": "current_line",
+                "american": -310,
+                "observedAt": "2026-11-01T19:47:38.097+00:00",
+                "sportsbook": "draftkings"
+              },
+              {
+                "line": 2.5,
+                "label": "move",
+                "source": "current_line",
+                "american": -350,
+                "observedAt": "2026-11-04T13:03:27.643Z",
+                "sportsbook": "draftkings"
+              },
+              {
+                "line": 2.5,
+                "label": "move",
+                "source": "current_line",
+                "american": -340,
+                "observedAt": "2026-11-04T13:46:52+00:00",
+                "sportsbook": "draftkings"
+              },
+              {
+                "line": 2.5,
+                "label": "move",
+                "source": "current_line",
+                "american": -340,
+                "observedAt": "2026-11-04T13:47:38.285Z",
+                "sportsbook": "draftkings"
+              },
+              {
+                "line": 2.5,
+                "label": "move",
+                "source": "current_line",
+                "american": -320,
+                "observedAt": "2026-11-04T14:47:12+00:00",
+                "sportsbook": "draftkings"
+              },
+              {
+                "line": 2.5,
+                "label": "move",
+                "source": "current_line",
+                "american": -320,
+                "observedAt": "2026-11-04T14:47:40.631Z",
+                "sportsbook": "draftkings"
+              },
+              {
+                "line": 2.5,
+                "label": "move",
+                "source": "current_line",
+                "american": -330,
+                "observedAt": "2026-11-04T16:17:14+00:00",
+                "sportsbook": "draftkings"
+              },
+              {
+                "line": 2.5,
+                "label": "current",
+                "source": "current_line",
+                "american": -330,
+                "observedAt": "2026-11-04T16:17:38.980Z",
+                "sportsbook": "draftkings"
+              }
+            ],
+            "marketSource": "draftkings",
+            "publicSplits": [],
+            "pinnacleEvPct": 2.593765793602243,
+            "priceAmerican": -330,
+            "marketFairProb": 0.7315017171401811,
+            "modelMarketGapPct": 5.584578778746407,
+            "soccerTotalContext": {
+              "line": 2.5,
+              "note": "The probability, scoring mean, BTTS, and score outlook come from one target-excluded or exact club fallback PMF.",
+              "over_p": 0.7873475049276452,
+              "edge_pp": 5.584578778746407,
+              "under_p": 0.21265249507235506,
+              "displayed_side": "over",
+              "projected_total": 4.173902495705895,
+              "mean_direction_side": "over",
+              "provider_divergence": false,
+              "mean_vs_probability_disagree": false
+            },
+            "currentPriceAmerican": -330,
+            "currentPriceObservedAt": "2026-11-04T16:46:47.000Z",
+            "currentPriceSportsbook": "draftkings"
+          },
+          "moneyline": {
+            "held": false,
+            "line": null,
+            "pick": "RMA",
+            "verdict": {
+              "key": "watchlist",
+              "label": "Watchlist"
+            },
+            "riskLine": "The leading three-way forecast and both market directions agree. An actionable Lean still requires its confidence floor, reasonable price and qualified value or observed movement.",
+            "modelProb": 0.7856502749555528,
+            "oddsTrail": [
+              {
+                "line": null,
+                "label": "open",
+                "source": "provider_opening",
+                "american": -320,
+                "observedAt": "2026-10-21T09:25:03.666Z",
+                "sportsbook": "fanduel"
+              },
+              {
+                "line": null,
+                "label": "first",
+                "source": "current_line",
+                "american": -452,
+                "observedAt": "2026-11-04T13:47:38.285Z",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -430,
+                "observedAt": "2026-11-04T14:06:21.579Z",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -437,
+                "observedAt": "2026-11-04T14:47:40.631Z",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -427,
+                "observedAt": "2026-11-04T15:17:38.676Z",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -448,
+                "observedAt": "2026-11-04T15:43:11.692Z",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -470,
+                "observedAt": "2026-11-04T16:17:38.980Z",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": null,
+                "label": "current",
+                "source": "current_line",
+                "american": -468,
+                "observedAt": "2026-11-04T16:47:39.295Z",
+                "sportsbook": "pinnacle"
+              }
+            ],
+            "marketSource": "pinnacle",
+            "publicSplits": [],
+            "pinnacleEvPct": -4.647573466932908,
+            "priceAmerican": -468,
+            "marketFairProb": 0.7970591789200879,
+            "modelMarketGapPct": -1.1408903964535089,
+            "currentPriceAmerican": -468,
+            "currentPriceObservedAt": "2026-11-04T16:47:06.973Z",
+            "currentPriceSportsbook": "pinnacle",
+            "soccerMatchResultContext": {
+              "note": "Model forecast and de-vigged market are shown side by side. The graded side is RMA, which matches the forecast.",
+              "model": {
+                "away": 0.7856502749555528,
+                "draw": 0.13180450963508,
+                "home": 0.08254521540936711
+              },
+              "market": {
+                "away": 0.7970591789200879,
+                "draw": 0.12898279590501707,
+                "home": 0.07395802517489511
+              },
+              "edge_pp": {
+                "away": -1.1408903964535089,
+                "draw": 0.282171373006293,
+                "home": 0.8587190234472006
+              },
+              "displayed_side": "away"
+            }
+          },
+          "first_inning": {
+            "held": false,
+            "line": null,
+            "pick": "Yes",
+            "verdict": {
+              "key": "lean",
+              "label": "Lean"
+            },
+            "riskLine": "The forecast clears its confidence floor and the existing positive exact-price value lane.",
+            "modelProb": 0.6345059394897316,
+            "oddsTrail": [
+              {
+                "line": null,
+                "label": "first",
+                "source": "current_line",
+                "american": -156,
+                "observedAt": "2026-10-31T12:58:29.428+00:00",
+                "sportsbook": "novig"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -144,
+                "observedAt": "2026-11-04T13:03:27.643+00:00",
+                "sportsbook": "novig"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -138,
+                "observedAt": "2026-11-04T13:47:38.285Z",
+                "sportsbook": "novig"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -138,
+                "observedAt": "2026-11-04T14:06:21.579+00:00",
+                "sportsbook": "novig"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -135,
+                "observedAt": "2026-11-04T14:47:40.631Z",
+                "sportsbook": "novig"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -135,
+                "observedAt": "2026-11-04T15:17:38.676+00:00",
+                "sportsbook": "novig"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -138,
+                "observedAt": "2026-11-04T15:43:11.692Z",
+                "sportsbook": "novig"
+              },
+              {
+                "line": null,
+                "label": "current",
+                "source": "current_line",
+                "american": -138,
+                "observedAt": "2026-11-04T16:17:38.98+00:00",
+                "sportsbook": "novig"
+              }
+            ],
+            "marketSource": "novig",
+            "publicSplits": [],
+            "pinnacleEvPct": 9.429285216345008,
+            "priceAmerican": -138,
+            "marketFairProb": 0.5714800144040332,
+            "modelMarketGapPct": 6.3025925085698375,
+            "soccerBttsContext": {
+              "no_p": 0.36549406051026845,
+              "note": "Derived from the same target-excluded or exact club fallback regulation PMF; the BTTS quote is economics only.",
+              "yes_p": 0.6345059394897316,
+              "edge_pp": 6.3025925085698375,
+              "market_yes": 0.5714800144040332,
+              "displayed_side": "yes",
+              "scoring_context": "RMA 3.10 \u00b7 AEK 1.07 expected goals"
+            },
+            "currentPriceAmerican": -138,
+            "currentPriceObservedAt": "2026-11-04T16:47:06.851Z",
+            "currentPriceSportsbook": "novig"
+          }
+        },
+        "soccerDoubleChanceMarket": {
+          "held": false,
+          "line": null,
+          "pick": "RMA or Draw",
+          "verdict": {
+            "key": "watchlist",
+            "label": "Watchlist"
+          },
+          "riskLine": "Strong Double Chance forecast with a coherent current price. Monitor only; the transferred policy has no actionable Double Chance threshold.",
+          "modelProb": 0.9174547845906329,
+          "oddsTrail": [
+            {
+              "line": null,
+              "label": "first",
+              "source": "current_line",
+              "american": -1600,
+              "observedAt": "2026-11-01T16:17:37.944+00:00",
+              "sportsbook": "draftkings"
+            },
+            {
+              "line": null,
+              "label": "move",
+              "source": "current_line",
+              "american": -1600,
+              "observedAt": "2026-11-01T21:47:37.213+00:00",
+              "sportsbook": "draftkings"
+            },
+            {
+              "line": null,
+              "label": "move",
+              "source": "current_line",
+              "american": -1800,
+              "observedAt": "2026-11-02T10:47:37.385+00:00",
+              "sportsbook": "draftkings"
+            },
+            {
+              "line": null,
+              "label": "move",
+              "source": "current_line",
+              "american": -1800,
+              "observedAt": "2026-11-03T17:47:39.975+00:00",
+              "sportsbook": "draftkings"
+            },
+            {
+              "line": null,
+              "label": "move",
+              "source": "current_line",
+              "american": -2000,
+              "observedAt": "2026-11-03T22:17:42.519+00:00",
+              "sportsbook": "draftkings"
+            },
+            {
+              "line": null,
+              "label": "move",
+              "source": "current_line",
+              "american": -2000,
+              "observedAt": "2026-11-04T03:17:40.786+00:00",
+              "sportsbook": "draftkings"
+            },
+            {
+              "line": null,
+              "label": "current",
+              "source": "current_line",
+              "american": -2500,
+              "observedAt": "2026-11-04T16:47:39.295Z",
+              "sportsbook": "draftkings"
+            }
+          ],
+          "marketSource": "draftkings",
+          "publicSplits": [],
+          "pinnacleEvPct": -4.58470240257417,
+          "priceAmerican": -2500,
+          "marketFairProb": 0.908697533535266,
+          "modelMarketGapPct": 0.8757251055366844,
+          "currentPriceAmerican": -2500,
+          "currentPriceObservedAt": "2026-11-04T16:47:03.048Z",
+          "currentPriceSportsbook": "draftkings",
+          "soccerDoubleChanceContext": {
+            "note": "The headline covers the Match Result forecast. All three prices remain visible as market context.",
+            "edge_pp": 0.8757251055366844,
+            "away_abbr": "RMA",
+            "home_abbr": "AEK",
+            "other_sides": [
+              {
+                "side": "home_or_draw",
+                "model": 0.2143497250444471,
+                "market": 0.22501081782778018
+              },
+              {
+                "side": "home_or_away",
+                "model": 0.8681954903649199,
+                "market": 0.8662916486369537
+              }
+            ],
+            "displayed_side": "away_or_draw",
+            "model_coverage": 0.9174547845906329,
+            "market_coverage": 0.908697533535266,
+            "side_explanation": "RMA or Draw follows the Match Result forecast; price affects the grade, not which club is covered."
+          }
+        }
+      },
+      "archives": [
+        {
+          "event": 4438969,
+          "start": "2026-11-04T17:45:00.000Z",
+          "away": "RMA",
+          "home": "AEK",
+          "key": "moneyline",
+          "pick": "RMA",
+          "kind": "moneyline",
+          "side": "away",
+          "line": null,
+          "capturedAt": 1793810768330,
+          "market": {
+            "eventTicker": "KXUCLGAME-26NOV04AEKRMA",
+            "source": "Kalshi via OWLS",
+            "status": "current",
+            "asOf": "2026-11-04T16:45:30.393Z",
+            "outcomes": [
+              {
+                "ticker": "KXUCLGAME-26NOV04AEKRMA-RMA",
+                "eventTicker": "KXUCLGAME-26NOV04AEKRMA",
+                "sideCode": "RMA",
+                "team": "Real Madrid",
+                "gameDate": "2026-11-04",
+                "bid": 0.81,
+                "ask": 0.82,
+                "probability": 0.815,
+                "volume24h": 3268970.32,
+                "totalVolume": 3643629.07,
+                "asOf": "2026-11-04T16:45:30.393Z",
+                "marketOpenedAt": "2026-10-21T00:37:00Z",
+                "history": [
+                  [
+                    1793217317311,
+                    0.765,
+                    70658.99
+                  ],
+                  [
+                    1793732751905,
+                    0.785,
+                    346143.26
+                  ],
+                  [
+                    1793810730393,
+                    0.815,
+                    3643629.07
+                  ]
+                ],
+                "historicalCandles": [],
+                "historicalCheckedAt": "2026-11-04T10:41:04.218Z",
+                "historicalRelease": "kalshi_display_candles_2026_10_29_r4_lifetime",
+                "historyFrom": "2026-10-21T00:37:00Z",
+                "openingQuote": {
+                  "kind": "first_available",
+                  "point": [
+                    1792576800000,
+                    0.715,
+                    0
+                  ]
+                },
+                "side": "away",
+                "label": "RMA"
+              },
+              {
+                "ticker": "KXUCLGAME-26NOV04AEKRMA-AEK",
+                "eventTicker": "KXUCLGAME-26NOV04AEKRMA",
+                "sideCode": "AEK",
+                "team": "AEK Athens",
+                "gameDate": "2026-11-04",
+                "bid": 0.06,
+                "ask": 0.07,
+                "probability": 0.065,
+                "volume24h": 279554.67,
+                "totalVolume": 291498.08,
+                "asOf": "2026-11-04T16:45:30.393Z",
+                "marketOpenedAt": "2026-10-21T00:37:00Z",
+                "history": [
+                  [
+                    1793217317311,
+                    0.1,
+                    2476.86
+                  ],
+                  [
+                    1793732751905,
+                    0.085,
+                    8507.68
+                  ],
+                  [
+                    1793810730393,
+                    0.065,
+                    291498.08
+                  ]
+                ],
+                "historicalCandles": [],
+                "historicalCheckedAt": "2026-11-04T14:36:08.510Z",
+                "historicalRelease": "kalshi_display_candles_2026_10_29_r4_lifetime",
+                "historyFrom": "2026-10-21T00:37:00Z",
+                "openingQuote": {
+                  "kind": "first_available",
+                  "point": [
+                    1792576800000,
+                    0.125,
+                    0
+                  ]
+                },
+                "side": "home",
+                "label": "AEK"
+              },
+              {
+                "ticker": "KXUCLGAME-26NOV04AEKRMA-TIE",
+                "eventTicker": "KXUCLGAME-26NOV04AEKRMA",
+                "sideCode": "TIE",
+                "team": "Tie",
+                "gameDate": "2026-11-04",
+                "bid": 0.11,
+                "ask": 0.12,
+                "probability": 0.115,
+                "volume24h": 34163.23,
+                "totalVolume": 38659.83,
+                "asOf": "2026-11-04T16:45:30.393Z",
+                "marketOpenedAt": "2026-10-21T00:37:00Z",
+                "history": [
+                  [
+                    1793217317311,
+                    0.135,
+                    2149.76
+                  ],
+                  [
+                    1793732751905,
+                    0.135,
+                    4199.33
+                  ],
+                  [
+                    1793810730393,
+                    0.115,
+                    38659.83
+                  ]
+                ],
+                "historicalCandles": [],
+                "historicalCheckedAt": "2026-11-04T14:46:06.177Z",
+                "historicalRelease": "kalshi_display_candles_2026_10_29_r4_lifetime",
+                "historyFrom": "2026-10-21T00:37:00Z",
+                "openingQuote": {
+                  "kind": "first_available",
+                  "point": [
+                    1792576800000,
+                    0.165,
+                    0
+                  ]
+                },
+                "side": "draw",
+                "label": "Draw"
+              }
+            ]
+          },
+          "book": {
+            "sportsbook": "pinnacle",
+            "line": null,
+            "points": [
+              [
+                1792624628470,
+                0.7542997542997543,
+                -307
+              ],
+              [
+                1793806991692,
+                0.8175182481751825,
+                -448
+              ],
+              [
+                1793809058980,
+                0.8245614035087719,
+                -470
+              ]
+            ],
+            "locked": false,
+            "historyScope": "provider_history",
+            "opening": {
+              "point": [
+                1792624628470,
+                0.7542997542997543,
+                -307
+              ],
+              "line": null
+            }
+          }
+        },
+        {
+          "event": 4438969,
+          "start": "2026-11-04T17:45:00.000Z",
+          "away": "RMA",
+          "home": "AEK",
+          "key": "total",
+          "pick": "Over",
+          "kind": "total",
+          "side": "over",
+          "line": 2.5,
+          "capturedAt": 1793810768330,
+          "market": {
+            "eventTicker": "KXUCLTOTAL-26NOV04AEKRMA",
+            "source": "Kalshi via OWLS",
+            "asOf": "2026-11-04T16:45:30.847Z",
+            "status": "current",
+            "outcomes": [
+              {
+                "ticker": "KXUCLTOTAL-26NOV04AEKRMA-3",
+                "eventTicker": "KXUCLTOTAL-26NOV04AEKRMA",
+                "sideCode": "OVER",
+                "team": "Over 2.5",
+                "gameDate": "2026-11-04",
+                "bid": 0.75,
+                "ask": 0.76,
+                "probability": 0.755,
+                "volume24h": 39013.11,
+                "totalVolume": 39575.88,
+                "asOf": "2026-11-04T16:45:30.847Z",
+                "history": [
+                  [
+                    1793226649757,
+                    0.73,
+                    0
+                  ],
+                  [
+                    1793810401722,
+                    0.755,
+                    39061.81
+                  ],
+                  [
+                    1793810730847,
+                    0.755,
+                    39575.88
+                  ]
+                ],
+                "contractKind": "total",
+                "strike": 2.5,
+                "marketOpenedAt": "2026-10-28T18:07:00Z",
+                "historicalCandles": [],
+                "historicalCheckedAt": "2026-11-04T16:11:06.554Z",
+                "historicalRelease": "kalshi_display_candles_2026_10_29_r4_lifetime",
+                "historyFrom": "2026-10-28T18:07:00Z",
+                "openingQuote": {
+                  "kind": "first_available",
+                  "point": [
+                    1793211000000,
+                    0.7050000000000001,
+                    0
+                  ]
+                },
+                "label": "Over 2.5"
+              }
+            ],
+            "context": {
+              "kind": "total",
+              "requestedLabel": "Over 2.5",
+              "displayLabel": "Over 2.5",
+              "method": "exact",
+              "note": null,
+              "sources": [
+                {
+                  "ticker": "KXUCLTOTAL-26NOV04AEKRMA-3",
+                  "label": "Over 2.5 goals scored",
+                  "asOf": "2026-11-04T16:45:30.847Z",
+                  "probability": 0.755
+                }
+              ]
+            }
+          },
+          "book": {
+            "sportsbook": "draftkings",
+            "line": 2.5,
+            "points": [
+              [
+                1793562458097,
+                0.7560975609756098,
+                -310
+              ],
+              [
+                1793803660631,
+                0.7619047619047619,
+                -320
+              ],
+              [
+                1793809058980,
+                0.7674418604651163,
+                -330
+              ]
+            ],
+            "locked": false
+          }
+        },
+        {
+          "event": 4438969,
+          "start": "2026-11-04T17:45:00.000Z",
+          "away": "RMA",
+          "home": "AEK",
+          "key": "first_inning",
+          "pick": "Yes",
+          "kind": "btts",
+          "side": "yes",
+          "line": null,
+          "capturedAt": 1793810768330,
+          "market": {
+            "eventTicker": "KXUCLBTTS-26NOV04AEKRMA",
+            "source": "Kalshi via OWLS",
+            "asOf": "2026-11-04T16:45:30.225Z",
+            "status": "current",
+            "outcomes": [
+              {
+                "ticker": "KXUCLBTTS-26NOV04AEKRMA-BTTS",
+                "eventTicker": "KXUCLBTTS-26NOV04AEKRMA",
+                "sideCode": "BTTS",
+                "team": "BTTS Yes",
+                "gameDate": "2026-11-04",
+                "bid": 0.57,
+                "ask": 0.58,
+                "probability": 0.575,
+                "volume24h": 11432.55,
+                "totalVolume": 12195.27,
+                "asOf": "2026-11-04T16:45:30.225Z",
+                "history": [
+                  [
+                    1793226649355,
+                    0.59,
+                    0
+                  ],
+                  [
+                    1793810401162,
+                    0.575,
+                    12108.69
+                  ],
+                  [
+                    1793810730225,
+                    0.575,
+                    12195.27
+                  ]
+                ],
+                "contractKind": "btts",
+                "strike": null,
+                "marketOpenedAt": "2026-10-28T18:07:00Z",
+                "historicalCandles": [],
+                "historicalCheckedAt": "2026-11-04T16:21:06.808Z",
+                "historicalRelease": "kalshi_display_candles_2026_10_29_r4_lifetime",
+                "historyFrom": "2026-10-28T18:07:00Z",
+                "openingQuote": {
+                  "kind": "first_available",
+                  "point": [
+                    1793211120000,
+                    0.595,
+                    0
+                  ]
+                },
+                "label": "BTTS Yes"
+              }
+            ],
+            "context": {
+              "kind": "btts",
+              "requestedLabel": "BTTS Yes",
+              "displayLabel": "BTTS Yes",
+              "method": "exact",
+              "note": null,
+              "sources": [
+                {
+                  "ticker": "KXUCLBTTS-26NOV04AEKRMA-BTTS",
+                  "label": "Both Teams To Score",
+                  "asOf": "2026-11-04T16:45:30.225Z",
+                  "probability": 0.575
+                }
+              ]
+            }
+          },
+          "book": {
+            "sportsbook": "novig",
+            "line": null,
+            "points": [
+              [
+                1793451509428,
+                0.609375,
+                -156
+              ],
+              [
+                1793805458676,
+                0.574468085106383,
+                -135
+              ],
+              [
+                1793806991692,
+                0.5798319327731093,
+                -138
+              ]
+            ],
+            "locked": false
+          }
+        }
+      ]
+    },
+    {
+      "game": {
+        "external_id": 4438971,
+        "sport": "soccer",
+        "awayTeam": "LIV",
+        "homeTeam": "FEN",
+        "gameStartAt": "2026-11-04T17:45:00.000Z",
+        "lockState": "locked",
+        "lockedAt": "2026-11-04T16:47:34.581+00:00",
+        "scheduledLockAt": "2026-11-04T16:45:00.000Z",
+        "status": {
+          "linesLocked": true,
+          "lineupConfirmed": true,
+          "marketDataLimited": false,
+          "sharpSignalPending": true
+        },
+        "soccerProjection": {
+          "likelyScore": {
+            "away": 2,
+            "home": 1
+          },
+          "medianTotal": 4,
+          "expectedGoals": {
+            "away": 2.6519772275390068,
+            "home": 1.0871148501087076
+          },
+          "mostLikelyTotal": 3,
+          "matchResultOutlook": {
+            "likelyScore": {
+              "away": 2,
+              "home": 1
+            },
+            "medianTotal": 4,
+            "expectedGoals": {
+              "away": 2.6519772275390068,
+              "home": 1.0871148501087076
+            },
+            "mostLikelyTotal": 3,
+            "likelyScoreProbability": 0.09038450645205798
+          },
+          "representativeScore": {
+            "away": 2,
+            "home": 1
+          },
+          "likelyScoreProbability": 0.09038450645205798,
+          "goalOutlookProbabilities": {
+            "away": 0.6986527224503604,
+            "draw": 0.17773372724500608,
+            "home": 0.12361355030463253,
+            "bttsNo": 0.3766267671784601,
+            "over25": 0.7200232071241381,
+            "bttsYes": 0.6233732328215399,
+            "under25": 0.2799767928758611
+          },
+          "teamToScoreProbabilities": {
+            "away": 0.9297292603336152,
+            "home": 0.6628599790265384
+          },
+          "coherentScorePresentation": {
+            "score": {
+              "away": 2.6519772275390068,
+              "home": 1.0871148501087076
+            },
+            "release": "ucl_projected_score_2026_11_04_r13_current_strength_scoring_prior",
+            "scenario": {
+              "away": 2,
+              "home": 1
+            },
+            "scenarioProbability": 0.09038450645205798
+          },
+          "representativeScoreProbability": 0.09038450645205798
+        },
+        "soccerModelProvenance": {},
+        "markets": {
+          "total": {
+            "held": false,
+            "line": 2.5,
+            "pick": "Over",
+            "verdict": {
+              "key": "lean",
+              "label": "Lean"
+            },
+            "riskLine": "The forecast clears its confidence floor and the existing positive exact-price value lane.",
+            "modelProb": 0.7200232071241381,
+            "oddsTrail": [
+              {
+                "line": 2.5,
+                "label": "first",
+                "source": "current_line",
+                "american": -211,
+                "observedAt": "2026-11-01T00:17:37.624+00:00",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": 2.5,
+                "label": "move",
+                "source": "current_line",
+                "american": -273,
+                "observedAt": "2026-11-04T13:47:35+00:00",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": 2.5,
+                "label": "move",
+                "source": "current_line",
+                "american": -273,
+                "observedAt": "2026-11-04T13:47:38.285Z",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": 2.5,
+                "label": "move",
+                "source": "current_line",
+                "american": -293,
+                "observedAt": "2026-11-04T14:47:30+00:00",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": 2.5,
+                "label": "move",
+                "source": "current_line",
+                "american": -293,
+                "observedAt": "2026-11-04T14:47:40.631Z",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": 2.5,
+                "label": "move",
+                "source": "current_line",
+                "american": -288,
+                "observedAt": "2026-11-04T16:17:18+00:00",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": 2.5,
+                "label": "move",
+                "source": "current_line",
+                "american": -288,
+                "observedAt": "2026-11-04T16:17:38.980Z",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": 2.5,
+                "label": "current",
+                "source": "current_line",
+                "american": -230,
+                "observedAt": "2026-11-04T16:47:39.295Z",
+                "sportsbook": "pinnacle"
+              }
+            ],
+            "marketSource": "pinnacle",
+            "publicSplits": [],
+            "pinnacleEvPct": 3.307677543898069,
+            "priceAmerican": -230,
+            "marketFairProb": 0.671282000199223,
+            "modelMarketGapPct": 4.874120692491513,
+            "soccerTotalContext": {
+              "line": 2.5,
+              "note": "The probability, scoring mean, BTTS, and score outlook come from one target-excluded or exact club fallback PMF.",
+              "over_p": 0.7200232071241381,
+              "edge_pp": 4.874120692491513,
+              "under_p": 0.2799767928758611,
+              "displayed_side": "over",
+              "projected_total": 3.7390920776477143,
+              "mean_direction_side": "over",
+              "provider_divergence": false,
+              "mean_vs_probability_disagree": false
+            },
+            "currentPriceAmerican": -230,
+            "currentPriceObservedAt": "2026-11-04T16:47:23.000Z",
+            "currentPriceSportsbook": "pinnacle"
+          },
+          "moneyline": {
+            "held": false,
+            "line": null,
+            "pick": "LIV",
+            "verdict": {
+              "key": "lean",
+              "label": "Lean"
+            },
+            "riskLine": "The forecast clears its confidence floor and the existing positive exact-price value lane.",
+            "modelProb": 0.6986527224503604,
+            "oddsTrail": [
+              {
+                "line": null,
+                "label": "open",
+                "source": "provider_opening",
+                "american": 100,
+                "observedAt": "2026-10-21T18:08:04.898Z",
+                "sportsbook": "polymarket"
+              },
+              {
+                "line": null,
+                "label": "first",
+                "source": "current_line",
+                "american": -209,
+                "observedAt": "2026-11-04T13:47:38.285Z",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -213,
+                "observedAt": "2026-11-04T14:06:21.579Z",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -211,
+                "observedAt": "2026-11-04T14:47:40.631Z",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -211,
+                "observedAt": "2026-11-04T15:17:38.676+00:00",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -205,
+                "observedAt": "2026-11-04T15:43:11.692Z",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -195,
+                "observedAt": "2026-11-04T16:17:38.980Z",
+                "sportsbook": "pinnacle"
+              },
+              {
+                "line": null,
+                "label": "current",
+                "source": "current_line",
+                "american": -170,
+                "observedAt": "2026-11-04T16:47:39.295Z",
+                "sportsbook": "pinnacle"
+              }
+            ],
+            "marketSource": "pinnacle",
+            "publicSplits": [],
+            "pinnacleEvPct": 10.962491212704295,
+            "priceAmerican": -170,
+            "marketFairProb": 0.6119806488332383,
+            "modelMarketGapPct": 8.667207361712205,
+            "currentPriceAmerican": -170,
+            "currentPriceObservedAt": "2026-11-04T16:47:06.973Z",
+            "currentPriceSportsbook": "pinnacle",
+            "soccerMatchResultContext": {
+              "note": "Model forecast and de-vigged market are shown side by side. The graded side is LIV, which matches the forecast.",
+              "model": {
+                "away": 0.6986527224503604,
+                "draw": 0.17773372724500608,
+                "home": 0.12361355030463253
+              },
+              "market": {
+                "away": 0.6119806488332383,
+                "draw": 0.21129766647694936,
+                "home": 0.17672168468981217
+              },
+              "edge_pp": {
+                "away": 8.667207361712205,
+                "draw": -3.3563939231943287,
+                "home": -5.310813438517964
+              },
+              "displayed_side": "away"
+            }
+          },
+          "first_inning": {
+            "held": false,
+            "line": null,
+            "pick": "Yes",
+            "verdict": {
+              "key": "watchlist",
+              "label": "Watchlist"
+            },
+            "riskLine": "BTTS clears the 55% forecast floor, but its current price and movement evidence do not qualify a Lean.",
+            "modelProb": 0.6233732328215399,
+            "oddsTrail": [
+              {
+                "line": null,
+                "label": "first",
+                "source": "current_line",
+                "american": -190,
+                "observedAt": "2026-11-01T00:17:37.624+00:00",
+                "sportsbook": "draftkings"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -185,
+                "observedAt": "2026-11-04T05:17:38.154+00:00",
+                "sportsbook": "draftkings"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -185,
+                "observedAt": "2026-11-04T05:47:37.243+00:00",
+                "sportsbook": "draftkings"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -210,
+                "observedAt": "2026-11-04T13:47:38.285+00:00",
+                "sportsbook": "draftkings"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -215,
+                "observedAt": "2026-11-04T14:47:40.631+00:00",
+                "sportsbook": "draftkings"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -215,
+                "observedAt": "2026-11-04T15:43:11.692+00:00",
+                "sportsbook": "draftkings"
+              },
+              {
+                "line": null,
+                "label": "move",
+                "source": "current_line",
+                "american": -225,
+                "observedAt": "2026-11-04T16:17:38.980Z",
+                "sportsbook": "draftkings"
+              },
+              {
+                "line": null,
+                "label": "current",
+                "source": "current_line",
+                "american": -195,
+                "observedAt": "2026-11-04T16:47:39.295Z",
+                "sportsbook": "draftkings"
+              }
+            ],
+            "marketSource": "draftkings",
+            "publicSplits": [],
+            "pinnacleEvPct": -5.694818624433706,
+            "priceAmerican": -195,
+            "marketFairProb": 0.627642789523509,
+            "modelMarketGapPct": -0.4269556701969157,
+            "soccerBttsContext": {
+              "no_p": 0.3766267671784601,
+              "note": "Derived from the same target-excluded or exact club fallback regulation PMF; the BTTS quote is economics only.",
+              "yes_p": 0.6233732328215399,
+              "edge_pp": -0.4269556701969157,
+              "market_yes": 0.627642789523509,
+              "displayed_side": "yes",
+              "scoring_context": "LIV 2.65 \u00b7 FEN 1.09 expected goals"
+            },
+            "currentPriceAmerican": -195,
+            "currentPriceObservedAt": "2026-11-04T16:47:14.858Z",
+            "currentPriceSportsbook": "draftkings"
+          }
+        },
+        "soccerDoubleChanceMarket": {
+          "held": false,
+          "line": null,
+          "pick": "LIV or Draw",
+          "verdict": {
+            "key": "watchlist",
+            "label": "Watchlist"
+          },
+          "riskLine": "Strong Double Chance forecast with a coherent current price. Monitor only; the transferred policy has no actionable Double Chance threshold.",
+          "modelProb": 0.8763864496953664,
+          "oddsTrail": [
+            {
+              "line": null,
+              "label": "first",
+              "source": "current_line",
+              "american": -600,
+              "observedAt": "2026-11-01T00:17:37.624+00:00",
+              "sportsbook": "draftkings"
+            },
+            {
+              "line": null,
+              "label": "move",
+              "source": "current_line",
+              "american": -750,
+              "observedAt": "2026-11-04T11:47:38.137+00:00",
+              "sportsbook": "draftkings"
+            },
+            {
+              "line": null,
+              "label": "move",
+              "source": "current_line",
+              "american": -700,
+              "observedAt": "2026-11-04T13:03:27.643+00:00",
+              "sportsbook": "draftkings"
+            },
+            {
+              "line": null,
+              "label": "move",
+              "source": "current_line",
+              "american": -750,
+              "observedAt": "2026-11-04T13:47:38.285+00:00",
+              "sportsbook": "draftkings"
+            },
+            {
+              "line": null,
+              "label": "move",
+              "source": "current_line",
+              "american": -750,
+              "observedAt": "2026-11-04T14:47:40.631+00:00",
+              "sportsbook": "draftkings"
+            },
+            {
+              "line": null,
+              "label": "move",
+              "source": "current_line",
+              "american": -700,
+              "observedAt": "2026-11-04T15:43:11.692Z",
+              "sportsbook": "draftkings"
+            },
+            {
+              "line": null,
+              "label": "move",
+              "source": "current_line",
+              "american": -700,
+              "observedAt": "2026-11-04T16:17:38.98+00:00",
+              "sportsbook": "draftkings"
+            },
+            {
+              "line": null,
+              "label": "current",
+              "source": "current_line",
+              "american": -600,
+              "observedAt": "2026-11-04T16:47:39.295Z",
+              "sportsbook": "draftkings"
+            }
+          ],
+          "marketSource": "draftkings",
+          "publicSplits": [],
+          "pinnacleEvPct": 2.245085797792745,
+          "priceAmerican": -600,
+          "marketFairProb": 0.8101508259516399,
+          "modelMarketGapPct": 6.623562374372649,
+          "currentPriceAmerican": -600,
+          "currentPriceObservedAt": "2026-11-04T16:47:14.858Z",
+          "currentPriceSportsbook": "draftkings",
+          "soccerDoubleChanceContext": {
+            "note": "The headline covers the Match Result forecast. All three prices remain visible as market context.",
+            "edge_pp": 6.623562374372649,
+            "away_abbr": "LIV",
+            "home_abbr": "FEN",
+            "other_sides": [
+              {
+                "side": "home_or_draw",
+                "model": 0.30134727754963864,
+                "market": 0.40220253770648795
+              },
+              {
+                "side": "home_or_away",
+                "model": 0.8222662727549929,
+                "market": 0.7876466363418723
+              }
+            ],
+            "displayed_side": "away_or_draw",
+            "model_coverage": 0.8763864496953664,
+            "market_coverage": 0.8101508259516399,
+            "side_explanation": "LIV or Draw follows the Match Result forecast; price affects the grade, not which club is covered."
+          }
+        }
+      },
+      "archives": [
+        {
+          "event": 4438971,
+          "start": "2026-11-04T17:45:00.000Z",
+          "away": "LIV",
+          "home": "FEN",
+          "key": "moneyline",
+          "pick": "LIV",
+          "kind": "moneyline",
+          "side": "away",
+          "line": null,
+          "capturedAt": 1793810768330,
+          "market": {
+            "eventTicker": "KXUCLGAME-26NOV04FENLFC",
+            "source": "Kalshi via OWLS",
+            "status": "current",
+            "asOf": "2026-11-04T16:45:30.393Z",
+            "outcomes": [
+              {
+                "ticker": "KXUCLGAME-26NOV04FENLFC-LFC",
+                "eventTicker": "KXUCLGAME-26NOV04FENLFC",
+                "sideCode": "LFC",
+                "team": "Liverpool",
+                "gameDate": "2026-11-04",
+                "bid": 0.63,
+                "ask": 0.64,
+                "probability": 0.635,
+                "volume24h": 1000657.86,
+                "totalVolume": 1093453.09,
+                "asOf": "2026-11-04T16:45:30.393Z",
+                "marketOpenedAt": "2026-10-21T00:37:00Z",
+                "history": [
+                  [
+                    1793217317311,
+                    0.605,
+                    27514.45
+                  ],
+                  [
+                    1793810401265,
+                    0.635,
+                    1077047.15
+                  ],
+                  [
+                    1793810730393,
+                    0.635,
+                    1093453.09
+                  ]
+                ],
+                "historicalCandles": [],
+                "historicalCheckedAt": "2026-11-04T10:51:05.011Z",
+                "historicalRelease": "kalshi_display_candles_2026_10_29_r4_lifetime",
+                "historyFrom": "2026-10-21T00:37:00Z",
+                "openingQuote": {
+                  "kind": "first_available",
+                  "point": [
+                    1792620000000,
+                    0.455,
+                    27.88
+                  ]
+                },
+                "side": "away",
+                "label": "LIV"
+              },
+              {
+                "ticker": "KXUCLGAME-26NOV04FENLFC-FEN",
+                "eventTicker": "KXUCLGAME-26NOV04FENLFC",
+                "sideCode": "FEN",
+                "team": "Fenerbahce",
+                "gameDate": "2026-11-04",
+                "bid": 0.17,
+                "ask": 0.18,
+                "probability": 0.175,
+                "volume24h": 70384.57,
+                "totalVolume": 77139.43,
+                "asOf": "2026-11-04T16:45:30.393Z",
+                "marketOpenedAt": "2026-10-21T00:37:00Z",
+                "history": [
+                  [
+                    1793217317311,
+                    0.19,
+                    1124.81
+                  ],
+                  [
+                    1793810401265,
+                    0.175,
+                    74773.07
+                  ],
+                  [
+                    1793810730393,
+                    0.175,
+                    77139.43
+                  ]
+                ],
+                "historicalCandles": [],
+                "historicalCheckedAt": "2026-11-04T16:46:08.165Z",
+                "historicalRelease": "kalshi_display_candles_2026_10_29_r4_lifetime",
+                "historyFrom": "2026-10-21T00:37:00Z",
+                "openingQuote": {
+                  "kind": "first_available",
+                  "point": [
+                    1792623600000,
+                    0.255,
+                    0
+                  ]
+                },
+                "side": "home",
+                "label": "FEN"
+              },
+              {
+                "ticker": "KXUCLGAME-26NOV04FENLFC-TIE",
+                "eventTicker": "KXUCLGAME-26NOV04FENLFC",
+                "sideCode": "TIE",
+                "team": "Tie",
+                "gameDate": "2026-11-04",
+                "bid": 0.19,
+                "ask": 0.2,
+                "probability": 0.195,
+                "volume24h": 12758.52,
+                "totalVolume": 17745.27,
+                "asOf": "2026-11-04T16:45:30.393Z",
+                "marketOpenedAt": "2026-10-21T00:37:00Z",
+                "history": [
+                  [
+                    1793217317311,
+                    0.21,
+                    35.93
+                  ],
+                  [
+                    1793810401265,
+                    0.185,
+                    13295.93
+                  ],
+                  [
+                    1793810730393,
+                    0.195,
+                    17745.27
+                  ]
+                ],
+                "historicalCandles": [],
+                "historicalCheckedAt": "2026-11-04T08:51:05.452Z",
+                "historicalRelease": "kalshi_display_candles_2026_10_29_r4_lifetime",
+                "historyFrom": "2026-10-21T00:37:00Z",
+                "openingQuote": {
+                  "kind": "first_available",
+                  "point": [
+                    1792623600000,
+                    0.25,
+                    0
+                  ]
+                },
+                "side": "draw",
+                "label": "Draw"
+              }
+            ]
+          },
+          "book": {
+            "sportsbook": "pinnacle",
+            "line": null,
+            "points": [
+              [
+                1792636268970,
+                0.5951417004048583,
+                -147
+              ],
+              [
+                1793806991692,
+                0.6721311475409836,
+                -205
+              ],
+              [
+                1793809058980,
+                0.6610169491525424,
+                -195
+              ]
+            ],
+            "locked": false,
+            "historyScope": "provider_history",
+            "opening": {
+              "point": [
+                1792636268970,
+                0.5951417004048583,
+                -147
+              ],
+              "line": null
+            }
+          }
+        },
+        {
+          "event": 4438971,
+          "start": "2026-11-04T17:45:00.000Z",
+          "away": "LIV",
+          "home": "FEN",
+          "key": "total",
+          "pick": "Over",
+          "kind": "total",
+          "side": "over",
+          "line": 2.5,
+          "capturedAt": 1793810768330,
+          "market": {
+            "eventTicker": "KXUCLTOTAL-26NOV04FENLFC",
+            "source": "Kalshi via OWLS",
+            "asOf": "2026-11-04T16:45:30.847Z",
+            "status": "current",
+            "outcomes": [
+              {
+                "ticker": "KXUCLTOTAL-26NOV04FENLFC-3",
+                "eventTicker": "KXUCLTOTAL-26NOV04FENLFC",
+                "sideCode": "OVER",
+                "team": "Over 2.5",
+                "gameDate": "2026-11-04",
+                "bid": 0.66,
+                "ask": 0.67,
+                "probability": 0.665,
+                "volume24h": 7450.1,
+                "totalVolume": 7496.78,
+                "asOf": "2026-11-04T16:45:30.847Z",
+                "history": [
+                  [
+                    1793226649757,
+                    0.64,
+                    0
+                  ],
+                  [
+                    1793758231019,
+                    0.7,
+                    115.01
+                  ],
+                  [
+                    1793810730847,
+                    0.665,
+                    7496.78
+                  ]
+                ],
+                "contractKind": "total",
+                "strike": 2.5,
+                "marketOpenedAt": "2026-10-28T18:07:00Z",
+                "historicalCandles": [],
+                "historicalCheckedAt": "2026-11-04T16:31:10.396Z",
+                "historicalRelease": "kalshi_display_candles_2026_10_29_r4_lifetime",
+                "historyFrom": "2026-10-28T18:07:00Z",
+                "openingQuote": {
+                  "kind": "first_available",
+                  "point": [
+                    1793211000000,
+                    0.645,
+                    0
+                  ]
+                },
+                "label": "Over 2.5"
+              }
+            ],
+            "context": {
+              "kind": "total",
+              "requestedLabel": "Over 2.5",
+              "displayLabel": "Over 2.5",
+              "method": "exact",
+              "note": null,
+              "sources": [
+                {
+                  "ticker": "KXUCLTOTAL-26NOV04FENLFC-3",
+                  "label": "Over 2.5 goals scored",
+                  "asOf": "2026-11-04T16:45:30.847Z",
+                  "probability": 0.665
+                }
+              ]
+            }
+          },
+          "book": {
+            "sportsbook": "pinnacle",
+            "line": 2.5,
+            "points": [
+              [
+                1793492257624,
+                0.6784565916398714,
+                -211
+              ],
+              [
+                1793803660631,
+                0.7455470737913485,
+                -293
+              ],
+              [
+                1793809058980,
+                0.7422680412371134,
+                -288
+              ]
+            ],
+            "locked": false
+          }
+        },
+        {
+          "event": 4438971,
+          "start": "2026-11-04T17:45:00.000Z",
+          "away": "LIV",
+          "home": "FEN",
+          "key": "first_inning",
+          "pick": "Yes",
+          "kind": "btts",
+          "side": "yes",
+          "line": null,
+          "capturedAt": 1793810768330,
+          "market": {
+            "eventTicker": "KXUCLBTTS-26NOV04FENLFC",
+            "source": "Kalshi via OWLS",
+            "asOf": "2026-11-04T16:45:30.225Z",
+            "status": "current",
+            "outcomes": [
+              {
+                "ticker": "KXUCLBTTS-26NOV04FENLFC-BTTS",
+                "eventTicker": "KXUCLBTTS-26NOV04FENLFC",
+                "sideCode": "BTTS",
+                "team": "BTTS Yes",
+                "gameDate": "2026-11-04",
+                "bid": 0.64,
+                "ask": 0.65,
+                "probability": 0.645,
+                "volume24h": 27670.83,
+                "totalVolume": 27835.33,
+                "asOf": "2026-11-04T16:45:30.225Z",
+                "history": [
+                  [
+                    1793226649355,
+                    0.615,
+                    0
+                  ],
+                  [
+                    1793810401162,
+                    0.645,
+                    27804.86
+                  ],
+                  [
+                    1793810730225,
+                    0.645,
+                    27835.33
+                  ]
+                ],
+                "contractKind": "btts",
+                "strike": null,
+                "marketOpenedAt": "2026-10-28T18:07:00Z",
+                "historicalCandles": [],
+                "historicalCheckedAt": "2026-11-04T16:41:08.160Z",
+                "historicalRelease": "kalshi_display_candles_2026_10_29_r4_lifetime",
+                "historyFrom": "2026-10-28T18:07:00Z",
+                "openingQuote": {
+                  "kind": "first_available",
+                  "point": [
+                    1793211000000,
+                    0.62,
+                    0
+                  ]
+                },
+                "label": "BTTS Yes"
+              }
+            ],
+            "context": {
+              "kind": "btts",
+              "requestedLabel": "BTTS Yes",
+              "displayLabel": "BTTS Yes",
+              "method": "exact",
+              "note": null,
+              "sources": [
+                {
+                  "ticker": "KXUCLBTTS-26NOV04FENLFC-BTTS",
+                  "label": "Both Teams To Score",
+                  "asOf": "2026-11-04T16:45:30.225Z",
+                  "probability": 0.645
+                }
+              ]
+            }
+          },
+          "book": {
+            "sportsbook": "draftkings",
+            "line": null,
+            "points": [
+              [
+                1793102839171,
+                0.6610169491525424,
+                -195
+              ],
+              [
+                1793806991692,
+                0.6825396825396826,
+                -215
+              ],
+              [
+                1793809058980,
+                0.6923076923076923,
+                -225
+              ]
+            ],
+            "locked": false,
+            "historyScope": "provider_history",
+            "opening": {
+              "point": [
+                1793102839171,
+                0.6610169491525424,
+                -195
+              ],
+              "line": null
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

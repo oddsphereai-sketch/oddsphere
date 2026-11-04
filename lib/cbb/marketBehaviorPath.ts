@@ -4,7 +4,7 @@ import type { CbbCanonicalReceipt, CbbForecast, CbbMarket, CbbQuote } from "./ty
 import { cbbEvidenceAvailableAt, cbbEvidenceProvablyBefore } from "./marketReceiptTime";
 import type { CbbBehaviorFlow } from "./marketBehaviorCandidate";
 
-export const CBB_MARKET_BEHAVIOR_PATH_RELEASE = "cbb_market_behavior_path_2026_11_03_r4_identical_preflow_state" as const;
+export const CBB_MARKET_BEHAVIOR_PATH_RELEASE = "cbb_market_behavior_path_2026_11_04_r5_retained_response_frontier" as const;
 const BOOKS = ["circa", "pinnacle", "bookmaker"];
 const MARKETS: CbbMarket[] = ["moneyline", "spread", "total"];
 // Current writer cadence is15 minutes:32 states cover7h45, exceeding the
@@ -39,7 +39,7 @@ export type CbbMarketPathStreamTape = {
   flowTruncatedBefore: string | null;
 };
 export type CbbMarketBehaviorPathTape = {
-  release: typeof CBB_MARKET_BEHAVIOR_PATH_RELEASE|"cbb_market_behavior_path_2026_11_02_r3_compact_native_frontier"|"cbb_market_behavior_path_2026_11_02_r2_availability_bounds";
+  release: typeof CBB_MARKET_BEHAVIOR_PATH_RELEASE|"cbb_market_behavior_path_2026_11_03_r4_identical_preflow_state"|"cbb_market_behavior_path_2026_11_02_r3_compact_native_frontier"|"cbb_market_behavior_path_2026_11_02_r2_availability_bounds";
   gameId: number;
   startsAt: string;
   capturedAt: string;
@@ -129,7 +129,16 @@ const sign = (n: number): Direction => Math.abs(n) <= 1e-7 ? 0 : n > 0 ? 1 : -1;
 const pair = (q: CbbQuote) => JSON.stringify([q.line, q.firstPrice, q.secondPrice]);
 const sourceTime = (q: CbbQuote) => Date.parse(q.providerObservedAt);
 const receiptTime = cbbEvidenceAvailableAt;
-const flowPair = (flow: CbbBehaviorFlow) => JSON.stringify([flow.line, flow.firstMoney, flow.secondMoney, flow.firstTickets, flow.secondTickets]);
+const flowPair = (flow: CbbBehaviorFlow) => JSON.stringify([flow.sourceEventId,flow.line, flow.firstMoney, flow.secondMoney, flow.firstTickets, flow.secondTickets]);
+/** Identical re-reads preserve an episode; a changed contract, native identity
+ * or any money/ticket axis is a new pressure state, never a new source vote. */
+export function cbbSameNativePressureState(a:{gameId:number;market:CbbMarket;sourceBook:string;sourceEventId:string|null;
+ line:number|null;firstMoney:number|null;secondMoney:number|null;firstTickets:number|null;secondTickets:number|null},b:typeof a):boolean{
+ return a.gameId===b.gameId&&a.market===b.market&&cbbPathBookFamily(a.sourceBook)===cbbPathBookFamily(b.sourceBook)&&
+  a.sourceEventId!==null&&a.sourceEventId===b.sourceEventId&&a.line===b.line&&a.firstMoney===b.firstMoney&&
+  a.secondMoney===b.secondMoney&&a.firstTickets===b.firstTickets&&a.secondTickets===b.secondTickets;
+}
+
 const fair = (q: CbbQuote) => cbbImpliedProbability(q.firstPrice) / (cbbImpliedProbability(q.firstPrice) + cbbImpliedProbability(q.secondPrice));
 function eligibleQuote(q: PathQuote, gameId: number, at: number, start: number) {
   if (q.gameId !== gameId || q.orientationVerified !== true || q.phase !== "current" ||
@@ -198,7 +207,7 @@ export function readCbbMarketBehaviorPath(args: {
   const limit = args.limitPerSource ?? MAX_QUOTES;
   if (!Number.isInteger(limit) || limit < 2 || limit > MAX_QUOTES) throw new Error("CBB path retention bound invalid");
   const previous = args.previous;
-  if (previous && (![CBB_MARKET_BEHAVIOR_PATH_RELEASE,"cbb_market_behavior_path_2026_11_02_r3_compact_native_frontier","cbb_market_behavior_path_2026_11_02_r2_availability_bounds"].includes(previous.release) || previous.gameId !== base.gameId ||
+  if (previous && (![CBB_MARKET_BEHAVIOR_PATH_RELEASE,"cbb_market_behavior_path_2026_11_03_r4_identical_preflow_state","cbb_market_behavior_path_2026_11_02_r3_compact_native_frontier","cbb_market_behavior_path_2026_11_02_r2_availability_bounds"].includes(previous.release) || previous.gameId !== base.gameId ||
     previous.startsAt !== args.startsAt || !Number.isFinite(Date.parse(previous.capturedAt)) || Date.parse(previous.capturedAt) > at)) {
     throw new Error("CBB path prior identity/cutoff mismatch");
   }

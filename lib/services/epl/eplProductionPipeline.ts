@@ -21,6 +21,8 @@ export type ClubSoccerPipelineConfig = {
   slugPrefix: string;
   providerIdKey: string;
   predictionSource: string;
+  /** Optional competition-owned writer contract; omitted legacy/defaults stay exact. */
+  writerRelease?: string;
   lockMinutes?: number;
   contextForGame?: (providerId: number) => Record<string, unknown> | null;
   /** Competition-scoped lock recovery: preserve the last priced tuple when
@@ -193,6 +195,7 @@ function recordFromMarket(input: {
         : {}),
       model_release: input.modelRelease,
       calibration_release: input.calibrationRelease,
+      ...(input.config.writerRelease ? { writer_release: input.config.writerRelease } : {}),
       captured_at: input.now.toISOString(),
       scheduled_lock_at: lockAt,
       selected_display_pick: input.market.pick,
