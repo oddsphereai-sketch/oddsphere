@@ -81,6 +81,12 @@ try {
   );
   await db.exec(migration);
   await db.exec(migration);
+  const scalarMigration = readFileSync(
+    "lib/db/schema-migration-v59-cfb-history-scalar-aggregation.sql",
+    "utf8",
+  );
+  await db.exec(scalarMigration);
+  await db.exec(scalarMigration);
   const source = readFileSync(
     "lib/services/football/cfbForwardEvidenceStore.ts",
     "utf8",
@@ -173,8 +179,43 @@ try {
     before,
     "every original snapshot, hash and frozen payload is unchanged",
   );
+  // Force the observed expanded-row sort spill with a synthetic numeric tape.
+  // Compare the actual installed functions; no production fixture is needed.
+  await db.exec(`SET work_mem='64kB';
+    INSERT INTO cfb_forward_evidence_snapshots
+    SELECT md5('wide:'||i)::uuid,2026,'r1','wide','unlocked',
+      '2026-11-04Z'::timestamptz,'2026-11-05Z'::timestamptz,repeat('f',64),
+      jsonb_build_object('market',jsonb_build_object('currentBooks',jsonb_build_array(
+        jsonb_build_object('originalNumericTape',to_jsonb(ARRAY(SELECT n FROM generate_series(1,1500)n)))
+      ))) FROM generate_series(1,300)i;`);
+  const wideQuery =
+    "SELECT cfb_forward_market_history_page(2026,ARRAY['r1'],ARRAY['wide'],NULL,0,250) AS page";
+  await db.exec(migration);
+  const previousPage = (await db.query(wideQuery)).rows[0].page;
+  const previousPlan = (
+    await db.query(`EXPLAIN(ANALYZE,BUFFERS,FORMAT JSON) ${wideQuery}`)
+  ).rows[0]["QUERY PLAN"][0];
+  await db.exec(scalarMigration);
+  const scalarPage = (await db.query(wideQuery)).rows[0].page;
+  const scalarPlan = (
+    await db.query(`EXPLAIN(ANALYZE,BUFFERS,FORMAT JSON) ${wideQuery}`)
+  ).rows[0]["QUERY PLAN"][0];
+  assert.deepEqual(
+    scalarPage,
+    previousPage,
+    "wide and tied history remains exactly ordered",
+  );
+  assert(
+    previousPlan.Plan["Temp Written Blocks"] > 0,
+    "the fixture must reproduce the old wide sort spill",
+  );
+  assert.equal(
+    scalarPlan.Plan["Temp Written Blocks"],
+    0,
+    "narrow ordered input must remove the observed temporary-write regression",
+  );
   console.log(
-    `PASS bounded CFB history SQL: ${fields.length} exact fields, legacy/null shapes, full opening horizon, ordered ties/pages, wrong scope isolation, bounds, invoker RLS/grants, rerun and immutable original rows`,
+    `PASS bounded CFB history SQL: ${fields.length} exact fields, legacy/null shapes, full opening horizon, ordered ties/pages, wrong scope isolation, bounds, invoker RLS/grants, rerun, immutable original rows and zero wide-sort temporary writes`,
   );
 } finally {
   await db.close();

@@ -107,7 +107,7 @@ export const CFB_FORWARD_WRITER_UNLOCKED_CONTINUITY_HOURS = 48 as const;
 export const CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE = 1_000 as const;
 export const CFB_FORWARD_MARKET_HISTORY_RPC_PAGE_SIZE = 250 as const;
 export const CFB_FORWARD_MARKET_HISTORY_TRANSPORT_RELEASE =
-  "cfb_market_history_transport_2026_11_04_r1_bounded_json_pages" as const;
+  "cfb_market_history_transport_2026_11_04_r2_ordered_scalar_pages" as const;
 // The visible-board movement reader retains 72 hours, versus the writer's
 // 48-hour unlocked continuity scan. A 96-game board observed every 15 minutes
 // contributes 27,648 movement rows before immutable openings/T-60 rows and

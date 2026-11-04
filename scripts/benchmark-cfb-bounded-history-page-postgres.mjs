@@ -58,6 +58,12 @@ try {
       "utf8",
     ),
   );
+  await setup.query(
+    readFileSync(
+      "lib/db/schema-migration-v59-cfb-history-scalar-aggregation.sql",
+      "utf8",
+    ),
+  );
   await setup.query("ANALYZE cfb_forward_evidence_snapshots");
 } finally {
   await setup.end();
@@ -196,7 +202,10 @@ console.log(
     cases: cases.map(({ pages, ...c }) => ({
       ...c,
       pages: pages.map(({ offset, rows, executionMs, tempWrittenBlocks }) => ({
-        offset, rows, executionMs, tempWrittenBlocks,
+        offset,
+        rows,
+        executionMs,
+        tempWrittenBlocks,
       })),
     })),
   }),
