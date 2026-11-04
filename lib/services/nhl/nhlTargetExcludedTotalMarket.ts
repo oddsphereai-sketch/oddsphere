@@ -6,6 +6,12 @@ import {
   type NhlModelOutput,
   type NhlTargetExcludedTotalRead,
 } from "../../automodel/nhlRegularModelV1";
+import {
+  arbitrateNhlMarketEpisode,
+  type NhlEpisodeMarket,
+  type NhlMarketEpisodeDecision,
+} from "./nhlMarketEpisodeArbiter";
+import { canonicalNhlSportsbookFamily } from "./nhlSportsbookFamily";
 
 export type NhlTotalMarketLineRow = {
   market_type: string;
@@ -20,7 +26,7 @@ export type NhlTotalMarketLineRow = {
 const NAMED_BOOKS = new Set(["circa", "pinnacle", "bookmaker"]);
 
 function normalizedBook(value: string): string {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  return canonicalNhlSportsbookFamily(value);
 }
 
 function impliedProbability(american: number): number {
@@ -223,28 +229,71 @@ export function buildNhlRegularMarketAwareForecast(args: {
     ...args.snapshot,
     market: {
       ...args.snapshot.market,
+      moneyline_market_episode: null,
+      spread_market_episode: null,
+      total_market_episode: null,
       target_excluded_total_read: null,
       target_exclusion_status: "unavailable",
     },
   };
   const seedModel = nhlRegularModelV1(seedSnapshot);
-  const line = seedSnapshot.market.market_total_line;
-  if (line === null) {
-    return {
-      snapshot: seedSnapshot,
-      model: seedModel,
-      seedModel,
-      targetExcludedTotalRead: null,
-      targetExclusionStatus: "unavailable",
-    };
-  }
+  const paths = seedSnapshot.market.market_episode_paths ?? [];
+  const decisionAt = seedSnapshot.market.market_decision_at ?? new Date().toISOString();
+  const totalLine = seedSnapshot.market.market_total_line;
+  const homePuckLine = seedSnapshot.market.market_home_puck_line;
+  const awayPuckLine = seedSnapshot.market.market_away_puck_line;
+  const contractKey = (market: NhlEpisodeMarket): string => market === "moneyline"
+    ? "full_game_ml"
+    : market === "total"
+      ? `total:${totalLine?.toFixed(1) ?? "none"}`
+      : `spread:${homePuckLine?.toFixed(1) ?? "none"}:${awayPuckLine?.toFixed(1) ?? "none"}`;
+  const modelSide = (model: NhlModelOutput, market: NhlEpisodeMarket): "home" | "away" | "over" | "under" => {
+    if (market === "total") return model.total.pick.startsWith("OVER") ? "over" : "under";
+    const pick = market === "moneyline" ? model.moneyline.pick : model.puck_line.pick;
+    return pick.startsWith(seedSnapshot.home.abbreviation) ? "home" : "away";
+  };
+  const modelLine = (model: NhlModelOutput, market: NhlEpisodeMarket): number | null => {
+    if (market === "moneyline") return null;
+    if (market === "total") return totalLine;
+    return model.puck_line.puck_line_value;
+  };
+  const executionQuote = (model: NhlModelOutput, market: NhlEpisodeMarket) => selectNhlBestPriceQuote({
+    rows: currentRows,
+    market,
+    side: modelSide(model, market),
+    line: modelLine(model, market),
+  });
+  const decision = (market: NhlEpisodeMarket, model: NhlModelOutput): NhlMarketEpisodeDecision => {
+    const quote = executionQuote(model, market);
+    const pressure = market === "moneyline"
+      ? seedSnapshot.market.moneyline_pressure_receipt
+      : market === "spread"
+        ? seedSnapshot.market.spread_pressure_receipt
+        : seedSnapshot.market.total_pressure_receipt;
+    return arbitrateNhlMarketEpisode({
+      market,
+      contractKey: contractKey(market),
+      decisionAt,
+      executionSportsbookFamily: quote?.sportsbook ?? null,
+      paths,
+      pressure,
+      materialMove: market === "moneyline" ? 0.01 : 0.12,
+      maximumPathAgeMs: 3 * 60 * 60 * 1_000,
+      maximumPressureAgeMs: 3 * 60 * 60 * 1_000,
+      followerWindowMs: 45 * 60 * 1_000,
+    });
+  };
+  const executionFingerprint = (model: NhlModelOutput): string => (["moneyline", "spread", "total"] as const)
+    .map((market) => {
+      const quote = executionQuote(model, market);
+      return `${market}:${modelSide(model, market)}:${modelLine(model, market) ?? "none"}:${normalizedBook(quote?.sportsbook ?? "none")}`;
+    })
+    .join("|");
 
-  let side: "over" | "under" = seedModel.total.pick.startsWith("OVER") ? "over" : "under";
-  let target = selectNhlBestPriceQuote({ rows: currentRows, market: "total", side, line });
+  let incumbentModel = seedModel;
   const visited = new Set<string>();
   for (let iteration = 0; iteration < 6; iteration += 1) {
-    if (!target) break;
-    const state = `${side}|${normalizedBook(target.sportsbook)}`;
+    const state = executionFingerprint(incumbentModel);
     if (visited.has(state)) {
       const snapshot: NhlFeatureSnapshot = {
         ...seedSnapshot,
@@ -259,47 +308,41 @@ export function buildNhlRegularMarketAwareForecast(args: {
       };
     }
     visited.add(state);
-    const targetExcludedTotalRead = buildNhlTargetExcludedTotalRead({
-      currentRows,
-      historyRows: args.historyRows,
-      totalLine: line,
-      excludedSportsbook: target.sportsbook,
-    });
-    if (!targetExcludedTotalRead) break;
+    const moneylineEpisode = decision("moneyline", incumbentModel);
+    const spreadEpisode = decision("spread", incumbentModel);
+    const totalEpisode = decision("total", incumbentModel);
     const snapshot: NhlFeatureSnapshot = {
       ...seedSnapshot,
       market: {
         ...seedSnapshot.market,
-        target_excluded_total_read: targetExcludedTotalRead,
+        moneyline_market_episode: moneylineEpisode,
+        spread_market_episode: spreadEpisode,
+        total_market_episode: totalEpisode,
         target_exclusion_status: "stable",
       },
     };
     const model = nhlRegularModelV1(snapshot);
-    if (model.layers.total_market_target_goals === null) break;
-    const finalSide = model.total.pick.startsWith("OVER") ? "over" : "under";
-    const finalTarget = selectNhlBestPriceQuote({
-      rows: currentRows,
-      market: "total",
-      side: finalSide,
-      line,
-    });
-    if (finalTarget && normalizedBook(finalTarget.sportsbook) === normalizedBook(target.sportsbook)) {
+    const finalState = executionFingerprint(model);
+    if (finalState === state) {
       return {
         snapshot,
         model,
         seedModel,
-        targetExcludedTotalRead,
+        targetExcludedTotalRead: null,
         targetExclusionStatus: "stable",
       };
     }
-    side = finalSide;
-    target = finalTarget;
+    incumbentModel = model;
   }
+  const snapshot: NhlFeatureSnapshot = {
+    ...seedSnapshot,
+    market: { ...seedSnapshot.market, target_exclusion_status: "cycle_fail_closed" },
+  };
   return {
-    snapshot: seedSnapshot,
+    snapshot,
     model: seedModel,
     seedModel,
     targetExcludedTotalRead: null,
-    targetExclusionStatus: "unavailable",
+    targetExclusionStatus: "cycle_fail_closed",
   };
 }

@@ -130,14 +130,12 @@ async function fetchAllTeamRows(season: number): Promise<CachedRows> {
   }
   if (results.some((rows) => rows === null)) throw new Error("MoneyPuck listed a current-season team file that returned 404");
   const rows = results.flatMap((teamRows) => teamRows ?? []);
-  const teamsByGame = new Map<number, Set<string>>();
-  for (const row of rows) {
-    const teams = teamsByGame.get(row.game_id) ?? new Set<string>();
-    teams.add(row.team_abbr);
-    teamsByGame.set(row.game_id, teams);
-  }
-  const incompleteGame = [...teamsByGame].find(([, teams]) => teams.size !== 2);
-  if (incompleteGame) throw new Error(`MoneyPuck game ${incompleteGame[0]} has incomplete paired team rows`);
+  // MoneyPuck can publish one team's row for a same-day or future game before
+  // its opponent file is updated. Retain the raw season feed here and let the
+  // slate-bounded replay admit only exact two-team pairs before the target
+  // date. The writer independently compares the replayed IDs with settled DB
+  // games, so a genuinely missing historical pair still fails closed without
+  // letting an unfinished future row erase the entire season state.
   const value = {
     season,
     expiresAt: Date.now() + CACHE_TTL_MS,

@@ -1,5 +1,47 @@
 # Model change safety protocol
 
+## Owner-directed NHL external-audited sharp-reader repair — November 4
+
+Daniel Mengel requested repeated independent AI reviews of whether the NHL
+reader catches sharp evidence and correctly affects final scores, predictions
+and play grades. Three independent review lanes rejected r25 and the first r26
+candidate. R27 closes their causal-clock, sportsbook-family, professional-split
+conflict/fallback, alternate-contract, future-quote, held-resistance,
+pre-pressure-volatility, locked-display and receipt-identity findings.
+
+The independent NHL forecast remains the only prior. R27 analyzes complete,
+fresh, exact-contract same-book episodes; excludes the exact execution-book
+family; treats conflicted professional splits as a veto; uses a truthful local
+availability clock; and never averages books or substitutes a current market
+level for the forecast. One physical book authors any innovation. A clean
+response after split availability is evaluated on that causal leg even when
+the earlier path was volatile. A flat hold can supply contextual resistance
+but has zero numerical authority. Unresolved, opposed, stale, future, partial,
+bought-back and reversed causal evidence fails closed.
+When correlated Moneyline and puck-line episodes agree, their persisted causal
+post-availability move clocks—not earlier global path moves—select the sole
+side-axis author.
+
+Qualified Moneyline, exact puck-line and exact main-Total innovations are
+reconciled once in one product-Poisson information projection. One final joint
+distribution owns scores, sides and probabilities; exact-price grades consume
+those final probabilities once. Infeasible or nonconvergent constraints return
+the exact independent distribution. The sole existing writer freezes a
+hash-bound, identity-bound, size-bounded three-market receipt. It records every
+professional split as selected or rejected. The locked member display separately
+retains fresh neutral or conflicting evidence while excluding invalid, future or
+stale rows; only selected evidence can authorize a model consequence. Locked cards
+verify and render the receipt before mutable dependencies; legacy locks retain
+their exact stored tuples and are never rewritten.
+
+The release also prevents an incomplete same-day/future MoneyPuck row from
+erasing complete historical state while retaining the exact settled-game ID
+gate. Paired tests prove score, side, probability and grade consequences across
+all three official markets, plus paired actionable promotion and demotion.
+This is functional product qualification followed by forward evaluation, not a
+future betting-accuracy guarantee. It adds no provider request, writer, cron,
+lease, stake or locked-record mutation. Evidence and rollback:
+`docs/model-audits/2026-11-04-nhl-external-audited-sharp-reader-r27.md`.
 ## Owner-directed UCL opponent-strength scoring repair — November 4
 
 After reviewing the exact November 3 1–8 BTTS cohort and code attribution,
@@ -94,7 +136,6 @@ joint law. Full/focused checks, independent source/consequence review,
 fresh-main protected PR, exact tree and actual live release/source/lock/reader
 verification remain mandatory. This is not a win-rate or exhaustive-future-case
 claim. Evidence: `docs/model-audits/2026-11-03-cbb-joint-native-decision-repair.json`.
-
 ## Owner-directed aligned CBB decisions and prospective New Orleans repair — November 3
 
 After the live R11/R13 repair, the owner explicitly instructed: "Fix that issue

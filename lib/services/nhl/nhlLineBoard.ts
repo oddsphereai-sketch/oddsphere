@@ -1,3 +1,5 @@
+import { canonicalNhlSportsbookFamily } from "./nhlSportsbookFamily";
+
 export type NhlCanonicalLineRow = {
   game_id?: number | string | null;
   market_type: string;
@@ -21,9 +23,8 @@ export type NhlSelectedPriceQuote = {
 export const NHL_CURRENT_QUOTE_RELATIVE_FRESH_MINUTES = 120 as const;
 
 function normalizedBook(value: string): string {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  return canonicalNhlSportsbookFamily(value);
 }
-
 function lineKey(value: number | null): string {
   return value === null ? "null" : value.toFixed(3);
 }
@@ -44,11 +45,16 @@ function observationTime(row: NhlCanonicalLineRow): number {
 export function selectNhlFreshCurrentLineBoard<T extends NhlCanonicalLineRow>(
   rows: readonly T[],
   maxRelativeAgeMinutes: number = NHL_CURRENT_QUOTE_RELATIVE_FRESH_MINUTES,
+  decisionAtMs: number = Date.now(),
 ): T[] {
   if (!Number.isFinite(maxRelativeAgeMinutes) || maxRelativeAgeMinutes < 0) {
     throw new Error("NHL current-line relative freshness must be non-negative.");
   }
-  const canonical = canonicalizeNhlLineRows(rows);
+  if (!Number.isFinite(decisionAtMs)) throw new Error("NHL current-line decision clock must be finite.");
+  const canonical = canonicalizeNhlLineRows(rows).filter((row) => {
+    const observed = observationTime(row);
+    return observed > 0 && observed <= decisionAtMs + 60_000;
+  });
   const anchorByMarket = new Map<string, number>();
   for (const row of canonical) {
     const observed = observationTime(row);

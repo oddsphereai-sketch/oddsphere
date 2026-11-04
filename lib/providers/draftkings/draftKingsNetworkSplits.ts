@@ -423,6 +423,7 @@ export function applyDraftKingsNetworkSplitFallback(
       ||uclClubNamesMatch(candidate.awayName,home)&&uclClubNamesMatch(candidate.homeName,away);
   };
   for (const game of response.games) {
+    if (game.lockState === "locked" && !options.reconstructMissingLockedPreLock) continue;
     if(ucl&&(game.lockState!=="open"||game.lockedAt))continue;
     if (response.sport === "cbb" && (game.lockState === "locked" || game.lockedAt)) continue;
     const lockedCutoffMs = game.lockState === "locked" && options.reconstructMissingLockedPreLock
@@ -464,7 +465,7 @@ export async function populateDailyEdgeDraftKingsFallback(
   response: DailyEdgeResponse,
   sport: Sport,
 ): Promise<DraftKingsNetworkOverlayResult> {
-  const options = { reconstructMissingLockedPreLock: true } as const;
+  const options = { reconstructMissingLockedPreLock: sport !== "nhl" } as const;
   // Apply the prior display authority before evaluating current sources. This
   // makes the source-hold decision deterministic rather than dependent on
   // which concurrent provider read happens to mutate the response first.

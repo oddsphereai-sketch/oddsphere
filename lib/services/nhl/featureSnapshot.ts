@@ -38,8 +38,13 @@ import {
   nhlSeasonStartYearFromExternalId,
 } from "./nhlScheduleIdentity";
 import { fetchNhlScheduleForDate } from "../../providers/nhl/_nhlApiClient";
-import { canonicalizeNhlLineRows } from "./nhlLineBoard";
+import { canonicalizeNhlLineRows, selectNhlFreshCurrentLineBoard } from "./nhlLineBoard";
 import { loadCompleteNhlCurrentLines, loadCompleteNhlLineHistory } from "./nhlLineStore";
+import type {
+  NhlBookPathReceipt,
+  NhlSplitPressureReceipt,
+} from "./nhlMarketEpisodeArbiter";
+import { canonicalNhlSportsbookFamily } from "./nhlSportsbookFamily";
 
 export type BuildSnapshotOptions = {
   /** games.id (sport='nhl'). */
@@ -69,6 +74,9 @@ export type BuildSnapshotOptions = {
     spreadSplitConfidence?: "high" | "medium" | "low" | "none";
     totalSplitSource?: "playbook" | "sharpapi" | null;
     totalSplitConfidence?: "high" | "medium" | "low" | "none";
+    moneylinePressureReceipt?: NhlSplitPressureReceipt | null;
+    spreadPressureReceipt?: NhlSplitPressureReceipt | null;
+    totalPressureReceipt?: NhlSplitPressureReceipt | null;
   };
   logger?: (msg: string) => void;
 };
@@ -249,7 +257,7 @@ function bestMlBreakEven(lines: DbLineRow[], side: "home" | "away"): number | nu
 const SHARP_BOOK_PRIORITY = ["circa", "pinnacle", "bookmaker"] as const;
 
 function normalizedBook(value: string): string {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  return canonicalNhlSportsbookFamily(value);
 }
 
 function median(values: readonly number[]): number | null {
@@ -424,6 +432,234 @@ function completeTotalAxisSequence(historyLines: DbLineRow[], book: string): num
       const point = totalAxisByBook(rows).get(book);
       return point === undefined ? [] : [point.axis];
     });
+}
+
+type TimedEconomicPoint = { at: string; value: number };
+
+function noVig(first: DbLineRow, second: DbLineRow): number | null {
+  const firstAt = first.observed_at ?? null;
+  const secondAt = second.observed_at ?? null;
+  if (firstAt !== null && secondAt !== null && firstAt !== secondAt) return null;
+  const firstProbability = first.implied_probability ?? americanToImplied(first.odds_american);
+  const secondProbability = second.implied_probability ?? americanToImplied(second.odds_american);
+  if (firstProbability === null || secondProbability === null) return null;
+  const hold = firstProbability + secondProbability;
+  if (hold < 0.94 || hold > 1.20) return null;
+  return firstProbability / hold;
+}
+
+function economicPointForBookSnapshot(args: {
+  market: "moneyline" | "spread" | "total";
+  rows: DbLineRow[];
+  currentTotalLine: number | null;
+  currentPuckPair: { home: number | null; away: number | null };
+  requireCurrentContract: boolean;
+  allowUniqueContractMigration?: boolean;
+}): number | null {
+  const rows = args.rows;
+  if (args.market === "moneyline") {
+    const home = rows.find((row) => row.market_type === "moneyline" && row.side === "home");
+    const away = rows.find((row) => row.market_type === "moneyline" && row.side === "away");
+    return home && away ? noVig(home, away) : null;
+  }
+  if (args.market === "total") {
+    let candidates = rows.flatMap((over) => {
+      if (over.market_type !== "total" || over.side !== "over" || over.line_value === null) return [];
+      const under = rows.find((row) => (
+        row.market_type === "total"
+        && row.side === "under"
+        && row.line_value !== null
+        && Math.abs(row.line_value - over.line_value!) < 0.01
+      ));
+      if (!under) return [];
+      const probability = noVig(over, under);
+      return probability === null ? [] : [{ line: over.line_value, probability }];
+    });
+    if (args.requireCurrentContract) {
+      const exact = args.currentTotalLine === null
+        ? []
+        : candidates.filter((candidate) => Math.abs(candidate.line - args.currentTotalLine!) < 0.01);
+      candidates = exact.length > 0
+        ? exact
+        : args.allowUniqueContractMigration && candidates.length === 1
+          ? candidates
+          : [];
+    }
+    candidates.sort((left, right) => (
+      Math.abs(left.probability - 0.5) - Math.abs(right.probability - 0.5)
+      || Math.abs(left.line - (args.currentTotalLine ?? left.line)) - Math.abs(right.line - (args.currentTotalLine ?? right.line))
+    ));
+    const point = candidates[0];
+    return point ? point.line + 5 * (point.probability - 0.5) : null;
+  }
+  let candidates = rows.flatMap((home) => {
+    if (home.market_type !== "spread" || home.side !== "home" || home.line_value === null) return [];
+    const away = rows.find((row) => (
+      row.market_type === "spread"
+      && row.side === "away"
+      && row.line_value !== null
+      && Math.abs(row.line_value + home.line_value!) < 0.01
+    ));
+    if (!away) return [];
+    const probability = noVig(home, away);
+    return probability === null ? [] : [{ homeLine: home.line_value, probability }];
+  });
+  if (args.requireCurrentContract) {
+    const exact = args.currentPuckPair.home === null
+      ? []
+      : candidates.filter((candidate) => Math.abs(candidate.homeLine - args.currentPuckPair.home!) < 0.01);
+    candidates = exact.length > 0
+      ? exact
+      : args.allowUniqueContractMigration && candidates.length === 1
+        ? candidates
+        : [];
+  }
+  candidates.sort((left, right) => (
+    Math.abs(Math.abs(left.homeLine) - 1.5) - Math.abs(Math.abs(right.homeLine) - 1.5)
+    || Math.abs(left.probability - 0.5) - Math.abs(right.probability - 0.5)
+  ));
+  const point = candidates[0];
+  return point ? -point.homeLine + 5 * (point.probability - 0.5) : null;
+}
+
+function classifyEconomicPath(points: readonly TimedEconomicPoint[], materialMove: number): NhlProbabilityPathState {
+  if (points.length < 2) return "unavailable";
+  const opening = points[0]!.value;
+  const current = points.at(-1)!.value;
+  const net = current - opening;
+  const deviations = points.map((point) => point.value - opening);
+  if (Math.abs(net) < materialMove) {
+    const positiveExcursion = Math.max(...deviations);
+    const negativeExcursion = Math.min(...deviations);
+    if (positiveExcursion >= materialMove && negativeExcursion <= -materialMove) return "reversal";
+    if (positiveExcursion >= materialMove || negativeExcursion <= -materialMove) return "buyback";
+    return "flat";
+  }
+  const direction = Math.sign(net);
+  const directed = points.map((point) => (point.value - opening) * direction);
+  const peak = Math.max(...directed);
+  const opposingExcursion = Math.min(...directed);
+  const retracement = peak - Math.abs(net);
+  const latestLeg = points.at(-1)!.value - points.at(-2)!.value;
+  if (opposingExcursion <= -materialMove) return "reversal";
+  if (retracement >= Math.max(materialMove, peak * 0.35)
+    || (Math.sign(latestLeg) === -direction && Math.abs(latestLeg) >= materialMove / 2)) {
+    return "buyback";
+  }
+  return "stable";
+}
+
+/**
+ * Build every complete same-book market path. Current Total and puck points are
+ * bound to the exact product contract. Historical points must prove that same
+ * contract; an alternate ladder is never allowed to impersonate main-line
+ * movement.
+ */
+export function buildNhlMarketEpisodePaths(args: {
+  currentLines: DbLineRow[];
+  historyLines: DbLineRow[];
+  currentTotalLine: number | null;
+  currentPuckPair: { home: number | null; away: number | null };
+}): NhlBookPathReceipt[] {
+  const markets = ["moneyline", "spread", "total"] as const;
+  const currentByBook = new Map<string, DbLineRow[]>();
+  for (const row of args.currentLines) {
+    const book = normalizedBook(row.sportsbook);
+    currentByBook.set(book, [...(currentByBook.get(book) ?? []), row]);
+  }
+  const historyByBookTime = new Map<string, DbLineRow[]>();
+  for (const row of args.historyLines) {
+    const at = row.observed_at ?? "";
+    if (!Number.isFinite(Date.parse(at))) continue;
+    const key = `${normalizedBook(row.sportsbook)}|${at}`;
+    historyByBookTime.set(key, [...(historyByBookTime.get(key) ?? []), row]);
+  }
+  const paths: NhlBookPathReceipt[] = [];
+  for (const [book, currentRows] of currentByBook) {
+    const sportsbook = currentRows[0]?.sportsbook ?? book;
+    for (const market of markets) {
+      const currentPoint = [...new Set(currentRows.map((row) => row.observed_at ?? ""))]
+        .filter((at) => Number.isFinite(Date.parse(at)))
+        .sort((left, right) => Date.parse(right) - Date.parse(left))
+        .flatMap((at) => {
+          const value = economicPointForBookSnapshot({
+            market,
+            rows: currentRows.filter((row) => row.observed_at === at),
+            currentTotalLine: args.currentTotalLine,
+            currentPuckPair: args.currentPuckPair,
+            requireCurrentContract: true,
+          });
+          return value === null ? [] : [{ at, value }];
+        })[0];
+      if (!currentPoint) continue;
+      const currentAt = currentPoint.at;
+      const currentValue = currentPoint.value;
+      const historical = [...historyByBookTime.entries()].flatMap(([key, rows]) => {
+        const separator = key.lastIndexOf("|");
+        if (key.slice(0, separator) !== book) return [];
+        const at = key.slice(separator + 1);
+        if (Date.parse(at) > Date.parse(currentAt)) return [];
+        const value = economicPointForBookSnapshot({
+          market,
+          rows,
+          currentTotalLine: args.currentTotalLine,
+          currentPuckPair: args.currentPuckPair,
+          requireCurrentContract: true,
+          allowUniqueContractMigration: true,
+        });
+        return value === null ? [] : [{ at, value }];
+      });
+      const points = [...new Map([
+        ...historical,
+        { at: currentAt, value: currentValue },
+      ].map((point) => [point.at, point])).values()]
+        .sort((left, right) => Date.parse(left.at) - Date.parse(right.at));
+      if (points.length < 2) continue;
+      const materialMove = market === "moneyline" ? 0.01 : 0.12;
+      const opening = points[0]!;
+      const firstMaterial = points.slice(1).find((point) => Math.abs(point.value - opening.value) >= materialMove) ?? null;
+      paths.push({
+        market,
+        sportsbook,
+        sportsbookFamily: book,
+        sourceClass: SHARP_BOOK_PRIORITY.some((named) => book.includes(named)) ? "named" : "broad",
+        contractKey: market === "moneyline"
+          ? "full_game_ml"
+          : market === "total"
+            ? `total:${args.currentTotalLine?.toFixed(1) ?? "none"}`
+            : `spread:${args.currentPuckPair.home?.toFixed(1) ?? "none"}:${args.currentPuckPair.away?.toFixed(1) ?? "none"}`,
+        complete: true,
+        state: classifyEconomicPath(points, materialMove),
+        openingValue: opening.value,
+        currentValue,
+        openingObservedAt: opening.at,
+        firstMaterialMoveAt: firstMaterial?.at ?? null,
+        currentObservedAt: currentAt,
+        observations: points,
+      });
+    }
+  }
+  return paths;
+}
+
+function completeCurrentBookCount(args: {
+  lines: DbLineRow[];
+  market: "moneyline" | "spread" | "total";
+  currentTotalLine: number | null;
+  currentPuckPair: { home: number | null; away: number | null };
+}): number {
+  const byBook = new Map<string, DbLineRow[]>();
+  for (const row of args.lines) {
+    const book = normalizedBook(row.sportsbook);
+    byBook.set(book, [...(byBook.get(book) ?? []), row]);
+  }
+  return [...byBook.values()].filter((rows) => economicPointForBookSnapshot({
+    market: args.market,
+    rows,
+    currentTotalLine: args.currentTotalLine,
+    currentPuckPair: args.currentPuckPair,
+    requireCurrentContract: true,
+  }) !== null).length;
 }
 
 function preferredCommonBook(current: ReadonlyMap<string, number>, opening: ReadonlyMap<string, number>): string | null {
@@ -734,7 +970,7 @@ export async function buildNhlFeatureSnapshot(
   // #39 — drop blocked books (fliff, kalshi) at the load point so every
   // downstream selection (ML implied prob, total line) is clean. Previously
   // only selectMainNhlTotalLine filtered; the ML implied-prob path did not.
-  const lines = canonicalizeNhlLineRows(((linesData as Array<{
+  const eligibleCurrentLines = (linesData as Array<{
     market_type: string;
     sportsbook: string;
     side: string | null;
@@ -747,7 +983,8 @@ export async function buildNhlFeatureSnapshot(
     ...line,
     implied_probability: americanToImplied(line.odds_american),
     observed_at: line.fetched_at,
-  }))));
+  }));
+  const lines = selectNhlFreshCurrentLineBoard(eligibleCurrentLines);
   const { prob: marketHomeProb, bookCount } = pickMlImpliedProbHome(lines);
   const marketTotalLine = selectMainNhlTotalLine(lines);
   const marketPuckLine = selectMainNhlPuckLinePair(lines);
@@ -786,6 +1023,21 @@ export async function buildNhlFeatureSnapshot(
   const marketOpenHomeProb = pickMlImpliedProbHome(openingLines).prob;
   const marketOpenTotalLine = selectMainNhlTotalLine(openingLines);
   const sameBookMovement = selectSameBookNhlMovement(lines, openingLines, historyLines);
+  const marketEpisodePaths = buildNhlMarketEpisodePaths({
+    currentLines: lines,
+    historyLines,
+    currentTotalLine: marketTotalLine,
+    currentPuckPair: marketPuckLine,
+  });
+  const moneylineBookCount = completeCurrentBookCount({
+    lines, market: "moneyline", currentTotalLine: marketTotalLine, currentPuckPair: marketPuckLine,
+  });
+  const spreadBookCount = completeCurrentBookCount({
+    lines, market: "spread", currentTotalLine: marketTotalLine, currentPuckPair: marketPuckLine,
+  });
+  const totalBookCount = completeCurrentBookCount({
+    lines, market: "total", currentTotalLine: marketTotalLine, currentPuckPair: marketPuckLine,
+  });
 
   // 6. Series context — fetch fresh from NHL API at prediction time.
   // Cheap (~1 HTTP call per snapshot); always up-to-date (NHL API
@@ -918,6 +1170,17 @@ export async function buildNhlFeatureSnapshot(
       market_home_puck_prob: marketPuckProbabilities.home,
       market_away_puck_prob: marketPuckProbabilities.away,
       market_book_count: bookCount,
+      moneyline_book_count: moneylineBookCount,
+      spread_book_count: spreadBookCount,
+      total_book_count: totalBookCount,
+      market_decision_at: new Date().toISOString(),
+      market_episode_paths: marketEpisodePaths,
+      moneyline_pressure_receipt: opts.marketEvidence?.moneylinePressureReceipt ?? null,
+      spread_pressure_receipt: opts.marketEvidence?.spreadPressureReceipt ?? null,
+      total_pressure_receipt: opts.marketEvidence?.totalPressureReceipt ?? null,
+      moneyline_market_episode: null,
+      spread_market_episode: null,
+      total_market_episode: null,
       ml_home_bets_pct: opts.marketEvidence?.mlHomeBetsPct ?? null,
       ml_home_money_pct: opts.marketEvidence?.mlHomeMoneyPct ?? null,
       spread_home_bets_pct: opts.marketEvidence?.spreadHomeBetsPct ?? null,
@@ -955,4 +1218,4 @@ export async function buildNhlFeatureSnapshot(
   };
 }
 
-export const __NHL_FEATURE_SNAPSHOT_TEST__ = { selectGoalieByDefault };
+export const __NHL_FEATURE_SNAPSHOT_TEST__ = { selectGoalieByDefault, classifyEconomicPath };

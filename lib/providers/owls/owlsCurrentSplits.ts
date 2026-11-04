@@ -124,13 +124,15 @@ export async function fetchOwlsCurrentSplitRows(args: {
 }): Promise<{ fetchedAt: string; rows: Json[]; partial: boolean; partialReason: string | null }> {
   const client = new OwlsInsightClient(args.apiKey, { timeoutMs: args.timeoutMs });
   const response = await client.splits<RawOwlsSplitsResponse>(OWLS_SPORT[args.sport]);
-  const rows = mapOwlsCurrentSplitRows(args.sport, response.body);
-  const newest = rows
-    .map((row) => text(row.fetched_at))
-    .filter((value): value is string => value !== null)
-    .sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? new Date().toISOString();
+  const receivedAt = new Date().toISOString();
+  const rows = mapOwlsCurrentSplitRows(args.sport, response.body).map((row) => ({
+    ...row,
+    // Local availability is distinct from Owls' per-book `as_of` clock.
+    // This value remains attached to the exact row when feeds are merged.
+    _oddsphere_received_at: receivedAt,
+  }));
   return {
-    fetchedAt: newest,
+    fetchedAt: receivedAt,
     rows,
     partial: response.body.meta?.status === "partial",
     partialReason: text(response.body.meta?.partial_reason),

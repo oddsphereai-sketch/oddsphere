@@ -6,17 +6,66 @@ import type {
   PublicSplitsProvider,
 } from "../publicSplitsResolver";
 import { resolveSlatePublicSplits } from "../resolveSlatePublicSplits";
+import type { NhlEpisodeMarket, NhlSplitPressureReceipt } from "./nhlMarketEpisodeArbiter";
 
 type NhlResolvedSplitEvidence = {
   source: PublicSplitsProvider | null;
   agreement: PublicSplitAgreementState;
   confidence: PublicSplitModelConfidence;
   providerGapPct: number | null;
+  observedAt?: string | null;
+  receivedAt?: string | null;
+  completePair?: boolean;
 };
 
 export type ResolvedNhlSplitsEvent = SharpNhlSplitsEvent & {
   internal_resolution?: Partial<Record<"moneyline" | "spread" | "total", NhlResolvedSplitEvidence>>;
 };
+
+export function nhlSplitPressureReceipt(
+  event: ResolvedNhlSplitsEvent | null,
+  market: NhlEpisodeMarket,
+): NhlSplitPressureReceipt | null {
+  if (!event) return null;
+  const evidence = event.internal_resolution?.[market];
+  const selectedSide = market === "total" ? "over" as const : "home" as const;
+  const opposingSide = market === "total" ? "under" as const : "away" as const;
+  const selectedTickets = market === "total"
+    ? event.total?.bets_pct?.over
+    : (market === "moneyline" ? event.moneyline : event.spread)?.bets_pct?.home;
+  const selectedMoney = market === "total"
+    ? event.total?.handle_pct?.over
+    : (market === "moneyline" ? event.moneyline : event.spread)?.handle_pct?.home;
+  if (!evidence?.source || !evidence.observedAt || !evidence.completePair
+    || selectedTickets == null || selectedMoney == null) return null;
+  const ticketsPct = selectedTickets * 100;
+  const moneyPct = selectedMoney * 100;
+  const consensusSide = ticketsPct >= 55 && moneyPct >= 55
+    ? selectedSide
+    : ticketsPct <= 45 && moneyPct <= 45
+      ? opposingSide
+      : null;
+  const differential = moneyPct - ticketsPct;
+  const differentialSide = Math.abs(differential) >= 10
+    ? differential > 0 ? selectedSide : opposingSide
+    : null;
+  const pressureSide = differentialSide ?? consensusSide;
+  if (pressureSide === null) return null;
+  const pressureTickets = pressureSide === selectedSide ? ticketsPct : 100 - ticketsPct;
+  const pressureMoney = pressureSide === selectedSide ? moneyPct : 100 - moneyPct;
+  return {
+    market,
+    source: evidence.source,
+    sourceClass: "public",
+    pressureSide,
+    ticketsPct: pressureTickets,
+    moneyPct: pressureMoney,
+    confidence: evidence.confidence,
+    completePair: true,
+    observedAt: evidence.observedAt,
+    receivedAt: evidence.receivedAt ?? null,
+  };
+}
 
 /**
  * NHL product contract: the last complete provider observation remains usable
@@ -42,13 +91,6 @@ export async function resolvedNhlSplitsByGame(
     const money = cell.resolved.displayMoneyPct;
     if (bet === null || money === null) continue;
     const event = byGame.get(cell.gameId) ?? {};
-    event.internal_resolution ??= {};
-    event.internal_resolution[cell.market] = {
-      source: cell.resolved.displaySource,
-      agreement: cell.resolved.agreementState,
-      confidence: cell.resolved.modelConfidence,
-      providerGapPct: cell.resolved.providerGapPct.max,
-    };
     const betFraction = bet / 100;
     const moneyFraction = money / 100;
     if (cell.market === "moneyline" && (cell.side === "home" || cell.side === "away")) {
@@ -71,6 +113,43 @@ export async function resolvedNhlSplitsByGame(
       event.total.handle_pct[cell.side] = moneyFraction;
     }
     byGame.set(cell.gameId, event);
+  }
+  const cellsByMarket = new Map<string, typeof cells>();
+  for (const cell of cells) {
+    const key = `${cell.gameId}:${cell.market}`;
+    cellsByMarket.set(key, [...(cellsByMarket.get(key) ?? []), cell]);
+  }
+  for (const [key, marketCells] of cellsByMarket) {
+    const [gameIdRaw, market] = key.split(":") as [string, "moneyline" | "spread" | "total"];
+    const selectedSide = market === "total" ? "over" : "home";
+    const opposingSide = market === "total" ? "under" : "away";
+    const selected = marketCells.find((cell) => cell.side === selectedSide) ?? null;
+    const opposing = marketCells.find((cell) => cell.side === opposingSide) ?? null;
+    const sameReceipt = selected !== null
+      && opposing !== null
+      && selected.resolved.displaySource !== null
+      && selected.resolved.displaySource === opposing.resolved.displaySource
+      && selected.resolved.displayObservedAt !== null
+      && selected.resolved.displayObservedAt === opposing.resolved.displayObservedAt;
+    const percentagesComplete = sameReceipt
+      && selected!.resolved.displayBettingPct !== null
+      && opposing!.resolved.displayBettingPct !== null
+      && selected!.resolved.displayMoneyPct !== null
+      && opposing!.resolved.displayMoneyPct !== null
+      && Math.abs(selected!.resolved.displayBettingPct + opposing!.resolved.displayBettingPct - 100) <= 1
+      && Math.abs(selected!.resolved.displayMoneyPct + opposing!.resolved.displayMoneyPct - 100) <= 1;
+    const event = byGame.get(Number(gameIdRaw));
+    if (!event || !selected) continue;
+    event.internal_resolution ??= {};
+    event.internal_resolution[market] = {
+      source: selected.resolved.displaySource,
+      agreement: selected.resolved.agreementState,
+      confidence: selected.resolved.modelConfidence,
+      providerGapPct: selected.resolved.providerGapPct.max,
+      observedAt: selected.resolved.displayObservedAt,
+      receivedAt: selected.resolved.displayReceivedAt,
+      completePair: percentagesComplete,
+    };
   }
   return byGame;
 }
