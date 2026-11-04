@@ -181,19 +181,30 @@ function latestSourceSection(args: {
   awayAbbr: string;
   evaluatedAt: string;
 }): MarketSplitDisplaySection | null {
-  const snapshots = sharpBookSnapshots(args.market, args.rows, args.sourceBook);
+  const evaluatedMs = Date.parse(args.evaluatedAt);
+  // Availability and a native book read are different clocks. A repeat HTTP
+  // capture cannot make an old read current, or pair different source reads.
+  const snapshots = sharpBookSnapshots(args.market, args.rows, args.sourceBook).filter(snapshot => {
+    const received = Date.parse(snapshot.fetchedAt);
+    const native = expectedSides(args.market).map(side => snapshot.rows.get(side)!.sourceObservedAt);
+    if (!Number.isFinite(evaluatedMs) || !Number.isFinite(received) || received > evaluatedMs) return false;
+    if (native.every(value => value === null)) return true; // unknown remains unknown/stale
+    const times = native.map(value => Date.parse(value ?? ""));
+    return times.every(value => Number.isFinite(value) && value <= received) && times[0] === times[1];
+  });
   const latest = snapshots.at(-1);
   if (!latest) return null;
   const first = snapshots[0]!;
-  const ageMinutes = (Date.parse(args.evaluatedAt) - Date.parse(latest.fetchedAt)) / 60_000;
-  if (!Number.isFinite(ageMinutes) || ageMinutes < 0) return null;
-  const stale = ageMinutes > SPLIT_STALE_AFTER_MINUTES;
+  const sourceObservedAt = latest.rows.get(expectedSides(args.market)[0]!)!.sourceObservedAt;
+  const nativeMs = Date.parse(sourceObservedAt ?? "");
+  const ageMinutes = (evaluatedMs - nativeMs) / 60_000;
+  const stale = !Number.isFinite(ageMinutes) || ageMinutes > SPLIT_STALE_AFTER_MINUTES;
   return {
     // The source remains internal provenance. Members always see one stable
     // panel while Circa silently displaces or yields to an approved fallback.
     label: "Sharp Book Splits",
     sourceBook: args.sourceBook,
-    sourceObservedAt: latest.fetchedAt,
+    sourceObservedAt,
     rows: expectedSides(args.market).map((side) => {
       const row = latest.rows.get(side)!;
       const firstRow = first.rows.get(side)!;
@@ -210,15 +221,15 @@ function latestSourceSection(args: {
         betsPct,
         moneyDeltaPp: moneyPct !== null && firstMoneyPct !== null ? moneyPct - firstMoneyPct : null,
         betsDeltaPp: betsPct !== null && firstBetsPct !== null ? betsPct - firstBetsPct : null,
-        comparisonObservedAt: first.rows.get(side)?.sourceObservedAt ?? first.fetchedAt,
-        observedAt: row.sourceObservedAt ?? row.fetchedAt,
+        comparisonObservedAt: first.rows.get(side)?.sourceObservedAt ?? null,
+        observedAt: row.sourceObservedAt,
         freshnessCheckedAt: row.fetchedAt,
         staleAfterMinutes: SPLIT_STALE_AFTER_MINUTES,
         isStale: stale,
       };
     }),
     signal: null,
-    lastUpdated: latest.fetchedAt,
+    lastUpdated: sourceObservedAt,
   };
 }
 

@@ -13,6 +13,7 @@ const fixture = { heldMemberFixtureRelease: NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_REL
   week: { week: 9 }, provenance: { sourceChecksum: "a".repeat(64) } } as unknown as NflWeekOneHeldMemberFixture;
 const current = buildNflForwardMemberSnapshot({ fixture, season: 2026, week: 9, publishedAt: at });
 const predecessors = [
+  { snapshot: "nfl_forward_member_snapshot_2026_11_04_r65_pmf_mean_direction_diagnostic", fixture: "nfl_weekly_member_fixture_2026_11_04_r73_pmf_mean_direction_diagnostic", member: "nfl_v1_member_release_2026_11_04_r57_pmf_mean_direction_diagnostic", decision: "nfl_v1_daily_edge_decision_2026_11_04_r60_pmf_mean_direction_diagnostic" },
   { snapshot: "nfl_forward_member_snapshot_2026_11_04_r64_unchanged_ml_confirmation", fixture: "nfl_weekly_member_fixture_2026_11_04_r72_unchanged_ml_confirmation",
     member: "nfl_v1_member_release_2026_11_04_r56_unchanged_ml_confirmation", decision: "nfl_v1_daily_edge_decision_2026_11_04_r59_unchanged_ml_confirmation" },
   { snapshot: "nfl_forward_member_snapshot_2026_11_02_r63_published_rounding_pressure", fixture: "nfl_weekly_member_fixture_2026_11_02_r71_published_rounding_pressure",

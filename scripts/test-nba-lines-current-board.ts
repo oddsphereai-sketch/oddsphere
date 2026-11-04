@@ -1,3 +1,4 @@
+import "./test-nba-owls-consumer-gap";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 

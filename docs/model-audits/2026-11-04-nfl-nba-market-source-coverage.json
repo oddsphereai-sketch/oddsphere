@@ -1,0 +1,1500 @@
+{
+  "scope": "NFL per-market source qualification, NBA complete native consumer pairs and native-clock preservation; active The Odds API diagnostics; all-game functional reviews",
+  "startingBase": "a64de8cb5dc22adb7b036e69533d95e577b26dc3",
+  "authorization": "Owner requests both coverage repairs, live checks and several independent all-game market-reader reviews; The Odds API remains active",
+  "releaseIdentifiers": [
+    "nba_daily_refresh_schedule_2026_11_04_r23_native_consumer_pairs",
+    "nba_grade_policy_2026_11_04_r26_native_consumer_pairs",
+    "nba_market_marriage_2026_11_04_r37_native_consumer_pairs",
+    "nba_professional_unified_2026_11_04_r35_native_consumer_pairs",
+    "nba_the_odds_api_current_2026_11_04_r2_credential_diagnostics",
+    "nfl_forward_evidence_writer_2026_11_04_r109_per_market_source_qualification",
+    "nfl_forward_member_snapshot_2026_11_04_r66_per_market_source_qualification",
+    "nfl_full_game_evidence_runtime_2026_11_04_r19_per_market_source_qualification",
+    "nfl_market_innovation_2026_11_04_r6_per_market_source_qualification",
+    "nfl_market_innovation_posture_2026_11_04_r6_per_market_source_qualification",
+    "nfl_owls_splits_2026_11_04_r5_per_market_source_qualification",
+    "nfl_v1_daily_edge_calibration_2026_11_04_r52_per_market_source_qualification",
+    "nfl_v1_daily_edge_decision_2026_11_04_r61_per_market_source_qualification",
+    "nfl_v1_daily_edge_model_2026_11_04_r53_per_market_source_qualification",
+    "nfl_v1_grade_policy_2026_11_04_r61_per_market_source_qualification",
+    "nfl_v1_member_release_2026_11_04_r58_per_market_source_qualification",
+    "nfl_weekly_member_fixture_2026_11_04_r74_per_market_source_qualification"
+  ],
+  "sources": {
+    "sharedProviderBulkReads": 3,
+    "additionalBDLAndKeylessTOAProbes": 3,
+    "keylessProbeCorrection": "No local THE_ODDS_API_KEY/ODDS_API_KEY existed;401was an unauthenticated request, not invalid-account proof",
+    "productionTOAConfiguration": "Existing sensitive THE_ODDS_API_KEY targets production; value not exported or changed",
+    "productionTOAVerification": "Pending new non-secret status snapshot from the existing normal writer",
+    "manualExistingNbaRefresh": "362295 at15:54:54 completed15:56:39;105s run outlived response connection; no duplicate retry",
+    "frozenReviewData": "/private/tmp/nfl-nba-full-market-review-frozen-20261104.json",
+    "nativeClockSemantics": "Official Owls docs define per-book as_of as actual read time; old Circa is not renewed by a fresh HTTP capture"
+  },
+  "sameInputImpact": {
+    "nba": {
+      "scope": "Deterministic existing production source\u2192law\u2192execution-fixed-point\u2192grade math on one frozen independent input and captured availability/injury/quality state; statistical model/roster head not rerun. Exact existing runtime functions used; all source tapes, prior knowledge, evaluation clock and primary quotes identical in both arms. No DB/provider requests or writes. This is not a historical performance test or reproduction of differently timed published DTOs.",
+      "clock": "2026-11-04T15:29:24.156Z",
+      "games": 14,
+      "markets": 42,
+      "before": {
+        "moneyline": {
+          "watch": 5,
+          "lean": 7,
+          "best_angle": 2
+        },
+        "spread": {
+          "watch": 9,
+          "best_angle": 1,
+          "lean": 4
+        },
+        "total": {
+          "watch": 12,
+          "lean": 2
+        }
+      },
+      "after": {
+        "moneyline": {
+          "watch": 5,
+          "lean": 7,
+          "best_angle": 2
+        },
+        "spread": {
+          "watch": 8,
+          "best_angle": 1,
+          "lean": 5
+        },
+        "total": {
+          "watch": 12,
+          "lean": 2
+        }
+      },
+      "actionablePromotions": 1,
+      "actionableDemotions": 0,
+      "tierPromotions": 0,
+      "tierDemotions": 0,
+      "scoresChanged": 0,
+      "sidesChanged": 1,
+      "probabilitiesChanged": 5,
+      "priceChanges": 3,
+      "gradeChanges": [
+        {
+          "gameId": 401909926,
+          "matchup": "CHI @ NY",
+          "market": "spread",
+          "before": {
+            "pick": "NY -12.5",
+            "side": "home",
+            "line": -12.5,
+            "p": 0.549181929610648,
+            "price": -105,
+            "book": "betmgm",
+            "grade": "watch",
+            "fair": 0.4893410169129597
+          },
+          "after": {
+            "pick": "NY -12",
+            "side": "home",
+            "line": -12,
+            "p": 0.5652933570126362,
+            "price": -105,
+            "book": "caesars",
+            "grade": "lean",
+            "fair": 0.5
+          },
+          "scoreBefore": {
+            "away": 106.3186633256853,
+            "home": 120.33091862689487,
+            "total": 226.64958195258018
+          },
+          "scoreAfter": {
+            "away": 106.3186633256853,
+            "home": 120.33091862689487,
+            "total": 226.64958195258018
+          }
+        }
+      ]
+    },
+    "nfl": {
+      "scope": "One frozen current board; same inputs, no providers or DB writes. Later bulk response assessed separately at actual availability, never backdated.",
+      "currentInput": "/private/tmp/nfl-pmf-coherence-live-inputs-20261104.json",
+      "games": 15,
+      "changedQualification": 0,
+      "promotions": 0,
+      "demotions": 0,
+      "sideChanges": 0,
+      "scoreChanges": 0,
+      "gradeCounts": {
+        "No Play": 17,
+        "Best Angle": 9,
+        "Watchlist": 8,
+        "Lean": 11
+      },
+      "interpretation": "All current Circa native reads are older than two hours. No newly qualified markets or forecast/grade inputs change; stored tuples preserved exactly. This artifact does not claim writer recomputation.",
+      "freshCapture": {
+        "capturedAt": "2026-11-04T15:19:44.186Z",
+        "requests": 1,
+        "matchedBefore": 15,
+        "matchedAfter": 15,
+        "rows": [
+          {
+            "gameId": "1392337",
+            "oldQualified": [],
+            "newQualified": [],
+            "reasons": {
+              "moneyline": "stale_or_future",
+              "spread": "stale_or_future",
+              "total": "stale_or_future"
+            },
+            "nativeBooks": [
+              {
+                "book": "dk",
+                "asOf": "2026-11-04T15:16:43.642Z",
+                "moneyline": {
+                  "away_price": -535,
+                  "home_price": 400,
+                  "away_handle_pct": 60,
+                  "home_handle_pct": 40,
+                  "away_bets_pct": 88,
+                  "home_bets_pct": 12
+                },
+                "spread": {
+                  "away_line": -10,
+                  "home_line": 10,
+                  "away_handle_pct": 90,
+                  "home_handle_pct": 10,
+                  "away_bets_pct": 80,
+                  "home_bets_pct": 20
+                },
+                "total": {
+                  "line": 39.5,
+                  "over_handle_pct": 39,
+                  "under_handle_pct": 61,
+                  "over_bets_pct": 60,
+                  "under_bets_pct": 40
+                }
+              },
+              {
+                "book": "circa",
+                "asOf": "2026-11-04T09:36:40.635Z",
+                "moneyline": {
+                  "away_price": -535,
+                  "home_price": 415,
+                  "away_handle_pct": 100,
+                  "home_handle_pct": 0,
+                  "away_bets_pct": 100,
+                  "home_bets_pct": 0
+                },
+                "spread": {
+                  "away_line": -10,
+                  "home_line": 10,
+                  "away_handle_pct": 38,
+                  "home_handle_pct": 62,
+                  "away_bets_pct": 39,
+                  "home_bets_pct": 61
+                },
+                "total": {
+                  "line": 40.5,
+                  "over_handle_pct": 34,
+                  "under_handle_pct": 66,
+                  "over_bets_pct": 67,
+                  "under_bets_pct": 33
+                }
+              },
+              {
+                "book": "betmgm",
+                "asOf": "2026-11-04T15:15:39.805Z",
+                "moneyline": {
+                  "away_price": -525,
+                  "home_price": 400,
+                  "away_bets_pct": 89,
+                  "home_bets_pct": 11
+                },
+                "spread": {
+                  "away_line": -10,
+                  "home_line": 10,
+                  "away_bets_pct": 63,
+                  "home_bets_pct": 37
+                },
+                "total": {
+                  "line": 40,
+                  "over_bets_pct": 77,
+                  "under_bets_pct": 23
+                }
+              }
+            ]
+          },
+          {
+            "gameId": "1392338",
+            "oldQualified": [],
+            "newQualified": [],
+            "reasons": {
+              "moneyline": "stale_or_future",
+              "spread": "stale_or_future",
+              "total": "stale_or_future"
+            },
+            "nativeBooks": [
+              {
+                "book": "dk",
+                "asOf": "2026-11-04T15:16:43.642Z",
+                "moneyline": {
+                  "away_price": -155,
+                  "home_price": 130,
+                  "away_handle_pct": 63,
+                  "home_handle_pct": 37,
+                  "away_bets_pct": 83,
+                  "home_bets_pct": 17
+                },
+                "spread": {
+                  "away_line": -3,
+                  "home_line": 3,
+                  "away_handle_pct": 54,
+                  "home_handle_pct": 46,
+                  "away_bets_pct": 84,
+                  "home_bets_pct": 16
+                },
+                "total": {
+                  "line": 52.5,
+                  "over_handle_pct": 92,
+                  "under_handle_pct": 8,
+                  "over_bets_pct": 60,
+                  "under_bets_pct": 40
+                }
+              },
+              {
+                "book": "circa",
+                "asOf": "2026-11-04T09:36:40.635Z",
+                "moneyline": {
+                  "away_price": -160,
+                  "home_price": 140,
+                  "away_handle_pct": 98,
+                  "home_handle_pct": 2,
+                  "away_bets_pct": 75,
+                  "home_bets_pct": 25
+                },
+                "spread": {
+                  "away_line": -3,
+                  "home_line": 3,
+                  "away_handle_pct": 78,
+                  "home_handle_pct": 22,
+                  "away_bets_pct": 89,
+                  "home_bets_pct": 11
+                },
+                "total": {
+                  "line": 52.5,
+                  "over_handle_pct": 70,
+                  "under_handle_pct": 30,
+                  "over_bets_pct": 60,
+                  "under_bets_pct": 40
+                }
+              },
+              {
+                "book": "betmgm",
+                "asOf": "2026-11-04T15:15:39.805Z",
+                "moneyline": {
+                  "away_price": -165,
+                  "home_price": 138,
+                  "away_bets_pct": 84,
+                  "home_bets_pct": 16
+                },
+                "spread": {
+                  "away_line": -3,
+                  "home_line": 3,
+                  "away_bets_pct": 78,
+                  "home_bets_pct": 22
+                },
+                "total": {
+                  "line": 52.5,
+                  "over_bets_pct": 65,
+                  "under_bets_pct": 35
+                }
+              }
+            ]
+          },
+          {
+            "gameId": "1392339",
+            "oldQualified": [],
+            "newQualified": [],
+            "reasons": {
+              "moneyline": "stale_or_future",
+              "spread": "stale_or_future",
+              "total": "stale_or_future"
+            },
+            "nativeBooks": [
+              {
+                "book": "dk",
+                "asOf": "2026-11-04T15:16:43.642Z",
+                "moneyline": {
+                  "away_price": -265,
+                  "home_price": 215,
+                  "away_handle_pct": 86,
+                  "home_handle_pct": 14,
+                  "away_bets_pct": 85,
+                  "home_bets_pct": 15
+                },
+                "spread": {
+                  "away_line": -6,
+                  "home_line": 6,
+                  "away_handle_pct": 89,
+                  "home_handle_pct": 11,
+                  "away_bets_pct": 87,
+                  "home_bets_pct": 13
+                },
+                "total": {
+                  "line": 51.5,
+                  "over_handle_pct": 53,
+                  "under_handle_pct": 47,
+                  "over_bets_pct": 38,
+                  "under_bets_pct": 63
+                }
+              },
+              {
+                "book": "circa",
+                "asOf": "2026-11-04T09:36:40.635Z",
+                "moneyline": {
+                  "away_price": -265,
+                  "home_price": 225,
+                  "away_handle_pct": 2,
+                  "home_handle_pct": 98,
+                  "away_bets_pct": 33,
+                  "home_bets_pct": 67
+                },
+                "spread": {
+                  "away_line": -6.5,
+                  "home_line": 6.5,
+                  "away_handle_pct": 1,
+                  "home_handle_pct": 99,
+                  "away_bets_pct": 13,
+                  "home_bets_pct": 88
+                },
+                "total": {
+                  "line": 51,
+                  "over_handle_pct": 100,
+                  "under_handle_pct": 0,
+                  "over_bets_pct": 100,
+                  "under_bets_pct": 0
+                }
+              },
+              {
+                "book": "betmgm",
+                "asOf": "2026-11-04T15:15:39.805Z",
+                "moneyline": {
+                  "away_price": -250,
+                  "home_price": 210,
+                  "away_bets_pct": 86,
+                  "home_bets_pct": 14
+                },
+                "spread": {
+                  "away_line": -6,
+                  "home_line": 6,
+                  "away_bets_pct": 63,
+                  "home_bets_pct": 37
+                },
+                "total": {
+                  "line": 51.5,
+                  "over_bets_pct": 56,
+                  "under_bets_pct": 44
+                }
+              }
+            ]
+          },
+          {
+            "gameId": "1392340",
+            "oldQualified": [],
+            "newQualified": [],
+            "reasons": {
+              "moneyline": "stale_or_future",
+              "spread": "stale_or_future",
+              "total": "stale_or_future"
+            },
+            "nativeBooks": [
+              {
+                "book": "dk",
+                "asOf": "2026-11-04T15:16:43.642Z",
+                "moneyline": {
+                  "away_price": 425,
+                  "home_price": -575,
+                  "away_handle_pct": 18,
+                  "home_handle_pct": 82,
+                  "away_bets_pct": 6,
+                  "home_bets_pct": 94
+                },
+                "spread": {
+                  "away_line": 9.5,
+                  "home_line": -9.5,
+                  "away_handle_pct": 54,
+                  "home_handle_pct": 46,
+                  "away_bets_pct": 33,
+                  "home_bets_pct": 67
+                },
+                "total": {
+                  "line": 47.5,
+                  "over_handle_pct": 96,
+                  "under_handle_pct": 4,
+                  "over_bets_pct": 75,
+                  "under_bets_pct": 25
+                }
+              },
+              {
+                "book": "circa",
+                "asOf": "2026-11-04T09:36:40.635Z",
+                "moneyline": {
+                  "away_price": 385,
+                  "home_price": -485,
+                  "away_handle_pct": 0,
+                  "home_handle_pct": 100,
+                  "away_bets_pct": 0,
+                  "home_bets_pct": 100
+                },
+                "spread": {
+                  "away_line": 9.5,
+                  "home_line": -9.5,
+                  "away_handle_pct": 87,
+                  "home_handle_pct": 13,
+                  "away_bets_pct": 50,
+                  "home_bets_pct": 50
+                },
+                "total": {
+                  "line": 47.5,
+                  "over_handle_pct": 83,
+                  "under_handle_pct": 17,
+                  "over_bets_pct": 63,
+                  "under_bets_pct": 38
+                }
+              },
+              {
+                "book": "betmgm",
+                "asOf": "2026-11-04T15:15:39.805Z",
+                "moneyline": {
+                  "away_price": 380,
+                  "home_price": -500,
+                  "away_bets_pct": 3,
+                  "home_bets_pct": 97
+                },
+                "spread": {
+                  "away_line": 9.5,
+                  "home_line": -9.5,
+                  "away_bets_pct": 26,
+                  "home_bets_pct": 74
+                },
+                "total": {
+                  "line": 47.5,
+                  "over_bets_pct": 63,
+                  "under_bets_pct": 37
+                }
+              }
+            ]
+          },
+          {
+            "gameId": "1392341",
+            "oldQualified": [],
+            "newQualified": [],
+            "reasons": {
+              "moneyline": "stale_or_future",
+              "spread": "stale_or_future",
+              "total": "stale_or_future"
+            },
+            "nativeBooks": [
+              {
+                "book": "dk",
+                "asOf": "2026-11-04T15:16:43.642Z",
+                "moneyline": {
+                  "away_price": -355,
+                  "home_price": 280,
+                  "away_handle_pct": 97,
+                  "home_handle_pct": 3,
+                  "away_bets_pct": 93,
+                  "home_bets_pct": 7
+                },
+                "spread": {
+                  "away_line": -7,
+                  "home_line": 7,
+                  "away_handle_pct": 53,
+                  "home_handle_pct": 47,
+                  "away_bets_pct": 83,
+                  "home_bets_pct": 17
+                },
+                "total": {
+                  "line": 50.5,
+                  "over_handle_pct": 100,
+                  "under_handle_pct": 0,
+                  "over_bets_pct": 79,
+                  "under_bets_pct": 21
+                }
+              },
+              {
+                "book": "circa",
+                "asOf": "2026-11-04T09:36:40.635Z",
+                "moneyline": {
+                  "away_price": -330,
+                  "home_price": 275,
+                  "away_handle_pct": 50,
+                  "home_handle_pct": 50,
+                  "away_bets_pct": 50,
+                  "home_bets_pct": 50
+                },
+                "spread": {
+                  "away_line": -7,
+                  "home_line": 7,
+                  "away_handle_pct": 17,
+                  "home_handle_pct": 83,
+                  "away_bets_pct": 50,
+                  "home_bets_pct": 50
+                },
+                "total": {
+                  "line": 50.5,
+                  "over_handle_pct": 0,
+                  "under_handle_pct": 100,
+                  "over_bets_pct": 0,
+                  "under_bets_pct": 100
+                }
+              },
+              {
+                "book": "betmgm",
+                "asOf": "2026-11-04T15:15:39.805Z",
+                "moneyline": {
+                  "away_price": -325,
+                  "home_price": 270,
+                  "away_bets_pct": 97,
+                  "home_bets_pct": 3
+                },
+                "spread": {
+                  "away_line": -7,
+                  "home_line": 7,
+                  "away_bets_pct": 76,
+                  "home_bets_pct": 24
+                },
+                "total": {
+                  "line": 50.5,
+                  "over_bets_pct": 56,
+                  "under_bets_pct": 44
+                }
+              }
+            ]
+          },
+          {
+            "gameId": "1392342",
+            "oldQualified": [],
+            "newQualified": [],
+            "reasons": {
+              "moneyline": "stale_or_future",
+              "spread": "stale_or_future",
+              "total": "stale_or_future"
+            },
+            "nativeBooks": [
+              {
+                "book": "dk",
+                "asOf": "2026-11-04T15:16:43.642Z",
+                "moneyline": {
+                  "away_price": 136,
+                  "home_price": -162,
+                  "away_handle_pct": 34,
+                  "home_handle_pct": 66,
+                  "away_bets_pct": 53,
+                  "home_bets_pct": 47
+                },
+                "spread": {
+                  "away_line": 3,
+                  "home_line": -3,
+                  "away_handle_pct": 25,
+                  "home_handle_pct": 75,
+                  "away_bets_pct": 53,
+                  "home_bets_pct": 47
+                },
+                "total": {
+                  "line": 42.5,
+                  "over_handle_pct": 7,
+                  "under_handle_pct": 93,
+                  "over_bets_pct": 83,
+                  "under_bets_pct": 17
+                }
+              },
+              {
+                "book": "circa",
+                "asOf": "2026-11-04T09:36:40.635Z",
+                "moneyline": {
+                  "away_price": 100,
+                  "home_price": -120,
+                  "away_handle_pct": 16,
+                  "home_handle_pct": 84,
+                  "away_bets_pct": 33,
+                  "home_bets_pct": 67
+                },
+                "spread": {
+                  "away_line": 1.5,
+                  "home_line": -1.5,
+                  "away_handle_pct": 89,
+                  "home_handle_pct": 11,
+                  "away_bets_pct": 30,
+                  "home_bets_pct": 70
+                },
+                "total": {
+                  "line": 43,
+                  "over_handle_pct": 0,
+                  "under_handle_pct": 100,
+                  "over_bets_pct": 0,
+                  "under_bets_pct": 100
+                }
+              },
+              {
+                "book": "betmgm",
+                "asOf": "2026-11-04T15:15:39.805Z",
+                "moneyline": {
+                  "away_price": 130,
+                  "home_price": -155,
+                  "away_bets_pct": 68,
+                  "home_bets_pct": 32
+                },
+                "spread": {
+                  "away_line": 3,
+                  "home_line": -3,
+                  "away_bets_pct": 90,
+                  "home_bets_pct": 10
+                },
+                "total": {
+                  "line": 42.5,
+                  "over_bets_pct": 89,
+                  "under_bets_pct": 11
+                }
+              }
+            ]
+          },
+          {
+            "gameId": "1392343",
+            "oldQualified": [],
+            "newQualified": [],
+            "reasons": {
+              "moneyline": "stale_or_future",
+              "spread": "stale_or_future",
+              "total": "stale_or_future"
+            },
+            "nativeBooks": [
+              {
+                "book": "dk",
+                "asOf": "2026-11-04T15:16:43.642Z",
+                "moneyline": {
+                  "away_price": -170,
+                  "home_price": 142,
+                  "away_handle_pct": 85,
+                  "home_handle_pct": 15,
+                  "away_bets_pct": 79,
+                  "home_bets_pct": 21
+                },
+                "spread": {
+                  "away_line": -3.5,
+                  "home_line": 3.5,
+                  "away_handle_pct": 89,
+                  "home_handle_pct": 11,
+                  "away_bets_pct": 79,
+                  "home_bets_pct": 21
+                },
+                "total": {
+                  "line": 39.5,
+                  "over_handle_pct": 13,
+                  "under_handle_pct": 87,
+                  "over_bets_pct": 69,
+                  "under_bets_pct": 31
+                }
+              },
+              {
+                "book": "circa",
+                "asOf": "2026-11-04T09:36:40.635Z",
+                "moneyline": {
+                  "away_price": -165,
+                  "home_price": 145,
+                  "away_handle_pct": 100,
+                  "home_handle_pct": 0,
+                  "away_bets_pct": 88,
+                  "home_bets_pct": 13
+                },
+                "spread": {
+                  "away_line": -3,
+                  "home_line": 3,
+                  "away_handle_pct": 17,
+                  "home_handle_pct": 83,
+                  "away_bets_pct": 83,
+                  "home_bets_pct": 17
+                },
+                "total": {
+                  "line": 40,
+                  "over_handle_pct": 0,
+                  "under_handle_pct": 100,
+                  "over_bets_pct": 0,
+                  "under_bets_pct": 100
+                }
+              },
+              {
+                "book": "betmgm",
+                "asOf": "2026-11-04T15:15:39.805Z",
+                "moneyline": {
+                  "away_price": -175,
+                  "home_price": 145,
+                  "away_bets_pct": 87,
+                  "home_bets_pct": 13
+                },
+                "spread": {
+                  "away_line": -3.5,
+                  "home_line": 3.5,
+                  "away_bets_pct": 74,
+                  "home_bets_pct": 26
+                },
+                "total": {
+                  "line": 39.5,
+                  "over_bets_pct": 67,
+                  "under_bets_pct": 33
+                }
+              }
+            ]
+          },
+          {
+            "gameId": "1392344",
+            "oldQualified": [],
+            "newQualified": [],
+            "reasons": {
+              "moneyline": "stale_or_future",
+              "spread": "stale_or_future",
+              "total": "stale_or_future"
+            },
+            "nativeBooks": [
+              {
+                "book": "dk",
+                "asOf": "2026-11-04T15:16:43.642Z",
+                "moneyline": {
+                  "away_price": -230,
+                  "home_price": 190,
+                  "away_handle_pct": 73,
+                  "home_handle_pct": 27,
+                  "away_bets_pct": 84,
+                  "home_bets_pct": 16
+                },
+                "spread": {
+                  "away_line": -5.5,
+                  "home_line": 5.5,
+                  "away_handle_pct": 66,
+                  "home_handle_pct": 34,
+                  "away_bets_pct": 76,
+                  "home_bets_pct": 24
+                },
+                "total": {
+                  "line": 47.5,
+                  "over_handle_pct": 65,
+                  "under_handle_pct": 35,
+                  "over_bets_pct": 58,
+                  "under_bets_pct": 42
+                }
+              },
+              {
+                "book": "circa",
+                "asOf": "2026-11-04T09:36:40.635Z",
+                "moneyline": {
+                  "away_price": -240,
+                  "home_price": 205,
+                  "away_handle_pct": 0,
+                  "home_handle_pct": 100,
+                  "away_bets_pct": 0,
+                  "home_bets_pct": 100
+                },
+                "spread": {
+                  "away_line": -5.5,
+                  "home_line": 5.5,
+                  "away_handle_pct": 98,
+                  "home_handle_pct": 2,
+                  "away_bets_pct": 90,
+                  "home_bets_pct": 10
+                },
+                "total": {
+                  "line": 47,
+                  "over_handle_pct": 0,
+                  "under_handle_pct": 100,
+                  "over_bets_pct": 0,
+                  "under_bets_pct": 100
+                }
+              },
+              {
+                "book": "betmgm",
+                "asOf": "2026-11-04T15:15:39.805Z",
+                "moneyline": {
+                  "away_price": -235,
+                  "home_price": 200,
+                  "away_bets_pct": 92,
+                  "home_bets_pct": 8
+                },
+                "spread": {
+                  "away_line": -5.5,
+                  "home_line": 5.5,
+                  "away_bets_pct": 87,
+                  "home_bets_pct": 13
+                },
+                "total": {
+                  "line": 47.5,
+                  "over_bets_pct": 71,
+                  "under_bets_pct": 29
+                }
+              }
+            ]
+          },
+          {
+            "gameId": "1392345",
+            "oldQualified": [],
+            "newQualified": [],
+            "reasons": {
+              "moneyline": "stale_or_future",
+              "spread": "stale_or_future",
+              "total": "stale_or_future"
+            },
+            "nativeBooks": [
+              {
+                "book": "dk",
+                "asOf": "2026-11-04T15:16:43.642Z",
+                "moneyline": {
+                  "away_price": -148,
+                  "home_price": 124,
+                  "away_handle_pct": 85,
+                  "home_handle_pct": 15,
+                  "away_bets_pct": 78,
+                  "home_bets_pct": 22
+                },
+                "spread": {
+                  "away_line": -2.5,
+                  "home_line": 2.5,
+                  "away_handle_pct": 44,
+                  "home_handle_pct": 56,
+                  "away_bets_pct": 74,
+                  "home_bets_pct": 26
+                },
+                "total": {
+                  "line": 43.5,
+                  "over_handle_pct": 24,
+                  "under_handle_pct": 76,
+                  "over_bets_pct": 67,
+                  "under_bets_pct": 33
+                }
+              },
+              {
+                "book": "circa",
+                "asOf": "2026-11-04T09:36:40.635Z",
+                "moneyline": {
+                  "away_price": -150,
+                  "home_price": 130,
+                  "away_handle_pct": 100,
+                  "home_handle_pct": 0,
+                  "away_bets_pct": 100,
+                  "home_bets_pct": 0
+                },
+                "spread": {
+                  "away_line": -3,
+                  "home_line": 3,
+                  "away_handle_pct": 16,
+                  "home_handle_pct": 84,
+                  "away_bets_pct": 41,
+                  "home_bets_pct": 59
+                },
+                "total": {
+                  "line": 44.5,
+                  "over_handle_pct": 91,
+                  "under_handle_pct": 9,
+                  "over_bets_pct": 67,
+                  "under_bets_pct": 33
+                }
+              },
+              {
+                "book": "betmgm",
+                "asOf": "2026-11-04T15:15:39.805Z",
+                "moneyline": {
+                  "away_price": -150,
+                  "home_price": 125,
+                  "away_bets_pct": 88,
+                  "home_bets_pct": 12
+                },
+                "spread": {
+                  "away_line": -2.5,
+                  "home_line": 2.5,
+                  "away_bets_pct": 100,
+                  "home_bets_pct": 0
+                },
+                "total": {
+                  "line": 44,
+                  "over_bets_pct": 66,
+                  "under_bets_pct": 34
+                }
+              }
+            ]
+          },
+          {
+            "gameId": "1392346",
+            "oldQualified": [],
+            "newQualified": [],
+            "reasons": {
+              "moneyline": "stale_or_future",
+              "spread": "stale_or_future",
+              "total": "stale_or_future"
+            },
+            "nativeBooks": [
+              {
+                "book": "dk",
+                "asOf": "2026-11-04T15:16:43.642Z",
+                "moneyline": {
+                  "away_price": -218,
+                  "home_price": 180,
+                  "away_handle_pct": 68,
+                  "home_handle_pct": 32,
+                  "away_bets_pct": 76,
+                  "home_bets_pct": 24
+                },
+                "spread": {
+                  "away_line": -4.5,
+                  "home_line": 4.5,
+                  "away_handle_pct": 99,
+                  "home_handle_pct": 1,
+                  "away_bets_pct": 83,
+                  "home_bets_pct": 17
+                },
+                "total": {
+                  "line": 40.5,
+                  "over_handle_pct": 12,
+                  "under_handle_pct": 88,
+                  "over_bets_pct": 50,
+                  "under_bets_pct": 50
+                }
+              },
+              {
+                "book": "circa",
+                "asOf": "2026-11-04T09:36:40.635Z",
+                "moneyline": {
+                  "away_price": -210,
+                  "home_price": 180,
+                  "away_handle_pct": 0,
+                  "home_handle_pct": 100,
+                  "away_bets_pct": 0,
+                  "home_bets_pct": 100
+                },
+                "spread": {
+                  "away_line": -4.5,
+                  "home_line": 4.5,
+                  "away_handle_pct": 25,
+                  "home_handle_pct": 75,
+                  "away_bets_pct": 50,
+                  "home_bets_pct": 50
+                },
+                "total": {
+                  "line": 41,
+                  "over_handle_pct": 62,
+                  "under_handle_pct": 38,
+                  "over_bets_pct": 42,
+                  "under_bets_pct": 58
+                }
+              },
+              {
+                "book": "betmgm",
+                "asOf": "2026-11-04T15:15:39.805Z",
+                "moneyline": {
+                  "away_price": -225,
+                  "home_price": 185,
+                  "away_bets_pct": 82,
+                  "home_bets_pct": 18
+                },
+                "spread": {
+                  "away_line": -5,
+                  "home_line": 5,
+                  "away_bets_pct": 60,
+                  "home_bets_pct": 40
+                },
+                "total": {
+                  "line": 41,
+                  "over_bets_pct": 58,
+                  "under_bets_pct": 42
+                }
+              }
+            ]
+          },
+          {
+            "gameId": "1392347",
+            "oldQualified": [],
+            "newQualified": [],
+            "reasons": {
+              "moneyline": "stale_or_future",
+              "spread": "stale_or_future",
+              "total": "stale_or_future"
+            },
+            "nativeBooks": [
+              {
+                "book": "dk",
+                "asOf": "2026-11-04T15:16:43.642Z",
+                "moneyline": {
+                  "away_price": 400,
+                  "home_price": -535,
+                  "away_handle_pct": 49,
+                  "home_handle_pct": 51,
+                  "away_bets_pct": 12,
+                  "home_bets_pct": 88
+                },
+                "spread": {
+                  "away_line": 10,
+                  "home_line": -10,
+                  "away_handle_pct": 71,
+                  "home_handle_pct": 29,
+                  "away_bets_pct": 52,
+                  "home_bets_pct": 48
+                },
+                "total": {
+                  "line": 52.5,
+                  "over_handle_pct": 100,
+                  "under_handle_pct": 0,
+                  "over_bets_pct": 92,
+                  "under_bets_pct": 8
+                }
+              },
+              {
+                "book": "circa",
+                "asOf": "2026-11-04T09:36:40.635Z",
+                "moneyline": {
+                  "away_price": 395,
+                  "home_price": -500,
+                  "away_handle_pct": 5,
+                  "home_handle_pct": 95,
+                  "away_bets_pct": 50,
+                  "home_bets_pct": 50
+                },
+                "spread": {
+                  "away_line": 10,
+                  "home_line": -10,
+                  "away_handle_pct": 2,
+                  "home_handle_pct": 98,
+                  "away_bets_pct": 44,
+                  "home_bets_pct": 56
+                },
+                "total": {
+                  "line": 52.5,
+                  "over_handle_pct": 100,
+                  "under_handle_pct": 0,
+                  "over_bets_pct": 100,
+                  "under_bets_pct": 0
+                }
+              },
+              {
+                "book": "betmgm",
+                "asOf": "2026-11-04T15:15:39.805Z",
+                "moneyline": {
+                  "away_price": 380,
+                  "home_price": -500,
+                  "away_bets_pct": 5,
+                  "home_bets_pct": 95
+                },
+                "spread": {
+                  "away_line": 10,
+                  "home_line": -10,
+                  "away_bets_pct": 69,
+                  "home_bets_pct": 31
+                },
+                "total": {
+                  "line": 52.5,
+                  "over_bets_pct": 73,
+                  "under_bets_pct": 27
+                }
+              }
+            ]
+          },
+          {
+            "gameId": "1392348",
+            "oldQualified": [],
+            "newQualified": [],
+            "reasons": {
+              "moneyline": "stale_or_future",
+              "spread": "stale_or_future",
+              "total": "stale_or_future"
+            },
+            "nativeBooks": [
+              {
+                "book": "dk",
+                "asOf": "2026-11-04T15:16:43.642Z",
+                "moneyline": {
+                  "away_price": 142,
+                  "home_price": -170,
+                  "away_handle_pct": 72,
+                  "home_handle_pct": 28,
+                  "away_bets_pct": 37,
+                  "home_bets_pct": 63
+                },
+                "spread": {
+                  "away_line": 3,
+                  "home_line": -3,
+                  "away_handle_pct": 10,
+                  "home_handle_pct": 90,
+                  "away_bets_pct": 28,
+                  "home_bets_pct": 72
+                },
+                "total": {
+                  "line": 46.5,
+                  "over_handle_pct": 80,
+                  "under_handle_pct": 20,
+                  "over_bets_pct": 77,
+                  "under_bets_pct": 23
+                }
+              },
+              {
+                "book": "circa",
+                "asOf": "2026-11-04T09:36:40.635Z",
+                "moneyline": {
+                  "away_price": 148,
+                  "home_price": -168,
+                  "away_handle_pct": 9,
+                  "home_handle_pct": 91,
+                  "away_bets_pct": 50,
+                  "home_bets_pct": 50
+                },
+                "spread": {
+                  "away_line": 3,
+                  "home_line": -3,
+                  "away_handle_pct": 2,
+                  "home_handle_pct": 98,
+                  "away_bets_pct": 42,
+                  "home_bets_pct": 58
+                },
+                "total": {
+                  "line": 47,
+                  "over_handle_pct": 0,
+                  "under_handle_pct": 100,
+                  "over_bets_pct": 0,
+                  "under_bets_pct": 100
+                }
+              },
+              {
+                "book": "betmgm",
+                "asOf": "2026-11-04T15:15:39.805Z",
+                "moneyline": {
+                  "away_price": 140,
+                  "home_price": -165,
+                  "away_bets_pct": 51,
+                  "home_bets_pct": 49
+                },
+                "spread": {
+                  "away_line": 3,
+                  "home_line": -3,
+                  "away_bets_pct": 60,
+                  "home_bets_pct": 40
+                },
+                "total": {
+                  "line": 47,
+                  "over_bets_pct": 70,
+                  "under_bets_pct": 30
+                }
+              }
+            ]
+          },
+          {
+            "gameId": "1392349",
+            "oldQualified": [],
+            "newQualified": [],
+            "reasons": {
+              "moneyline": "stale_or_future",
+              "spread": "stale_or_future",
+              "total": "stale_or_future"
+            },
+            "nativeBooks": [
+              {
+                "book": "dk",
+                "asOf": "2026-11-04T15:16:43.642Z",
+                "moneyline": {
+                  "away_price": 550,
+                  "home_price": -800,
+                  "away_handle_pct": 3,
+                  "home_handle_pct": 97,
+                  "away_bets_pct": 10,
+                  "home_bets_pct": 90
+                },
+                "spread": {
+                  "away_line": 12.5,
+                  "home_line": -12.5,
+                  "away_handle_pct": 44,
+                  "home_handle_pct": 56,
+                  "away_bets_pct": 53,
+                  "home_bets_pct": 47
+                },
+                "total": {
+                  "line": 41.5,
+                  "over_handle_pct": 14,
+                  "under_handle_pct": 86,
+                  "over_bets_pct": 71,
+                  "under_bets_pct": 29
+                }
+              },
+              {
+                "book": "circa",
+                "asOf": "2026-11-04T09:36:40.635Z",
+                "moneyline": {
+                  "away_price": 490,
+                  "home_price": -650,
+                  "away_handle_pct": 100,
+                  "home_handle_pct": 0,
+                  "away_bets_pct": 100,
+                  "home_bets_pct": 0
+                },
+                "spread": {
+                  "away_line": 13,
+                  "home_line": -13,
+                  "away_handle_pct": 9,
+                  "home_handle_pct": 91,
+                  "away_bets_pct": 89,
+                  "home_bets_pct": 11
+                },
+                "total": {
+                  "line": 41.5,
+                  "over_handle_pct": 0,
+                  "under_handle_pct": 100,
+                  "over_bets_pct": 17,
+                  "under_bets_pct": 83
+                }
+              },
+              {
+                "book": "betmgm",
+                "asOf": "2026-11-04T15:15:39.805Z",
+                "moneyline": {
+                  "away_price": 550,
+                  "home_price": -700,
+                  "away_bets_pct": 7,
+                  "home_bets_pct": 93
+                },
+                "spread": {
+                  "away_line": 12,
+                  "home_line": -12,
+                  "away_bets_pct": 63,
+                  "home_bets_pct": 37
+                },
+                "total": {
+                  "line": 41.5,
+                  "over_bets_pct": 77,
+                  "under_bets_pct": 23
+                }
+              }
+            ]
+          },
+          {
+            "gameId": "1392350",
+            "oldQualified": [],
+            "newQualified": [],
+            "reasons": {
+              "moneyline": "stale_or_future",
+              "spread": "stale_or_future",
+              "total": "stale_or_future"
+            },
+            "nativeBooks": [
+              {
+                "book": "dk",
+                "asOf": "2026-11-04T15:16:43.642Z",
+                "moneyline": {
+                  "away_price": 235,
+                  "home_price": -290,
+                  "away_handle_pct": 21,
+                  "home_handle_pct": 79,
+                  "away_bets_pct": 13,
+                  "home_bets_pct": 87
+                },
+                "spread": {
+                  "away_line": 6,
+                  "home_line": -6,
+                  "away_handle_pct": 81,
+                  "home_handle_pct": 19,
+                  "away_bets_pct": 23,
+                  "home_bets_pct": 77
+                },
+                "total": {
+                  "line": 47.5,
+                  "over_handle_pct": 86,
+                  "under_handle_pct": 14,
+                  "over_bets_pct": 93,
+                  "under_bets_pct": 7
+                }
+              },
+              {
+                "book": "circa",
+                "asOf": "2026-11-04T09:36:40.635Z",
+                "moneyline": {
+                  "away_price": 240,
+                  "home_price": -285,
+                  "away_handle_pct": 1,
+                  "home_handle_pct": 99,
+                  "away_bets_pct": 17,
+                  "home_bets_pct": 83
+                },
+                "spread": {
+                  "away_line": 6,
+                  "home_line": -6,
+                  "away_handle_pct": 73,
+                  "home_handle_pct": 27,
+                  "away_bets_pct": 29,
+                  "home_bets_pct": 71
+                },
+                "total": {
+                  "line": 47.5,
+                  "over_handle_pct": 60,
+                  "under_handle_pct": 40,
+                  "over_bets_pct": 75,
+                  "under_bets_pct": 25
+                }
+              },
+              {
+                "book": "betmgm",
+                "asOf": "2026-11-04T15:15:39.805Z",
+                "moneyline": {
+                  "away_price": 230,
+                  "home_price": -285,
+                  "away_bets_pct": 7,
+                  "home_bets_pct": 93
+                },
+                "spread": {
+                  "away_line": 6,
+                  "home_line": -6,
+                  "away_bets_pct": 14,
+                  "home_bets_pct": 86
+                },
+                "total": {
+                  "line": 47.5,
+                  "over_bets_pct": 62,
+                  "under_bets_pct": 38
+                }
+              }
+            ]
+          },
+          {
+            "gameId": "1392351",
+            "oldQualified": [],
+            "newQualified": [],
+            "reasons": {
+              "moneyline": "stale_or_future",
+              "spread": "stale_or_future",
+              "total": "stale_or_future"
+            },
+            "nativeBooks": [
+              {
+                "book": "dk",
+                "asOf": "2026-11-04T15:16:43.642Z",
+                "moneyline": {
+                  "away_price": -180,
+                  "home_price": 150,
+                  "away_handle_pct": 84,
+                  "home_handle_pct": 16,
+                  "away_bets_pct": 84,
+                  "home_bets_pct": 16
+                },
+                "spread": {
+                  "away_line": -3.5,
+                  "home_line": 3.5,
+                  "away_handle_pct": 47,
+                  "home_handle_pct": 53,
+                  "away_bets_pct": 66,
+                  "home_bets_pct": 34
+                },
+                "total": {
+                  "line": 45.5,
+                  "over_handle_pct": 68,
+                  "under_handle_pct": 32,
+                  "over_bets_pct": 86,
+                  "under_bets_pct": 14
+                }
+              },
+              {
+                "book": "circa",
+                "asOf": "2026-11-04T09:36:40.635Z",
+                "moneyline": {
+                  "away_price": -180,
+                  "home_price": 155,
+                  "away_handle_pct": 72,
+                  "home_handle_pct": 28,
+                  "away_bets_pct": 60,
+                  "home_bets_pct": 40
+                },
+                "spread": {
+                  "away_line": -3.5,
+                  "home_line": 3.5,
+                  "away_handle_pct": 96,
+                  "home_handle_pct": 4,
+                  "away_bets_pct": 82,
+                  "home_bets_pct": 18
+                },
+                "total": {
+                  "line": 45.5,
+                  "over_handle_pct": 1,
+                  "under_handle_pct": 99,
+                  "over_bets_pct": 50,
+                  "under_bets_pct": 50
+                }
+              },
+              {
+                "book": "betmgm",
+                "asOf": "2026-11-04T15:15:39.805Z",
+                "moneyline": {
+                  "away_price": -190,
+                  "home_price": 155,
+                  "away_bets_pct": 81,
+                  "home_bets_pct": 19
+                },
+                "spread": {
+                  "away_line": -3.5,
+                  "home_line": 3.5,
+                  "away_bets_pct": 62,
+                  "home_bets_pct": 38
+                },
+                "total": {
+                  "line": 45.5,
+                  "over_bets_pct": 65,
+                  "under_bets_pct": 35
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "reviewCoverage": {
+    "games": 68,
+    "markets": 204,
+    "nflGames": 15,
+    "nbaGames": 53,
+    "pricedNbaGames": 14,
+    "futureUnpricedNbaGames": 39,
+    "ledgers": [
+      "/private/tmp/nfl-nba-independent-all-game-review-a-20261104.json",
+      "/private/tmp/nfl-nba-independent-full-board-review-b-20261104.json",
+      "/private/tmp/nfl-nba-independent-full-product-review-c-20261104.json",
+      "/private/tmp/nfl-nba-independent-review-d-20261104.json"
+    ],
+    "interpretationCaveats": [
+      "A strong residual model value may oppose a professional price leg; no automatic market-follow or forced fade",
+      "Native stale Circa remains stored context, not falsely-current professional money",
+      "Later raw captures and earlier stored DTOs are not backdated into the published decision",
+      "Future absent offers are not synthetic actionable picks"
+    ]
+  },
+  "immutableLocks": {
+    "baselineRecords": 639,
+    "source": "/private/tmp/moneyline-market-confirmation-lock-confidence-baseline-20261104.json",
+    "previousR65andR34Precedence": "tested",
+    "newAndLegacyNativeClockPayloads": "tested exact null/stored values"
+  },
+  "unchanged": [
+    "writer ownership",
+    "prediction_pipeline sport lease",
+    "provider schedules",
+    "grade floors",
+    "stakes",
+    "legacy locked fields"
+  ],
+  "validation": {
+    "state": "full local model gate, TypeScript, focused and independent reviews passed; production/integration pending",
+    "fullGate": "npm run verify:model-change passed after all reviewed fixes",
+    "TypeScript": "passed --noEmit --incremental false",
+    "ESLint": "0 errors,6 warnings in existing declarations",
+    "focused": "NBA native consumer pairs, The Odds API missing-key/redaction, split native clocks and aged cache restore, legacy locked null/clocked payloads; NFL partial source qualification and R65/R64/R63 continuity and PMF tracking policy",
+    "independentReviews": 4,
+    "reviewFindingsClosed": [
+      "NBA native clock stripping",
+      "unlocked cached stale flags not aging",
+      "provider error credential echoes before truncation"
+    ],
+    "diagnosticReview": "One disjoint bounded status snapshot under existing NBA lease; no new polling or prediction writer",
+    "localOptionalPostgres": "skipped: MARKET_BRAIN_POSTGRES_URL unset; hosted proof required before merge"
+  },
+  "performanceClaim": false,
+  "rollback": "Restore the complete prior NFL R57 and NBA R34 runtime families while preserving any locks from either release."
+}

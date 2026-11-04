@@ -73,6 +73,7 @@ export function applySharpBookSplitContinuity(
   let matchedGames = 0;
   let populatedMarkets = 0;
   for (const game of response.games) {
+    if (response.sport === "nba" && game.lockedAt != null) continue;
     if (game.lockState === "locked" && !options.reconstructMissingLockedPreLock) continue;
     const lockedCutoffMs = game.lockState === "locked" && options.reconstructMissingLockedPreLock
       ? Date.parse(game.lockedAt ?? "")
@@ -97,9 +98,14 @@ export function applySharpBookSplitContinuity(
       }
       const existing = market.sportsbookSplits ?? null;
       const selected = existing && sectionQuality(existing) > 0
-        ? preferredActiveSection(retained, existing, nowMs)
+        // Earlier NBA continuity captures stripped native row clocks and used
+        // transport time as section provenance. Such a cache cannot displace
+        // fresh source-bound evidence merely because that receipt is later.
+        ? response.sport === "nba" && hasNativeSplitClocks(existing) && !hasNativeSplitClocks(retained)
+          ? existing : preferredActiveSection(retained, existing, nowMs)
         : retained;
-      market.sportsbookSplits = cloneRetainedSection(selected);
+      market.sportsbookSplits = cloneRetainedSection(selected, response.sport === "nba", nowMs);
+      if (response.sport === "nba") refreshNbaSplitAvailability(market);
       populatedMarkets += 1;
     }
   }
@@ -225,11 +231,12 @@ export function alignMarketReadsToDisplayedSharpBookSplits(response: DailyEdgeRe
 export function restoreCompleteSharpBookSplitDisplay(
   response: DailyEdgeResponse,
   feed: SharpBookSplitContinuityFeed | null,
+  nowMs = Date.now(),
 ): number {
   if (!feed || feed.sport !== response.sport || feed.slateDate !== response.date) return 0;
   let restored = 0;
   for (const game of response.games) {
-    if (game.lockState === "locked") continue;
+    if (game.lockState === "locked" || response.sport === "nba" && game.lockedAt != null) continue;
     const matches = feed.games.filter((candidate) => retainedGameMatches(candidate, game));
     if (matches.length !== 1) continue;
     for (const marketKey of MARKET_KEYS) {
@@ -242,7 +249,8 @@ export function restoreCompleteSharpBookSplitDisplay(
           ? market.recommendationDecision.sharpBookSplits
           : null;
       if (displayed && sectionQuality(displayed) >= 2) continue;
-      market.sportsbookSplits = cloneRetainedSection(retained);
+      market.sportsbookSplits = cloneRetainedSection(retained, response.sport === "nba", nowMs);
+      if (response.sport === "nba") refreshNbaSplitAvailability(market);
       restored += 1;
     }
   }
@@ -289,15 +297,15 @@ function mergeContinuityFeeds(
 ): SharpBookSplitContinuityFeed | null {
   if (!earlier) return later;
   if (!later) return earlier;
-  const games = earlier.games.map(cloneRetainedGame);
+  const games = earlier.games.map(game => cloneRetainedGame(game, sport === "nba"));
   for (const latestGame of later.games) {
     const index = games.findIndex((candidate) => retainedGamesMatch(candidate, latestGame));
     if (index < 0) {
-      games.push(cloneRetainedGame(latestGame));
+      games.push(cloneRetainedGame(latestGame, sport === "nba"));
       continue;
     }
     const prior = games[index]!;
-    const latestClone = cloneRetainedGame(latestGame);
+    const latestClone = cloneRetainedGame(latestGame, sport === "nba");
     const markets = { ...prior.markets };
     for (const marketKey of MARKET_KEYS) {
       const earlierSection = markets[marketKey];
@@ -330,7 +338,7 @@ function captureFeed(
   sport: Sport,
   previous: SharpBookSplitContinuityFeed | null,
 ): SharpBookSplitContinuityFeed {
-  const retained = previous?.games.map(cloneRetainedGame) ?? [];
+  const retained = previous?.games.map(game => cloneRetainedGame(game, sport === "nba")) ?? [];
   for (const game of response.games) {
     const current = retained.find((candidate) => retainedGameMatches(candidate, game));
     const target: RetainedGame = current ?? {
@@ -345,7 +353,7 @@ function captureFeed(
       const market = game.markets[marketKey];
       const section = displayedSection(market);
       if (!section || sectionQuality(section) === 0) continue;
-      const normalized = cloneRetainedSection(section);
+      const normalized = cloneRetainedSection(section, sport === "nba");
       const prior = target.markets[marketKey];
       if (!prior || sectionQuality(normalized) >= sectionQuality(prior)) {
         target.markets[marketKey] = normalized;
@@ -465,7 +473,37 @@ function complementary(values: Array<number | null>): boolean {
     Math.abs(values[0]! + values[1]! - 100) <= 1;
 }
 
-function cloneRetainedSection(section: MarketSplitDisplaySection): MarketSplitDisplaySection {
+function hasNativeSplitClocks(section: MarketSplitDisplaySection): boolean {
+  const native = Date.parse(section.sourceObservedAt ?? "");
+  return Number.isFinite(native) && section.rows.length === 2 && section.rows.every(row => {
+    const observed = Date.parse(row.observedAt ?? ""), received = Date.parse(row.freshnessCheckedAt ?? "");
+    return observed === native && Number.isFinite(received) && received >= observed;
+  });
+}
+
+function refreshNbaSplitAvailability(market: MarketEdgeDto): void {
+  if (!market.sharpBookAvailability || !market.sportsbookSplits?.rows.some(row => row.isStale)) return;
+  market.sharpBookAvailability = { ...market.sharpBookAvailability, status: "stale",
+    message: "The last complete two-sided sharp-book split snapshot is retained while the next update is pending.",
+    lastUpdated: market.sportsbookSplits.lastUpdated };
+}
+
+function cloneRetainedSection(section: MarketSplitDisplaySection, preserveNativeClocks = false,
+  freshnessAtMs?: number): MarketSplitDisplaySection {
+  // NBA open-card evidence already carries the exact native read and receipt.
+  // Preserve missing legacy fields as missing; never synthesize a new clock.
+  if (preserveNativeClocks) {
+    const cloned = structuredClone(section);
+    // Only unlocked apply/restore passes supply a current check time. Feed
+    // storage preserves capture-time metadata; immutable locks never enter.
+    if (freshnessAtMs !== undefined) for (const row of cloned.rows) {
+      const native = Date.parse(row.observedAt ?? ""), received = Date.parse(row.freshnessCheckedAt ?? "");
+      const ttl = Number.isFinite(row.staleAfterMinutes) ? Math.max(1, row.staleAfterMinutes!) : 75;
+      row.isStale = ![native, received, freshnessAtMs].every(Number.isFinite) || native > received ||
+        received > freshnessAtMs || freshnessAtMs - native > ttl * 60_000;
+    }
+    return cloned;
+  }
   return {
     label: section.label,
     sourceBook: section.sourceBook ?? null,
@@ -495,12 +533,12 @@ function latestSectionTimestamp(section: MarketSplitDisplaySection): string | nu
   return values.at(-1) ?? null;
 }
 
-function cloneRetainedGame(game: RetainedGame): RetainedGame {
+function cloneRetainedGame(game: RetainedGame, preserveNativeClocks = false): RetainedGame {
   return {
     ...game,
     markets: Object.fromEntries(Object.entries(game.markets).map(([key, section]) => [
       key,
-      cloneRetainedSection(section),
+      cloneRetainedSection(section, preserveNativeClocks),
     ])) as RetainedGame["markets"],
   };
 }

@@ -415,6 +415,9 @@ function newestCompleteSection(
  * member responses keep only the values and established source label.
  */
 export function sanitizeRetainedSharpSplitPresentation(response: DailyEdgeResponse): number {
+  // The NBA builder owns honest native/receipt clocks. Preserve both current
+  // evidence and exact legacy locked DTOs, including stored null fields.
+  if (response.sport === "nba") return 0;
   let sanitized = 0;
   for (const game of response.games) {
     for (const market of Object.values(game.markets)) {

@@ -161,3 +161,11 @@ const baselineConflict = qualifyNflOwlsSplitsForSourceReaction({ ...args,
 assert.equal(baselineConflict.flows.total, undefined);
 assert.equal(baselineConflict.reasons.total, "conflicting_source_economic_baselines");
 console.log("NFL source-reaction clocks: historical own-contract context and latest actual pre-flow economic baseline passed");
+
+for (const capturedAt of ["2026-11-02T14:31:00.000Z", "2026-11-02T13:59:00.000Z", "invalid"]) {
+  const unavailable = qualifyNflOwlsSplitsForSourceReaction({ ...args,
+    splits: { ...splits, moneyline: { ...splits.moneyline, capturedAt } } });
+  assert.equal(unavailable.flows.moneyline, undefined,
+    "native pressure cannot enter a causal reaction before actual response receipt or with invalid chronology");
+  assert.ok(unavailable.flows.spread?.length, "one unavailable market cannot discard another valid source contract");
+}
