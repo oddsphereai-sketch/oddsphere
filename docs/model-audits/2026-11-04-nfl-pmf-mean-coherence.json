@@ -1,0 +1,54 @@
+{
+  "scope": "NFL-only full-distribution probability coherence; no forecast or grade tuning",
+  "startingBase": "955f4d15f3005c67a1b3741c56dcd6c308172f9c",
+  "authorization": "Review and repair overly rigid moneyline restrictions; complete live publication without manufactured picks or bypassing real contradictions",
+  "releaseIdentifiers": [
+    "nfl_forward_evidence_writer_2026_11_04_r108_pmf_mean_direction_diagnostic",
+    "nfl_forward_member_snapshot_2026_11_04_r65_pmf_mean_direction_diagnostic",
+    "nfl_full_game_evidence_runtime_2026_11_04_r18_pmf_mean_direction_diagnostic",
+    "nfl_market_innovation_2026_11_04_r5_pmf_mean_direction_diagnostic",
+    "nfl_market_innovation_posture_2026_11_04_r5_pmf_mean_direction_diagnostic",
+    "nfl_v1_daily_edge_calibration_2026_11_04_r51_pmf_mean_direction_diagnostic",
+    "nfl_v1_daily_edge_decision_2026_11_04_r60_pmf_mean_direction_diagnostic",
+    "nfl_v1_daily_edge_model_2026_11_04_r52_pmf_mean_direction_diagnostic",
+    "nfl_v1_grade_policy_2026_11_04_r60_pmf_mean_direction_diagnostic",
+    "nfl_v1_member_release_2026_11_04_r57_pmf_mean_direction_diagnostic",
+    "nfl_weekly_member_fixture_2026_11_04_r73_pmf_mean_direction_diagnostic"
+  ],
+  "productionFinding": {
+    "game": "ARI@SEA",
+    "providerGameId": "1392349",
+    "line": 41.5,
+    "expectedTotal": 43.385900114169466,
+    "decisionSide": "under",
+    "pmfSide": "under",
+    "blockedBoardCoverage": "14/15",
+    "priorSnapshotPreserved": "R63"
+  },
+  "unchanged": [
+    "scores",
+    "probabilities",
+    "picks",
+    "grades",
+    "stakes",
+    "CFB/default/legacy semantics",
+    "provider request budget and schedule",
+    "sole writer and sport prediction lease"
+  ],
+  "boardImpact": {
+    "promotionRulesChanged": 0,
+    "demotionRulesChanged": 0,
+    "syntheticPlaysAdded": 0,
+    "storedCurrentRowsForOfflineComparison": 14,
+    "priorHeldGameRows": 1,
+    "status": "pending exact same-input coherence replay"
+  },
+  "lockedBaseline": {
+    "records": 639,
+    "preservedBeforeFollowup": true,
+    "path": "/private/tmp/moneyline-market-confirmation-lock-confidence-baseline-20261104.json"
+  },
+  "validation": {
+    "status": "in progress; not published"
+  }
+}
