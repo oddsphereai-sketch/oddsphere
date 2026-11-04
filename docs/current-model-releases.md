@@ -6814,9 +6814,9 @@ separate frozen selection. Legacy r23-r25 locks remain exact and are never rewri
 The release also permits incomplete same-day/future MoneyPuck file publication
 without discarding all prior paired games. Only exact earlier pairs replay and
 the existing settled-game ID gate still rejects missing historical coverage.
-On the exact November 4 four-game / twelve-market rehearsal, r27 has zero errors,
-one Total side change, zero promotions, one demotion and seven actionables
-(zero Best Angle, seven Lean, five Watchlist) versus eight r25 actionables.
+On the final November 4 four-game / twelve-market rehearsal, r27 has zero errors,
+zero side changes, zero promotions, zero demotions and the same seven actionables
+(zero Best Angle, seven Lean, five Watchlist) as the latest r25 records.
 Current named paths are flat or otherwise non-authoritative after excluding each
 evaluated execution book, so no reader innovation changes a score on that
 snapshot. Paired functional tests cover promotions,

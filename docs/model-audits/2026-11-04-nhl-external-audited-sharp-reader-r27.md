@@ -132,14 +132,13 @@ per-market member signals.
 
 ## Current-board rehearsal
 
-The November 4 read-only rehearsal processed four games and twelve markets with
-zero errors. Against the r25 stored rows it produced one Total side change,
-zero promotions, one demotion and seven actionables instead of eight: zero Best
-Angle, seven Lean and five Watchlist. The current named-book episodes were flat
-or otherwise non-authoritative after exact execution-book exclusion, so no
-reader innovation changed a score on this snapshot. The changed Total is the
-coherent final-distribution result rather than an invented market consequence.
-No actionability quota was used.
+The final November 4 read-only rehearsal processed four games and twelve
+markets with zero errors. Against the latest r25 stored rows it produced zero
+side changes, zero promotions, zero demotions and the same seven actionables:
+zero Best Angle, seven Lean and five Watchlist. The current named-book episodes
+were flat or lacked a causal response after exact execution-book exclusion, so
+no reader innovation changed a score on this snapshot. No actionability quota
+was used.
 
 ## Remaining boundary
 
