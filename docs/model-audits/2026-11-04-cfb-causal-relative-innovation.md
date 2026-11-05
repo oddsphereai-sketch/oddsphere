@@ -87,7 +87,10 @@ only to future-unlocked rows.
 
 Not published. The valid same-input board-impact comparison is complete. Focused
 checks, TypeScript, `npm run verify:model-change` and integration safety pass on
-fresh production base `f69328f9`. That merge changed no CFB runtime, test or
-audit-operator input file, so the hash-stamped same-input provider replay remains
-the applicable result and was not needlessly repeated. Rollback is the complete
-R59/R41/R7 family; never rewrite a row already locked under either release.
+fresh production base `1b8a677a`. PR #1014 changed only the cross-sport audit
+classifier/operator and its tests/artifact. The complete CFB runtime, focused-test
+and same-input-operator tree hash remained exactly
+`9445a29d0fa85f1b3ea4688feb887ae96da1db768fbdb5110f24d4a82e4e24a9`
+before and after that rebase, so the frozen provider replay remains applicable
+and was not needlessly repeated. Rollback is the complete R59/R41/R7 family;
+never rewrite a row already locked under either release.
