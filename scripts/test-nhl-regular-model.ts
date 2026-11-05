@@ -128,6 +128,10 @@ assert.equal(resolveNhlPriceAwareVerdict("total", "best_angle", -155, 0.65), "le
 assert.equal(resolveNhlPriceAwareVerdict("total", "best_angle", -110, 0.65), "best_angle", "a qualified Total remains a Best Angle");
 assert.equal(resolveNhlPriceAwareVerdict("moneyline", "best_angle", -200, 0.70), "lean", "a price in the -200s cannot be an NHL Best Angle");
 assert.equal(resolveNhlPriceAwareVerdict("moneyline", "lean", -230, 0.72), "lean", "a short likely winner remains actionable as a Lean");
+assert.equal(resolveNhlPriceAwareVerdict("total", "lean", -115, 0.5274), "watchlist",
+  "a negative exact-price Total cannot remain an actionable Lean");
+assert.equal(resolveNhlPriceAwareVerdict("moneyline", "lean", 120, 0.48), "lean",
+  "a positive exact-price Lean remains actionable across plus-money prices");
 assert.equal(resolveNhlPriceAwareVerdict("moneyline", "lean", -899, 0.90), "lean");
 assert.equal(resolveNhlPriceAwareVerdict("moneyline", "lean", -900, 0.92), "pass", "an extreme negative price is not actionable");
 assert.equal(resolveNhlPriceAwareVerdict("moneyline", "best_angle", null, 0.70), "pass", "a missing exact price is not actionable");
@@ -1252,7 +1256,7 @@ assert.match(reader, /writerVerdictsByGame/, "reader carries the price-aware wri
 assert.match(reader, /nhlVerdictFromStoredDecision/, "reader maps the writer's immutable storage token instead of recomputing the grade");
 assert.match(reader, /const displayModel: NhlModelOutput = storedPayload \? model : \{/, "stored writer and locked verdicts take precedence over the unlocked no-writer price-aware fallback");
 assert.match(reader, /NHL_REGULAR_TRANSITION_MODEL_RELEASES/, "reader preserves an already-locked prior-release tuple during deployment");
-assert.match(reader, /nhl_daily_edge_reader_2026_11_04_r20_identity_bound_reader_receipt/, "reader release records identity-bound immutable reader-receipt rendering");
+assert.match(reader, /nhl_daily_edge_reader_2026_11_04_r22_positive_value_actionability/, "reader release records exact-price actionability binding");
 assert.match(writer, /select\("external_id"\)/, "writer verifies exact settled-game replay identities instead of count parity");
 assert.match(reader, /select\("external_id"\)/, "reader verifies the same exact settled-game replay identities");
 assert.match(reader, /r\.model_version === NHL_REGULAR_MODEL_RELEASE \|\| r\.locked_at !== null/, "reader preserves a locked transition predecessor without consulting fresh replay state");

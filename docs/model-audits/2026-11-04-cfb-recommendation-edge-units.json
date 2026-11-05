@@ -1,0 +1,19 @@
+{
+  "release": "cfb_recommendation_edge_units_2026_11_04_r1",
+  "startingBaseSha": "ae20808cc9acb2ae79b35cc395ac0ecaebce04a2",
+  "scope": "future_unlocked_member_evidence_only",
+  "defect": "writer edgePercentagePoints was multiplied by 100 a second time in the member recommendation receipt",
+  "repairRelease": "cfb_v1_member_fixture_2026_11_04_r102_recommendation_edge_units",
+  "sameInputImpact": {
+    "scoreChanges": 0,
+    "probabilityChanges": 0,
+    "pickChanges": 0,
+    "gradeChanges": 0,
+    "promotions": 0,
+    "demotions": 0,
+    "actionableCountChange": 0
+  },
+  "invariant": "recommendation edgePp equals the writer decision edgePercentagePoints and member modelMarketGapPct",
+  "lockedRecordsMutated": 0,
+  "rollback": "restore member fixture R101 while preserving any R102 locked payload exactly"
+}

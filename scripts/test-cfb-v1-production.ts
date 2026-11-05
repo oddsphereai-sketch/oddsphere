@@ -1752,6 +1752,19 @@ assert.deepEqual(member.snapshot.games[0]!.projected, authoritativeForecast.repr
 assert.equal(member.snapshot.games[0]!.footballOnlyProjection?.expectedAwayPoints, forecast.expectedAwayPoints, "the immutable independent PMF remains a diagnostic baseline");
 assert.equal(member.snapshot.games[0]!.footballOnlyProjection?.expectedHomePoints, forecast.expectedHomePoints);
 assert.equal(member.snapshot.games[0]!.recommendationDecision?.audit.canPublish, true);
+for (const decision of payload.decisions.evaluatedBets) {
+  const memberMarket = decision.market === "spread" ? "first_inning" : decision.market;
+  assert.equal(
+    member.snapshot.games[0]!.markets[memberMarket].recommendationDecision?.edgePp,
+    decision.edgePercentagePoints,
+    `${decision.market} recommendation evidence must preserve the writer's percentage-point unit`,
+  );
+  assert.equal(
+    member.snapshot.games[0]!.markets[memberMarket].recommendationDecision?.edgePp,
+    member.snapshot.games[0]!.markets[memberMarket].modelMarketGapPct,
+    `${decision.market} recommendation and member comparison gaps must use the same unit`,
+  );
+}
 
 const ualbLikeCapturedAt = "2026-09-02T10:39:48.862Z";
 const ualbLikeGameStartAt = "2026-09-05T23:30:00.000Z";

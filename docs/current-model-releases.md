@@ -1,5 +1,68 @@
 # Current production model releases and qualified research candidates
 
+## NBA composed named-book opposition — November 4
+
+The authoritative NBA grade policy advances to
+`nba_grade_policy_2026_11_04_r28_composed_named_book_opposition`; model R36 and
+market-marriage R38 remain unchanged. A market that first earns Best Angle no
+longer returns early at Lean when the same stored posture contains corroborated
+two-source opposition or explicit cross-book disagreement. It proceeds through
+the same opposition rule as a native Lean and becomes Watchlist. The existing
+clean, causal, side-matched Lean-to-Best promotion remains paired and unchanged.
+
+Moneyline copy now says a Spread correction "authored" the side only when the
+stored reader effect actually changed the final winner. A same-winner margin
+adjustment can still confirm the side but cannot claim a flip. Scores,
+probabilities, picks, prices, source clocks, reader consequences and locked
+records are unchanged. Exact R27 locks retain their stored grade and rationale.
+
+## NHL professional split ingestion and positive-value actionability — November 4
+
+The authoritative future-unlocked NHL tuple advances to model
+`nhl_regular_2026_r30_positive_value_actionability`, calibration
+`nhl_regular_calibration_2026_r30_positive_value_actionability`, decision
+`nhl_regular_decision_2026_r30_positive_value_actionability`, and reader
+`nhl_daily_edge_reader_2026_11_04_r22_positive_value_actionability`.
+Receipt schema R3 remains unchanged. Exact R28 and earlier locked records retain
+their stored model, probability, pick, grade, price, evidence and receipt precedence.
+
+Owls' current NHL split rows may omit `event_start_time` while retaining the
+provider event date in `event_id`. The writer now uses the same exact fallback
+already used by the display matcher: provider event date plus exact away/home
+identity, followed by the existing single-event guard. A wrong date, missing
+parseable event identity, reversed teams, multiple provider events, incomplete
+money/ticket pair, invalid clock, future observation, stale observation or source
+conflict still fails closed. The evaluated book remains excluded from its own
+forecast evidence; no split percentage is converted directly into goals.
+
+The split-ingestion portion changed zero scores, sides, probabilities, prices or
+grades. The later exact-price gate demotes a Lean to Watchlist when its selected
+price has nonpositive expected value; the current dry run changed SJS-LAK Over
+6 at -114 from Lean to Watchlist, while locked rows remained exact. The paired
+existing puck-line promotion still requires at least 58% probability and a 5pp
+exact-price edge. The repair changes evidence availability prospectively: all four
+games expose six exact current professional market rows (Circa and DraftKings
+for Moneyline, puck line and Total) to the existing causal response reader instead
+of silently supplying none. Evidence and rollback are recorded in
+`docs/model-audits/2026-11-04-nhl-exact-event-date-professional-splits.json`.
+
+## CFB recommendation evidence percentage-point units — November 4
+
+The CFB member fixture advances to
+`cfb_v1_member_fixture_2026_11_04_r102_recommendation_edge_units`. The exact-price
+writer already stores `edgePercentagePoints` in percentage points; the member
+recommendation receipt now preserves that unit instead of multiplying it by 100
+a second time. The receipt's `edgePp` therefore agrees with the unchanged
+`modelMarketGapPct` and writer decision (for example, 20.8 pp remains 20.8 pp,
+not 2,080 pp).
+
+This is an evidence-presentation correction only. Forecasts, score distributions,
+probabilities, selected sides, exact prices, grades, actionability, stakes, writer,
+lease, cadence, provider calls, tracking and every locked payload remain unchanged.
+Existing locked member snapshots keep their exact stored receipt. The paired
+promotion/demotion and board-count impact is 0/0/0. Evidence:
+`docs/model-audits/2026-11-04-cfb-recommendation-edge-units.json`.
+
 ## CBB removal of rejected prior-forecast takeover — November 4
 
 Current market model R18, grade R22, receipt R14, board R23, publisher R33,

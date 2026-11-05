@@ -1,0 +1,55 @@
+{
+  "release": "nhl_exact_event_date_professional_splits_2026_11_04_r1",
+  "startingBaseSha": "ae20808cc9acb2ae79b35cc395ac0ecaebce04a2",
+  "scope": "future_unlocked_nhl_only",
+  "defect": {
+    "displayMatcher": "accepted exact provider event-date ID plus exact teams when event_start_time was absent",
+    "writerMatcher": "required event_start_time and therefore returned zero professional split rows",
+    "liveReceiptImpact": "all 12 November 4 NHL market receipts had an empty professionalBooks array"
+  },
+  "repair": {
+    "modelRelease": "nhl_regular_2026_r30_positive_value_actionability",
+    "calibrationRelease": "nhl_regular_calibration_2026_r30_positive_value_actionability",
+    "decisionRelease": "nhl_regular_decision_2026_r30_positive_value_actionability",
+    "readerRelease": "nhl_daily_edge_reader_2026_11_04_r22_positive_value_actionability",
+    "receiptRelease": "nhl_reader_receipt_2026_11_04_r3_exact_price_professional_best",
+    "identityRule": "provider event date in event_id plus exact oriented teams plus one provider event identity",
+    "unchangedGuards": [
+      "complete complementary money and ticket pair",
+      "source observation and receipt clocks",
+      "future and stale quarantine",
+      "professional-source priority and conflict veto",
+      "execution-book exclusion",
+      "locked-record precedence"
+    ]
+  },
+  "liveSameInputBoard": {
+    "slateDate": "2026-11-04",
+    "games": 4,
+    "markets": 12,
+    "actionablesBefore": 7,
+    "actionablesAfter": 7,
+    "promotions": 0,
+    "demotions": 0,
+    "sideChanges": 0,
+    "gradeChanges": 0,
+    "probabilityChanges": 0,
+    "professionalRowsAvailableAfterRepairPerGame": 6
+  },
+  "prospectiveExactPriceGradeReplay": {
+    "actionablesBefore": 7,
+    "actionablesAfter": 5,
+    "promotions": 0,
+    "demotions": 2,
+    "demoted": [
+      "CGY@SEA Over 6 at -115, model probability 0.5274 versus 0.5349 break-even",
+      "SJS@LAK Over 6 at -115, model probability 0.5315 versus 0.5349 break-even"
+    ],
+    "pairedPromotionRule": "existing puck-line Watchlist to Lean requires model probability >= 0.58 and exact-price edge >= 0.05",
+    "laterUnlockedDryRun": "SJS@LAK Over 6 at -114 demoted to Watchlist; CGY@SEA had moved to Under 6.5 with positive value; six locked rows were preserved"
+  },
+  "lockedRecordsMutated": 0,
+  "providerCallsAdded": 0,
+  "writersAdded": 0,
+  "rollback": "restore R28 model/calibration/decision and R20 reader; preserve every R29/R30 lock if any exists"
+}

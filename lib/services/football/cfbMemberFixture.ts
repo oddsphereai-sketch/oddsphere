@@ -143,7 +143,7 @@ import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMark
 import { isCurrentMarketCycleOpening } from "../dailyEdge/marketCycleOpening";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_11_04_r101_moneyline_resistance_guard" as const;
+  "cfb_v1_member_fixture_2026_11_04_r102_recommendation_edge_units" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_market_sharp_public_outcome_contract_2026_10_27_r81_near_tie_pmf_winner_coherence" as const;
 export const CFB_MEMBER_GAME_LIFECYCLE_RELEASE =
@@ -1630,7 +1630,12 @@ function buildCfbRecommendationDecision(args: {
     selectedSide: selectedMarketSide(args.payload, marketName, value.decision),
     modelProbability: value.market.modelProb,
     marketImplied: value.market.marketFairProb,
-    edgePp: value.decision ? value.decision.edgePercentagePoints * 100 : null,
+    // The writer already stores this value in percentage points (for example,
+    // 20.8 means a 20.8 pp gap). RecommendationDecision uses the same unit.
+    // Multiplying again made the evidence receipt claim a 2,080 pp edge while
+    // the forecast, exact-price decision, grade and modelMarketGapPct all
+    // correctly retained 20.8 pp.
+    edgePp: value.decision ? value.decision.edgePercentagePoints : null,
     price: value.market.priceAmerican,
     playGrade: value.decision?.grade ?? "No Play",
     quickRead: value.market.displayReason ?? "The outcome forecast and exact-price Bet grade remain separate.",
@@ -1744,7 +1749,14 @@ function cfbSplitSection(
           ]
         : [];
   if (rows.length === 0) return null;
-  return { label, rows, signal: null, lastUpdated: record.capturedAt };
+  return {
+    label,
+    sourceBook: record.sportsbook,
+    sourceObservedAt: record.capturedAt,
+    rows,
+    signal: null,
+    lastUpdated: record.capturedAt,
+  };
 }
 
 function previousSharpSplitRecord(args: {

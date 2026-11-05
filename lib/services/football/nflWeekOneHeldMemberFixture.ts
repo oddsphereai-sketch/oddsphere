@@ -947,6 +947,8 @@ function nflSourceSplitEvidence(
       ];
   const section: MarketSplitDisplaySection = {
     label: book === "circa" ? "Sharp Book Splits" : book === "draftkings" ? "DraftKings Splits" : "BetMGM Splits",
+    sourceBook: book,
+    sourceObservedAt: observedAt,
     rows,
     signal: null,
     lastUpdated: observedAt,

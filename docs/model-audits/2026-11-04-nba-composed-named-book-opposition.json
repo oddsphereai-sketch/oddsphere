@@ -1,0 +1,41 @@
+{
+  "release": "nba_composed_named_book_opposition_2026_11_04_r1",
+  "startingBaseSha": "ae20808cc9acb2ae79b35cc395ac0ecaebce04a2",
+  "scope": "future_unlocked_nba_grade_and_rationale_only",
+  "modelRelease": "nba_professional_unified_2026_11_04_r36_paid_consumer_book_coverage",
+  "marketMarriageRelease": "nba_market_marriage_2026_11_04_r38_paid_consumer_book_coverage",
+  "gradeReleaseBefore": "nba_grade_policy_2026_11_04_r27_paid_consumer_book_coverage",
+  "gradeReleaseAfter": "nba_grade_policy_2026_11_04_r28_composed_named_book_opposition",
+  "defects": [
+    "Best Angle with corroborated named-book opposition returned early at Lean and skipped the existing Lean-to-Watch rule",
+    "Moneyline rationale claimed a Spread correction authored the side when the correction changed only the margin"
+  ],
+  "repair": {
+    "corroboratedOpposition": "two distinct opposing named sources, or one opposing source plus a distinct conflict/disagreement",
+    "bestAnglePath": "corroborated opposition becomes Watchlist; isolated opposition remains Lean",
+    "promotionPath": "unchanged clean causal Lean-to-Best promotion",
+    "authorshipCopy": "requires an actual independent-to-final winner change"
+  },
+  "functionalCoverage": {
+    "mirroredGradePairs": 288,
+    "completeForecastReflections": 360,
+    "quoteOnlyReflections": 360,
+    "favoriteAndUnderdogReachable": true,
+    "overAndUnderReachable": true,
+    "pairedPromotionRuleTested": true,
+    "pairedDemotionRuleTested": true
+  },
+  "unchanged": [
+    "independent forecast",
+    "market consequence",
+    "score",
+    "probability",
+    "pick",
+    "selected price",
+    "stake",
+    "provider requests",
+    "writer and lease"
+  ],
+  "lockedRecordsMutated": 0,
+  "rollback": "restore NBA grade R27 while preserving any R28 locked payload exactly"
+}

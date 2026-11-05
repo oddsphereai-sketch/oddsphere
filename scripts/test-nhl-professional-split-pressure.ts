@@ -120,6 +120,59 @@ assert.equal(
   "the production extractor preserves each merged row's receipt clock; a new feed envelope cannot renew stale Circa",
 );
 
+const withoutProviderStart = identifiedNhlProfessionalSplits({
+  feed: {
+    source: "owls_current_splits",
+    release: "owls_current_splits_2026_10_27_r1_complete_named_book",
+    sport: "nhl",
+    fetchedAt: "2026-11-04T17:59:30.000Z",
+    rows: [{
+      event_id: "nhl:Ottawa Senators@Buffalo Sabres-20261105",
+      league: "nhl",
+      away_team: "Ottawa Senators",
+      home_team: "Buffalo Sabres",
+      sportsbook: "circa",
+      fetched_at: "2026-11-04T17:30:00.000Z",
+      _oddsphere_received_at: "2026-11-04T17:30:01.000Z",
+      _oddsphere_market_fetched_at: { moneyline: "2026-11-04T17:30:00.000Z" },
+      moneyline: market(65, 52),
+    }],
+  },
+  slateDate: "2026-11-04",
+  gameStartAt: "2026-11-05T00:30:00.000Z",
+  awayAbbr: "OTT",
+  homeAbbr: "BUF",
+  cutoffAt: decisionAt,
+});
+assert.equal(withoutProviderStart.length, 1, "an exact provider event-date ID may bind a missing event_start_time");
+assert.equal(withoutProviderStart[0]?.sourceBook, "circa");
+
+const wrongProviderDate = identifiedNhlProfessionalSplits({
+  feed: {
+    source: "owls_current_splits",
+    release: "owls_current_splits_2026_10_27_r1_complete_named_book",
+    sport: "nhl",
+    fetchedAt: "2026-11-04T17:59:30.000Z",
+    rows: [{
+      event_id: "nhl:Ottawa Senators@Buffalo Sabres-20261106",
+      league: "nhl",
+      away_team: "Ottawa Senators",
+      home_team: "Buffalo Sabres",
+      sportsbook: "circa",
+      fetched_at: "2026-11-04T17:30:00.000Z",
+      _oddsphere_received_at: "2026-11-04T17:30:01.000Z",
+      _oddsphere_market_fetched_at: { moneyline: "2026-11-04T17:30:00.000Z" },
+      moneyline: market(65, 52),
+    }],
+  },
+  slateDate: "2026-11-04",
+  gameStartAt: "2026-11-05T00:30:00.000Z",
+  awayAbbr: "OTT",
+  homeAbbr: "BUF",
+  cutoffAt: decisionAt,
+});
+assert.equal(wrongProviderDate.length, 0, "an exact-team split for another provider event date must fail closed");
+
 const invalidClockCannotCreateConflict = selectNhlProfessionalSplitPressure({
   market: "moneyline",
   decisionAt,

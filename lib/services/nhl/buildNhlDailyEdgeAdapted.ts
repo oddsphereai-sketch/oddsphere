@@ -70,7 +70,7 @@ import {
 import { selectNhlProfessionalSplitPressure } from "./nhlProfessionalSplitPressure";
 
 export const NHL_DAILY_EDGE_READER_RELEASE =
-  "nhl_daily_edge_reader_2026_11_04_r20_identity_bound_reader_receipt" as const;
+  "nhl_daily_edge_reader_2026_11_04_r22_positive_value_actionability" as const;
 
 type NhlStoredSnapshot = {
   model_output?: NhlModelOutput;

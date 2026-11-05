@@ -236,6 +236,8 @@ export type NbaMoneylineReaderEvidence = {
   spreadReadQualified: boolean;
   spreadReadSide: "home" | "away" | null;
   spreadCorrectionApplied: boolean;
+  /** True only when that correction changed the final winner, not merely the margin. */
+  spreadSideFlipped?: boolean;
   jointConflict?: boolean;
 };
 
@@ -389,6 +391,16 @@ function applyNbaPostureToGrade(input: GradeInput, incumbent: GradeOutput): Grad
   const opposed = posture.opposingSources.length > 0 || posture.conflictingSources.length > 0 ||
     Boolean(posture.convictionRiskSources?.length);
   if (incumbent.grade === "best_angle" && opposed) {
+    if (hasCorroboratedNbaOpposition(posture)) {
+      return {
+        ...incumbent,
+        grade: "watch",
+        effectiveConfidence: Math.min(incumbent.effectiveConfidence, 52),
+        bestAngleEligible: false,
+        rationale: [...incumbent.rationale,
+          "Corroborated named-book opposition or disagreement conflicts with this pick. The independent value remains visible, but the market evidence moves it to the Watchlist."],
+      };
+    }
     return {
       ...incumbent,
       grade: "lean",
@@ -585,7 +597,8 @@ function gradeNbaMarketEconomics(input: GradeInput, legacyAudit = false): GradeO
       evidence.directReadSide === pickedSide;
     const spreadConfirms = pickedSide !== null && evidence?.directReadQualified !== true &&
       evidence?.spreadReadQualified === true && evidence.spreadReadSide === pickedSide;
-    if (input.market === "moneyline" && evidence?.spreadCorrectionApplied === true) {
+    if (input.market === "moneyline" && evidence?.spreadCorrectionApplied === true &&
+        evidence.spreadSideFlipped === true) {
       rationale.push("Strong model value at the selected price after a validated Spread correction authored the final side.");
     } else if (input.market === "moneyline" && directConfirms) {
       rationale.push("Strong model value at the selected price with qualified named-book Moneyline movement confirming the side.");
