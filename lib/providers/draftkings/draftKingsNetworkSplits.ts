@@ -11,6 +11,7 @@ import {
   applySharpApiCurrentSplitOverlay,
   populateDailyEdgeSharpApiCurrentSplits,
   readStoredSharpApiCurrentSplits,
+  currentSplitResponseDates,
   refreshCachedOwlsCurrentSplitFallback,
   restoreCompleteSharpApiCurrentSplitDisplay,
   restoreStoredCompleteSharpApiCurrentSplitDisplay,
@@ -502,7 +503,7 @@ export async function populateDailyEdgeStoredSplitFallback(
 ): Promise<DraftKingsNetworkOverlayResult> {
   const [continuity, sharpFeed, draftKingsFeed] = await Promise.all([
     loadDailyEdgeSharpBookSplitContinuity(response, sport, options),
-    readStoredSharpApiCurrentSplits(sport).catch(() => null),
+    readStoredSharpApiCurrentSplits(sport, currentSplitResponseDates(response)).catch(() => null),
     readStoredDraftKingsNetworkSplits(sport).catch(() => null),
   ]);
   const current = applySharpApiCurrentSplitOverlay(response, sharpFeed, Date.now(), options);

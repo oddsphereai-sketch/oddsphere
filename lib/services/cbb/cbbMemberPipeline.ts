@@ -28,7 +28,7 @@ import { writeLockedCbbTracking } from "./cbbTrackingWriter";
 import { readCbbCapturedMarketHistory,readCbbCapturedNamedSplits } from "./cbbCapturedMarketHistory";
 import { mergeCbbCapturedNamedSplitEvidence,mergeCbbDraftKingsSplitEvidence,mergeCbbReaderEvidence,readCbbCapturedPublicSplits,type CbbPreparedNamedSplitSections,type CbbPreparedPublicSplitSections } from "./cbbReaderMarketEvidence";
 import { readStoredDraftKingsNetworkSplits,applyDraftKingsNetworkSplitFallback } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
-import { applySharpApiCurrentSplitOverlay } from "@/lib/providers/real_api/sharpApiCurrentSplits";
+import { applySharpApiCurrentSplitOverlay,currentSplitReadDates } from "@/lib/providers/real_api/sharpApiCurrentSplits";
 import { advanceCbbProvisionalSnapshot } from "@/lib/cbb/provisionalLifecycle";
 import { isOwnerApprovedCbbMemberExclusion } from "@/lib/cbb/memberBoardScope";
 import {readCbbCanonicalReaderHistory} from "./cbbCanonicalReaderHistory";
@@ -124,7 +124,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   const providerWarnings:string[]=[oddsReceipt.error,splitsReceipt.error].filter((e):e is string=>e!==null);
   const [bookHistory,capturedSplits,draftKingsFeed]=await Promise.all([
     readCbbCapturedMarketHistory(db).catch(error=>{providerWarnings.push(error instanceof Error?error.message:"CBB captured history unavailable");return null;}),
-    readCbbCapturedNamedSplits(db).catch(error=>{providerWarnings.push(error instanceof Error?error.message:"CBB captured splits unavailable");return null;}),
+    readCbbCapturedNamedSplits(db,currentSplitReadDates(args.anchorDate,candidateGames.map(game=>game.date))).catch(error=>{providerWarnings.push(error instanceof Error?error.message:"CBB captured splits unavailable");return null;}),
     readStoredDraftKingsNetworkSplits("cbb",db).catch(error=>{providerWarnings.push(error instanceof Error?error.message:"CBB stored DraftKings splits unavailable");return null;}),
   ]);
   const sourceCovered=(quotes:CbbQuote[])=>["moneyline","spread","total"].every(market=>quotes.some(q=>q.market===market)&&

@@ -289,12 +289,12 @@ export async function overlayCbbReaderMarketEvidence(board:DailyEdgeResponse,opt
   const requested=options.gameIds?new Set(options.gameIds):null;
   const selected={...board,games:board.games.filter(game=>!requested||requested.has(game.id))};
   if(selected.games.length===0||selected.games.every(game=>game.lockState==="locked"||game.lockedAt!==null))return board;
-  const [{readPredictionMarketBookHistory},{supabase},{readStoredSharpApiCurrentSplits,applySharpApiCurrentSplitOverlay}]=await Promise.all([
+  const [{readPredictionMarketBookHistory},{supabase},{readStoredSharpApiCurrentSplits,applySharpApiCurrentSplitOverlay,currentSplitResponseDates}]=await Promise.all([
     import("@/lib/services/dailyEdge/predictionMarketDisplayFeed"),import("@/lib/db/supabase"),import("@/lib/providers/real_api/sharpApiCurrentSplits")]);
   const ids=selected.games.filter(game=>game.lockedAt===null&&game.lockState!=="locked").map(game=>String(game.external_id));
   const {readStoredDraftKingsNetworkSplits,applyDraftKingsNetworkSplitFallback}=await import("@/lib/providers/draftkings/draftKingsNetworkSplits");
   const [feed,rows,namedFeed,draftKingsFeed]=await Promise.all([readPredictionMarketBookHistory("cbb").catch(()=>null),readCbbCapturedPublicSplits(supabase,ids.map(Number)).catch(()=>[]),
-    readStoredSharpApiCurrentSplits("cbb").catch(()=>null),readStoredDraftKingsNetworkSplits("cbb",supabase).catch(()=>null)]);
+    readStoredSharpApiCurrentSplits("cbb",currentSplitResponseDates(selected)).catch(()=>null),readStoredDraftKingsNetworkSplits("cbb",supabase).catch(()=>null)]);
   // Named-book polling must not crowd public consensus out of a shared row cap.
   // The durable named-book display feed already has exact institution matching,
   // source timestamps and freshness checks; no provider request is made here.

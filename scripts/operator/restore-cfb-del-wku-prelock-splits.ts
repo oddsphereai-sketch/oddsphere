@@ -1,6 +1,8 @@
-import { readLatestLabResponseSnapshot, upsertLabResponseSnapshot } from "../../lib/services/labResponseSnapshots";
-import { validateSharpApiCurrentSplitFeed } from "../../lib/providers/real_api/sharpApiCurrentSplits";
+import { upsertLabResponseSnapshot } from "../../lib/services/labResponseSnapshots";
+import { readStoredSharpApiCurrentSplits } from "../../lib/providers/real_api/sharpApiCurrentSplits";
 import { encodeCurrentSplitFeedTransport } from "../../lib/providers/real_api/currentSplitFeedTransport";
+import { prepareArchivedCurrentSplitFeed } from "../../lib/providers/real_api/currentSplitObservationArchive";
+import { supabase } from "../../lib/db/supabase";
 
 const SPORT = "cfb" as const;
 const RELEASE = "owls_current_splits_2026_10_27_r1_complete_named_book" as const;
@@ -20,8 +22,7 @@ function normalize(value: unknown): string {
 
 async function main(): Promise<void> {
   if (Date.parse(OBSERVED_AT) > Date.parse(LOCKED_AT)) throw new Error("Recovery evidence is not pre-lock.");
-  const stored = await readLatestLabResponseSnapshot<Json>(SNAPSHOT_KEY);
-  const payload = validateSharpApiCurrentSplitFeed(stored?.payload, SPORT);
+  const payload = await readStoredSharpApiCurrentSplits(SPORT);
   if (!payload || payload.source !== "owls_current_splits" || payload.release !== RELEASE) {
     throw new Error("Owls CFB durable split snapshot is unavailable or incompatible.");
   }
@@ -65,10 +66,12 @@ async function main(): Promise<void> {
     },
   };
   const next = { ...payload, rows: [...rows, recovered] };
+  const archived = await prepareArchivedCurrentSplitFeed({ client: supabase, previous: payload,
+    current: { ...payload, rows: [recovered] }, merged: next });
   const result = await upsertLabResponseSnapshot({
     snapshotKey: SNAPSHOT_KEY,
     kind: "daily_edge",
-    payload: encodeCurrentSplitFeedTransport(next),
+    payload: encodeCurrentSplitFeedTransport(archived),
     ttlMs: 5 * 60 * 1000,
     staleMs: 10 * 24 * 60 * 60 * 1000,
     sport: SPORT,
