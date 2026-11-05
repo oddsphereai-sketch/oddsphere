@@ -217,6 +217,19 @@ function resolveMarketRead(sport: string, market: MarketInput, consensus: Market
         : `Sharp book splits support ${pick}, but consensus splits show resistance.`,
     };
   }
+  if (sharpAvailable && (
+    (sharpLean === "support" && movement === "resistance") ||
+    (sharpLean === "resistance" && movement === "support")
+  )) {
+    return {
+      status: "mixed",
+      label: "Mixed",
+      tone: "gray",
+      copy: sharpLean === "support"
+        ? `Sharp book pressure supports ${pick}, but the observed price response resists it.`
+        : `Sharp book pressure opposes ${pick}, but the observed price response supports it.`,
+    };
+  }
   if (sharpAvailable && (consensusLean === "resistance" || sharpLean === "resistance" || movement === "resistance")) {
     return { status: "resistance", label: "Market Resistance", tone: "amber", copy: `Market signals show resistance against ${pick}.` };
   }

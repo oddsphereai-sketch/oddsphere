@@ -201,8 +201,8 @@ assert.ok(
   Math.abs(keyThreeUpset.forecast.expectedMarginHome - forecast.expectedMarginHome) < 1e-9,
   "an independent upset must survive the empirically retained football key-three band",
 );
-assert.match(CFB_COMPLETE_MARKET_READER_RELEASE, /r8_causal_relative_innovation/);
-assert.equal(CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE, "cfb_market_reader_artifact_2026_11_04_r6_causal_relative_innovation");
+assert.match(CFB_COMPLETE_MARKET_READER_RELEASE, /r9_professional_pressure_reaction/);
+assert.equal(CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE, "cfb_market_reader_artifact_2026_11_05_r7_professional_pressure_reaction");
 const artifact = JSON.parse(readFileSync(
   new URL("../lib/services/football/modelArtifacts/cfbCompleteMarketReaderArtifact.json", import.meta.url),
   "utf8",
@@ -308,9 +308,13 @@ sharpConflict.sharpApiSplits = [{
   },
 }];
 const sharpConflictResult = applyCfbCompleteMarketReader({ ...common, currentObservation: sharpConflict });
-assert.equal(sharpConflictResult.namedTotalStatus, "source_conflict");
-assert.ok(Math.abs(sharpConflictResult.totalShiftPoints) < 1e-9,
-  "opposed exact Owls Circa flow vetoes rather than blending with named price innovation");
+assert.equal(sharpConflictResult.namedTotalStatus, "applied");
+assert.equal(sharpConflictResult.totalPressureReactionConflict, true);
+assert.equal(sharpConflictResult.receipt.pressureReactionConflict.total, true);
+assert.ok(sharpConflictResult.totalShiftPoints > 0,
+  "opposed exact Owls pressure is preserved as conflict while the coherent named response authors the consequence");
+assert.equal(sharpConflictResult.receipt.ledger.filter((entry) =>
+  entry.source === "professional_pressure_vs_named_price_reaction" && entry.market === "total_axis").length, 1);
 const wrongGameSharp = structuredClone(sharpConflict);
 wrongGameSharp.sharpApiSplits![0]!.providerGameId = "wrong-game";
 const wrongGameSharpResult = applyCfbCompleteMarketReader({ ...common, currentObservation: wrongGameSharp });
@@ -372,9 +376,10 @@ const reversedNamedPrice = applyCfbCompleteMarketReader({
   } as never],
   currentObservation: namedPriceOnlyUnderObservation,
 });
-assert.equal(reversedNamedPrice.namedTotalStatus, "reversal",
-  "an observed Over-then-Under buyback is not a persistent named-book direction");
-assert.ok(Math.abs(reversedNamedPrice.totalShiftPoints) < 1e-9);
+assert.equal(reversedNamedPrice.namedTotalStatus, "applied",
+  "an observed buyback retains the current net named-book response instead of erasing it");
+assert.ok(reversedNamedPrice.totalShiftPoints < 0,
+  "the two agreeing current named-book contracts author one Under consequence after the buyback");
 
 const opposedNamedPrice = replaceTotalCurrent(namedPriceOnlyObservation, (source) =>
   source === "pinnacle"
