@@ -10,7 +10,13 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 
 export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "nfl_forward_member_snapshot_2026_11_04_r66_per_market_source_qualification" as const;
+  "nfl_forward_member_snapshot_2026_11_05_r67_conviction_risk_grade_cap" as const;
+const NFL_CONVICTION_CAP_PREDECESSOR = {
+  snapshot: "nfl_forward_member_snapshot_2026_11_04_r66_per_market_source_qualification",
+  fixture: "nfl_weekly_member_fixture_2026_11_04_r74_per_market_source_qualification",
+  member: "nfl_v1_member_release_2026_11_04_r58_per_market_source_qualification",
+  decision: "nfl_v1_daily_edge_decision_2026_11_04_r61_per_market_source_qualification",
+} as const;
 const NFL_PMF_MEAN_PREDECESSOR = {
   snapshot: "nfl_forward_member_snapshot_2026_11_04_r65_pmf_mean_direction_diagnostic",
   fixture: "nfl_weekly_member_fixture_2026_11_04_r73_pmf_mean_direction_diagnostic",
@@ -913,6 +919,10 @@ function validateNflForwardMemberSnapshot(
     decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE &&
     fixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE &&
     heldMemberFixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE) ||
+    (memberRelease === NFL_CONVICTION_CAP_PREDECESSOR.member &&
+      decisionRelease === NFL_CONVICTION_CAP_PREDECESSOR.decision &&
+      fixtureRelease === NFL_CONVICTION_CAP_PREDECESSOR.fixture &&
+      heldMemberFixtureRelease === NFL_CONVICTION_CAP_PREDECESSOR.fixture) ||
     independentAxesPredecessorContract ||
     (memberRelease === NFL_PMF_MEAN_PREDECESSOR.member &&
       decisionRelease === NFL_PMF_MEAN_PREDECESSOR.decision &&

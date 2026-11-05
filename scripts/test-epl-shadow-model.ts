@@ -297,6 +297,18 @@ const fanduelRestored = trackedPrice("888:match_result:home", -650, "fanduel", n
 assert.deepEqual(fanduelOnly.map((stop) => stop.american), [-650]);
 assert.deepEqual(circaOnly.map((stop) => stop.american), [-600], "a sportsbook change starts an independent economic trail");
 assert.deepEqual(fanduelRestored.map((stop) => stop.american), [-650], "returning to a sportsbook restores only that book's trail");
+const validOpening = trackedPrice("890:match_result:home", -150, "pinnacle", null, null,
+  { price: -125, sportsbook: "Pinnacle", observedAt: "2026-08-18T14:00:00Z" }, "2026-08-18T15:00:00Z") ?? [];
+assert.deepEqual(validOpening.map((stop) => stop.label), ["open", "first"],
+  "a chronological exact same-book provider opening may seed the movement trail");
+const crossBookOpening = trackedPrice("891:match_result:home", -150, "pinnacle", null, null,
+  { price: -125, sportsbook: "DraftKings", observedAt: "2026-08-18T14:00:00Z" }, "2026-08-18T15:00:00Z") ?? [];
+assert.deepEqual(crossBookOpening.map((stop) => stop.label), ["first"],
+  "a cross-book provider opening cannot be relabeled as the current book's movement");
+const lateOpening = trackedPrice("892:match_result:home", -150, "pinnacle", null, null,
+  { price: -125, sportsbook: "Pinnacle", observedAt: "2026-08-18T16:00:00Z" }, "2026-08-18T15:00:00Z") ?? [];
+assert.deepEqual(lateOpening.map((stop) => stop.label), ["first"],
+  "a provider opening observed after the current capture cannot invert trail chronology");
 hydrateEplStoredPriceHistory([
   { providerId: 889, market: "match_result", side: "home", line: null, american: -700, sportsbook: "fanduel", recordedAt: "2026-08-19T13:22:18Z", isOpener: false },
   { providerId: 889, market: "match_result", side: "home", line: null, american: -600, sportsbook: "circa", recordedAt: "2026-08-19T21:07:48Z", isOpener: false },
@@ -586,7 +598,7 @@ assert.match(lockRoute, /findEplGamesEnteringLock/);
 assert.match(lockRoute, /predictions\.priorTuplesLocked[\s\S]*prior_priced_tuples_locked:\s*predictions\.priorTuplesLocked/, "fallback locks must count as writes and remain visible in cron telemetry");
 assert.match(memberStore, /current-week/);
 assert.match(memberStore, /readLatestLabResponseSnapshot/, "EPL reads need a bounded emergency fallback when a valid weekly snapshot outlives its cache deadline");
-assert.match(memberStore, /epl_member_snapshot_lifecycle_2026_10_31_r8_exact_locked_payload_precedence/, "EPL continuity behavior must carry its own immutable lifecycle release");
+assert.match(memberStore, /epl_member_snapshot_lifecycle_2026_11_05_r9_same_book_opening_chronology/, "EPL continuity behavior must carry its own immutable lifecycle release");
 for (const route of [refreshRoute, lockRoute]) {
   assert.match(route, /reconstructVerifiedEplLockedGames/, "every EPL publisher must reconstruct due locked games from the verified four-market DB cohort");
   assert.match(route, /authoritativeLockedProviderIds:\s*lockVerification\.completeProviderIds/, "DB verification establishes missing locks while existing public locks retain precedence");

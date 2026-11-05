@@ -434,10 +434,10 @@ assert.ok((fixtureGradeCounts["Best Angle"] ?? 0) + (fixtureGradeCounts.Lean ?? 
 assert.equal(markets.every((market) => (market.oddsTrail?.length ?? 0) >= 1), true);
 assert.equal(markets.every((market) => (market.opposingOddsTrail?.stops.length ?? 0) >= 1), true);
 assert.equal(markets.every((market) => market.publicSplits.length === 2), true);
-assert.equal(markets.every((market) => market.keyStats.some((row) => row.label.startsWith("Decision-model input ·"))), true);
+assert.equal(markets.every((market) => market.keyStats.some((row) => row.label.startsWith("Independent model prior ·"))), true);
 assert.equal(markets.every((market) => market.keyStats.some((row) => row.label === "Current context · Expected quarterback")), true);
 assert.equal(markets.every((market) => market.keyStats.some((row) => row.label === "Current context · Venue and weather")), true);
-assert.equal(markets.every((market) => market.keyStats.some((row) => row.label === "Decision-model input · Frozen sample")), true);
+assert.equal(markets.every((market) => market.keyStats.some((row) => row.label === "Independent model prior · Frozen baseline")), true);
 assert.equal(markets.every((market) => market.marketPrediction?.status === "available"), true);
 for (const game of fixture.snapshot.games) {
   const forecast = getNflV1WeekOneOutcomeForecast({

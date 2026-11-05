@@ -260,7 +260,9 @@ function openingMoneylinePrice(rows: BdlEplOdds[], side: "home" | "draw" | "away
   const priceField = side === "home" ? "moneyline_home_odds" : side === "away" ? "moneyline_away_odds" : "moneyline_draw_odds";
   const complete = rows.filter((row) => typeof row[priceField] === "number" && Number.isFinite(row[priceField]));
   const sameBook = currentBook ? complete.find((row) => bookKey(row.vendor) === bookKey(currentBook)) : null;
-  const row = sameBook ?? complete[0];
+  // A provider opening may seed directional movement only for the exact
+  // current sportsbook. A cross-book opening remains separate market context.
+  const row = currentBook ? sameBook : complete[0];
   if (!row) return null;
   return { price: row[priceField]!, sportsbook: row.vendor || null, observedAt: row.opened_at ?? row.updated_at ?? null };
 }
@@ -275,7 +277,15 @@ export function trackedPrice(key: string, price: number | null, sportsbook: stri
   // substituted for our durable observation time or a changed price can be
   // overwritten by a later snapshot carrying the same upstream timestamp.
   const observedAt = capturedAt;
-  if (opening && !trail.some((stop) => stop.label === "open")) {
+  const openingAt = Date.parse(opening?.observedAt ?? "");
+  const earliestSameBookAt = Math.min(Date.parse(capturedAt), ...trail
+    .filter((stop) => bookKey(stop.sportsbook) === bookKey(sportsbook))
+    .map((stop) => Date.parse(stop.observedAt ?? ""))
+    .filter(Number.isFinite));
+  const verifiedSameBookOpening = opening !== null && Boolean(bookKey(sportsbook)) &&
+    bookKey(opening.sportsbook) === bookKey(sportsbook) && Number.isFinite(openingAt) &&
+    Number.isFinite(earliestSameBookAt) && openingAt <= earliestSameBookAt;
+  if (verifiedSameBookOpening && !trail.some((stop) => stop.label === "open")) {
     trail.unshift({ label: "open", american: opening.price, line, sportsbook: opening.sportsbook, source: "provider_opening", observedAt: opening.observedAt });
   }
   if (!trail.some((stop) => stop.label === "first") && trail.filter((stop) => stop.label === "current").length === 1) {

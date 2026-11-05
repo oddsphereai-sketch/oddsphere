@@ -48,7 +48,11 @@ import { isVerifiedEventOpening } from "../dailyEdge/marketCycleOpening";
 import { verifiedTrailMovementDirection } from "../dailyEdge/verifiedTrailMovement";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_11_04_r74_per_market_source_qualification" as const;
+  "nfl_weekly_member_fixture_2026_11_05_r75_conviction_risk_grade_cap" as const;
+const NFL_CONVICTION_CAP_PREDECESSOR_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_11_04_r58_per_market_source_qualification" as const;
+const NFL_CONVICTION_CAP_PREDECESSOR_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_11_04_r61_per_market_source_qualification" as const;
 const NFL_PMF_MEAN_PREDECESSOR_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_11_04_r57_pmf_mean_direction_diagnostic" as const;
 const NFL_PMF_MEAN_PREDECESSOR_DECISION_RELEASE =
@@ -367,6 +371,9 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[], preservedLockedIds
     row.payload.decisions.evaluatedBets.every((decision) =>
       decision.decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE);
   const isPreviousAuthority = (row: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }) =>
+    (row.payload.decisions.modelPromotionStatus === NFL_CONVICTION_CAP_PREDECESSOR_MEMBER_RELEASE &&
+      row.payload.decisions.evaluatedBets.every((decision) =>
+        decision.decisionRelease === NFL_CONVICTION_CAP_PREDECESSOR_DECISION_RELEASE)) ||
     (row.payload.decisions.modelPromotionStatus === NFL_PMF_MEAN_PREDECESSOR_MEMBER_RELEASE &&
       row.payload.decisions.evaluatedBets.every((decision) =>
         decision.decisionRelease === NFL_PMF_MEAN_PREDECESSOR_DECISION_RELEASE)) ||
@@ -672,6 +679,7 @@ function buildHeldGame(
     awayQuarterback: quarterbackContext(payload, "away"),
     homeQuarterback: quarterbackContext(payload, "home"),
     weather: payload.weather,
+    independentCompleteThroughWeek: payload.exactProviderScoreShadow?.completeThroughWeek ?? null,
   });
   total.keyStats = nflFootballEvidenceStats({
     awayTeam: away,
@@ -680,6 +688,7 @@ function buildHeldGame(
     awayQuarterback: quarterbackContext(payload, "away"),
     homeQuarterback: quarterbackContext(payload, "home"),
     weather: payload.weather,
+    independentCompleteThroughWeek: payload.exactProviderScoreShadow?.completeThroughWeek ?? null,
   });
   spread.keyStats = nflFootballEvidenceStats({
     awayTeam: away,
@@ -688,6 +697,7 @@ function buildHeldGame(
     awayQuarterback: quarterbackContext(payload, "away"),
     homeQuarterback: quarterbackContext(payload, "home"),
     weather: payload.weather,
+    independentCompleteThroughWeek: payload.exactProviderScoreShadow?.completeThroughWeek ?? null,
   });
   const sourceSplits = {
     moneyline: nflSourceSplitEvidence(payload, "moneyline", movementRows),
