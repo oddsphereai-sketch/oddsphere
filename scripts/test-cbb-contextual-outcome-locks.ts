@@ -90,6 +90,23 @@ export async function testCbbContextualOutcomeLocks(){
   // covariance release, new source labels or corrected probabilities.
   const legacy=buildCbbProvisionalBoard(independent,targets);stored=null;await writeCbbMemberGame({game,candidate:legacy,homeLogo:null,awayLogo:null,now:at},db);const old=(await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:lock},db)).record;tracked.length=0;await writeLockedCbbTracking(old,tracking);for(const r of tracked)(r.snapshot_json as Record<string,unknown>).release="cbb_tracking_writer_2026_11_05_r24_coordinated_source_lineage";const oldRecords=JSON.stringify(tracked),oldBytes=JSON.stringify(old);assert.equal(await writeLockedCbbTracking(old,tracking),0);assert.equal(JSON.stringify(tracked),oldRecords);assert.equal(JSON.stringify(old),oldBytes);assert.equal(assertCbbContextualLockedRecord(old),null);
   const legacyNoQuote=buildCbbGameForecastBoard(independent,{kind:"cross_division"});stored=null;await writeCbbMemberGame({game,candidate:legacyNoQuote,homeLogo:null,awayLogo:null,now:at},db);const oldWinner=(await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:lock},db)).record;tracked.length=0;assert.equal(await writeLockedCbbTracking(oldWinner,tracking),1,"Old R1 normal-law winner retains its own verifier and no wager");assert.equal(tracked[0].odds_american,null);
+  // New risk-based priced passes can retain positive nominal EV. They remain
+  // complete forecasts without recommendation confidence or wager exposure.
+  const extremeTargets=[{...targets[0],firstPrice:-100000,secondPrice:5000},...targets.slice(1)];
+  const extremeBoard=releasedBoard(true,extremeTargets,{marginMean:100,totalMean:146,marginSd:11,totalSd:15,correlation:.1});
+  assert.equal(extremeBoard.rows[0].grade,"No Play");assert(extremeBoard.rows[0].expectedValue!>0);
+  stored=null;await writeCbbMemberGame({game,candidate:extremeBoard,homeLogo:null,awayLogo:null,now:at,marketQuotes:extremeTargets},db);
+  const extremeLock=(await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:lock},db)).record;
+  assert.equal(extremeLock.memberGame.markets.moneyline.verdict.key,"no_play");
+  assert.equal(extremeLock.memberGame.markets.moneyline.recommendationConfidence,null);
+  assert.equal(extremeLock.memberGame.markets.moneyline.modelProb,extremeBoard.rows[0].probability);
+  tracked.length=0;assert.equal(await writeLockedCbbTracking(extremeLock,tracking),3);
+  const extremeML=tracked.find(row=>row.market==="moneyline")!;
+  assert.equal(extremeML.no_bet,true);assert.equal(extremeML.play_grade,"no_play");
+  assert.equal(extremeML.expected_value,extremeBoard.rows[0].expectedValue);
+  const extremeBytes=JSON.stringify(extremeLock),extremeTracking=JSON.stringify(tracked);
+  assert.equal(await writeLockedCbbTracking(extremeLock,tracking),0);
+  assert.equal(JSON.stringify(extremeLock),extremeBytes);assert.equal(JSON.stringify(tracked),extremeTracking);
   // The preceding contextual R7/R6 family shares model R1, but retains its
   // original grades and tracking evidence when the new grade family ships.
   const priorContextual=releasedBoard(true,targets,undefined,true);
