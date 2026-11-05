@@ -17,9 +17,10 @@ export type CbbTeamIdentity = {
   espnAbbreviation: string | null;
   logoUrl: string | null;
   status: "verified_exact_name" | "verified_exact_event" | "unverified" | "ambiguous";
+  officialAbbreviationEvidence?: {espnTeamId:string;espnEventId:string;observedAt:string};
 };
 
-function verifiedEspnLogo(href: string | undefined, id: string): string | null {
+export function verifiedEspnLogo(href: string | undefined, id: string): string | null {
   if (!href || !/^\d+$/.test(id)) return null;
   try {
     const url = new URL(href);

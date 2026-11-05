@@ -39,7 +39,7 @@ export async function GET(request: Request): Promise<Response> {
     if (!owlsKey) throw new Error("OWLS_INSIGHT_API_KEY missing for CBB member writer");
     const training = await refreshCbbCurrentTraining({season,anchorDate:today,apiKey,now:now.toISOString()});
     const board = await refreshCbbMemberBoard({anchorDate:today,season,bdlKey:apiKey,owlsKey,
-      trainingGames:training.receipt.games,syncFixtures:async games=>{
+      trainingGames:training.receipt.games,crossTrainingGames:training.receipt.crossDivisionGames,syncFixtures:async games=>{
         // Reuse this leased writer's captured fixtures: no second provider poll.
         // The canonical seeder preserves both member and tracking locks.
         for(const slateDate of [...new Set(games.map(game=>computeSlateDate("cbb",game.date)))]){

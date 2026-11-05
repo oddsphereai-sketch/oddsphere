@@ -10,6 +10,43 @@ cannot count as blind evidence. These are review obligations, not runtime
 activation gates, quotas, source weights or forecasting rules. Stored locked
 public records retain exact precedence.
 
+## Owner-approved CBB complete Division I forecast coverage — November 5
+
+The owner explicitly directed completion of review and live publication for
+November 5 and future slates, with actual predictions instead of empty cards and
+all November 4 locked public records unchanged. This scoped authorization covers
+the R5 independent /R19 incumbent market /R15 receipt /R34 publisher /R24 adapter
+/R22 tracking /R4 training /R8 fixture family and the separately versioned cross
+forecast and frozen-winner R1 contracts listed in the release registry.
+
+The NCAA census owns current D1 membership. Actual cross-game boxes and paired
+official school/venue evidence support a separate opponent prior; D1-trained
+nonlinear score corrections and numerical market consequences may not be
+transferred to cross games. New cross and newcomer forecasts cannot acquire
+qualified wager grades merely because raw quotes are present. Store their real
+winner and coherent score law separately, retain raw quotes as evidence, and
+invent no line, odds, EV or stake. Only the explicit frozen model winner may
+track W/L at null odds/units. Existing priced incumbent grading remains exact.
+
+This accepts provisional forecast coverage with explicitly recorded sparse-team,
+unseen-team, venue-domain and newcomer-source uncertainty; it is not an outcome
+accuracy or betting-edge validation claim. The actual 149-game current-input
+comparison reproduces all 43 incumbent input keys and preserves 129 priced
+decisions: 68 Leans, 61 Watchlists, 0 promotions/demotions, 0 side or score
+changes. The 22 added cross forecasts create no unqualified wager actionables.
+
+No empty card may be admitted under the new coverage path. Unconfirmed or
+unmatched future fixtures remain internal and may enter the board only after
+complete forecast inputs arrive before the existing T-60 cutoff. The same sole
+writer, shared prediction_pipeline:cbb lease, provider budgets and cadence remain
+authoritative. Existing locked payloads retain exact reader/writer precedence.
+Publication requires focused source/forecast/quote/lock/tracking tests, the full
+model-change gate, types/lint/build, independent review, current-main integration
+safety, protected PR checks and actual live release, complete-card, source,
+normal-writer and unchanged-lock-hash proof. The detailed source review and
+rollback boundary are in
+`model-audits/2026-11-05-cbb-all-division-one-private.md`.
+
 ## Owner-directed CFB causal market-reader repair — November 4
 
 The owner directed removal of CFB weighting/blending and requested one sharp,

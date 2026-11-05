@@ -7,6 +7,7 @@ import {cbbEvidenceAvailableAt,cbbEvidenceProvablyBefore,cbbEvidenceReceiptBound
 import { gradeCbbProvisional } from "./provisionalGradePolicy";
 import {gradeCbbReceivedMarket} from "./marketBehaviorGrade";
 import { CBB_CURRENT_SCORE_RELEASE,CBB_PREVIOUS_CURRENT_SCORE_RELEASE } from "./currentScoreRuntime";
+import {CBB_FULL_D1_SCORE_RELEASE,CBB_FULL_D1_MARKET_MODEL_RELEASE,CBB_FULL_D1_READER_RECEIPT_RELEASE} from "./fullDivisionOneReleases";
 import type { CbbForecast,CbbMarket,CbbQuote,CbbCanonicalReceipt } from "./types";
 import {cbbSelectDecisionSplitFrontiers,type CbbDecisionSplitContext} from "./decisionSplitContext";
 import {interpretCbbRelativeMarketMove,type CbbRelativeMarketInterpretation} from "./marketEpisodeInterpretation";
@@ -50,7 +51,7 @@ export const CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE="cbb_market_behavior_2026_11_04
 const priority=["circa","pinnacle","bookmaker"];
 export const cbbBookFamily=(book:string)=>["pinnacle","ps3838"].includes(book.toLowerCase())?"pinnacle":book.toLowerCase();
 type AttestedQuote=CbbQuote&{orientationVerified?:boolean};
-export type CbbMarketAnchors={release:typeof CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_NATIVE_COUNTERPRESSURE_RECEIPT_RELEASE|typeof CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_CONTINUITY_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_JOINT_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_ALIGNED_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_RETAIL_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_EPISODE_MARKET_BEHAVIOR_RECEIPT_RELEASE|"cbb_market_behavior_2026_11_03_r4_new_orleans_prior_input"|"cbb_market_behavior_2026_11_03_r3_direction_and_magnitude"|"cbb_market_behavior_2026_11_02_r2_received_source_path"|"cbb_market_behavior_2026_11_02_r1_same_book_economics";gameId:number;startsAt:string;
+export type CbbMarketAnchors={release:typeof CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_FULL_D1_READER_RECEIPT_RELEASE|typeof CBB_NATIVE_COUNTERPRESSURE_RECEIPT_RELEASE|typeof CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_CONTINUITY_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_JOINT_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_ALIGNED_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_RETAIL_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_EPISODE_MARKET_BEHAVIOR_RECEIPT_RELEASE|"cbb_market_behavior_2026_11_03_r4_new_orleans_prior_input"|"cbb_market_behavior_2026_11_03_r3_direction_and_magnitude"|"cbb_market_behavior_2026_11_02_r2_received_source_path"|"cbb_market_behavior_2026_11_02_r1_same_book_economics";gameId:number;startsAt:string;
   independentRelease:string;independentInputKey:string;capturedAt:string;quotes:Array<CbbQuote&{anchorCapturedAt?:string}>;quarantinedKeys?:string[]};
 export type CbbBehaviorFlow={provider:"owls";gameId:number;sourceBook:string;market:CbbMarket;line:number|null;
   firstMoney:number;secondMoney:number;firstTickets:number;secondTickets:number;
@@ -73,8 +74,8 @@ export type AxisRead={status:"applied"|"confirming"|"neutral"|"unavailable"|"con
   crossMarketDisagreement?:boolean;
   sourceDirection:-1|0|1|null;directionalEvidence:"unavailable"|"flat"|"single_source"|"aligned"|"opposed"|"converging";
   sourceBook:string|null;sourceMarket:CbbMarket|null;reason:string};
-export type CbbMarketBehaviorReceipt={release:typeof CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE;
-  modelRelease:typeof CBB_MARKET_BEHAVIOR_MODEL_RELEASE;independentRelease:string;independentInputKey:string;
+export type CbbMarketBehaviorReceipt={release:typeof CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE|typeof CBB_FULL_D1_READER_RECEIPT_RELEASE;
+  modelRelease:typeof CBB_MARKET_BEHAVIOR_MODEL_RELEASE|typeof CBB_FULL_D1_MARKET_MODEL_RELEASE;independentRelease:string;independentInputKey:string;
   forecastIdentity:ReturnType<typeof forecastIdentity>;frozenUncertainty:CbbForecast["uncertainty"];
   originalIndependentUncertainty?:CbbForecast["uncertainty"];jointMarginDecision?:CbbJointMarginDecision;
   informationOverlap:"not_attested";referencePolicy:"union_target_excluded_same_book_receipts";
@@ -245,7 +246,10 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
   historyQuotes?:CbbQuote[];historyFlows?:CbbBehaviorFlow[];previousPath?:CbbMarketBehaviorPathTape|null;quarantinedSources?:CbbSourcePathQuarantine[];
   historyCompleteness?:{price:boolean;split:boolean}}){
   const base=args.independent,at=Date.parse(base.asOf),start=Date.parse(args.startsAt);
-  if(![CBB_CURRENT_SCORE_RELEASE,CBB_PREVIOUS_CURRENT_SCORE_RELEASE].includes(base.release as typeof CBB_CURRENT_SCORE_RELEASE)||!args.independentInputKey||![at,start].every(Number.isFinite)||at>=start-3600_000)
+  const expanded=base.release===CBB_FULL_D1_SCORE_RELEASE;
+  const outputRelease=expanded?CBB_FULL_D1_MARKET_MODEL_RELEASE:CBB_MARKET_BEHAVIOR_MODEL_RELEASE;
+  const receiptRelease=expanded?CBB_FULL_D1_READER_RECEIPT_RELEASE:CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE;
+  if(!([CBB_CURRENT_SCORE_RELEASE,CBB_PREVIOUS_CURRENT_SCORE_RELEASE,CBB_FULL_D1_SCORE_RELEASE] as readonly string[]).includes(base.release)||!args.independentInputKey||![at,start].every(Number.isFinite)||at>=start-3600_000)
     throw new Error("CBB market behavior requires current independent release and an open prelock fixture");
   if(args.targets.some(q=>q.gameId!==base.gameId))throw new Error("CBB market target identity mismatch");
   if(args.splitContext?.some(row=>row.gameId!==base.gameId||!Number.isFinite(Date.parse(row.availableBy))||Date.parse(row.availableBy)>at))
@@ -268,8 +272,8 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
       cbbBookFamily(q.sportsbook)===cbbBookFamily(stream.book)&&q.market===stream.market))??[];
   const current=latestQuotes([...retainedQuotes,...(args.historyQuotes??[]),...args.currentQuotes],base,at,excluded);
   const previous=args.anchors;
-  const reusable=previous&&[CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_NATIVE_COUNTERPRESSURE_RECEIPT_RELEASE,CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_CONTINUITY_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_JOINT_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_ALIGNED_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_RECEIPT_RELEASE,"cbb_market_behavior_2026_11_03_r4_new_orleans_prior_input","cbb_market_behavior_2026_11_03_r3_direction_and_magnitude","cbb_market_behavior_2026_11_02_r2_received_source_path","cbb_market_behavior_2026_11_02_r1_same_book_economics"].includes(previous.release)&&previous.gameId===base.gameId&&
-    previous.startsAt===args.startsAt&&[base.release,CBB_PREVIOUS_CURRENT_SCORE_RELEASE].includes(previous.independentRelease)&&
+  const reusable=previous&&[CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_FULL_D1_READER_RECEIPT_RELEASE,CBB_NATIVE_COUNTERPRESSURE_RECEIPT_RELEASE,CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_CONTINUITY_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_JOINT_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_ALIGNED_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_RECEIPT_RELEASE,"cbb_market_behavior_2026_11_03_r4_new_orleans_prior_input","cbb_market_behavior_2026_11_03_r3_direction_and_magnitude","cbb_market_behavior_2026_11_02_r2_received_source_path","cbb_market_behavior_2026_11_02_r1_same_book_economics"].includes(previous.release)&&previous.gameId===base.gameId&&
+    previous.startsAt===args.startsAt&&[base.release,CBB_PREVIOUS_CURRENT_SCORE_RELEASE,...(base.release===CBB_FULL_D1_SCORE_RELEASE?[CBB_CURRENT_SCORE_RELEASE]:[])].includes(previous.independentRelease)&&
     Number.isFinite(Date.parse(previous.capturedAt))&&Date.parse(previous.capturedAt)<=at;
   const originals=reusable?previous.quotes.filter(q=>validQuote(q,base,Date.parse(q.anchorCapturedAt??previous.capturedAt),new Set(),false)):[];
   // A newly observed source starts at its earliest genuine available native
@@ -287,7 +291,7 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
     const key=`${cbbBookFamily(problem.book)}:${problem.market}`;
     withheldCurrent.add(key);sourceProblems.push(`${key}:current_response_rejected:${problem.reason}`);
   }
-  const anchors:CbbMarketAnchors={release:CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,gameId:base.gameId,startsAt:args.startsAt,
+  const anchors:CbbMarketAnchors={release:receiptRelease,gameId:base.gameId,startsAt:args.startsAt,
     independentRelease:reusable?previous.independentRelease:base.release,independentInputKey:reusable?previous.independentInputKey:args.independentInputKey,capturedAt:reusable?previous.capturedAt:base.asOf,
     quotes:[...structuredClone(originals),...current.filter(q=>!known.has(`${cbbBookFamily(q.sportsbook)}:${q.market}`))
       .map(q=>({...q,anchorCapturedAt:base.asOf}))],quarantinedKeys:[...quarantined]};
@@ -377,10 +381,10 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
     winnerArbitration={...winnerArbitration,status:"conflicting",reason:"incoherent_final_score_law"};
   }
   const zero=normalCdf((.5-nextMargin)/marginSd)-normalCdf((-.5-nextMargin)/marginSd);
-  const forecast:CbbForecast=margin.delta===0&&total.delta===0&&marginSd===base.uncertainty.marginSd?{...base,release:CBB_MARKET_BEHAVIOR_MODEL_RELEASE}:{...base,release:CBB_MARKET_BEHAVIOR_MODEL_RELEASE,margin:nextMargin,total:nextTotal,
+  const forecast:CbbForecast=margin.delta===0&&total.delta===0&&marginSd===base.uncertainty.marginSd?{...base,release:outputRelease}:{...base,release:outputRelease,margin:nextMargin,total:nextTotal,
     homeScore:(nextTotal+nextMargin)/2,awayScore:(nextTotal-nextMargin)/2,
     homeWinProbability:(1-normalCdf((.5-nextMargin)/marginSd))/(1-zero),uncertainty:{...base.uncertainty,marginSd}};
-  const receipt:CbbMarketBehaviorReceipt={release:CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,modelRelease:CBB_MARKET_BEHAVIOR_MODEL_RELEASE,
+  const receipt:CbbMarketBehaviorReceipt={release:receiptRelease,modelRelease:outputRelease,
     independentRelease:base.release,independentInputKey:args.independentInputKey,forecastIdentity:forecastIdentity(forecast),
     frozenUncertainty:structuredClone(forecast.uncertainty),originalIndependentUncertainty:structuredClone(base.uncertainty),jointMarginDecision:joint.decision,informationOverlap:"not_attested",
     referencePolicy:"union_target_excluded_same_book_receipts",marginPolicy:"contextual_authority_before_current_level",

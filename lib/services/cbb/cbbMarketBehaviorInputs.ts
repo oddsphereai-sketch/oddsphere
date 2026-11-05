@@ -5,8 +5,9 @@ import type {CbbProvisionalSnapshot} from "@/lib/cbb/provisionalLifecycle";
 import type {CbbForecast,CbbTrainingGame} from "@/lib/cbb/types";
 import type {cbbCurrentSplitEvidence} from "@/lib/cbb/owlsSplitEvidence";
 
-export function cbbIndependentInputKey(fixture:{id:number;homeId:number;awayId:number;neutral:boolean|null;season:number},history:CbbTrainingGame[]){
- return createHash("sha256").update(JSON.stringify({release:CBB_CURRENT_SCORE_RELEASE,fixture,history})).digest("hex");
+export function cbbIndependentInputKey(fixture:{id:number;homeId:number;awayId:number;neutral:boolean|null;season:number},history:CbbTrainingGame[],programInputs?:unknown){
+ return createHash("sha256").update(JSON.stringify({release:CBB_CURRENT_SCORE_RELEASE,fixture,history,
+  ...(programInputs===undefined?{}:{programInputs})})).digest("hex");
 }
 /** The independent runtime admits a final six hours after its scheduled start.
  * Replaying an earlier decision must use that decision's genuine availability,

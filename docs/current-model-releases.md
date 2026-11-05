@@ -1,5 +1,38 @@
 # Current production model releases and qualified research candidates
 
+## Owner-approved CBB all-Division-I coverage — November 5
+
+The owner explicitly stopped changes to the November 4 board and subsequently
+approved publication for November 5 and later. The scoped release prepares 65
+actual November 5 fixture forecasts, including 22 lower-division opponents,
+under the existing single writer and lease. It does not qualify new cross-domain
+betting grades or assert improved accuracy. Preserve all current production
+historical release declarations below as their original-era evidence. Production
+activation requires protected PR publication and live verification.
+
+Publication identifiers: independent
+`cbb_candidate_2026_11_05_r5_complete_d1_program_priors`, incumbent market model
+`cbb_candidate_2026_11_05_r19_complete_d1_program_priors`, receipt
+`cbb_market_behavior_2026_11_05_r15_complete_d1_program_priors`, cross score
+`cbb_cross_division_score_2026_11_05_r1_posterior_score_law`, forecast board
+`cbb_game_forecast_board_2026_11_05_r1_unpriced_outcomes`, forecast-only grade
+`cbb_game_forecast_grade_2026_11_05_r1_no_unquoted_wagers`, frozen outcome
+`cbb_game_outcome_2026_11_05_r1_frozen_winner`, publisher
+`cbb_member_pipeline_2026_11_05_r34_full_division_one_forecasts`, adapter
+`cbb_member_adapter_2026_11_05_r24_unpriced_game_forecast`, tracking
+`cbb_tracking_writer_2026_11_05_r22_frozen_unpriced_winners`, training
+`cbb_current_training_2026_11_05_r4_separate_cross_division_receipts`, and fixture
+seed `cbb_fixture_seed_2026_11_05_r8_verified_complete_d1_identities`.
+
+The cross score does not call the D1 numerical market reader. Held raw quotes
+remain evidence, while unqualified wager decisions cannot enter Spread/Total or
+unit tracking. Exact legacy locks retain their stored precedence. Source data,
+functional proof, provisional limitations and the outstanding activation work
+are documented in
+`docs/model-audits/2026-11-05-cbb-all-division-one-private.md`. The current-input
+43-game /129-market comparison has 0 promotions, 0 demotions, 0 side changes
+and 0 score changes; 22 new cross forecasts add no unqualified wager grades.
+
 ## Pro reader posture presentation and audit transport — November 4
 
 NBA model R36, market-marriage R38, grade R28 and locked-member snapshot R8

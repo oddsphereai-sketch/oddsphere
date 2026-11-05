@@ -1,5 +1,6 @@
 import {CBB_NATIVE_COUNTERPRESSURE_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import {CBB_MONEYLINE_VALUE_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
+import {CBB_GAME_OUTCOME_RELEASE} from "@/lib/cbb/gameForecastBoard";
 import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto, PickResult } from "@/app/lab/lib/labTypes";
 import type { Grade } from "@/lib/types/domain/Grade";
 import type { Verdict } from "@/lib/services/verdictDerivation";
@@ -13,7 +14,7 @@ import { buildDailyEdgeMemberPresentation } from "@/app/lab/lib/dailyEdgeRespons
 import { CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INFORMATIONAL_WATCHLIST_GRADE_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE } from "@/lib/cbb/marketBehaviorCandidate";
 import {CBB_CONTINUITY_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_JOINT_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_ALIGNED_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 
-export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_04_r23_truthful_market_read_provenance" as const;
+export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_05_r24_unpriced_game_forecast" as const;
 type GradeLabel="Best Angle"|"Lean"|"Watchlist"|"No Play"|"Held";
 type BoardRow=CbbProvisionalSnapshot["board"]["rows"][number];
 type SplitEvidence=ReturnType<typeof cbbCurrentSplitEvidence>;
@@ -90,6 +91,10 @@ export function cbbOfficialGameResultFromScores(snapshot:CbbProvisionalSnapshot,
     game.status==="post"&&game.statusState!=="final"||game.homeScore===null||game.awayScore===null)return null;
   const rows=settleLockedCbbProvisionalBoard(snapshot,{home:game.homeScore,away:game.awayScore});
   const result=(market:CbbMarket)=>{const row=rows.find(r=>r.market===market)!;const outcome=settled(row.outcome);
+    if(market==="moneyline"&&row.selection===null&&snapshot.board.gameForecast?.release===CBB_GAME_OUTCOME_RELEASE){
+      const chosen=snapshot.board.gameForecast.selection;
+      return {pickResult:((game.homeScore!>game.awayScore!)===(chosen==="first")?"win":"loss") as PickResult,gradeUnits:null};
+    }
     const gradeUnits=outcome===null||row.price===null?null:outcome==="push"?0:outcome==="loss"?-1:row.price>0?row.price/100:100/-row.price;
     return {pickResult:outcome,gradeUnits};};
   return {finalScore:{home:game.homeScore,away:game.awayScore},markets:{moneyline:result("moneyline"),total:result("total"),first_inning:result("spread")}};
@@ -124,6 +129,25 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
   const ml=marketEdge(game,rows.get("moneyline")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability,preciseReason,informationalWatchlist),
     spread=marketEdge(game,rows.get("spread")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability,preciseReason,informationalWatchlist),
     total=marketEdge(game,rows.get("total")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability,preciseReason,informationalWatchlist);
+  if(snapshot.board.gameForecast?.release===CBB_GAME_OUTCOME_RELEASE){
+    const outcome=snapshot.board.gameForecast;
+    if(!Number.isFinite(outcome.probability)||outcome.probability<0||outcome.probability>1||
+      outcome.homeId!==game.home_team.id||outcome.awayId!==game.visitor_team.id||
+      outcome.homeWinProbability!==snapshot.board.score.homeWinProbability||
+      outcome.selection!==(outcome.homeWinProbability>=.5?"first":"second")||
+      Math.abs(outcome.probability-(outcome.selection==="first"?outcome.homeWinProbability:1-outcome.homeWinProbability))>1e-10)
+      throw Error("Stored CBB game forecast differs from its score law");
+    if(ml.priceAmerican===null){
+      ml.modelProb=outcome.probability;
+      ml.marketPrediction={status:"available",label:`${outcome.selection==="first"?game.home_team.abbreviation:game.visitor_team.abbreviation} ML`,
+        line:null,probability:outcome.probability,source:"model_outcome",sportsbook:null,observedAt:snapshot.capturedAt,
+        freshnessCheckedAt:null,reason:null};
+    }
+    if(total.line===null)total.marketPrediction={status:"available",label:`Projected total ${snapshot.board.score.total.toFixed(1)}`,
+      line:null,probability:null,source:"model_outcome",sportsbook:null,observedAt:snapshot.capturedAt,freshnessCheckedAt:null,reason:null};
+    if(spread.line===null)spread.marketPrediction={status:"available",label:`${snapshot.board.score.margin>=0?game.home_team.abbreviation:game.visitor_team.abbreviation} by ${Math.abs(snapshot.board.score.margin).toFixed(1)}`,
+      line:null,probability:null,source:"model_outcome",sportsbook:null,observedAt:snapshot.capturedAt,freshnessCheckedAt:null,reason:null};
+  }
   // Publish the display basis only on new unlocked DTOs. Legacy locked
   // snapshots retain their exact presentation; future locks clone this flag.
   if(snapshot.lockedAt===null)for(const market of [ml,spread,total]){

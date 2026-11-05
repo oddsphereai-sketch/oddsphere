@@ -6,8 +6,10 @@ import type { CbbGame, CbbTeam } from "../../cbb/types";
 import { cbbRollingSlateDates } from "../../cbb/rollingSlate";
 import { fetchCbbTeamIdentities } from "./fetchCbbTeamIdentities";
 import { addDaysToSlate, computeSlateDate } from "../../dates/slateDate";
+import {CBB_FULL_D1_COVERAGE_START} from "../../cbb/crossDivisionPrior";
+import {cbbDivisionOneFixture} from "../../cbb/divisionOneMembership";
 
-export const CBB_FIXTURE_SEED_RELEASE = "cbb_fixture_seed_2026_11_04_r7_locked_terminal_score_continuity" as const;
+export const CBB_FIXTURE_SEED_RELEASE = "cbb_fixture_seed_2026_11_05_r8_verified_complete_d1_identities" as const;
 
 /** The same seven Eastern slate dates the member board will display. */
 export function cbbFixtureSeedDates(today: string): string[] {
@@ -33,7 +35,8 @@ type SeedOptions = {
 };
 
 /** Provider date matching can straddle UTC midnight; the ET date is final. */
-export function selectCbbSlateGames(rows: CbbGame[], slateDate: string, season: number): CbbGame[] {
+export function selectCbbSlateGames(rows: CbbGame[], slateDate: string, season: number,
+  options:{allowMissingAbbreviations?:boolean}={}): CbbGame[] {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(slateDate) || !Number.isInteger(season)) {
     throw new Error("Invalid CBB slate date or season");
   }
@@ -42,8 +45,11 @@ export function selectCbbSlateGames(rows: CbbGame[], slateDate: string, season: 
   if (new Set(games.map(game => game.id)).size !== games.length) throw new Error("Duplicate CBB fixture ID");
   for (const game of games) {
     cbbCanonicalStatus(game);
-    cbbCanonicalTeamPayload(game.home_team);
-    cbbCanonicalTeamPayload(game.visitor_team);
+    for(const team of [game.home_team,game.visitor_team]){
+      if(options.allowMissingAbbreviations&&!team.abbreviation?.trim()){
+        if(!Number.isInteger(team.id)||team.id<=0||!team.full_name?.trim())throw Error("Incomplete CBB team identity");
+      }else cbbCanonicalTeamPayload(team);
+    }
     if (game.home_team.id === game.visitor_team.id) throw new Error("CBB fixture has duplicate participants");
   }
   return games.sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
@@ -62,8 +68,17 @@ export async function seedCbbGames(options: SeedOptions) {
   const dates = [addDaysToSlate(options.slateDate, -1), options.slateDate,
     addDaysToSlate(options.slateDate, 1)];
   const client = options.client ?? new CbbBallDontLieClient(options.apiKey, { maxRequests: 25 });
-  const games = selectCbbSlateGames(options.capturedGames ?? await client.gamesForDates(dates, options.season),
-    options.slateDate, options.season);
+  const expanded=options.slateDate>=CBB_FULL_D1_COVERAGE_START;
+  const selected = selectCbbSlateGames(options.capturedGames ?? await client.gamesForDates(dates, options.season),
+    options.slateDate, options.season,{allowMissingAbbreviations:expanded});
+  const eligible=expanded?selected.filter(game=>cbbDivisionOneFixture(game).eligible):selected;
+  const identities = options.identityFetcher && eligible.length ?
+    await options.identityFetcher({ games:eligible, slateDate: options.slateDate }) : null;
+  const games=selectCbbSlateGames(eligible.map(game=>({...game,...Object.fromEntries(
+    (["home_team","visitor_team"] as const).map(side=>{
+      const team=game[side],identity=identities?.get(team.id);
+      return [side,!team.abbreviation?.trim()&&identity?.officialAbbreviationEvidence&&identity.espnAbbreviation
+        ?{...team,abbreviation:identity.espnAbbreviation}:team];}))})),options.slateDate,options.season);
   const teams = new Map<number, CbbTeam>();
   for (const game of games) {
     for (const team of [game.home_team, game.visitor_team]) {
@@ -72,8 +87,6 @@ export async function seedCbbGames(options: SeedOptions) {
       teams.set(team.id, team);
     }
   }
-  const identities = options.identityFetcher && games.length ?
-    await options.identityFetcher({ games, slateDate: options.slateDate }) : null;
   const verifiedLogos = [...teams.values()].filter(team => identities?.get(team.id)?.logoUrl).length;
   const preservedLockedConflicts:number[]=[];
   const terminalScoresMappedToLockedIdentity:number[]=[];
