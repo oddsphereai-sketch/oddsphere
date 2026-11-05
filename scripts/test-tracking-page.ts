@@ -23,6 +23,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 
+const LIFETIME = readFileSync("lib/services/tracking/lifetimeRecords.ts", "utf8");
 const PAGE = readFileSync("app/lab/tracking/TrackingClient.tsx", "utf8");
 const CHARTS = readFileSync("app/lab/tracking/components/TrackingCharts.tsx", "utf8");
 const API = readFileSync("app/api/lab/tracking-foundation/route.ts", "utf8");
@@ -286,7 +287,7 @@ check(
 );
 check(
   "Lifetime Tracking preserves honest historical/live source labels",
-  /lifetimeSourceLabel[\s\S]{0,500}Lifetime · live \+\$\{record\.live_decided_contribution\}[\s\S]{0,300}Since launch/.test(PAGE),
+  LIFETIME.includes('return `Lifetime · live +${record.live_decided_contribution}`') && LIFETIME.includes('return "Since launch"'),
 );
 check(
   "Category tracking visibly groups models by sport with labeled tinted sections",
@@ -311,8 +312,8 @@ check(
 );
 check(
   "Lifetime records expose numeric metrics without replacing merged history",
-  /type LifetimeRecord[\s\S]{0,1200}metrics:\s*Metrics/.test(PAGE) &&
-    /source_type:\s*"lifetime_merged"[\s\S]{0,1000}metrics:\s*\{[\s\S]{0,300}wins:\s*mergedWins/.test(PAGE),
+  /type LifetimeRecord[\s\S]{0,1200}metrics:\s*Metrics/.test(LIFETIME) &&
+    /source_type:\s*"lifetime_merged"[\s\S]{0,1000}metrics:\s*\{[\s\S]{0,300}wins:\s*mergedWins/.test(LIFETIME),
 );
 check(
   "Lifetime Tracking uses merged buildLifetimeRecords helper",
@@ -321,12 +322,12 @@ check(
 check(
   "UCL Lifetime includes immutable locked Match Result, Total, BTTS, and Double Chance history",
   /buildLifetimeRecords\([\s\S]{0,220}data\?\.actionableHistory\?\.bySportMarket \?\? \[\]/.test(PAGE) &&
-    /lockedHistory[\s\S]{0,1000}b\.sport === "ucl"[\s\S]{0,2200}source_type:\s*"locked_lifetime"/.test(PAGE) &&
-    /Locked lifetime · all released locks/.test(PAGE),
+    /lockedHistory[\s\S]{0,1000}b\.sport === "ucl"[\s\S]{0,2200}source_type:\s*"locked_lifetime"/.test(LIFETIME) &&
+    /Locked lifetime · all released locks/.test(LIFETIME),
 );
 check(
   "UCL legacy Moneyline archive joins the released Match Result category",
-  /sport === "ucl" && market === "moneyline" \? "match_result" : market/.test(PAGE),
+  /sport === "ucl" && market === "moneyline" \? "match_result" : market/.test(LIFETIME),
 );
 check(
   "Signed-in Tracking opens on the established weekly window",
@@ -343,31 +344,31 @@ check(
 // reflect the new honest categorisation.
 check(
   "Lifetime merge combines baseline + live when both exist (lifetime_merged)",
-  PAGE.includes('source_type: "lifetime_merged"'),
+  LIFETIME.includes('source_type: "lifetime_merged"'),
 );
 check(
   "Lifetime merge falls back to baseline-only when live has no decided picks (lifetime_baseline)",
-  PAGE.includes('source_type: "lifetime_baseline"'),
+  LIFETIME.includes('source_type: "lifetime_baseline"'),
 );
 check(
   "Lifetime merge labels live-only categories 'since_launch' so members don't read them as all-time",
-  PAGE.includes('source_type: "since_launch"'),
+  LIFETIME.includes('source_type: "since_launch"'),
 );
 check(
   "Merge math: mergedWins = baseline.lifetime_wins + liveWins",
-  /mergedWins\s*=\s*base\.lifetime_wins\s*\+\s*liveWins/.test(PAGE),
+  /mergedWins\s*=\s*base\.lifetime_wins\s*\+\s*liveWins/.test(LIFETIME),
 );
 check(
   "Merge math: mergedTotal = baseline.lifetime_total + liveDecided",
-  /mergedTotal\s*=\s*base\.lifetime_total\s*\+\s*liveDecided/.test(PAGE),
+  /mergedTotal\s*=\s*base\.lifetime_total\s*\+\s*liveDecided/.test(LIFETIME),
 );
 check(
   "Lifetime row shows source label so merged vs baseline-only is visible",
-  PAGE.includes('return `Lifetime · live +${record.live_decided_contribution}`'),
+  LIFETIME.includes('return `Lifetime · live +${record.live_decided_contribution}`'),
 );
 check(
   "Lifetime row shows 'Since launch' for live-only categories",
-  PAGE.includes('if (record.source_type === "since_launch") return "Since launch"'),
+  LIFETIME.includes('if (record.source_type === "since_launch") return "Since launch"'),
 );
 check(
   "Lifetime Tracking explains MLB auto-update + maintained other sports",
@@ -564,11 +565,11 @@ check(
     /publicRecords[\s\S]{0,300}isPublicallyTracked\(record\.sport, record\.slate_date\)/.test(SERVICE),
 );
 check(
-  "Service prefers explicit tracking display override before member_facing_at_lock",
+  "Service preserves member_facing_at_lock before a later tracking display override",
   SERVICE.includes("memberFacingGradeAtLock") &&
     SERVICE.includes("displayGradeOverride") &&
     SERVICE.includes("member_facing_at_lock") &&
-    /displayGradeOverride\(record\)[\s\S]{0,160}memberFacingGradeAtLock\(record\)/.test(SERVICE),
+    /memberFacingGradeAtLock\(record\)[\s\S]{0,160}displayGradeOverride\(record\)/.test(SERVICE),
 );
 // Phase 6B.24 — first_inning records must split into virtual NRFI / YRFI
 // buckets so the public Tracking page's NRFI / YRFI categories see
@@ -630,7 +631,7 @@ check(
 check(
   "API shares the five-minute aggregate cache across server instances",
   API.includes("unstable_cache") &&
-    API.includes('"member-tracking-aggregate-v14-ucl-alt-locked-lifetime"') &&
+    API.includes('"member-tracking-aggregate-v15-locked-grade-precedence"') &&
     API.includes("TRACKING_RESPONSE_CACHE_TTL_MS / 1000"),
 );
 check(
