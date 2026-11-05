@@ -122,11 +122,21 @@ function supportedSport(sport: Sport): sport is SupportedSport {
   return sport !== "soccer" && sport !== "ucl";
 }
 
-const readCachedCurrentSplits = unstable_cache(
-  async (sport: SupportedSport, eventDates?: readonly string[]) => readDurableCurrentSplits(sport, { eventDates }),
-  ["owls-current-splits-durable-overlay-v4-archived-history"],
+// Keep the original one-entry-per-sport provider sharing. Cache only the small
+// transport envelope; decoded feeds can exceed Next's 2MB data-cache limit.
+const readCachedCurrentSplitStorage = unstable_cache(
+  async (sport: SupportedSport) => {
+    const feed = await readDurableCurrentSplits(sport, { eventDates: [] });
+    return feed ? encodeCurrentSplitFeedTransport(feed as unknown as Record<string, unknown>) : null;
+  },
+  ["owls-current-splits-durable-overlay-v5-shared-compressed-hot-feed"],
   { revalidate: 5 * 60, tags: ["owls-current-splits"] },
 );
+
+async function readCachedCurrentSplits(sport: SupportedSport, eventDates?: readonly string[]): Promise<SharpApiCurrentSplitFeed | null> {
+  const feed = validateSharpApiCurrentSplitFeed(await readCachedCurrentSplitStorage(sport), sport);
+  return feed && hydrateCurrentSplitHistory(feed, eventDates);
+}
 
 async function readDurableCurrentSplits(
   sport: SupportedSport,

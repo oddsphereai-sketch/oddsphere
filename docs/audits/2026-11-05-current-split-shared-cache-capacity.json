@@ -1,0 +1,39 @@
+{
+  "base": "42a0882cc4e3380fc09d8f6006df49893245324b",
+  "nextLimitSource": "node_modules/next/dist/server/lib/incremental-cache/index.js:471",
+  "frameworkEntryLimitBytes": 2097152,
+  "providerCacheScope": "One sport argument; dates are hydrated outside the shared compressed hot cache",
+  "cadence": "Existing five-minute cache and existing collector tag invalidation unchanged",
+  "rows": [
+    {
+      "sport": "cfb",
+      "decodedBytes": 10051450,
+      "cacheEntryBytes": 538807,
+      "exactJsonRoundTrip": true
+    },
+    {
+      "sport": "cbb",
+      "decodedBytes": 5230435,
+      "cacheEntryBytes": 314535,
+      "exactJsonRoundTrip": true
+    },
+    {
+      "sport": "nfl",
+      "decodedBytes": 2874381,
+      "cacheEntryBytes": 156271,
+      "exactJsonRoundTrip": true
+    },
+    {
+      "sport": "nba",
+      "decodedBytes": 5488942,
+      "cacheEntryBytes": 299891,
+      "exactJsonRoundTrip": true
+    },
+    {
+      "sport": "nhl",
+      "decodedBytes": 4158934,
+      "cacheEntryBytes": 232579,
+      "exactJsonRoundTrip": true
+    }
+  ]
+}
