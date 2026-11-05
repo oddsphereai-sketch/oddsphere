@@ -185,6 +185,7 @@ export async function prepareArchivedCurrentSplitFeed(args: {
     const item = { sport: args.current.sport, feed_release: args.current.release, source: args.current.source,
       group_key: key, event_dates: [...new Set(rows.map(currentSplitEventDate).filter((date) => date !== null))],
       first_observation_id: groupOrders[key], fetched_at: args.current.fetchedAt, payload, payload_text: payloadText,
+      observation_sha256s: rows.map((row) => createHash("sha256").update(canonicalSplitJson(row)).digest("hex")),
       payload_sha256: createHash("sha256").update(payloadText).digest("hex") };
     if (!Number.isSafeInteger(groupOrders[key]) || Buffer.byteLength(JSON.stringify(item)) > 900_000) {
       throw new Error("Retained split history index exceeds its verified transport; current cache is preserved");
@@ -217,7 +218,7 @@ export async function prepareArchivedCurrentSplitFeed(args: {
 
 /** Derived retained-display index only; raw immutable observations remain the research authority. */
 export async function* iterateCurrentSplitGroupHistory(client: Client, feed: SharpApiCurrentSplitFeed,
-  eventDates?: readonly string[], groupKeys?: readonly string[]): AsyncGenerator<{ group_key: string; first_observation_id: number; payload: unknown }> {
+  eventDates?: readonly string[], groupKeys?: readonly string[]): AsyncGenerator<{ group_key: string; first_observation_id: number; payload: unknown; observation_sha256s: string[] }> {
   if (eventDates?.length === 0 || groupKeys?.length === 0) return;
   let cursor = 0;
   for (;;) {
@@ -226,7 +227,7 @@ export async function* iterateCurrentSplitGroupHistory(client: Client, feed: Sha
       p_group_keys: groupKeys ?? null, p_after_order: cursor,
     });
     if (error) throw new Error(`Retained historical split evidence unavailable: ${error.message}`);
-    const rows = (data ?? []) as Array<{ group_key: string; first_observation_id: number; payload: unknown }>;
+    const rows = (data ?? []) as Array<{ group_key: string; first_observation_id: number; payload: unknown; observation_sha256s: string[] }>;
     for (const row of rows) {
       const order = Number(row.first_observation_id);
       if (!Number.isSafeInteger(order) || order <= cursor) throw new Error("Retained history page has invalid order");

@@ -1,0 +1,48 @@
+{
+  "production_commit": "224a43088a67c30c278c1caf982baf2655f0ca0f",
+  "deployment": "https://vercel.com/oddsphereai-sketchs-projects/oddsphere/6CvUsWfKy7RqDcQ8w8ZWcuy4Vuth",
+  "production_ready_at": "2026-11-05T14:39:50Z",
+  "before": {
+    "samples": 7,
+    "from": "2026-11-05T14:34:50.032Z",
+    "to": "2026-11-05T14:37:54.000Z",
+    "commitment_min_bytes": 4636917760,
+    "commitment_median_bytes": 4656226304,
+    "commitment_max_bytes": 4676956160,
+    "available_median_bytes": 1092739072,
+    "swapout_counter_start": 43219,
+    "swapout_counter_end": 43219,
+    "oom_counter_end": 0,
+    "pool_timeout_counter_end": 0
+  },
+  "after": {
+    "samples": 33,
+    "from": "2026-11-05T14:43:31.288Z",
+    "to": "2026-11-05T14:59:52.282Z",
+    "commitment_min_bytes": 3999141888,
+    "commitment_median_bytes": 4040282112,
+    "commitment_max_bytes": 4124680192,
+    "available_median_bytes": 1606475776,
+    "swapout_counter_start": 43219,
+    "swapout_counter_end": 43219,
+    "oom_counter_end": 0,
+    "pool_timeout_counter_end": 0
+  },
+  "immutable_hash_samples": 20,
+  "immutable_hash_mismatches": 0,
+  "active_sports_compressed": [
+    "cfb",
+    "cbb",
+    "nfl",
+    "nba",
+    "nhl"
+  ],
+  "live_cfb_wire_bytes": 998194,
+  "live_cfb_decoded_json_bytes": 19555346,
+  "live_cfb_rows": 26233,
+  "unrelated_preexisting_warnings": [
+    "book-history bounded backfill deferral",
+    "Kalshi UCL invalid/old source receipt"
+  ],
+  "scope": "Observation window stops before later unrelated NFL/CBB production changes. Host measurements show improvement after rollout, not attribution of every committed byte. No Supabase service restart or compute upgrade was performed."
+}

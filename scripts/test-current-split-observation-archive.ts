@@ -84,6 +84,12 @@ async function main() {
   applySharpApiCurrentSplitOverlay(locked as unknown as Parameters<typeof applySharpApiCurrentSplitOverlay>[0], historical);
   assert.equal(JSON.stringify(locked), lockedJson, "history access cannot reinterpret a locked record");
 
+  const duplicate = { ...base, sport: "cbb" as const, rows: [row("20261027", 500), row("20261027", 500)] };
+  const duplicateJson = JSON.stringify(duplicate);
+  const duplicateHot = await prepareCurrentSplitCapture(null, duplicate, db);
+  assert.deepEqual((await hydrateCurrentSplitHistory(duplicateHot, undefined, db)).rows, duplicate.rows, "retained historical reads preserve duplicate row positions");
+  assert.equal(await readOriginalCurrentSplitCapture(db, createHash("sha256").update(duplicateJson).digest("hex")), duplicateJson, "original receipts preserve ordering and duplicate multiplicity exactly");
+
   if (process.argv[2]) {
     const captured = JSON.parse(readFileSync(process.argv[2], "utf8"));
     const entry = Array.isArray(captured) ? captured.find((r) => r.snapshot_key.includes("::cfb::")) : captured;

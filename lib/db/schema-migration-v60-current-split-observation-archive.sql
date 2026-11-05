@@ -135,6 +135,7 @@ CREATE TABLE IF NOT EXISTS public.current_split_group_history (
   source text NOT NULL, event_dates date[] NOT NULL,
   first_observation_id bigint NOT NULL REFERENCES public.current_split_observation_archive(id),
   fetched_at timestamptz NOT NULL, payload jsonb NOT NULL,
+  observation_sha256s text[] NOT NULL,
   payload_sha256 text NOT NULL CHECK(payload_sha256 ~ '^[a-f0-9]{64}$'),
   PRIMARY KEY(sport,feed_release,group_key), UNIQUE(sport,feed_release,first_observation_id)
 );
@@ -156,12 +157,17 @@ BEGIN
       WHERE a.sport=r->>'sport' AND a.feed_release=r->>'feed_release' AND a.event_book_key=r->>'group_key')) THEN
     RAISE EXCEPTION 'Retained history checksum or original group order is invalid';
   END IF;
-  INSERT INTO public.current_split_group_history(sport,feed_release,group_key,source,event_dates,first_observation_id,fetched_at,payload,payload_sha256)
+  IF EXISTS(SELECT 1 FROM jsonb_array_elements(history) r CROSS JOIN LATERAL jsonb_array_elements_text(r->'observation_sha256s') h
+    WHERE NOT EXISTS(SELECT 1 FROM public.current_split_observation_archive a WHERE a.sport=r->>'sport'
+      AND a.feed_release=r->>'feed_release' AND a.event_book_key=r->>'group_key' AND a.observation_sha256=h.value)) THEN
+    RAISE EXCEPTION 'Retained history references an observation not yet preserved in the immutable archive';
+  END IF;
+  INSERT INTO public.current_split_group_history(sport,feed_release,group_key,source,event_dates,first_observation_id,fetched_at,payload,payload_sha256,observation_sha256s)
     SELECT r->>'sport',r->>'feed_release',r->>'group_key',r->>'source',
       ARRAY(SELECT jsonb_array_elements_text(r->'event_dates'))::date[],(r->>'first_observation_id')::bigint,
-      (r->>'fetched_at')::timestamptz,r->'payload',r->>'payload_sha256' FROM jsonb_array_elements(history) r
+      (r->>'fetched_at')::timestamptz,r->'payload',r->>'payload_sha256',ARRAY(SELECT jsonb_array_elements_text(r->'observation_sha256s')) FROM jsonb_array_elements(history) r
     ON CONFLICT(sport,feed_release,group_key) DO UPDATE SET source=excluded.source,event_dates=excluded.event_dates,
-      fetched_at=excluded.fetched_at,payload=excluded.payload,payload_sha256=excluded.payload_sha256
+      fetched_at=excluded.fetched_at,payload=excluded.payload,payload_sha256=excluded.payload_sha256,observation_sha256s=excluded.observation_sha256s
     WHERE excluded.fetched_at>=public.current_split_group_history.fetched_at;
   IF EXISTS(SELECT 1 FROM jsonb_array_elements(history) r LEFT JOIN public.current_split_group_history h
     ON h.sport=r->>'sport' AND h.feed_release=r->>'feed_release' AND h.group_key=r->>'group_key'
@@ -174,9 +180,9 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.read_current_split_group_history(p_sport text,p_release text,
   p_event_dates date[],p_group_keys text[],p_after_order bigint)
-RETURNS TABLE(group_key text,first_observation_id bigint,payload jsonb)
+RETURNS TABLE(group_key text,first_observation_id bigint,payload jsonb,observation_sha256s text[])
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path=pg_catalog AS $$
-  SELECT h.group_key,h.first_observation_id,h.payload FROM public.current_split_group_history h
+  SELECT h.group_key,h.first_observation_id,h.payload,h.observation_sha256s FROM public.current_split_group_history h
   WHERE h.sport=p_sport AND h.feed_release=p_release AND h.first_observation_id>p_after_order
     AND (p_event_dates IS NULL OR h.event_dates&&p_event_dates)
     AND (p_group_keys IS NULL OR h.group_key=ANY(p_group_keys))

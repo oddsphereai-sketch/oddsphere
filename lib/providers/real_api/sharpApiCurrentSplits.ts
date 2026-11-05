@@ -9,9 +9,10 @@ import type { MarketSplitDisplaySection } from "@/lib/types/domain/Recommendatio
 import type { Sport } from "@/lib/types/domain/Sport";
 import { revalidateTag, unstable_cache } from "next/cache";
 import { decodeCurrentSplitFeedTransport, encodeCurrentSplitFeedTransport } from "./currentSplitFeedTransport";
-import { CURRENT_SPLIT_ARCHIVE_PROTOCOL, currentSplitGroupKey, iterateCurrentSplitGroupHistory,
+import { CURRENT_SPLIT_ARCHIVE_PROTOCOL, canonicalSplitJson, currentSplitGroupKey, iterateCurrentSplitGroupHistory,
   prepareArchivedCurrentSplitFeed, splitArchiveState } from "./currentSplitObservationArchive";
 import type { supabase as SupabaseClient } from "@/lib/db/supabase";
+import { createHash } from "node:crypto";
 
 const OWLS_CURRENT_SPLITS_RELEASE = "owls_current_splits_2026_10_27_r1_complete_named_book" as const;
 const CURRENT_SPLITS_RELEASE = "sharpapi_current_splits_2026_10_12_r2_cfb_central_team_identity" as const;
@@ -156,7 +157,7 @@ async function readDurableCurrentSplits(
         };
         const { supabase } = await import("@/lib/db/supabase");
         const feed = await prepareCurrentSplitCapture(validatedStored, current, supabase);
-        await upsertLabResponseSnapshot({
+        const saved = await upsertLabResponseSnapshot({
           snapshotKey: key,
           kind: "daily_edge",
           payload: encodeCurrentSplitFeedTransport(feed as unknown as Record<string, unknown>),
@@ -166,6 +167,7 @@ async function readDurableCurrentSplits(
           source: "owls_current_splits",
           payloadVersion: OWLS_CURRENT_SPLITS_RELEASE,
         });
+        if (!saved.ok) throw new Error(`Owls current split cache write was not acknowledged: ${saved.error}`);
         if (options.forceProviderFetch) {
           // The scheduled capture and the member snapshot publisher can run
           // seconds apart. Expire the process-level durable-read cache now so
@@ -216,6 +218,10 @@ export async function hydrateCurrentSplitHistory(feed: SharpApiCurrentSplitFeed,
     const snapshot = validateSharpApiCurrentSplitFeed(row.payload, feed.sport);
     if (!snapshot || snapshot.release !== feed.release || snapshot.source !== feed.source
       || snapshot.rows.some((item) => currentSplitGroupKey(item) !== row.group_key)) throw new Error("Retained split history receipt is invalid");
+    if (!Array.isArray(row.observation_sha256s) || snapshot.rows.length !== row.observation_sha256s.length
+      || snapshot.rows.some((item, index) => createHash("sha256").update(canonicalSplitJson(item)).digest("hex") !== row.observation_sha256s[index])) {
+      throw new Error("Retained split history differs from its immutable observation references");
+    }
     history.push(...snapshot.rows);
     groupOrders[row.group_key] = row.first_observation_id; coldGroups.add(row.group_key);
   }
