@@ -44,8 +44,8 @@ Evidence: `model-audits/2026-11-05-nfl-source-reaction-health.json`.
 The owner explicitly directed completion of review and live publication for
 November 5 and future slates, with actual predictions instead of empty cards and
 all November 4 locked public records unchanged. This scoped authorization covers
-the R5 independent /R19 incumbent market /R15 receipt /R36 publisher /R24 adapter
-/R22 tracking /R4 training /R8 fixture family and the separately versioned cross
+the R5 independent /R20 incumbent market /R16 receipt /R37 publisher /R24 adapter
+/R23 tracking /R4 training /R8 fixture family and the separately versioned cross
 forecast and frozen-winner R1 contracts listed in the release registry.
 
 The NCAA census owns current D1 membership. Actual cross-game boxes and paired
@@ -124,6 +124,17 @@ requires focused normalization/resolver/predecessor/lock tests, the full model
 gate, current-main integration safety, protected PR checks, and postmerge live
 release/QB/board/lock verification. Evidence:
 `docs/model-audits/2026-11-05-nfl-current-game-starter-authority.json`.
+
+The owner's subsequent November 5 whole-board audit request authorizes the
+R37/R20/R16 source-admission repair: exact recorded provider aliases and complete
+UTC capture of the seventh Eastern slate day. All 365 verified D1 programs and
+their opponents remain in scope. Existing guards, dates, prices, model equations,
+market-reader consequences, grade policy, sole writer/lease and prior locks are
+preserved. Old R19/R15 anchors remain compatible. No missing line or market may
+be invented; a source-present rejection must be distinguished from a provider's
+absent market and from sparse statistical inputs. The cross-domain data/tail
+limitations remain unresolved by this operational repair and must not be reported
+as complete full-model coverage.
 
 ## Owner-directed Daily Edge health and NFL conviction repair — November 5
 

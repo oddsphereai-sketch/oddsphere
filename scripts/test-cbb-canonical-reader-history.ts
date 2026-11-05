@@ -4,9 +4,15 @@ import { readCbbCanonicalReaderHistory } from "../lib/services/cbb/cbbCanonicalR
 type DataRow={id:number;canonical_event_id:string;fetched_at:string;inserted_at:string};
 const at="2026-11-02T20:00:00Z";
 const data:DataRow[]=Array.from({length:1002},(_,i)=>({id:i+1,canonical_event_id:"777",fetched_at:"2026-11-02T19:00:00Z",inserted_at:"2026-11-02T19:00:01Z"}));
-function mock(rows:DataRow[],fault=false){
+function mock(rows:DataRow[],fault=false,watermark?:number,missingFunction=false){
  const calls:Array<{table:string;fields:string;filters:Array<[string,string,unknown]>;limit:number}>=[];
- const db={from:(table:string)=>({select:(fields:string)=>{
+ const watermarks:unknown[]=[];
+ const db={rpc:(name:string,args:unknown)=>{
+   assert.equal(name,"market_price_observation_high_water");watermarks.push(args);
+   return {abortSignal:(signal:AbortSignal)=>{assert.ok(signal instanceof AbortSignal);return Promise.resolve(
+     missingFunction?{data:null,error:{code:"PGRST202",message:"Could not find the function public.market_price_observation_high_water"}}:
+     fault?{data:null,error:{message:"bounded source unavailable"}}:{data:watermark??rows.at(-1)?.id??0,error:null});}};
+ },from:(table:string)=>({select:(fields:string)=>{
    const c={table,fields,filters:[] as Array<[string,string,unknown]>,limit:1000};calls.push(c);
    let descending=false,single=false;
    const query={eq:(k:string,v:unknown)=>{c.filters.push(["eq",k,v]);return query;},in:(k:string,v:unknown)=>{c.filters.push(["in",k,v]);return query;},
@@ -20,7 +26,7 @@ function mock(rows:DataRow[],fault=false){
      }};
    return query;
  }})} as unknown as Parameters<typeof readCbbCanonicalReaderHistory>[0]["db"];
- return {db,calls};
+ return {db,calls,watermarks};
 }
 async function main(){
  const good=mock(data),result=await readCbbCanonicalReaderHistory({db:good.db,gameIds:[777],asOf:at});
@@ -30,6 +36,16 @@ async function main(){
  const books=good.calls.filter(c=>c.table==="market_price_observations_v2").map(c=>c.filters.find(f=>f[0]==="in"&&f[1]==="sportsbook")?.[2]);
  assert.ok(books.every(list=>JSON.stringify(list)===JSON.stringify(["circa","pinnacle","ps3838","bookmaker"])||JSON.stringify(list)===JSON.stringify(["draftkings","betmgm"])));
  assert.ok(books.some(list=>JSON.stringify(list)===JSON.stringify(["draftkings","betmgm"])),"retail history is a separate bounded context family, never a professional expert");
+ assert.equal(good.watermarks.length,1,"retail and professional reads reuse one indexed watermark");
+ assert.deepEqual(good.watermarks[0],{p_league:"cbb",p_event_ids:["777"]});
+ const broader=await readCbbCanonicalReaderHistory({db:mock(data.slice(0,1000),false,9999).db,gameIds:[777],asOf:at,maxRowsPerFamily:1000});
+ assert.equal(broader.price.complete,true,"a watermark outside this book/window cannot falsely exhaust an exact-size window");
+ assert.equal(broader.priceRows.length,1000);
+ assert.equal(broader.price.queries,3,"bounded final probe proves the filtered family is complete");
+ const absent=await readCbbCanonicalReaderHistory({db:mock([],false,9999).db,gameIds:[777],asOf:at});
+ assert.equal(absent.price.complete,true);assert.equal(absent.priceRows.length,0);
+ const legacy=await readCbbCanonicalReaderHistory({db:mock(data,false,undefined,true).db,gameIds:[777],asOf:at});
+ assert.deepEqual(legacy.priceRows,result.priceRows,"missing-function rollback retains the exact old filtered read");
  assert.equal(result.retailPrice.complete,true);assert.equal(result.retailPriceRows.length,1002);
  const capped=await readCbbCanonicalReaderHistory({db:mock(data).db,gameIds:[777],asOf:at,maxRowsPerFamily:1000});
  assert.equal(capped.complete,false);assert.equal(capped.price.reason,"row_budget_exceeded");assert.equal(capped.priceRows.length,1000,"partial history remains explicitly partial");

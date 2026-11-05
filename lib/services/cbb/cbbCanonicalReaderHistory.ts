@@ -1,7 +1,8 @@
+import {isMissingRpcFunction} from "@/lib/db/missingRpcFunction";
 import type { supabase } from "@/lib/db/supabase";
 import type { CbbCanonicalPriceRow, CbbCanonicalSplitRow } from "./cbbCanonicalMarketEvidence";
 
-export const CBB_CANONICAL_READER_HISTORY_RELEASE = "cbb_canonical_reader_history_2026_11_03_r2_separate_retail_context" as const;
+export const CBB_CANONICAL_READER_HISTORY_RELEASE = "cbb_canonical_reader_history_2026_11_05_r3_indexed_price_watermark" as const;
 const PAGE_SIZE = 1000;
 const MAX_ROWS = 32_000;
 const MAX_BYTES = 24_000_000;
@@ -32,6 +33,13 @@ export async function readCbbCanonicalReaderHistory(args: {
     throw new Error("CBB canonical reader scope/budget invalid");
   }
   const now = args.nowMs ?? Date.now, started = now(), deadline = started + budget;
+  // The event-indexed maximum is an upper bound for the narrower price/book/
+  // availability window below. It must not select observations or confer source
+  // authority. Reuse one bounded read for the professional and retail families.
+  let priceWatermark: Promise<{data:unknown;error:unknown}> | undefined;
+  const priceHigh = () => priceWatermark ??= Promise.resolve(args.db.rpc("market_price_observation_high_water",
+    {p_league:"cbb",p_event_ids:ids.map(String)})
+    .abortSignal(AbortSignal.timeout(Math.max(1,deadline-now()))));
   const load = async (kind: "price"|"split"|"retail") => {
     const priceFamily=kind!=="split",rowLimit=kind==="retail"?Math.min(maxRows,8000):maxRows;
     const byteLimit=kind==="retail"?Math.min(maxBytes,6_000_000):maxBytes;
@@ -51,16 +59,42 @@ export async function readCbbCanonicalReaderHistory(args: {
     try {
       if (now() >= deadline) return {rows,receipt:{...receipt,reason:"deadline_before_query"}};
       receipt.queries++;
-      const high = await query("id").order("id",{ascending:false}).limit(1)
-        .abortSignal(AbortSignal.timeout(Math.max(1,deadline-now()))).maybeSingle();
-      if (high.error) throw high.error;
-      const highId = Number((high.data as unknown as {id?:unknown}|null)?.id ?? 0);
+      let highId: number;
+      if(priceFamily){
+        const high=await priceHigh();
+        if(isMissingRpcFunction(high.error as Parameters<typeof isMissingRpcFunction>[0],"market_price_observation_high_water")){
+          receipt.queries++;
+          const fallback=await query("id").order("id",{ascending:false}).limit(1)
+            .abortSignal(AbortSignal.timeout(Math.max(1,deadline-now()))).maybeSingle();
+          if(fallback.error)throw fallback.error;
+          highId=Number((fallback.data as unknown as {id?:unknown}|null)?.id??0);
+        }else{
+          if(high.error)throw high.error;
+          highId=Number(high.data??0);
+        }
+      }else{
+        const high = await query("id").order("id",{ascending:false}).limit(1)
+          .abortSignal(AbortSignal.timeout(Math.max(1,deadline-now()))).maybeSingle();
+        if (high.error) throw high.error;
+        highId = Number((high.data as unknown as {id?:unknown}|null)?.id ?? 0);
+      }
       if (!Number.isSafeInteger(highId) || highId < 0) throw new Error("invalid high-water ID");
       receipt.highWaterId = highId;
       if (!highId) return {rows,receipt:{...receipt,complete:true,reason:"no_observations_in_window"}};
       while (receipt.lastId < highId) {
         if (now() >= deadline) { receipt.reason = "deadline_exceeded"; break; }
-        if (rows.length >= rowLimit) { receipt.reason = "row_budget_exceeded"; break; }
+        if (rows.length >= rowLimit) {
+          // The indexed watermark may belong to another book or time. At an
+          // exact row cap, prove the filtered window has no remaining row.
+          receipt.queries++;
+          const probe=await query("id").gt("id",receipt.lastId).lte("id",highId)
+            .order("id",{ascending:true}).limit(1)
+            .abortSignal(AbortSignal.timeout(Math.max(1,deadline-now())));
+          if(probe.error)throw probe.error;
+          receipt.complete=(probe.data??[]).length===0;
+          receipt.reason=receipt.complete?"complete_bounded_window":"row_budget_exceeded";
+          break;
+        }
         receipt.queries++;
         const size = Math.min(PAGE_SIZE,rowLimit-rows.length);
         const page = await query(fields).gt("id",receipt.lastId).lte("id",highId).order("id",{ascending:true}).limit(size)

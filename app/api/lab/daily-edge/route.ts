@@ -6748,10 +6748,11 @@ export async function GET(request: Request) {
     const { overlayCbbLockedMemberGames } = await import("@/lib/services/cbb/cbbMemberReader");
     const payload = await overlayCbbLockedMemberGames(stored.payload).catch(() => null);
     if (!payload) return Response.json(empty, { status: 503, headers: { "Cache-Control": "no-store" } });
-    return Response.json(payload, { headers: {
+    const {cbbPublishedResponse}=await import("@/lib/services/cbb/cbbPublishedResponse");
+    return cbbPublishedResponse(payload, {
       "Cache-Control": "private, max-age=30, stale-while-revalidate=300",
       "X-Oddsphere-Response-Source": stored.cacheState,
-    } });
+    },request.headers.get("accept-encoding"));
   }
 
   // Schedule-only visibility applies to the current/future rolling window,

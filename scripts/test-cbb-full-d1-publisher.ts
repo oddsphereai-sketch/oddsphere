@@ -53,7 +53,7 @@ async function main(){
     splits:async()=>{owlsCalls++;return {body:{success:true,data:[]}};}} as unknown as OwlsInsightClient;
   const fetcher=(async()=>{freeCalls++;return new Response(JSON.stringify({events:official.events}));}) as typeof fetch;
   const family={complete:true,reason:"offline_empty_source",highWaterId:0,lastId:0,rows:0,bytes:0,queries:0};
-  const canonicalHistoryReader=(async()=>({release:"cbb_canonical_reader_history_2026_11_03_r2_separate_retail_context",complete:true,
+  const canonicalHistoryReader=(async()=>({release:"cbb_canonical_reader_history_2026_11_05_r3_indexed_price_watermark",complete:true,
     asOf:now,since:now,sourceWindow:"six_hour_bootstrap_or_explicit_since",providerRequests:0,databaseWrites:0,
     priceRows:[],splitRows:[],retailPriceRows:[],price:family,split:family,retailPrice:family,elapsedMs:0})) as NonNullable<Parameters<typeof refreshCbbMemberBoard>[0]["canonicalHistoryReader"]>;
   let published:DailyEdgeResponse|null=null;
@@ -73,6 +73,23 @@ async function main(){
     {external_id:tbd.id,slate_date:computeSlateDate("cbb",tbd.date),game_date:tbd.date,status:"STATUS_SCHEDULED",away_team_id:tbd.visitor_team.id,home_team_id:tbd.home_team.id,venue:null}]});
   const sourceFetcher=(async(input:string|URL|Request)=>{const key=new URL(String(input)).searchParams.get("dates");
     return new Response(JSON.stringify({events:source.officialDays.find(d=>d.day.replaceAll("-","")===key)?.events??[]}));}) as typeof fetch;
+  const late=source.games.find(g=>computeSlateDate("cbb",g.date)==="2026-11-11"&&g.date.startsWith("2026-11-12")&&
+    !cbbDivisionOneFixture(g).crossDivision&&forecastCbbFullDivisionOneBatch([g],now,[],new Map(source.officialDays.map(d=>[d.day,d])))[0].forecast.inputStatus==="complete")!;
+  assert.ok(late,"actual late ET fixture crosses the last requested UTC midnight");
+  const lateTeams=[late.home_team,late.visitor_team].map(t=>({id:t.id,abbreviation:t.abbreviation,display_name:t.full_name,logo_url:null}));
+  const lateSchedule=buildCbbRollingSchedule({anchorDate:day,teams:[...new Map([...teams.values(),...lateTeams].map(t=>[t.id,t])).values()],games:[
+    ...games.map(g=>({external_id:g.id,slate_date:day,game_date:g.date,status:"STATUS_SCHEDULED",away_team_id:g.visitor_team.id,home_team_id:g.home_team.id,venue:null})),
+    {external_id:late.id,slate_date:computeSlateDate("cbb",late.date),game_date:late.date,status:"STATUS_SCHEDULED",away_team_id:late.visitor_team.id,home_team_id:late.home_team.id,venue:null}]});
+  const dateCalls:string[][]=[];
+  const utcProvider={calls:0,gamesForDates:async(dates:string[])=>{dateCalls.push([...dates]);return [...games,late].filter(g=>dates.includes(g.date.slice(0,10)));}} as unknown as CbbBallDontLieClient;
+  const lateResult=await refreshCbbMemberBoard({anchorDate:day,season:2026,now,bdlKey:"offline",owlsKey:"offline",provider:utcProvider,owls,
+    trainingGames:[],db,fetcher:sourceFetcher,loadSchedule:async()=>lateSchedule,saveSnapshot,canonicalHistoryReader,fallbackOdds:[]});
+  assert.equal(lateResult.published,66,"the seventh ET day's late game must publish an actual forecast");
+  assert.ok((published as DailyEdgeResponse|null)?.games.some(g=>g.external_id===late.id));
+  assert.equal(dateCalls.length,2,"reuse the existing bounded two-batch fixture capture");
+  assert.ok(dateCalls.every(dates=>dates.length<=7));
+  assert.ok(dateCalls.flat().includes("2026-11-12"),"capture the following UTC date before exact ET filtering");
+  assert.equal(JSON.stringify(stored.get("cbb::member-game::nov4-owner-record")),original);
   const incomplete=await refreshCbbMemberBoard({anchorDate:day,season:2026,now,bdlKey:"offline",owlsKey:"offline",
     provider:{...provider,gamesForDates:async()=>[...games,tbd]} as unknown as CbbBallDontLieClient,owls,
     trainingGames:[],db,fetcher:sourceFetcher,loadSchedule:async()=>tbdSchedule,saveSnapshot,canonicalHistoryReader,fallbackOdds:[]});
