@@ -72,8 +72,6 @@ import {
   NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
 } from "./nflV1ActionableGradeCandidate";
 import {
-  buildNflIndependentScoreBaseForecast,
-  buildNflPaidTeamScoreBaseForecast,
   buildNflMarketEvidenceOutcomeForecast,
   buildNflNoWeightMarketEvidenceOutcomeForecast,
   getNflV1WeekOneOutcomeForecast,
@@ -87,6 +85,7 @@ import {
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_SHA256,
 } from "./nflV1WeekOneOutcome";
+import { selectNflOutcomeBaseAuthority } from "./nflOutcomeBaseAuthority";
 import {
   resolveNflTargetExcludedMarketAxes,
   resolveNflTargetExcludedMoneylineAnchor,
@@ -162,7 +161,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_05_r112_source_reaction_health" as const;
+  "nfl_forward_evidence_writer_2026_11_05_r113_outcome_value_separation" as const;
 
 const NFL_REGULAR_MARKETS = ["moneyline", "spread", "total"] as const;
 const NFL_OWLS_COVERAGE_DIAGNOSTICS = new Set([
@@ -871,19 +870,18 @@ export async function runNflForwardEvidenceWriter(args: {
           }
         : undefined,
     });
-    const baseOutcome = exactProviderScore
-      ? buildNflIndependentScoreBaseForecast({
-          baseForecast: legacyBaseOutcome,
-          independentScore: exactProviderScore,
-        })
-      : paidProjectionShadow
-      ? buildNflPaidTeamScoreBaseForecast({
-          baseForecast: legacyBaseOutcome,
-          paidTeamScore: paidProjectionShadow,
-        })
-      : legacyBaseOutcome;
+    const baseSelection = selectNflOutcomeBaseAuthority({
+      fallbackForecast: legacyBaseOutcome,
+      exactProviderScore,
+      playerAwareScore: paidProjectionShadow ?? null,
+      providerDepth: { away: providerAwayDepth, home: providerHomeDepth },
+      availabilityAdjustedDepth: { away: awayDepth, home: homeDepth },
+    });
+    const baseOutcome = baseSelection.outcome;
     const incumbentOutcome = shadowMoneyline.footballProjection
-      ? (exactProviderScore ? buildNflNoWeightMarketEvidenceOutcomeForecast : buildNflMarketEvidenceOutcomeForecast)({
+      ? (baseSelection.receipt.marketInputPolicy === "prohibited_from_outcome_base"
+          ? buildNflNoWeightMarketEvidenceOutcomeForecast
+          : buildNflMarketEvidenceOutcomeForecast)({
           baseForecast: baseOutcome,
           footballHomeMargin: shadowMoneyline.footballProjection.projectedHomeMargin,
           current,
@@ -969,7 +967,8 @@ export async function runNflForwardEvidenceWriter(args: {
       } : {}),
     });
     const existingLockedRecord = hasImmutableNflLockedRecord(historicalExisting, plan.game.providerGameId);
-    const independentInnovationEnabled = exactProviderScore?.marketInputPolicy === "prohibited_from_independent_score";
+    const independentInnovationEnabled =
+      baseSelection.receipt.marketInputPolicy === "prohibited_from_outcome_base";
     const semanticBaseOutcome = independentInnovationEnabled ? baseOutcome : resolved.outcome;
     const semanticBaseProduction = independentInnovationEnabled ? buildNflV1ActionableGradeBundle({
       providerGameId: plan.game.providerGameId, awayTeam: plan.game.away.abbreviation,
@@ -1012,15 +1011,9 @@ export async function runNflForwardEvidenceWriter(args: {
     const availableMarkets = ([moneylineMargin !== null && "moneyline", spreadMargin !== null && "spread",
       marketImpliedTotal !== null && "total"].filter(Boolean)) as Array<"moneyline" | "spread" | "total">;
     const marketImpliedMargin = spreadMargin ?? moneylineMargin;
-    const candidateMargin = moneylineMargin ?? spreadMargin ?? (resolved.outcome.expectedHomeScore - resolved.outcome.expectedAwayScore);
-    const candidateTotal = marketImpliedTotal ?? (resolved.outcome.expectedHomeScore + resolved.outcome.expectedAwayScore);
-    const marketScoreCandidate = availableMarkets.length > 0 && candidateTotal > Math.abs(candidateMargin)
-      ? {
-          expectedAwayScore: (candidateTotal - candidateMargin) / 2,
-          expectedHomeScore: (candidateTotal + candidateMargin) / 2,
-        } : null;
-    // Unavailable coordinates below are render-only placeholders. availableMarkets
-    // causes the ledger to emit null/unavailable, never independent-as-price evidence.
+    // These current market coordinates qualify the downstream contract and
+    // grading evidence only. They are deliberately not submitted as a forecast
+    // candidate: current price attractiveness cannot own the outcome law.
     const targetExcludedAnchor = availableMarkets.length > 0 ? {
       homeMargin: axes.margin?.homeMargin ?? 0,
       spreadHomeFairProbability: axes.margin?.spreadHomeFairProbability ?? 0.5,
@@ -1090,11 +1083,6 @@ export async function runNflForwardEvidenceWriter(args: {
             ? fromMarginTotal(paidProjectionShadow.projectedHomeMargin, paidProjectionShadow.projectedTotal)
             : null,
         },
-        { source: "target_excluded_paired_price_score", forecast: marketScoreCandidate,
-          authoritativeMarkets: availableMarkets,
-          marketValues: { ...(moneylineMargin !== null ? { moneyline: moneylineMargin } : {}),
-            ...(spreadMargin !== null ? { spread: spreadMargin } : {}),
-            ...(marketImpliedTotal !== null ? { total: marketImpliedTotal } : {}) } },
         { source: "released_current", forecast: resolved.outcome },
       ],
       availability: {
@@ -1316,6 +1304,7 @@ export async function runNflForwardEvidenceWriter(args: {
       } : {}),
       ...(paidProjectionShadow ? { paidProjectionShadow } : {}),
       ...(exactProviderScore ? { exactProviderScoreShadow: exactProviderScore } : {}),
+      outcomeBaseAuthority: baseSelection.receipt,
       ...(availabilityArbitrationShadow ? { availabilityArbitrationShadow } : {}),
       decisions: {
         evaluatedBets: production.evaluatedBets,
@@ -1347,7 +1336,10 @@ export async function runNflForwardEvidenceWriter(args: {
         weather: weatherRequests, totalMaximum: apiCallsMaximum,
       },
     };
-    const hasTargetFreePrior = Boolean(exactProviderScore) || Boolean(paidProjectionShadow) || hasNflV1WeekOneOutcomeForecast(plan.game.providerGameId);
+    const hasTargetFreePrior = baseSelection.receipt.marketInputPolicy === "prohibited_from_outcome_base" ||
+      hasNflV1WeekOneOutcomeForecast(plan.game.providerGameId);
+    const baseUsesPlayerAware = baseSelection.receipt.source === "player_aware_availability_regime" ||
+      baseSelection.receipt.source === "paid_player_aware";
     const contextualEvidenceCapture = buildNflForwardContextCapture({
       payload: {
         ...payload,
@@ -1358,10 +1350,10 @@ export async function runNflForwardEvidenceWriter(args: {
       independentForecast: baseOutcome,
       independentTargetFree: hasTargetFreePrior,
       independentRelease: hasTargetFreePrior
-        ? exactProviderScore
-          ? NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE
-          : paidProjectionShadow
+        ? baseUsesPlayerAware
           ? NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE
+          : exactProviderScore
+          ? NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE
           : NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE
         : NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
       authoritativeForecast: outcome,
@@ -1377,21 +1369,21 @@ export async function runNflForwardEvidenceWriter(args: {
         manifest.rawParserInput ? [manifest.rawParserInput] : []);
       try {
         const independentForecastAvailableAt = hasTargetFreePrior
-          ? exactProviderScore
-            ? retrievalCompletedAt
-            : paidProjectionShadow
+          ? baseUsesPlayerAware && paidProjectionShadow
             ? paidProjectionFetch?.byGame[plan.game.providerGameId]
               ? retrievalCompletedAt
               : paidProjectionShadow.fetchedAt
+            : exactProviderScore
+            ? retrievalCompletedAt
             : "2026-08-23T00:00:00.000Z"
           : null;
         const independentPriorInputLineage = hasTargetFreePrior && independentForecastAvailableAt
           ? buildNflIndependentPriorInputLineage({
               eventId: plan.game.providerGameId,
-              independentRelease: exactProviderScore
-                ? NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE
-                : paidProjectionShadow
+              independentRelease: baseUsesPlayerAware
                 ? NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE
+                : exactProviderScore
+                ? NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE
                 : NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
               availableAt: independentForecastAvailableAt,
               exactProviderScoreContext,
@@ -1409,14 +1401,14 @@ export async function runNflForwardEvidenceWriter(args: {
           independentForecastAvailableAt,
           independentForecastProvenance: !hasTargetFreePrior
             ? "unavailable"
-            : exactProviderScore
-            ? "fresh"
-            : paidProjectionShadow
+            : baseUsesPlayerAware && paidProjectionShadow
             ? paidProjectionFetch?.byGame[plan.game.providerGameId]
               ? "fresh"
               : paidProjectionRefreshDue && paidProjectionFetch === null
               ? "stored_after_failed_refresh"
               : "stored_cache"
+            : exactProviderScore
+            ? "fresh"
             : "static_artifact",
           independentPriorInputLineage,
           retrievalCompletedAt,

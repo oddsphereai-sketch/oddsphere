@@ -1,5 +1,55 @@
 # Current production model releases and qualified research candidates
 
+## NFL outcome/value separation and player-state authority — November 5 candidate
+
+The owner clarified the product boundary: the predicted winner, score, margin,
+total and outcome probabilities optimize for outcome accuracy. An attractive
+offered price, break-even probability, edge or expected value cannot select or
+move those outputs; those economics enter only after the forecast and selected
+contract side are frozen and may affect only the play grade. Chronological
+same-book number/juice movement remains eligible game evidence and is not the
+same thing as choosing a pick because its current price looks attractive.
+
+The candidate also repairs a current-state omission exposed by JAX@BAL. The
+normal exact-provider completed-game state remains authoritative, but it has no
+player or quarterback input. When the availability resolver verifies that the
+provider quarterback was replaced and a complete player-aware projection was
+collected after the displaced depth snapshot, the selector chooses that single
+market-free player-state law. It never averages or weights the two models. The
+existing relative same-book reader then applies once. The legacy absolute
+`target_excluded_paired_price_score` is removed from the forecast-candidate set;
+it remains available only as contract/grading context.
+
+Candidate identifiers are:
+
+- `nfl_outcome_base_authority_2026_11_05_r1_player_state_value_separation`
+- `nfl_forward_evidence_collector_2026_11_05_r35_outcome_value_separation`
+- `nfl_v1_daily_edge_model_2026_11_05_r55_outcome_value_separation`
+- `nfl_v1_daily_edge_calibration_2026_11_05_r54_outcome_value_separation`
+- `nfl_v1_daily_edge_decision_2026_11_05_r64_outcome_value_separation`
+- `nfl_v1_grade_policy_2026_11_05_r64_outcome_value_separation`
+- `nfl_v1_member_release_2026_11_05_r62_outcome_value_separation`
+- `nfl_market_innovation_runtime_2026_11_05_r7_outcome_value_separation`
+- `nfl_full_game_evidence_runtime_2026_11_05_r20_outcome_value_separation`
+- `nfl_weekly_member_fixture_2026_11_05_r78_outcome_value_separation`
+- `nfl_forward_member_snapshot_2026_11_05_r70_outcome_value_separation`
+- `nfl_forward_evidence_writer_2026_11_05_r113_outcome_value_separation`
+
+The current SELECT-only 15-game audit selects exact-provider state for 13 games
+and player-aware availability state for JAX@BAL and ARI@SEA. After replaying the
+same relative reader, JAX@BAL changes from JAX by 2.78 / total 46.42 to JAX by
+14.08 / total 39.18; the Spread side changes BAL +10 to JAX -10, the Total side
+changes Over 39.5 to Under 39.5, and the Moneyline remains JAX. ARI@SEA changes
+from SEA by 6.51 to SEA by 8.92; its Spread side changes ARI to SEA, while its
+Moneyline and Under remain. The other 13 games retain their selected base and
+market sides. The fixed-point grade replay retains 18 actionables with zero
+actionable promotions and zero actionable demotions; both JAX side changes
+remain Leans, while the ARI-to-SEA Spread change remains non-actionable. This is
+a functional state-authority and value-separation repair, not a future-accuracy
+claim. Exact R69/R61/R77/R63 stored locks retain precedence.
+Predeclaration and rollback:
+`docs/model-audits/2026-11-05-nfl-outcome-value-separation-predeclaration.md`.
+
 ## NFL source-reaction health semantics — November 5 candidate
 
 The owner clarified that a professional split on an older or different native

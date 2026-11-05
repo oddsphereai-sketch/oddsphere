@@ -16,6 +16,7 @@ import type { NflForwardContextCapture } from "./nflForwardEvidenceCapture";
 import type { NflPaidProjectionShadow } from "./balldontlieNflWeeklyProjectionShadow";
 import type { NflExactProviderIndependentScore } from "./nflExactProviderScoreRuntime";
 import type { NflAvailabilityArbitrationShadow } from "./nflAvailabilityArbitrationShadow";
+import type { NflOutcomeBaseAuthorityReceipt } from "./nflOutcomeBaseAuthority";
 import type { NflMarketBrainCaptureResult } from "./nflMarketBrainShadow";
 import type { FootballRawPriceResponseManifest } from "./footballRawPriceManifest";
 import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
@@ -29,7 +30,7 @@ export const NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE =
 export const NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook" as const;
 export const NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "nfl_forward_evidence_collector_2026_11_05_r34_source_reaction_health" as const;
+  "nfl_forward_evidence_collector_2026_11_05_r35_outcome_value_separation" as const;
 
 export type NflForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -181,6 +182,8 @@ export type NflForwardEvidencePayload = {
   paidProjectionShadow?: NflPaidProjectionShadow;
   /** Exact market-free score before the downstream market reader; internal audit evidence only. */
   exactProviderScoreShadow?: NflExactProviderIndependentScore;
+  /** Price-blind authority receipt for the single target-free outcome base. */
+  outcomeBaseAuthority?: NflOutcomeBaseAuthorityReceipt;
   /** Prospective injury/player/market agreement diagnostic with zero decision authority. */
   availabilityArbitrationShadow?: NflAvailabilityArbitrationShadow;
   contextualEvidenceCapture?: NflForwardContextCapture;
@@ -249,7 +252,8 @@ export type NflForwardEvidencePayload = {
       | "nfl_v1_member_release_2026_11_04_r58_per_market_source_qualification"
       | "nfl_v1_member_release_2026_11_05_r59_conviction_risk_grade_cap"
       | "nfl_v1_member_release_2026_11_05_r60_current_game_starter_authority"
-      | "nfl_v1_member_release_2026_11_05_r61_source_reaction_health";
+      | "nfl_v1_member_release_2026_11_05_r61_source_reaction_health"
+      | "nfl_v1_member_release_2026_11_05_r62_outcome_value_separation";
     publicationEnabled: boolean;
     /** True only after the authoritative regular/postseason T-60 boundary validates the complete tuple. */
     trackingEnabled: boolean;
