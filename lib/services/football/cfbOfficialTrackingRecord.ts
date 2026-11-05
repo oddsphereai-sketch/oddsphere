@@ -33,6 +33,7 @@ import {
 import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_CALIBRATION_RELEASE,
+  CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE,
   CFB_V1_PRICE_CONTEXT_PREVIOUS_CALIBRATION_RELEASE,
   CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE,
   CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE,
@@ -74,7 +75,7 @@ import {
 import { assertMarketScopedFootballDecisions, FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "./footballMarketScopedTracking";
 
 export const CFB_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "cfb_official_tracking_record_2026_11_04_r52_causal_relative_innovation" as const;
+  "cfb_official_tracking_record_2026_11_05_r53_original_t60_release_handoff" as const;
 
 export function cfbTrackingMarketsForPayload(payload: CfbForwardEvidencePayload): CfbV1Market[] {
   const markets = new Set<CfbV1Market>(payload.decisions.evaluatedBets.map((decision) => decision.market));
@@ -593,18 +594,32 @@ function formatLine(value: number): string {
 }
 
 export function isEligibleCfbOfficialTrackingPayload(payload: CfbForwardEvidencePayload): boolean {
+  // Release transitions must materialize the original priced T-60 call, not
+  // reinterpret it as a new-release or accuracy-only forecast. These exact
+  // predecessor tuples were published by the same sole writer before R60.
+  const originalPreCausalLock =
+    String(payload.schemaRelease) === CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE &&
+    String(payload.memberRelease) === CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_MEMBER_RELEASE &&
+    [CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE,
+      "cfb_v1_daily_edge_decision_2026_10_31_r58_market_evidence_integrity",
+    ].includes(payload.decisions.decisionRelease) &&
+    String(payload.authoritativeForecast?.release) ===
+      "cfb_market_sharp_aware_production_2026_10_27_r41_near_tie_pmf_winner_coherence";
+  const currentCompatibleLock =
+    payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
+    payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE &&
+    (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE ||
+      payload.decisions.decisionRelease === CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE ||
+      payload.decisions.decisionRelease === CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE ||
+      payload.decisions.decisionRelease === CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE ||
+      payload.decisions.decisionRelease === CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE ||
+      payload.decisions.decisionRelease === CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE ||
+      payload.decisions.decisionRelease === CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE) &&
+    (payload.authoritativeForecast?.release === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE ||
+      payload.authoritativeForecast?.release === CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE);
   if (
-    payload.schemaRelease !== CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
-    payload.memberRelease !== CFB_FORWARD_MEMBER_RELEASE ||
-    (payload.decisions.decisionRelease !== CFB_V1_DECISION_RELEASE &&
-      payload.decisions.decisionRelease !== CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE &&
-      payload.decisions.decisionRelease !== CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE &&
-      payload.decisions.decisionRelease !== CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE &&
-      payload.decisions.decisionRelease !== CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE &&
-      payload.decisions.decisionRelease !== CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE) ||
-    (payload.authoritativeForecast?.release !== CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE &&
-      payload.authoritativeForecast?.release !== CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE) ||
-    payload.authoritativeForecast.status !== "market_sharp_applied" ||
+    !(currentCompatibleLock || originalPreCausalLock) ||
+    payload.authoritativeForecast?.status !== "market_sharp_applied" ||
     !payload.decisions.publicationEnabled ||
     !payload.decisions.trackingEnabled ||
     (payload.stage !== "t60" && !isCfbPreT60PublishedPayloadRecovery(payload)) ||
