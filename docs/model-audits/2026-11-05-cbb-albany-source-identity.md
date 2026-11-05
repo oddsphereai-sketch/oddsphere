@@ -43,3 +43,15 @@ new-release attribution. Full model-change gate, focused types/lint/build,
 independent review, latest-main integration, protected PR and normal current
 collector/writer/browser evidence precede completion. No extra provider request
 or manual refresh is authorized by this document.
+
+Final source-boundary review also found an acquisition-window defect: admission
+already allows±10 minutes but the current-board query excluded those minutes at
+its earliest/latest bounds. Query bounds now include the exact existing10-minute
+tolerance; qualification itself is unchanged, with no extra request/market/credit
+or time-tolerance widening. This prevents an edge event from being filtered
+upstream before the exact matcher can examine it. Descriptors are runtime-checked
+short strings, retained at most20 with a separate full count; malformed objects,
+long text and control characters never enter these diagnostic fields. Tests
+prove query/admission boundary parity, outside-window rejection, malformed-field
+containment and unchanged admitted quotes. Source absence is not inferred solely
+from an unmatched canonical ID.

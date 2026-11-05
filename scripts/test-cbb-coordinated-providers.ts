@@ -17,6 +17,13 @@ async function main(){
  const unmatched=normalizeCbbTheOddsApiCurrent([game],[source,{...source,id:'unmatched-native-event',away_team:'Unmatched school'}],f.capturedAt,f.capturedAt);
  assert.deepEqual(unmatched.quotes,result.quotes,"name diagnostics cannot change admitted quotes");
  assert.deepEqual(unmatched.unmatchedEvents,[{eventId:'unmatched-native-event',away:'Unmatched school',home:source.home_team??'',startsAt:source.commence_time??''}]);
+ const malformed=Array.from({length:25},(_,i)=>({...source,id:`malformed-${i}`,away_team:'X'.repeat(20000),home_team:{raw:'body'},commence_time:{raw:'clock'}}));
+ const bounded=normalizeCbbTheOddsApiCurrent([game],[source,...malformed],f.capturedAt,f.capturedAt);
+ assert.deepEqual(bounded.quotes,result.quotes);assert.equal(bounded.unmatchedEventCount,25);assert.equal(bounded.unmatchedEvents?.length,20);
+ assert.ok(bounded.unmatchedEvents?.every(e=>e.away===''&&e.home===''&&e.startsAt===''),"raw malformed values cannot enter diagnostics");
+ const edge={...source,commence_time:new Date(Date.parse(game.date)+600000).toISOString()};
+ assert.ok(normalizeCbbTheOddsApiCurrent([game],[edge],f.capturedAt,f.capturedAt).quotes.length);
+ assert.equal(normalizeCbbTheOddsApiCurrent([game],[{...edge,commence_time:new Date(Date.parse(game.date)+600001).toISOString()}],f.capturedAt,f.capturedAt).quotes.length,0);
  const q=result.quotes[0],duplicates=mergeCbbCurrentSourceQuotes([q,{...q,provider:'owls'}],game.id,f.capturedAt);
  assert.equal(duplicates.quotes.length,1);assert.equal(duplicates.duplicates,1);
  const owls={...q,provider:'owls' as const},bdl={...q,provider:'balldontlie' as const,firstPrice:q.firstPrice-10};
@@ -28,7 +35,7 @@ async function main(){
  assert.equal(mergeCbbCurrentSourceQuotes([q,{...q,firstPrice:q.firstPrice-10}],game.id,f.capturedAt).quotes.length,0);
  const stale={...q,providerObservedAt:new Date(Date.parse(q.providerObservedAt)-3600001).toISOString()};
  assert.deepEqual(mergeCbbCurrentSourceQuotes([stale,q],game.id,f.capturedAt).quotes,[q]);
- let calls=0;const fetcher=async(input:Parameters<typeof fetch>[0])=>{calls++;const u=new URL(String(input));if(u.pathname==='/v4/sports')return new Response('[]',{headers:{'x-requests-remaining':'10000'}});assert.equal(u.pathname,'/v4/sports/basketball_ncaab/odds');assert.equal(u.searchParams.get('markets'),'h2h,spreads,totals');return new Response(JSON.stringify([source]),{headers:{'x-requests-remaining':'9997','x-requests-last':'3'}});};
+ let calls=0;const fetcher=async(input:Parameters<typeof fetch>[0])=>{calls++;const u=new URL(String(input));if(u.pathname==='/v4/sports')return new Response('[]',{headers:{'x-requests-remaining':'10000'}});assert.equal(u.pathname,'/v4/sports/basketball_ncaab/odds');assert.equal(u.searchParams.get('markets'),'h2h,spreads,totals');assert.equal(Date.parse(u.searchParams.get('commenceTimeFrom')!),Date.parse(game.date)-600000);assert.equal(Date.parse(u.searchParams.get('commenceTimeTo')!),Date.parse(game.date)+600000);return new Response(JSON.stringify([source]),{headers:{'x-requests-remaining':'9997','x-requests-last':'3'}});};
  const read=await fetchCbbTheOddsApiCurrent({apiKey:'dummy',games:[game],fetcher,now:()=>f.capturedAt});assert.equal(read.quotes.length,result.quotes.length);assert.equal(calls,2);assert.equal(read.creditsUsed,3);
  calls=0;const reserve=await fetchCbbTheOddsApiCurrent({apiKey:'dummy',games:[game],now:()=>f.capturedAt,fetcher:async()=>{calls++;return new Response('[]',{headers:{'x-requests-remaining':'1002'}});}});assert.equal(reserve.status,'credit_reserve');assert.equal(calls,1);assert.equal(reserve.paidRequests,0);
  console.log('PASS CBB coordinated provider contracts: exact fixture/clock/pairs, source origins, duplicates, conflicts, fresh native states, one-board/quota bounds; no network or writes.');

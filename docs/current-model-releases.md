@@ -158,6 +158,10 @@ identity uses the same alias; Albany State, other schools, wrong days and
 ambiguous fixtures stay rejected. Canonical capture advances to
 `market_intelligence_v2_capture_2026_11_05_r28_cbb_albany_source_identity` and
 shared mapping to `cbb_sharp_split_mapping_2026_11_05_r6_albany_source_identity`.
+The current request bounds include the existing±10-minute admission margin
+at both window edges, preventing upstream exclusion of otherwise matchable
+events. Returned unmatched diagnostics retain at most20 short-string native
+event descriptors plus total count; no extra source request is introduced.
 No clock tolerance, provider budget, forecast equation, grade threshold,
 source priority or cache behavior changes. R22/R18 remain explicit compatible
 anchor/path/tracking owners, including actual saved R22 future-lock proof.

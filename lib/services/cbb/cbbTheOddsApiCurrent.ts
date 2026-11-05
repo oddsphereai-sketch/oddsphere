@@ -5,13 +5,14 @@ import type {RawOwlsOddsEvent} from "@/lib/providers/owls/owlsSharpBookOdds";
 
 export const CBB_THE_ODDS_API_CURRENT_RELEASE="cbb_the_odds_api_current_2026_11_05_r1_exact_gap_capture" as const;
 const BOOKS=["pinnacle","draftkings","fanduel","betmgm","betrivers","williamhill_us","bet365","bovada"];
-const RESERVE=1000,CREDITS=3,MAX_BYTES=4_000_000;
+const RESERVE=1000,CREDITS=3,MAX_BYTES=4_000_000,FIXTURE_TOLERANCE_MS=10*60_000;
+const diagnosticText=(value:unknown,max:number)=>typeof value==="string"&&value.length<=max&&!/[\u0000-\u001f\u007f]/.test(value)?value:"";
 const aliases:Record<string,string>={williamhill_us:"caesars"};
 const int=(value:string|null)=>{const n=value===null?NaN:Number(value);return Number.isInteger(n)&&n>=0?n:null;};
 export type CbbTheOddsApiReceipt={release:typeof CBB_THE_ODDS_API_CURRENT_RELEASE;status:"read"|"credit_reserve"|"quota_unavailable";
   requestedAt:string;availableAt:string;requests:number;paidRequests:number;creditsUsed:number;creditsRemaining:number|null;
-  eventsReturned:number;unmatchedEvents?:Array<{eventId:string;away:string;home:string;startsAt:string}>;quotes:CbbQuote[];rejections:Array<CbbCurrentOddsRejection&{gameId:number}>};
-export function normalizeCbbTheOddsApiCurrent(games:CbbGame[],body:unknown,requestedAt:string,availableAt:string):Pick<CbbTheOddsApiReceipt,"eventsReturned"|"unmatchedEvents"|"quotes"|"rejections">{
+  eventsReturned:number;unmatchedEventCount?:number;unmatchedEvents?:Array<{eventId:string;away:string;home:string;startsAt:string}>;quotes:CbbQuote[];rejections:Array<CbbCurrentOddsRejection&{gameId:number}>};
+export function normalizeCbbTheOddsApiCurrent(games:CbbGame[],body:unknown,requestedAt:string,availableAt:string):Pick<CbbTheOddsApiReceipt,"eventsReturned"|"unmatchedEventCount"|"unmatchedEvents"|"quotes"|"rejections">{
  if(!Array.isArray(body))throw Error("CBB The Odds API response must be an event array");
  const events=body.filter((e):e is RawOwlsOddsEvent&{id:string;sport_key:string}=>!!e&&typeof e==="object"&&
    e.sport_key==="basketball_ncaab"&&typeof e.id==="string"&&!!e.id&&e.id.length<=256);
@@ -19,8 +20,8 @@ export function normalizeCbbTheOddsApiCurrent(games:CbbGame[],body:unknown,reque
  const used=new Set<string>();
  for(const game of games){
   const own={homeTeamDisplayName:game.home_team.full_name,awayTeamDisplayName:game.visitor_team.full_name,cbbHomeCollege:game.home_team.college,cbbAwayCollege:game.visitor_team.college};
-  const participants=events.filter(e=>cbbSplitOrientation(e.away_team??"",e.home_team??"",own)!==null);
-  const matches=participants.filter(e=>Number.isFinite(Date.parse(e.commence_time??""))&&Math.abs(Date.parse(e.commence_time!)-Date.parse(game.date))<=600000);
+  const participants=events.filter(e=>typeof e.away_team==="string"&&typeof e.home_team==="string"&&cbbSplitOrientation(e.away_team??"",e.home_team??"",own)!==null);
+  const matches=participants.filter(e=>typeof e.commence_time==="string"&&Number.isFinite(Date.parse(e.commence_time))&&Math.abs(Date.parse(e.commence_time!)-Date.parse(game.date))<=FIXTURE_TOLERANCE_MS);
   if(matches.length!==1||used.has(matches[0]?.id)){
    rejections.push({gameId:game.id,book:null,reason:matches.length===0?participants.length?"matching_schools_wrong_start":"exact_event_absent":"exact_event_ambiguous_or_reused"});continue;
   }
@@ -34,8 +35,10 @@ export function normalizeCbbTheOddsApiCurrent(games:CbbGame[],body:unknown,reque
   rejections.push(...result.rejected.map(r=>({...r,gameId:game.id})));
   if(!result.quotes.length&&!result.rejected.length)rejections.push({gameId:game.id,book:null,reason:"no_complete_named_book_markets"});
  }
- return {eventsReturned:body.length,quotes,rejections,unmatchedEvents:events.filter(e=>!used.has(e.id)).map(e=>({
-  eventId:e.id,away:e.away_team??"",home:e.home_team??"",startsAt:e.commence_time??""}))};
+ const unmatched=events.filter(e=>!used.has(e.id));
+ return {eventsReturned:body.length,quotes,rejections,unmatchedEventCount:unmatched.length,unmatchedEvents:unmatched.slice(0,20).map(e=>({
+  eventId:diagnosticText(e.id,256),away:diagnosticText(e.away_team,160),home:diagnosticText(e.home_team,160),
+  startsAt:diagnosticText(e.commence_time,64)}))};
 }
 // Whitelist only non-secret acquisition facts. The normal cron response body
 // is not retained by refreshLogger; these receipts make ordinary cycles
@@ -50,7 +53,7 @@ function observed(receipt:CbbTheOddsApiReceipt):CbbTheOddsApiReceipt{
    requestedAt:receipt.requestedAt,availableAt:receipt.availableAt,requests:receipt.requests,paidRequests:receipt.paidRequests,
    creditsUsed:receipt.creditsUsed,creditsRemaining:receipt.creditsRemaining,eventsReturned:receipt.eventsReturned,
    matchedGames:new Set(receipt.quotes.map(q=>q.gameId)).size,quoteGameIds:[...new Set(receipt.quotes.map(q=>q.gameId))],
-   quotes:receipt.quotes.length,rejectionReasons,rejectedGameIds,unmatchedEventCount:receipt.unmatchedEvents?.length??0,
+   quotes:receipt.quotes.length,rejectionReasons,rejectedGameIds,unmatchedEventCount:receipt.unmatchedEventCount??0,
    unmatchedEventSample:(receipt.unmatchedEvents??[]).slice(0,20)})}`);
  return receipt;
 }
@@ -78,8 +81,8 @@ export async function fetchCbbTheOddsApiCurrent(args:{apiKey:string;games:CbbGam
  current.searchParams.set("oddsFormat","american");current.searchParams.set("dateFormat","iso");
  const starts=args.games.map(g=>Date.parse(g.date));
  if(starts.some(t=>!Number.isFinite(t)))throw Error("CBB The Odds API gap fixture time invalid");
- current.searchParams.set("commenceTimeFrom",new Date(Math.min(...starts)).toISOString().replace(/\.\d{3}Z$/,"Z"));
- current.searchParams.set("commenceTimeTo",new Date(Math.max(...starts)).toISOString().replace(/\.\d{3}Z$/,"Z"));
+ current.searchParams.set("commenceTimeFrom",new Date(Math.min(...starts)-FIXTURE_TOLERANCE_MS).toISOString().replace(/\.\d{3}Z$/,"Z"));
+ current.searchParams.set("commenceTimeTo",new Date(Math.max(...starts)+FIXTURE_TOLERANCE_MS).toISOString().replace(/\.\d{3}Z$/,"Z"));
  let response:Response;
  const currentRequestedAt=now();
  args.onRequest?.("current");

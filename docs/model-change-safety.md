@@ -48,6 +48,9 @@ Manhattan opponent and00:00Z start. Incumbent model R23 /receipt R19 /publisher
 R41 /tracking R27 and canonical capture R28 admit that exact full-name alias
 through the common collector/quote/split identity path. No generic fuzziness,
 clock widening, quota increase or grading/model formula change is authorized.
+Align the provider query edges with the existing±10-minute matcher, and retain
+only20 sanitized unmatched-event descriptors with a separate total count;
+these use the same already-fetched response and add no request.
 Existing R22/R18 and older locks retain exact authority and original attribution.
 The 22 unsupported cross priors remain unpublished; reader R1's cached-clock
 handoff remains unchanged. Functional positive/reversed/mixed-school/day/ambiguity
