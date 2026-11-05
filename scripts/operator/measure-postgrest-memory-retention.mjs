@@ -31,9 +31,16 @@ await db.query(`
     SELECT jsonb_build_object('pid',pg_backend_pid(),'managedBytes',
       (SELECT sum(total_bytes) FROM pg_backend_memory_contexts))
   $$;
+  CREATE TABLE public.memory_write_fixture(id integer PRIMARY KEY,payload jsonb NOT NULL);
+  CREATE FUNCTION public.memory_write(jsonb) RETURNS void LANGUAGE sql AS $$
+    INSERT INTO public.memory_write_fixture VALUES(($1->>'id')::integer,$1->'payload')
+    ON CONFLICT(id) DO UPDATE SET payload=excluded.payload
+  $$;
   GRANT USAGE ON SCHEMA public TO memory_reader;
   GRANT SELECT ON public.memory_fixture TO memory_reader;
   GRANT EXECUTE ON FUNCTION public.memory_probe() TO memory_reader;
+  GRANT EXECUTE ON FUNCTION public.memory_write(jsonb) TO memory_reader;
+  GRANT SELECT,INSERT,UPDATE ON public.memory_write_fixture TO memory_reader;
   ANALYZE public.memory_fixture;
 `);
 await db.end();
@@ -43,6 +50,8 @@ const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const observations = [];
 const cases = [
   { name: "current_pages", legacy: false, idleGc: false },
+  { name: "current_pages_and_large_writes", legacy: false, idleGc: false, writes: true },
+  { name: "current_pages_and_large_writes_idle_gc", legacy: false, idleGc: true, writes: true },
   { name: "legacy_then_current_pages", legacy: true, idleGc: false },
   { name: "legacy_then_current_pages_idle_gc", legacy: true, idleGc: true },
 ];
@@ -51,10 +60,17 @@ function memory(pid) {
   const smaps = readFileSync(`/proc/${pid}/smaps_rollup`, "utf8");
   const values = {};
   for (const text of [status, smaps]) {
-    for (const match of text.matchAll(/^(VmRSS|VmSize|VmData|VmSwap|Rss|Pss|Private_Clean|Private_Dirty|Anonymous|Swap):\s+(\d+) kB/gm)) {
+    for (const match of text.matchAll(/^(VmRSS|VmSize|VmData|VmSwap|Rss|Pss|Private_Clean|Private_Dirty|Anonymous|Swap|SwapPss|LazyFree):\s+(\d+) kB/gm)) {
       values[match[1] + "Bytes"] = Number(match[2]) * 1024;
     }
   }
+  // Linux marks VM_ACCOUNT regions with "ac". This mapping total is a
+  // reservation diagnostic, not a replacement for host Committed_AS: shared
+  // mappings and touched private file mappings require separate accounting.
+  const maps = readFileSync(`/proc/${pid}/smaps`, "utf8");
+  values.accountableMappingBytes = [...maps.matchAll(/^Size:\s+(\d+) kB[\s\S]*?^VmFlags:([^\n]*)/gm)]
+    .filter((match) => /\bac\b/.test(match[2]))
+    .reduce((sum, match) => sum + Number(match[1]) * 1024, 0);
   return values;
 }
 const childEnvironment = { PATH: process.env.PATH, LANG: "C.UTF-8" };
@@ -112,6 +128,17 @@ for (const entry of cases) {
     timer = setInterval(() => { samples.push({ phase, ...memory(child.pid) }); }, 100);
     const baseline = await checkpoint("baseline");
     const requests = [];
+    if (entry.writes) {
+      phase = "large_write_burst";
+      // Matches the observed ~19.5 MB request class using invented data only.
+      requests.push(...await Promise.all(Array.from({ length: 5 }, async (_, id) => {
+        const body = JSON.stringify({ id, payload: { syntheticEvidence: "abcdefgh".repeat(2_443_750) } });
+        const response = await fetch(`${base}/rpc/memory_write`, { method: "POST", headers: { "Content-Type": "application/json" }, body, signal: AbortSignal.timeout(30000) });
+        assert(response.ok, `write HTTP ${response.status}`);
+        await response.arrayBuffer();
+        return { writeBytes: Buffer.byteLength(body), sha256: hash(body) };
+      })));
+    }
     if (entry.legacy) {
       phase = "legacy_burst";
       requests.push(...await Promise.all(Array.from({ length: 5 }, () => readPage(1000))));
