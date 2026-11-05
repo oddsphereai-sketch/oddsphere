@@ -219,3 +219,15 @@ console.log(JSON.stringify({capacity:"compact_tape_only; ephemeral intervals are
   productionCircaFlowMixBytes:bytes(nativeTape),production120GameReadBytes:bytes(nativeTape)*120,
   uniqueMaximumLengthEventIdBytes:bytes(longIdTape),uniqueMaximumLengthEventId120GameReadBytes:bytes(longIdTape)*120}));
 console.log("PASS CBB observed paired path: buyback/resumption/holds, native flow contracts, receipt clocks, persistent ambiguity, exclusion and bounded contiguous coverage.");
+
+const transported={...quote(20,-115,-105),provider:"the_odds_api" as const,providerEventId:"exact-toa-event",requestedAt:time(14)};
+const transportedRead=run([transported],{seedQuotes:[q0],flows:[flow()]});
+const transportedStream=transportedRead.tape.streams.find(s=>s.book==="circa"&&s.market==="spread")!;
+const expandedTransport=expandCbbMarketBehaviorPathStream(JSON.parse(JSON.stringify(transportedRead.tape)),JSON.parse(JSON.stringify(transportedStream)));
+const restoredTransport=expandedTransport.quotes.find(q=>q.providerObservedAt===transported.providerObservedAt)!;
+assert.equal(restoredTransport.provider,"the_odds_api");assert.equal(restoredTransport.providerEventId,transported.providerEventId);
+assert.equal(restoredTransport.requestedAt,transported.requestedAt);
+assert.equal(source(transportedRead).boundFlows.length,0,"no apparent reaction when the quote request began before flow availability");
+const oldTape=structuredClone(first.tape);oldTape.release="cbb_market_behavior_path_2026_11_04_r5_retained_response_frontier";
+const oldTapeBytes=JSON.stringify(oldTape);run([q2],{previous:oldTape});assert.equal(JSON.stringify(oldTape),oldTapeBytes,"old retained tape is never mutated by migration");
+console.log("PASS CBB transport path: new provider/event/request clock round trip, old R5 compatibility and overlapping-request reaction rejection.");

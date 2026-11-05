@@ -11,3 +11,10 @@ assert.equal(cbbAvailabilityUpperBoundMs("2026-11-02T10:00:00.123001-05:00"),Dat
 assert.ok(Number.isNaN(cbbAvailabilityUpperBoundMs("bad")));
 assert.equal(before.canonicalReceipt.availableBy,"2026-11-02T15:00:00.123001+00:00","raw native clock is preserved");
 console.log("PASS CBB receipt clocks: sub-millisecond DB availability rounds outward, raw timestamps retained and overlapping windows never prove order.");
+
+const inFlight={requestedAt:"2026-11-02T15:00:00.110Z",fetchedAt:"2026-11-02T15:00:00.200Z"};
+assert.equal(cbbEvidenceReceiptBounds(inFlight).earliest,Date.parse(inFlight.requestedAt));
+assert.equal(cbbEvidenceReceiptBounds(inFlight).available,Date.parse(inFlight.fetchedAt));
+assert.equal(cbbEvidenceProvablyBefore(before,inFlight),false,"flow available during an already-in-flight quote request cannot prove a later response");
+assert.equal(cbbEvidenceProvablyBefore(before,{...inFlight,requestedAt:"2026-11-02T15:00:00.125Z"}),true);
+assert.ok(Number.isNaN(cbbEvidenceReceiptBounds({...inFlight,requestedAt:"2026-11-02T15:00:00.300Z"}).available));

@@ -35,8 +35,8 @@ async function main(){
   next.snapshot.board.marketContext.verifiedMarketRead!.modelRelease=CBB_FULL_D1_MARKET_MODEL_RELEASE;
   next.snapshot.board.marketContext.verifiedMarketRead!.release=CBB_FULL_D1_READER_RECEIPT_RELEASE;
   tracked.length=0;assert.equal(await writeLockedCbbTracking(next,db),3);
-  assert.ok(tracked.every(r=>r.model_used==="cbb_r20_complete_source_admission"&&r.model_version===CBB_FULL_D1_MARKET_MODEL_RELEASE));
+  assert.ok(tracked.every(r=>r.model_used==="cbb_r21_coordinated_provider_capture"&&r.model_version===CBB_FULL_D1_MARKET_MODEL_RELEASE));
   const corrupt=structuredClone(frozen.record);corrupt.snapshot.board.score.home+=1;
   await assert.rejects(writeLockedCbbTracking(corrupt,db),/receipt differs/);
-  console.log("PASS actual CBB R19/R15 continuity: future lock, exact reader/writer bytes, tracking idempotence, receipt guard, distinct R20 attribution.");
+  console.log("PASS actual CBB R19/R15 continuity: future lock, exact reader/writer bytes, tracking idempotence, receipt guard, distinct current-release attribution.");
 }void main().catch(error=>{console.error(error);process.exitCode=1;});

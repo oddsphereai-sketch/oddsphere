@@ -1,3 +1,8 @@
+import type {CbbGame} from "../lib/cbb/types";
+import fs from "node:fs";
+import {gunzipSync} from "node:zlib";
+import {normalizeCbbTheOddsApiCurrent,fetchCbbTheOddsApiCurrent,CBB_THE_ODDS_API_CURRENT_RELEASE} from "../lib/services/cbb/cbbTheOddsApiCurrent";
+import type {RawOwlsOddsEvent} from "../lib/providers/owls/owlsSharpBookOdds";
 import assert from "node:assert/strict";
 import {mock} from "node:test";
 import {computeSlateDate} from "../lib/dates/slateDate";
@@ -65,6 +70,41 @@ async function main(){
   assert.equal(result.unpublishedIncomplete.length,0);assert.equal(result.written,65);assert.equal(result.trackingInserted,0);
   assert.equal((published as DailyEdgeResponse|null)?.games.length,65);assert.equal(providerCalls,2);assert.equal(owlsCalls,2);assert.equal(freeCalls,1);
   assert.equal(JSON.stringify(stored.get("cbb::member-game::nov4-owner-record")),original);
+  // Exercise the real sole writer with an injected, bounded source read. The
+  // raw prices below are captured Owls contracts in documented Odds API wire
+  // form: this proves the handoff, not additional live provider coverage.
+  const sourceCapture=JSON.parse(gunzipSync(fs.readFileSync(new URL("./fixtures/cbb-source-admission-20261105.json.gz",import.meta.url))).toString()) as {
+    capturedAt:string;games:CbbGame[];events:RawOwlsOddsEvent[]};
+  const quoteGame=sourceCapture.games.find(g=>g.id===10882706)!;
+  const native=sourceCapture.events.filter(e=>e.away_team==="Penn").map((e,i)=>({...e,id:`contract-${i}`,sport_key:"basketball_ncaab"}));
+  // Keep one event with all its source books; each API event remains unique.
+  const event={...native[0],bookmakers:native.flatMap(e=>e.bookmakers??[])};
+  let sourceReads=0;
+  const theOddsApiReader=(async args=>{sourceReads++;args.onRequest?.("quota");args.onRequest?.("current");
+    const evidence=normalizeCbbTheOddsApiCurrent([quoteGame],[event],sourceCapture.capturedAt,sourceCapture.capturedAt);
+    return {release:CBB_THE_ODDS_API_CURRENT_RELEASE,status:"read",requestedAt:sourceCapture.capturedAt,availableAt:sourceCapture.capturedAt,
+      requests:2,paidRequests:1,creditsUsed:3,creditsRemaining:9997,...evidence};}) as typeof fetchCbbTheOddsApiCurrent;
+  const beforeConnected=new Map([...stored].map(([key,value])=>[key,structuredClone(value)]));
+  const connected=await refreshCbbMemberBoard({anchorDate:day,season:2026,now:sourceCapture.capturedAt,bdlKey:"offline",owlsKey:"offline",theOddsApiKey:"dummy",
+    theOddsApiReader,provider,owls,trainingGames:[],db,fetcher,loadSchedule:async()=>schedule,saveSnapshot,canonicalHistoryReader,fallbackOdds:[]});
+  assert.equal(sourceReads,1);assert.equal(connected.published,65);assert.equal(connected.currentSourceCoverage.theOddsApiRequests,2);
+  assert.ok(connected.currentSourceCoverage.quotesByProvider.the_odds_api>0);
+  const connectedMember=(stored.get(`cbb::member-game::${quoteGame.id}`) as CbbStoredMemberGame).memberGame;
+  for(const key of ["moneyline","first_inning","total"] as const){
+    const market=connectedMember.markets[key];assert.ok(market.priceAmerican!==null,`${key} exact target quote reaches the card`);
+    assert.ok(market.oddsTrail?.length);assert.ok(market.opposingOddsTrail?.stops.length,`${key} both source sides reach the reader`);
+  }
+  assert.equal(JSON.stringify(stored.get("cbb::member-game::nov4-owner-record")),original);
+  // One failed transport must not prevent the other exact source from
+  // completing the same board. Provider failure remains visible in telemetry.
+  stored.clear();for(const [key,value] of beforeConnected)stored.set(key,value);
+  const outageOwls={odds:async()=>{throw Error("offline source outage");},splits:async()=>({body:{success:true,data:[]}})} as unknown as OwlsInsightClient;
+  const outage=await refreshCbbMemberBoard({anchorDate:day,season:2026,now:sourceCapture.capturedAt,bdlKey:"offline",owlsKey:"offline",theOddsApiKey:"dummy",
+    theOddsApiReader,provider,owls:outageOwls,trainingGames:[],db,fetcher,loadSchedule:async()=>schedule,saveSnapshot,canonicalHistoryReader,fallbackOdds:[]});
+  assert.equal(outage.published,65);assert.ok(outage.providerWarnings.includes("Owls current odds request failed"));
+  assert.ok(outage.currentSourceCoverage.quotesByProvider.the_odds_api>0);
+  // Restore only this in-memory harness before earlier-clock lifecycle cases.
+  stored.clear();for(const [key,value] of beforeConnected)stored.set(key,value);
   const tbd=source.games.find(g=>g.id===10882930)!;
   assert.ok(tbd,"actual frozen future fixture with unconfirmed official tip time");
   const tbdTeams=[tbd.home_team,tbd.visitor_team].map(t=>({id:t.id,abbreviation:t.abbreviation,display_name:t.full_name,logo_url:null}));
