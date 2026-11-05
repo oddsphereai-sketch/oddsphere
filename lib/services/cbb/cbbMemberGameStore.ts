@@ -84,12 +84,12 @@ export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisi
   const evidenceAt=freezing?Date.parse(args.game.date)-60*60_000:Date.parse(args.now);
   const empty:BookDisplayFeed={release:BOOK_DISPLAY_HISTORY_RELEASE,sport:"cbb",fetchedAt:args.now,eventsAt:args.now,events:[],rows:[]};
   const captured=args.bookHistory?{...args.bookHistory,rows:args.bookHistory.rows.filter(row=>row.event===args.game.id)}:empty;
-  const history=accumulateCbbPublishedQuotes(captured,retained?[retained.memberGame]:[],null,evidenceAt);
+  const history=freezing?empty:accumulateCbbPublishedQuotes(captured,retained?[retained.memberGame]:[],null,evidenceAt);
   // A future lock freezes the existing published decision and evidence. It
   // must not rebuild the DTO with empty split/quote arguments at the cutoff.
   const candidate=freezing?structuredClone(existing.memberGame):adaptCbbProvisionalGame({game:args.game,snapshot:next,
     homeLogo:args.homeLogo,awayLogo:args.awayLogo,now:args.now,splitEvidence:args.splitEvidence,marketQuotes:args.marketQuotes});
-  const memberGame=mergeCbbReaderEvidence({sport:"cbb",games:[candidate]} as Parameters<typeof mergeCbbReaderEvidence>[0],history,[],evidenceAt).games[0];
+  const memberGame=freezing?candidate:mergeCbbReaderEvidence({sport:"cbb",games:[candidate]} as Parameters<typeof mergeCbbReaderEvidence>[0],history,[],evidenceAt).games[0];
   if(!freezing){
     for(const key of ["moneyline","first_inning","total"] as const){
       const market=memberGame.markets[key],section=args.capturedNamedSections?.[key]??retained?.memberGame.markets[key].sportsbookSplits;
