@@ -13,7 +13,7 @@ import {
   type EplForwardEvidenceCapture,
 } from "./eplForwardEvidenceCapture";
 import { deriveEplCoherentMarketOutcome } from "./eplCoherentMarketOutcome";
-import { reconcileEplProjectedGoalsWithResult, selectEplMatchResultSide } from "./eplShadowModel";
+import type { EplShadowPrediction } from "./eplShadowModel";
 import type { UclRelativeMarketReadReceipt } from "../ucl/uclRelativeMarketRead";
 
 const BOOK_PRIORITY = ["pinnacle", "circa", "draftkings", "fanduel", "betmgm", "caesars"];
@@ -63,6 +63,9 @@ export type EplPreviewBuildOptions = {
   /** Authenticated zero-write diagnostics only: ignore durable quote freshness
    * so the paid supplemental endpoint can be proven before publication. */
   forceCurrentProviderRefresh?: boolean;
+  /** Read-only release comparison only. Both branches receive one identical
+   * decision clock; ordinary production callers always use the live clock. */
+  auditDecisionAt?: string;
   marketProvider?: EplMarketProvider | null;
   cacheNamespace?: string;
   cacheIdentity?: string;
@@ -613,7 +616,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   deriveCoherentOutcome: deriveEplCoherentMarketOutcome,
   deriveMatchResultDecision: deriveEplMatchResultDecision,
   derivePreviewGrade: deriveEplPreviewGrade,
-  selectMatchResultSide: selectEplMatchResultSide,
+  useCoherentMatchResultForecast: true,
 }, competitionLabel = "EPL", storedPriceHistory: EplStoredPriceObservation[] = []): DailyEdgeGameDto {
   const clubP = match.prediction.probabilities;
   const mr = coherentRead(sharp.odds, "match_result", ["home", "draw", "away"])
@@ -652,10 +655,8 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     kickoff: match.kickoff,
   });
   const coherentMatchResult = coherentOutcome.markets.match_result;
-  const relativeMarketReader = authorities.nativeGoalMarketContracts
-    ? (coherentOutcome.audit.goalsReader as { relativeMarketReader?: UclRelativeMarketReadReceipt } | undefined)?.relativeMarketReader
-    : undefined;
-  const forecastPrediction = authorities.useCoherentMatchResultForecast
+  const relativeMarketReader = (coherentOutcome.audit.goalsReader as { relativeMarketReader?: UclRelativeMarketReadReceipt } | undefined)?.relativeMarketReader;
+  const forecastPrediction: EplShadowPrediction = authorities.useCoherentMatchResultForecast
     ? {
         ...match.prediction,
         probabilities: {
@@ -675,7 +676,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     return { release: match.prediction.release, side, rawSide: side, applied: false };
   })();
   const forecastSide = forecastArbitration.side;
-  const publishedGoals = reconcileEplProjectedGoalsWithResult(coherentOutcome.expectedGoals, forecastArbitration);
+  const publishedGoals = coherentOutcome.expectedGoals;
   const publishedTotal = publishedGoals.home + publishedGoals.away;
   const goalOutlookProbabilities = coherentOutcome.markets;
   const p = {
@@ -708,9 +709,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   const totalSide = totalForecastSide;
   const bttsForecastSide = p.bttsYes >= p.bttsNo ? "yes" : "no";
   const bttsSide = bttsForecastSide;
-  const representativeScore = forecastArbitration.applied
-    ? coherentOutcome.likelyScore
-    : coherentOutcome.representativeScore;
+  const representativeScore = coherentOutcome.representativeScore;
   const split = bestSplits(sharp.splits);
   const matchResultSplits = publicSplits({ market: "moneyline", split, home: match.homeTeam.abbreviation, away: match.awayTeam.abbreviation, pick: resultSide });
   const totalSplits = publicSplits({ market: "total", split, home: match.homeTeam.abbreviation, away: match.awayTeam.abbreviation, pick: totalSide });
@@ -940,7 +939,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
         edge_pp: bttsEdge,
         displayed_side: bttsSide,
         scoring_context: `${match.awayTeam.abbreviation} ${publishedGoals.away.toFixed(2)} · ${match.homeTeam.abbreviation} ${publishedGoals.home.toFixed(2)} expected goals`,
-        note: "Derived from the same target-excluded or exact club fallback regulation PMF; the BTTS quote is economics only.",
+        note: "Derived from the same coherent regulation PMF. Qualified target-excluded relative paths may update that PMF; the evaluated execution quote remains economics only.",
       },
       soccerPriceBoard: btts ? {
         sportsbook: btts.sportsbook,
@@ -996,7 +995,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     soccerModelProvenance: {
       coherentOutcomeRelease: coherentOutcome.release,
       source: coherentOutcome.source,
-      evaluatedQuoteRole: "economics_and_grade_only",
+      evaluatedQuoteRole: coherentOutcome.audit.evaluatedQuoteRole,
       targetExcludedBooks: coherentOutcome.audit.evaluatedCanonicalBooksExcluded,
       eligibleAlternativeBooks: coherentOutcome.audit.eligibleAlternativeBooks,
       goalsReader: coherentOutcome.audit.goalsReader,
@@ -1107,7 +1106,8 @@ export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: E
     }
   }
   const date = slate.matches[0]?.kickoff.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
-  const capturedAt = new Date().toISOString();
+  const capturedAt = options.auditDecisionAt ?? new Date().toISOString();
+  if (!Number.isFinite(Date.parse(capturedAt))) throw new Error("Invalid EPL audit decision clock");
   const response: DailyEdgeResponse = {
     as_of: slate.generatedAt,
     sport: "soccer",

@@ -30,6 +30,32 @@ probabilities, picks, grades, prices, stakes or actionability: board impact is
 0 promotions / 0 demotions / 0 removals. Evidence:
 `docs/model-audits/2026-11-04-pro-reader-auditability.json`.
 
+## EPL coherent relative-path reader and truthful soccer/CBB provenance — November 4
+
+Future-unlocked EPL advances to model `epl_goals_coherent_2026_11_04_r24_relative_path_joint_pmf`,
+outcome `epl_coherent_market_outcome_2026_11_04_r4_relative_path_joint_pmf`, draw calibration
+`epl_draw_calibration_2026_11_04_r2_joint_pmf_order_constraint`, and grade
+`epl_grade_policy_2026_11_04_v29_relative_path_joint_pmf`. It reuses the existing qualified
+same-book relative-episode engine over target-excluded books. The engine applies the pooled
+before/current source-profile density ratio once to the independent joint score law; it does not
+weight or blend market levels with the model. Match Result, Draw, Double Chance, Total, BTTS,
+expected goals, representative score, picks, and grades all consume that final law. Eligible draw
+handling is now a minimum-information order constraint inside the joint law, not an out-of-band
+side override or midpoint score rewrite.
+
+CBB member adapter advances to `cbb_member_adapter_2026_11_04_r23_truthful_market_read_provenance`.
+It changes no score, probability, pick, grade, price, stake, writer, provider, or cadence; future
+unlocked breakdowns now describe the stored top-market support/resistance/neutral semantic rather
+than claiming no sharp data, and attach scope-qualified reader provenance. UCL model and market
+reader behavior remain unchanged; member lifecycle advances to
+`ucl_member_snapshot_lifecycle_2026_11_04_r26_evidence_role_provenance` so future-unlocked cards
+publish the coherent outcome's actual evidence-role receipt instead of the EPL fallback literal.
+All legacy locked payloads retain exact stored reader, projection, market, grade, and provenance
+precedence. Evidence and rollback: `docs/model-audits/2026-11-04-epl-cbb-ucl-coherent-reader.md`.
+The release-pure current 10-game/40-market read-only comparison produced two promotions, three
+demotions, zero actionable removals, zero side changes, and an unchanged six actionables; it used
+one Owls board request, zero paid fallback requests, and zero writes.
+
 ## NBA composed named-book opposition — November 4
 
 The authoritative NBA grade policy advances to
@@ -5562,10 +5588,11 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 ## Premier League production release (active)
 
 - October 28 provider cutover: future-unlocked EPL prices use one cached Owls soccer board for fresh named-book Match Result and exact-2.5 Total vectors, with the paid The Odds API event endpoint filling only missing BTTS, Double Chance, and exact-2.5 Total vectors. Exact team orientation, kickoff proximity, complete same-book outcome vectors, provider timestamps, a 20-request cycle ceiling, and a 1,000-credit reserve fail closed. The free event catalog is used for identity and quota proof. Fresh durable quotes may bridge the bounded cadence only as explicitly attributed `stored_quote` rows and are never re-recorded as new provider observations. Playbook consensus is not a sportsbook and remains outside this price lane. The existing writer, `prediction_pipeline:soccer` lease, schedule, stake, copy, labels, layout, settlement, and locked payload precedence are unchanged. The zero-write rehearsal preserved all 40 forecast sides and every model probability; the fresh-price comparison moved actionables 9 to 7 through two BTTS price demotions and zero promotions. This is an exact-price economics change, not a new grading rule. Production proof must still show live supplemental coverage and quota telemetry before completion. Evidence and rollback: `docs/model-audits/2026-10-28-soccer-owls-the-odds-provider-cutover-predeclaration.md`, `docs/model-audits/2026-10-28-soccer-owls-the-odds-provider-cutover-results.md`; roll back r21/v26/r3 and the composite provider together without rewriting any lock.
-- Runtime/model release: `epl_goals_coherent_2026_10_31_r23_partial_price_publication`
-- Probability core: one Dixon–Coles score PMF supplies decimal expected goals, likely and representative scores, Match Result, Double Chance, Total, and BTTS. R20 preserves the r19 independent Total head and combines it with a chronologically validated 75% professional attack/defence matchup margin plus 25% r19 margin. The matchup margin uses only prior-match goals/xG, shots, shots on target and possession; it contains no sportsbook target. A chronologically selected draw selector may choose Draw when the exact-score mode is level, the best-club/Draw gap is at most 8pp, the scoring-mean gap is at most 0.20, Draw is at least 24%, and neither club exceeds 40%; an accepted Draw equalizes the displayed team means around the unchanged Total so the final score and result remain coherent. The independent club PMF is otherwise authoritative unless at least two fresh, complete, target-excluded exact-2.5 Total vectors have distinct source families, distinct quote signatures, and unanimous direction; qualified evidence applies the versioned minimum-change Total tilt while preserving every Match Result marginal exactly. Evaluated Match Result, Total, and BTTS books and direct BTTS prices never enter the forecast.
-- Coherent outcome contract: `epl_coherent_market_outcome_2026_10_28_r3_provider_attributed_price_vectors`
-- Display-grade / calibration release: `epl_grade_policy_2026_10_31_v28_partial_price_publication`
+- Runtime/model release: `epl_goals_coherent_2026_11_04_r24_relative_path_joint_pmf`
+- Probability core: one Dixon–Coles score PMF supplies decimal expected goals, likely and representative scores, Match Result, Double Chance, Total, and BTTS. R24 retains the r23 statistical score prior. When the established draw-eligibility predicates hold, a minimum-information order projection makes Draw at least as probable as either club inside that same PMF. Qualified complete same-book pregame episodes from exact event/market/book identities then contribute only their before-to-current relative innovation; the evaluated execution book is excluded per market, copied paths collapse, conflicts/future/stale/incomplete paths fail closed, and no current market level or fixed market/model weight becomes a forecast target. The pooled source-profile density ratio is applied once to the joint law. Every public probability, projected score, side, and grade is derived afterward from that law.
+- Coherent outcome contract: `epl_coherent_market_outcome_2026_11_04_r4_relative_path_joint_pmf`
+- Draw calibration: `epl_draw_calibration_2026_11_04_r2_joint_pmf_order_constraint`
+- Display-grade / calibration release: `epl_grade_policy_2026_11_04_v29_relative_path_joint_pmf`
 - Match Result locked-score reader release: `epl_match_result_exact_locked_score_2026_08_23_r2`
 - Member reader lifecycle: `daily_edge_weekly_reader_lifecycle_2026_08_21_r1`; EPL snapshot continuity/publication lifecycle: `epl_member_snapshot_lifecycle_2026_10_31_r8_exact_locked_payload_precedence`; tracking lock policy: `epl_tracking_lock_2026_09_20_r2_verified_member_reconstruction`
 - Runtime constants: `lib/services/epl/eplShadowModel.ts`
@@ -5651,7 +5678,7 @@ The four-season chronological tournament selected the runtime configuration on 2
 - Competition context: `ucl_competition_context_2026_09_03_r2_qualifying_truthful`; settlement: `ucl_regulation_settlement_2026_10_15_r4_frozen_member_forecast_continuity`
 - Frozen history manifest: `ucl_history_manifest_2026_09_03_r1` (185/126/63, cutoff `2026-01-28T20:00:00.000Z`, match SHA-256 `00d3761b7d94851776ffb5b893bdaded8dec85657f769140a2aef0dacd306d36`; 754 team-stat rows, stat SHA-256 `3b817b9aa164ebc5141c26dddf9194611735d98708deef2b5b7f16df91314f88`)
 - Stored-quote availability authority: `ucl_stored_quote_fallback_2026_11_03_r4_attested_stored_paths`
-- Member lifecycle: `ucl_member_snapshot_lifecycle_2026_11_04_r25_input_completion_clock`
+- Member lifecycle: `ucl_member_snapshot_lifecycle_2026_11_04_r26_evidence_role_provenance`
 - Prediction writer: `ucl_prediction_writer_2026_11_04_r1_input_completion_clock`; actual completed-input clock owns future capture/lock timestamps, with legacy lock precedence unchanged.
 - Runtime constants: `lib/services/ucl/uclModel.ts`, `lib/services/ucl/uclCoherentMarketOutcome.ts`, `lib/services/ucl/uclPreviewGrade.ts`, and `lib/services/ucl/uclCompetitionContext.ts`. The UCL model, outcome and grade authorities are owned/versioned in UCL; the EPL module supplies only shared display/writer adapters.
 - Provider boundary: the dedicated Ball Don't Lie UCL v1 product owns fixtures, history, stats, availability, 1X2 fallback, and provider opening odds. The documented plural `seasons[]` and bounded `start_date`/`end_date` filters ignored their values in live tests, returning 2026 and 2011 rows respectively. Production does not retry those known-bad paths. Current fixtures and historical cohorts each use the empirically verified singular `season=` transport, paginate, deduplicate exact IDs, reject conflicting duplicates and every returned-season mismatch, and fail closed on an empty current season or any historical season without regulation-final rows. Cache reads and fresh reads must also match the frozen match and team-stat manifests exactly before training. Cached telemetry must prove the same ready singular-season strategy and exact 189/189 cohorts. Schema v6 persists only authenticated raw inputs and deterministically rebuilds joined xG training rows on read. The deviation remains explicit in provider-health telemetry. The read-only replay returned exactly 189 rows for 2024 and 189 for 2025; 754 team-stat rows joined after the complete cohort passed. Empty, mismatched, partial, or manifest-drifted history is a write/publication error: the cycle preserves the last-known-good member snapshot and cannot publish a default-prior replacement. `CurrentSoccerMarketProvider` owns the primary exact-book Match Result, Double Chance, Total, and BTTS board; soccer splits remain truthfully unavailable.

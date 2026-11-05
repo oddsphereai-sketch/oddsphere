@@ -7,9 +7,9 @@ import {
 import { deriveSoccerMarketProbabilities } from "@/lib/services/soccer/soccerMarketProbabilities";
 import type { BdlEplMatch, BdlEplTeamMatchStats } from "@/lib/providers/real_api/BallDontLieEplProvider";
 
-export const EPL_SHADOW_MODEL_RELEASE = "epl_goals_coherent_2026_10_31_r23_partial_price_publication" as const;
+export const EPL_SHADOW_MODEL_RELEASE = "epl_goals_coherent_2026_11_04_r24_relative_path_joint_pmf" as const;
 export const EPL_BASELINE_MODEL_RELEASE = "epl_goals_coherent_2026_10_01_r19_draw_arbitration" as const;
-export const EPL_SHADOW_CALIBRATION_RELEASE = "epl_grade_policy_2026_10_31_v28_partial_price_publication" as const;
+export const EPL_SHADOW_CALIBRATION_RELEASE = "epl_grade_policy_2026_11_04_v29_relative_path_joint_pmf" as const;
 export const EPL_DRAW_ARBITRATION_RELEASE = "epl_draw_arbitration_2026_10_01_r1" as const;
 
 export type EplMatchResultSide = "home" | "draw" | "away";
@@ -326,5 +326,6 @@ export function predictEplMatch(fit: EplShadowFit, homeTeamId: number, awayTeamI
     homeStrengthSource: home.source,
     awayStrengthSource: away.source,
     confidence: limited ? "limited" : "standard",
+    coherentJoint: joint,
   };
 }

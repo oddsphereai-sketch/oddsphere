@@ -215,6 +215,7 @@ function summarize(lambdaHome: number, lambdaAway: number): EplShadowPrediction 
     homeStrengthSource: "club_history",
     awayStrengthSource: "club_history",
     confidence: "standard",
+    coherentJoint: joint,
   };
 }
 

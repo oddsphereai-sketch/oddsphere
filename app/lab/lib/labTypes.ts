@@ -1016,7 +1016,7 @@ export type DailyEdgeGameDto = {
     independentScoreInputs?: import("@/lib/services/ucl/uclModel").UclPrediction["adjustment"];
     coherentOutcomeRelease: string;
     projectedScoreRelease?: string;
-    source: "independent_club_pmf" | "target_excluded_total_tilt" | "target_excluded_opening_match_result_log_pool" | "target_excluded_late_match_result_log_pool" | "target_excluded_goals_arbitration" | "relative_same_book_market_paths";
+    source: "independent_club_pmf" | "independent_draw_calibrated_pmf" | "target_excluded_total_tilt" | "target_excluded_opening_match_result_log_pool" | "target_excluded_late_match_result_log_pool" | "target_excluded_goals_arbitration" | "relative_same_book_market_paths";
     evaluatedQuoteRole: "economics_and_grade_only" | "paired_path_evidence_and_execution_economics";
     targetExcludedBooks: string[];
     eligibleAlternativeBooks: string[];
