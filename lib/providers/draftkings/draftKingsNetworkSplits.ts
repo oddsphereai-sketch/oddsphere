@@ -701,15 +701,15 @@ function providerIdentityMatches(provider: string, identity: string): boolean {
   return identity.length > 0 && (provider === identity || provider.startsWith(`${identity} `));
 }
 
+const gameMonthDayFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York", month: "numeric", day: "numeric",
+});
+
 function gameMonthDay(game: DailyEdgeGameDto, slateDate: string): string {
   const value = game.gameStartAt ?? `${slateDate}T12:00:00Z`;
   const parsed = new Date(value);
   if (!Number.isFinite(parsed.getTime())) return "";
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    month: "numeric",
-    day: "numeric",
-  }).format(parsed);
+  return gameMonthDayFormatter.format(parsed);
 }
 
 function cleanHtmlText(value: string | undefined): string {

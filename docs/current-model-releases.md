@@ -18,7 +18,7 @@ Publication identifiers: independent
 `cbb_game_forecast_board_2026_11_05_r1_unpriced_outcomes`, forecast-only grade
 `cbb_game_forecast_grade_2026_11_05_r1_no_unquoted_wagers`, frozen outcome
 `cbb_game_outcome_2026_11_05_r1_frozen_winner`, publisher
-`cbb_member_pipeline_2026_11_05_r35_complete_forecast_publication`, adapter
+`cbb_member_pipeline_2026_11_05_r36_split_matcher_memory`, adapter
 `cbb_member_adapter_2026_11_05_r24_unpriced_game_forecast`, tracking
 `cbb_tracking_writer_2026_11_05_r22_frozen_unpriced_winners`, training
 `cbb_current_training_2026_11_05_r4_separate_cross_division_receipts`, and fixture
@@ -32,6 +32,15 @@ are documented in
 `docs/model-audits/2026-11-05-cbb-all-division-one-private.md`. The current-input
 43-game /129-market comparison has 0 promotions, 0 demotions, 0 side changes
 and 0 score changes; 22 new cross forecasts add no unqualified wager grades.
+R36 preserves the R35 forecast/grade/quote/lock semantics and reuses one immutable
+ET month/day formatter in the CBB split matcher. The prior full-slate matcher
+created ICU formatters per source/fixture comparison and reproduced a 2.7 GB
+native-memory peak against the 2 GB production allocation. The stored 480-fixture /
+128-source-game regression requires exact pre-repair output and a bounded formatter
+allocation count. The shared slate-date/hour, DraftKings source-date and CBB card-time formatters are also reused with
+exact timezone/DST/roll parity and no cached date results. The sole writer,
+lease, cadence and provider calls are unchanged.
+
 R35 supersedes the R34 publication lifecycle: an incomplete later-day D1 venue
 cannot abort the whole board. Only complete forecasts construct candidates, and
 a prior coherent member payload remains exact when its refresh is incomplete.

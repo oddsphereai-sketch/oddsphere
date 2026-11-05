@@ -50,7 +50,11 @@ const qualified=(r:CbbDecisionSplitContext,at:number)=>{
 };
 const names=(game:CbbGame)=>({homeTeamDisplayName:game.home_team.full_name,awayTeamDisplayName:game.visitor_team.full_name,
   cbbHomeCollege:game.home_team.college,cbbAwayCollege:game.visitor_team.college});
-const monthDay=(start:string)=>new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",month:"numeric",day:"numeric"}).format(new Date(start));
+// Reuse the immutable ICU formatter. A seven-day board compares every source
+// fixture against the identity context; constructing one per comparison retains
+// gigabytes of native ICU allocations before V8 sees enough heap pressure to GC.
+const monthDayFormatter=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",month:"numeric",day:"numeric"});
+const monthDay=(start:string)=>monthDayFormatter.format(new Date(start));
 const family=(book:string)=>book==="draftkings_network"?"draftkings":book;
 
 /** Predecision source evidence. Each physical family remains distinct from a
