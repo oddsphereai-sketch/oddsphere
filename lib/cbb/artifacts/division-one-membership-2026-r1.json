@@ -1,0 +1,2200 @@
+{
+  "release": "cbb_division_one_membership_2026_11_05_r1_ncaa_mbb_census",
+  "season": 2026,
+  "source": "https://web3.ncaa.org/directory/api/directory/memberList?type=12&division=I&sportCode=MBB",
+  "capturedAt": "2026-11-05T04:02:42.012Z",
+  "sourceHash": "0a161c9fc92c344f9caa03e43f2576d9075abdad4433ea2432354d6c1ef4ada8",
+  "academicYear": 2027,
+  "members": [
+    {
+      "ncaa": 67,
+      "ncaaName": "Boston College",
+      "bdl": 1,
+      "bdlName": "Boston College Eagles"
+    },
+    {
+      "ncaa": 107,
+      "ncaaName": "University of California, Berkeley",
+      "bdl": 2,
+      "bdlName": "California Golden Bears"
+    },
+    {
+      "ncaa": 147,
+      "ncaaName": "Clemson University",
+      "bdl": 3,
+      "bdlName": "Clemson Tigers"
+    },
+    {
+      "ncaa": 193,
+      "ncaaName": "Duke University",
+      "bdl": 4,
+      "bdlName": "Duke Blue Devils"
+    },
+    {
+      "ncaa": 234,
+      "ncaaName": "Florida State University",
+      "bdl": 5,
+      "bdlName": "Florida State Seminoles"
+    },
+    {
+      "ncaa": 255,
+      "ncaaName": "Georgia Institute of Technology",
+      "bdl": 6,
+      "bdlName": "Georgia Tech Yellow Jackets"
+    },
+    {
+      "ncaa": 367,
+      "ncaaName": "University of Louisville",
+      "bdl": 7,
+      "bdlName": "Louisville Cardinals"
+    },
+    {
+      "ncaa": 415,
+      "ncaaName": "University of Miami (Florida)",
+      "bdl": 8,
+      "bdlName": "Miami Hurricanes"
+    },
+    {
+      "ncaa": 490,
+      "ncaaName": "North Carolina State University",
+      "bdl": 9,
+      "bdlName": "NC State Wolfpack"
+    },
+    {
+      "ncaa": 457,
+      "ncaaName": "University of North Carolina, Chapel Hill",
+      "bdl": 10,
+      "bdlName": "North Carolina Tar Heels"
+    },
+    {
+      "ncaa": 513,
+      "ncaaName": "University of Notre Dame",
+      "bdl": 11,
+      "bdlName": "Notre Dame Fighting Irish"
+    },
+    {
+      "ncaa": 545,
+      "ncaaName": "University of Pittsburgh",
+      "bdl": 12,
+      "bdlName": "Pittsburgh Panthers"
+    },
+    {
+      "ncaa": 663,
+      "ncaaName": "Southern Methodist University",
+      "bdl": 13,
+      "bdlName": "SMU Mustangs"
+    },
+    {
+      "ncaa": 674,
+      "ncaaName": "Stanford University",
+      "bdl": 14,
+      "bdlName": "Stanford Cardinal"
+    },
+    {
+      "ncaa": 688,
+      "ncaaName": "Syracuse University",
+      "bdl": 15,
+      "bdlName": "Syracuse Orange"
+    },
+    {
+      "ncaa": 746,
+      "ncaaName": "University of Virginia",
+      "bdl": 16,
+      "bdlName": "Virginia Cavaliers"
+    },
+    {
+      "ncaa": 742,
+      "ncaaName": "Virginia Polytechnic Institute and State University",
+      "bdl": 17,
+      "bdlName": "Virginia Tech Hokies"
+    },
+    {
+      "ncaa": 749,
+      "ncaaName": "Wake Forest University",
+      "bdl": 18,
+      "bdlName": "Wake Forest Demon Deacons"
+    },
+    {
+      "ncaa": 43,
+      "ncaaName": "Austin Peay State University",
+      "bdl": 19,
+      "bdlName": "Austin Peay Governors"
+    },
+    {
+      "ncaa": 52,
+      "ncaaName": "Bellarmine University",
+      "bdl": 20,
+      "bdlName": "Bellarmine Knights"
+    },
+    {
+      "ncaa": 1004,
+      "ncaaName": "University of Central Arkansas",
+      "bdl": 21,
+      "bdlName": "Central Arkansas Bears"
+    },
+    {
+      "ncaa": 202,
+      "ncaaName": "Eastern Kentucky University",
+      "bdl": 22,
+      "bdlName": "Eastern Kentucky Colonels"
+    },
+    {
+      "ncaa": 28755,
+      "ncaaName": "Florida Gulf Coast University",
+      "bdl": 23,
+      "bdlName": "Florida Gulf Coast Eagles"
+    },
+    {
+      "ncaa": 316,
+      "ncaaName": "Jacksonville University",
+      "bdl": 24,
+      "bdlName": "Jacksonville Dolphins"
+    },
+    {
+      "ncaa": 28600,
+      "ncaaName": "Lipscomb University",
+      "bdl": 25,
+      "bdlName": "Lipscomb Bisons"
+    },
+    {
+      "ncaa": 487,
+      "ncaaName": "University of North Alabama",
+      "bdl": 26,
+      "bdlName": "North Alabama Lions"
+    },
+    {
+      "ncaa": 2711,
+      "ncaaName": "University of North Florida",
+      "bdl": 27,
+      "bdlName": "North Florida Ospreys"
+    },
+    {
+      "ncaa": 11504,
+      "ncaaName": "Queens University of Charlotte",
+      "bdl": 28,
+      "bdlName": "Queens University Royals"
+    },
+    {
+      "ncaa": 678,
+      "ncaaName": "Stetson University",
+      "bdl": 29,
+      "bdlName": "Stetson Hatters"
+    },
+    {
+      "ncaa": 766,
+      "ncaaName": "University of West Georgia",
+      "bdl": 30,
+      "bdlName": "West Georgia Wolves"
+    },
+    {
+      "ncaa": 62,
+      "ncaaName": "Binghamton University",
+      "bdl": 31,
+      "bdlName": "Binghamton Bearcats"
+    },
+    {
+      "ncaa": 81,
+      "ncaaName": "Bryant University",
+      "bdl": 32,
+      "bdlName": "Bryant Bulldogs"
+    },
+    {
+      "ncaa": 380,
+      "ncaaName": "University of Maine",
+      "bdl": 33,
+      "bdlName": "Maine Black Bears"
+    },
+    {
+      "ncaa": 471,
+      "ncaaName": "New Jersey Institute of Technology",
+      "bdl": 34,
+      "bdlName": "NJIT Highlanders"
+    },
+    {
+      "ncaa": 469,
+      "ncaaName": "University of New Hampshire",
+      "bdl": 35,
+      "bdlName": "New Hampshire Wildcats"
+    },
+    {
+      "ncaa": 14,
+      "ncaaName": "University at Albany",
+      "bdl": 36,
+      "bdlName": "UAlbany Great Danes"
+    },
+    {
+      "ncaa": 391,
+      "ncaaName": "University of Maryland, Baltimore County",
+      "bdl": 37,
+      "bdlName": "UMBC Retrievers"
+    },
+    {
+      "ncaa": 368,
+      "ncaaName": "University of Massachusetts Lowell",
+      "bdl": 38,
+      "bdlName": "UMass Lowell River Hawks"
+    },
+    {
+      "ncaa": 738,
+      "ncaaName": "University of Vermont",
+      "bdl": 39,
+      "bdlName": "Vermont Catamounts"
+    },
+    {
+      "ncaa": 458,
+      "ncaaName": "The University of North Carolina at Charlotte",
+      "bdl": 40,
+      "bdlName": "Charlotte 49ers"
+    },
+    {
+      "ncaa": 196,
+      "ncaaName": "East Carolina University",
+      "bdl": 41,
+      "bdlName": "East Carolina Pirates"
+    },
+    {
+      "ncaa": 229,
+      "ncaaName": "Florida Atlantic University",
+      "bdl": 42,
+      "bdlName": "Florida Atlantic Owls"
+    },
+    {
+      "ncaa": 404,
+      "ncaaName": "University of Memphis",
+      "bdl": 43,
+      "bdlName": "Memphis Tigers"
+    },
+    {
+      "ncaa": 497,
+      "ncaaName": "University of North Texas",
+      "bdl": 44,
+      "bdlName": "North Texas Mean Green"
+    },
+    {
+      "ncaa": 574,
+      "ncaaName": "Rice University",
+      "bdl": 45,
+      "bdlName": "Rice Owls"
+    },
+    {
+      "ncaa": 651,
+      "ncaaName": "University of South Florida",
+      "bdl": 46,
+      "bdlName": "South Florida Bulls"
+    },
+    {
+      "ncaa": 690,
+      "ncaaName": "Temple University",
+      "bdl": 47,
+      "bdlName": "Temple Owls"
+    },
+    {
+      "ncaa": 718,
+      "ncaaName": "Tulane University",
+      "bdl": 48,
+      "bdlName": "Tulane Green Wave"
+    },
+    {
+      "ncaa": 719,
+      "ncaaName": "The University of Tulsa",
+      "bdl": 49,
+      "bdlName": "Tulsa Golden Hurricane"
+    },
+    {
+      "ncaa": 9,
+      "ncaaName": "University of Alabama at Birmingham",
+      "bdl": 50,
+      "bdlName": "UAB Blazers"
+    },
+    {
+      "ncaa": 706,
+      "ncaaName": "University of Texas at San Antonio",
+      "bdl": 51,
+      "bdlName": "UTSA Roadrunners"
+    },
+    {
+      "ncaa": 782,
+      "ncaaName": "Wichita State University",
+      "bdl": 52,
+      "bdlName": "Wichita State Shockers"
+    },
+    {
+      "ncaa": 173,
+      "ncaaName": "Davidson College",
+      "bdl": 53,
+      "bdlName": "Davidson Wildcats"
+    },
+    {
+      "ncaa": 175,
+      "ncaaName": "University of Dayton",
+      "bdl": 54,
+      "bdlName": "Dayton Flyers"
+    },
+    {
+      "ncaa": 194,
+      "ncaaName": "Duquesne University",
+      "bdl": 55,
+      "bdlName": "Duquesne Dukes"
+    },
+    {
+      "ncaa": 236,
+      "ncaaName": "Fordham University",
+      "bdl": 56,
+      "bdlName": "Fordham Rams"
+    },
+    {
+      "ncaa": 248,
+      "ncaaName": "George Mason University",
+      "bdl": 57,
+      "bdlName": "George Mason Patriots"
+    },
+    {
+      "ncaa": 249,
+      "ncaaName": "George Washington University",
+      "bdl": 58,
+      "bdlName": "George Washington Revolutionaries"
+    },
+    {
+      "ncaa": 340,
+      "ncaaName": "La Salle University",
+      "bdl": 59,
+      "bdlName": "La Salle Explorers"
+    },
+    {
+      "ncaa": 371,
+      "ncaaName": "Loyola University Chicago",
+      "bdl": 60,
+      "bdlName": "Loyola Chicago Ramblers"
+    },
+    {
+      "ncaa": 572,
+      "ncaaName": "University of Rhode Island",
+      "bdl": 61,
+      "bdlName": "Rhode Island Rams"
+    },
+    {
+      "ncaa": 575,
+      "ncaaName": "University of Richmond",
+      "bdl": 62,
+      "bdlName": "Richmond Spiders"
+    },
+    {
+      "ncaa": 606,
+      "ncaaName": "Saint Joseph's University",
+      "bdl": 63,
+      "bdlName": "Saint Joseph's Hawks"
+    },
+    {
+      "ncaa": 609,
+      "ncaaName": "Saint Louis University",
+      "bdl": 64,
+      "bdlName": "Saint Louis Billikens"
+    },
+    {
+      "ncaa": 596,
+      "ncaaName": "St. Bonaventure University",
+      "bdl": 65,
+      "bdlName": "St. Bonaventure Bonnies"
+    },
+    {
+      "ncaa": 740,
+      "ncaaName": "Virginia Commonwealth University",
+      "bdl": 66,
+      "bdlName": "VCU Rams"
+    },
+    {
+      "ncaa": 28,
+      "ncaaName": "Arizona State University",
+      "bdl": 67,
+      "bdlName": "Arizona State Sun Devils"
+    },
+    {
+      "ncaa": 29,
+      "ncaaName": "University of Arizona",
+      "bdl": 68,
+      "bdlName": "Arizona Wildcats"
+    },
+    {
+      "ncaa": 77,
+      "ncaaName": "Brigham Young University",
+      "bdl": 69,
+      "bdlName": "BYU Cougars"
+    },
+    {
+      "ncaa": 51,
+      "ncaaName": "Baylor University",
+      "bdl": 70,
+      "bdlName": "Baylor Bears"
+    },
+    {
+      "ncaa": 140,
+      "ncaaName": "University of Cincinnati",
+      "bdl": 71,
+      "bdlName": "Cincinnati Bearcats"
+    },
+    {
+      "ncaa": 157,
+      "ncaaName": "University of Colorado Boulder",
+      "bdl": 72,
+      "bdlName": "Colorado Buffaloes"
+    },
+    {
+      "ncaa": 288,
+      "ncaaName": "University of Houston",
+      "bdl": 73,
+      "bdlName": "Houston Cougars"
+    },
+    {
+      "ncaa": 311,
+      "ncaaName": "Iowa State University",
+      "bdl": 74,
+      "bdlName": "Iowa State Cyclones"
+    },
+    {
+      "ncaa": 328,
+      "ncaaName": "University of Kansas",
+      "bdl": 75,
+      "bdlName": "Kansas Jayhawks"
+    },
+    {
+      "ncaa": 327,
+      "ncaaName": "Kansas State University",
+      "bdl": 76,
+      "bdlName": "Kansas State Wildcats"
+    },
+    {
+      "ncaa": 521,
+      "ncaaName": "Oklahoma State University",
+      "bdl": 77,
+      "bdlName": "Oklahoma State Cowboys"
+    },
+    {
+      "ncaa": 698,
+      "ncaaName": "Texas Christian University",
+      "bdl": 78,
+      "bdlName": "TCU Horned Frogs"
+    },
+    {
+      "ncaa": 700,
+      "ncaaName": "Texas Tech University",
+      "bdl": 79,
+      "bdlName": "Texas Tech Red Raiders"
+    },
+    {
+      "ncaa": 128,
+      "ncaaName": "University of Central Florida",
+      "bdl": 80,
+      "bdlName": "UCF Knights"
+    },
+    {
+      "ncaa": 732,
+      "ncaaName": "University of Utah",
+      "bdl": 81,
+      "bdlName": "Utah Utes"
+    },
+    {
+      "ncaa": 768,
+      "ncaaName": "West Virginia University",
+      "bdl": 82,
+      "bdlName": "West Virginia Mountaineers"
+    },
+    {
+      "ncaa": 87,
+      "ncaaName": "Butler University",
+      "bdl": 83,
+      "bdlName": "Butler Bulldogs"
+    },
+    {
+      "ncaa": 169,
+      "ncaaName": "Creighton University",
+      "bdl": 84,
+      "bdlName": "Creighton Bluejays"
+    },
+    {
+      "ncaa": 176,
+      "ncaaName": "DePaul University",
+      "bdl": 85,
+      "bdlName": "DePaul Blue Demons"
+    },
+    {
+      "ncaa": 251,
+      "ncaaName": "Georgetown University",
+      "bdl": 86,
+      "bdlName": "Georgetown Hoyas"
+    },
+    {
+      "ncaa": 387,
+      "ncaaName": "Marquette University",
+      "bdl": 87,
+      "bdlName": "Marquette Golden Eagles"
+    },
+    {
+      "ncaa": 556,
+      "ncaaName": "Providence College",
+      "bdl": 88,
+      "bdlName": "Providence Friars"
+    },
+    {
+      "ncaa": 635,
+      "ncaaName": "Seton Hall University",
+      "bdl": 89,
+      "bdlName": "Seton Hall Pirates"
+    },
+    {
+      "ncaa": 603,
+      "ncaaName": "St. John's University (New York)",
+      "bdl": 90,
+      "bdlName": "St. John's Red Storm"
+    },
+    {
+      "ncaa": 164,
+      "ncaaName": "University of Connecticut",
+      "bdl": 91,
+      "bdlName": "UConn Huskies"
+    },
+    {
+      "ncaa": 739,
+      "ncaaName": "Villanova University",
+      "bdl": 92,
+      "bdlName": "Villanova Wildcats"
+    },
+    {
+      "ncaa": 812,
+      "ncaaName": "Xavier University",
+      "bdl": 93,
+      "bdlName": "Xavier Musketeers"
+    },
+    {
+      "ncaa": 207,
+      "ncaaName": "Eastern Washington University",
+      "bdl": 94,
+      "bdlName": "Eastern Washington Eagles"
+    },
+    {
+      "ncaa": 294,
+      "ncaaName": "Idaho State University",
+      "bdl": 95,
+      "bdlName": "Idaho State Bengals"
+    },
+    {
+      "ncaa": 295,
+      "ncaaName": "University of Idaho",
+      "bdl": 96,
+      "bdlName": "Idaho Vandals"
+    },
+    {
+      "ncaa": 441,
+      "ncaaName": "University of Montana",
+      "bdl": 97,
+      "bdlName": "Montana Grizzlies"
+    },
+    {
+      "ncaa": 440,
+      "ncaaName": "Montana State University-Bozeman",
+      "bdl": 98,
+      "bdlName": "Montana State Bobcats"
+    },
+    {
+      "ncaa": 501,
+      "ncaaName": "Northern Arizona University",
+      "bdl": 99,
+      "bdlName": "Northern Arizona Lumberjacks"
+    },
+    {
+      "ncaa": 502,
+      "ncaaName": "University of Northern Colorado",
+      "bdl": 100,
+      "bdlName": "Northern Colorado Bears"
+    },
+    {
+      "ncaa": 550,
+      "ncaaName": "Portland State University",
+      "bdl": 101,
+      "bdlName": "Portland State Vikings"
+    },
+    {
+      "ncaa": 102,
+      "ncaaName": "California State University, Sacramento",
+      "bdl": 102,
+      "bdlName": "Sacramento State Hornets"
+    },
+    {
+      "ncaa": 758,
+      "ncaaName": "Weber State University",
+      "bdl": 103,
+      "bdlName": "Weber State Wildcats"
+    },
+    {
+      "ncaa": 48,
+      "ncaaName": "Charleston Southern University",
+      "bdl": 104,
+      "bdlName": "Charleston Southern Buccaneers"
+    },
+    {
+      "ncaa": 1092,
+      "ncaaName": "Gardner-Webb University",
+      "bdl": 105,
+      "bdlName": "Gardner-Webb Runnin' Bulldogs"
+    },
+    {
+      "ncaa": 19651,
+      "ncaaName": "High Point University",
+      "bdl": 106,
+      "bdlName": "High Point Panthers"
+    },
+    {
+      "ncaa": 363,
+      "ncaaName": "Longwood University",
+      "bdl": 107,
+      "bdlName": "Longwood Lancers"
+    },
+    {
+      "ncaa": 1320,
+      "ncaaName": "Presbyterian College",
+      "bdl": 108,
+      "bdlName": "Presbyterian Blue Hose"
+    },
+    {
+      "ncaa": 563,
+      "ncaaName": "Radford University",
+      "bdl": 109,
+      "bdlName": "Radford Highlanders"
+    },
+    {
+      "ncaa": 10411,
+      "ncaaName": "University of South Carolina Upstate",
+      "bdl": 110,
+      "bdlName": "South Carolina Upstate Spartans"
+    },
+    {
+      "ncaa": 456,
+      "ncaaName": "University of North Carolina Asheville",
+      "bdl": 111,
+      "bdlName": "UNC Asheville Bulldogs"
+    },
+    {
+      "ncaa": 792,
+      "ncaaName": "Winthrop University",
+      "bdl": 112,
+      "bdlName": "Winthrop Eagles"
+    },
+    {
+      "ncaa": 301,
+      "ncaaName": "University of Illinois Urbana-Champaign",
+      "bdl": 113,
+      "bdlName": "Illinois Fighting Illini"
+    },
+    {
+      "ncaa": 306,
+      "ncaaName": "Indiana University, Bloomington",
+      "bdl": 114,
+      "bdlName": "Indiana Hoosiers"
+    },
+    {
+      "ncaa": 312,
+      "ncaaName": "University of Iowa",
+      "bdl": 115,
+      "bdlName": "Iowa Hawkeyes"
+    },
+    {
+      "ncaa": 392,
+      "ncaaName": "University of Maryland, College Park",
+      "bdl": 116,
+      "bdlName": "Maryland Terrapins"
+    },
+    {
+      "ncaa": 416,
+      "ncaaName": "Michigan State University",
+      "bdl": 117,
+      "bdlName": "Michigan State Spartans"
+    },
+    {
+      "ncaa": 418,
+      "ncaaName": "University of Michigan",
+      "bdl": 118,
+      "bdlName": "Michigan Wolverines"
+    },
+    {
+      "ncaa": 428,
+      "ncaaName": "University of Minnesota, Twin Cities",
+      "bdl": 119,
+      "bdlName": "Minnesota Golden Gophers"
+    },
+    {
+      "ncaa": 463,
+      "ncaaName": "University of Nebraska-Lincoln",
+      "bdl": 120,
+      "bdlName": "Nebraska Cornhuskers"
+    },
+    {
+      "ncaa": 509,
+      "ncaaName": "Northwestern University",
+      "bdl": 121,
+      "bdlName": "Northwestern Wildcats"
+    },
+    {
+      "ncaa": 518,
+      "ncaaName": "The Ohio State University",
+      "bdl": 122,
+      "bdlName": "Ohio State Buckeyes"
+    },
+    {
+      "ncaa": 529,
+      "ncaaName": "University of Oregon",
+      "bdl": 123,
+      "bdlName": "Oregon Ducks"
+    },
+    {
+      "ncaa": 539,
+      "ncaaName": "Pennsylvania State University",
+      "bdl": 124,
+      "bdlName": "Penn State Nittany Lions"
+    },
+    {
+      "ncaa": 559,
+      "ncaaName": "Purdue University",
+      "bdl": 125,
+      "bdlName": "Purdue Boilermakers"
+    },
+    {
+      "ncaa": 587,
+      "ncaaName": "Rutgers, The State University of New Jersey, New Brunswick",
+      "bdl": 126,
+      "bdlName": "Rutgers Scarlet Knights"
+    },
+    {
+      "ncaa": 110,
+      "ncaaName": "University of California, Los Angeles",
+      "bdl": 127,
+      "bdlName": "UCLA Bruins"
+    },
+    {
+      "ncaa": 657,
+      "ncaaName": "University of Southern California",
+      "bdl": 128,
+      "bdlName": "USC Trojans"
+    },
+    {
+      "ncaa": 756,
+      "ncaaName": "University of Washington",
+      "bdl": 129,
+      "bdlName": "Washington Huskies"
+    },
+    {
+      "ncaa": 796,
+      "ncaaName": "University of Wisconsin-Madison",
+      "bdl": 130,
+      "bdlName": "Wisconsin Badgers"
+    },
+    {
+      "ncaa": 90,
+      "ncaaName": "California Polytechnic State University",
+      "bdl": 131,
+      "bdlName": "Cal Poly Mustangs"
+    },
+    {
+      "ncaa": 94,
+      "ncaaName": "California State University, Bakersfield",
+      "bdl": 132,
+      "bdlName": "Cal State Bakersfield Roadrunners"
+    },
+    {
+      "ncaa": 97,
+      "ncaaName": "California State University, Fullerton",
+      "bdl": 133,
+      "bdlName": "Cal State Fullerton Titans"
+    },
+    {
+      "ncaa": 101,
+      "ncaaName": "California State University, Northridge",
+      "bdl": 134,
+      "bdlName": "Cal State Northridge Matadors"
+    },
+    {
+      "ncaa": 277,
+      "ncaaName": "University of Hawaii, Manoa",
+      "bdl": 135,
+      "bdlName": "Hawai'i Rainbow Warriors"
+    },
+    {
+      "ncaa": 99,
+      "ncaaName": "Long Beach State University",
+      "bdl": 136,
+      "bdlName": "Long Beach State Beach"
+    },
+    {
+      "ncaa": 108,
+      "ncaaName": "University of California, Davis",
+      "bdl": 137,
+      "bdlName": "UC Davis Aggies"
+    },
+    {
+      "ncaa": 109,
+      "ncaaName": "University of California, Irvine",
+      "bdl": 138,
+      "bdlName": "UC Irvine Anteaters"
+    },
+    {
+      "ncaa": 111,
+      "ncaaName": "University of California, Riverside",
+      "bdl": 139,
+      "bdlName": "UC Riverside Highlanders"
+    },
+    {
+      "ncaa": 112,
+      "ncaaName": "University of California, San Diego",
+      "bdl": 140,
+      "bdlName": "UC San Diego Tritons"
+    },
+    {
+      "ncaa": 104,
+      "ncaaName": "University of California, Santa Barbara",
+      "bdl": 141,
+      "bdlName": "UC Santa Barbara Gauchos"
+    },
+    {
+      "ncaa": 115,
+      "ncaaName": "Campbell University",
+      "bdl": 142,
+      "bdlName": "Campbell Fighting Camels"
+    },
+    {
+      "ncaa": 1014,
+      "ncaaName": "College of Charleston (South Carolina)",
+      "bdl": 143,
+      "bdlName": "Charleston Cougars"
+    },
+    {
+      "ncaa": 191,
+      "ncaaName": "Drexel University",
+      "bdl": 144,
+      "bdlName": "Drexel Dragons"
+    },
+    {
+      "ncaa": 1068,
+      "ncaaName": "Elon University",
+      "bdl": 145,
+      "bdlName": "Elon Phoenix"
+    },
+    {
+      "ncaa": 270,
+      "ncaaName": "Hampton University",
+      "bdl": 146,
+      "bdlName": "Hampton Pirates"
+    },
+    {
+      "ncaa": 283,
+      "ncaaName": "Hofstra University",
+      "bdl": 147,
+      "bdlName": "Hofstra Pride"
+    },
+    {
+      "ncaa": 439,
+      "ncaaName": "Monmouth University",
+      "bdl": 148,
+      "bdlName": "Monmouth Hawks"
+    },
+    {
+      "ncaa": 488,
+      "ncaaName": "North Carolina A&T State University",
+      "bdl": 149,
+      "bdlName": "North Carolina A&T Aggies"
+    },
+    {
+      "ncaa": 500,
+      "ncaaName": "Northeastern University",
+      "bdl": 150,
+      "bdlName": "Northeastern Huskies"
+    },
+    {
+      "ncaa": 683,
+      "ncaaName": "Stony Brook University",
+      "bdl": 151,
+      "bdlName": "Stony Brook Seawolves"
+    },
+    {
+      "ncaa": 711,
+      "ncaaName": "Towson University",
+      "bdl": 152,
+      "bdlName": "Towson Tigers"
+    },
+    {
+      "ncaa": 460,
+      "ncaaName": "University of North Carolina Wilmington",
+      "bdl": 153,
+      "bdlName": "UNC Wilmington Seahawks"
+    },
+    {
+      "ncaa": 786,
+      "ncaaName": "William & Mary",
+      "bdl": 154,
+      "bdlName": "William & Mary Tribe"
+    },
+    {
+      "ncaa": 180,
+      "ncaaName": "University of Delaware",
+      "bdl": 155,
+      "bdlName": "Delaware Blue Hens"
+    },
+    {
+      "ncaa": 231,
+      "ncaaName": "Florida International University",
+      "bdl": 156,
+      "bdlName": "Florida International Panthers"
+    },
+    {
+      "ncaa": 315,
+      "ncaaName": "Jacksonville State University",
+      "bdl": 157,
+      "bdlName": "Jacksonville State Gamecocks"
+    },
+    {
+      "ncaa": 1157,
+      "ncaaName": "Kennesaw State University",
+      "bdl": 158,
+      "bdlName": "Kennesaw State Owls"
+    },
+    {
+      "ncaa": 355,
+      "ncaaName": "Liberty University",
+      "bdl": 159,
+      "bdlName": "Liberty Flames"
+    },
+    {
+      "ncaa": 366,
+      "ncaaName": "Louisiana Tech University",
+      "bdl": 160,
+      "bdlName": "Louisiana Tech Bulldogs"
+    },
+    {
+      "ncaa": 419,
+      "ncaaName": "Middle Tennessee State University",
+      "bdl": 161,
+      "bdlName": "Middle Tennessee Blue Raiders"
+    },
+    {
+      "ncaa": 669,
+      "ncaaName": "Missouri State University",
+      "bdl": 162,
+      "bdlName": "Missouri State Bears"
+    },
+    {
+      "ncaa": 472,
+      "ncaaName": "New Mexico State University",
+      "bdl": 163,
+      "bdlName": "New Mexico State Aggies"
+    },
+    {
+      "ncaa": 624,
+      "ncaaName": "Sam Houston State University",
+      "bdl": 164,
+      "bdlName": "Sam Houston Bearkats"
+    },
+    {
+      "ncaa": 704,
+      "ncaaName": "University of Texas at El Paso",
+      "bdl": 165,
+      "bdlName": "UTEP Miners"
+    },
+    {
+      "ncaa": 772,
+      "ncaaName": "Western Kentucky University",
+      "bdl": 166,
+      "bdlName": "Western Kentucky Hilltoppers"
+    },
+    {
+      "ncaa": 148,
+      "ncaaName": "Cleveland State University",
+      "bdl": 167,
+      "bdlName": "Cleveland State Vikings"
+    },
+    {
+      "ncaa": 184,
+      "ncaaName": "University of Detroit Mercy",
+      "bdl": 168,
+      "bdlName": "Detroit Mercy Titans"
+    },
+    {
+      "ncaa": 794,
+      "ncaaName": "University of Wisconsin-Green Bay",
+      "bdl": 169,
+      "bdlName": "Green Bay Phoenix"
+    },
+    {
+      "ncaa": 2699,
+      "ncaaName": "Indiana University Indianapolis",
+      "bdl": 170,
+      "bdlName": "IU Indianapolis Jaguars"
+    },
+    {
+      "ncaa": 797,
+      "ncaaName": "University of Wisconsin-Milwaukee",
+      "bdl": 171,
+      "bdlName": "Milwaukee Panthers"
+    },
+    {
+      "ncaa": 505,
+      "ncaaName": "Northern Kentucky University",
+      "bdl": 172,
+      "bdlName": "Northern Kentucky Norse"
+    },
+    {
+      "ncaa": 514,
+      "ncaaName": "Oakland University",
+      "bdl": 173,
+      "bdlName": "Oakland Golden Grizzlies"
+    },
+    {
+      "ncaa": 308,
+      "ncaaName": "Purdue University Fort Wayne",
+      "bdl": 174,
+      "bdlName": "Purdue Fort Wayne Mastodons"
+    },
+    {
+      "ncaa": 579,
+      "ncaaName": "Robert Morris University",
+      "bdl": 175,
+      "bdlName": "Robert Morris Colonials"
+    },
+    {
+      "ncaa": 810,
+      "ncaaName": "Wright State University",
+      "bdl": 176,
+      "bdlName": "Wright State Raiders"
+    },
+    {
+      "ncaa": 817,
+      "ncaaName": "Youngstown State University",
+      "bdl": 177,
+      "bdlName": "Youngstown State Penguins"
+    },
+    {
+      "ncaa": 80,
+      "ncaaName": "Brown University",
+      "bdl": 178,
+      "bdlName": "Brown Bears"
+    },
+    {
+      "ncaa": 158,
+      "ncaaName": "Columbia University-Barnard College",
+      "bdl": 179,
+      "bdlName": "Columbia Lions"
+    },
+    {
+      "ncaa": 167,
+      "ncaaName": "Cornell University",
+      "bdl": 180,
+      "bdlName": "Cornell Big Red"
+    },
+    {
+      "ncaa": 172,
+      "ncaaName": "Dartmouth College",
+      "bdl": 181,
+      "bdlName": "Dartmouth Big Green"
+    },
+    {
+      "ncaa": 275,
+      "ncaaName": "Harvard University",
+      "bdl": 182,
+      "bdlName": "Harvard Crimson"
+    },
+    {
+      "ncaa": 540,
+      "ncaaName": "University of Pennsylvania",
+      "bdl": 183,
+      "bdlName": "Pennsylvania Quakers"
+    },
+    {
+      "ncaa": 554,
+      "ncaaName": "Princeton University",
+      "bdl": 184,
+      "bdlName": "Princeton Tigers"
+    },
+    {
+      "ncaa": 813,
+      "ncaaName": "Yale University",
+      "bdl": 185,
+      "bdlName": "Yale Bulldogs"
+    },
+    {
+      "ncaa": 116,
+      "ncaaName": "Canisius University",
+      "bdl": 186,
+      "bdlName": "Canisius Golden Griffins"
+    },
+    {
+      "ncaa": 220,
+      "ncaaName": "Fairfield University",
+      "bdl": 187,
+      "bdlName": "Fairfield Stags"
+    },
+    {
+      "ncaa": 310,
+      "ncaaName": "Iona University",
+      "bdl": 188,
+      "bdlName": "Iona Gaels"
+    },
+    {
+      "ncaa": 381,
+      "ncaaName": "Manhattan University",
+      "bdl": 189,
+      "bdlName": "Manhattan Jaspers"
+    },
+    {
+      "ncaa": 386,
+      "ncaaName": "Marist University",
+      "bdl": 190,
+      "bdlName": "Marist Red Foxes"
+    },
+    {
+      "ncaa": 410,
+      "ncaaName": "Merrimack College",
+      "bdl": 191,
+      "bdlName": "Merrimack Warriors"
+    },
+    {
+      "ncaa": 450,
+      "ncaaName": "Mount St. Mary's University",
+      "bdl": 192,
+      "bdlName": "Mount St. Mary's Mountaineers"
+    },
+    {
+      "ncaa": 482,
+      "ncaaName": "Niagara University",
+      "bdl": 193,
+      "bdlName": "Niagara Purple Eagles"
+    },
+    {
+      "ncaa": 562,
+      "ncaaName": "Quinnipiac University",
+      "bdl": 194,
+      "bdlName": "Quinnipiac Bobcats"
+    },
+    {
+      "ncaa": 576,
+      "ncaaName": "Rider University",
+      "bdl": 195,
+      "bdlName": "Rider Broncs"
+    },
+    {
+      "ncaa": 590,
+      "ncaaName": "Sacred Heart University",
+      "bdl": 196,
+      "bdlName": "Sacred Heart Pioneers"
+    },
+    {
+      "ncaa": 617,
+      "ncaaName": "Saint Peter's University",
+      "bdl": 197,
+      "bdlName": "Saint Peter's Peacocks"
+    },
+    {
+      "ncaa": 639,
+      "ncaaName": "Siena University",
+      "bdl": 198,
+      "bdlName": "Siena Saints"
+    },
+    {
+      "ncaa": 165,
+      "ncaaName": "Coppin State University",
+      "bdl": 199,
+      "bdlName": "Coppin State Eagles"
+    },
+    {
+      "ncaa": 178,
+      "ncaaName": "Delaware State University",
+      "bdl": 200,
+      "bdlName": "Delaware State Hornets"
+    },
+    {
+      "ncaa": 290,
+      "ncaaName": "Howard University",
+      "bdl": 201,
+      "bdlName": "Howard Bison"
+    },
+    {
+      "ncaa": 393,
+      "ncaaName": "University of Maryland Eastern Shore",
+      "bdl": 202,
+      "bdlName": "Maryland Eastern Shore Hawks"
+    },
+    {
+      "ncaa": 446,
+      "ncaaName": "Morgan State University",
+      "bdl": 203,
+      "bdlName": "Morgan State Bears"
+    },
+    {
+      "ncaa": 485,
+      "ncaaName": "Norfolk State University",
+      "bdl": 204,
+      "bdlName": "Norfolk State Spartans"
+    },
+    {
+      "ncaa": 489,
+      "ncaaName": "North Carolina Central University",
+      "bdl": 205,
+      "bdlName": "North Carolina Central Eagles"
+    },
+    {
+      "ncaa": 647,
+      "ncaaName": "South Carolina State University",
+      "bdl": 206,
+      "bdlName": "South Carolina State Bulldogs"
+    },
+    {
+      "ncaa": 5,
+      "ncaaName": "University of Akron",
+      "bdl": 207,
+      "bdlName": "Akron Zips"
+    },
+    {
+      "ncaa": 47,
+      "ncaaName": "Ball State University",
+      "bdl": 208,
+      "bdlName": "Ball State Cardinals"
+    },
+    {
+      "ncaa": 71,
+      "ncaaName": "Bowling Green State University",
+      "bdl": 209,
+      "bdlName": "Bowling Green Falcons"
+    },
+    {
+      "ncaa": 86,
+      "ncaaName": "University at Buffalo, the State University of New York",
+      "bdl": 210,
+      "bdlName": "Buffalo Bulls"
+    },
+    {
+      "ncaa": 129,
+      "ncaaName": "Central Michigan University",
+      "bdl": 211,
+      "bdlName": "Central Michigan Chippewas"
+    },
+    {
+      "ncaa": 204,
+      "ncaaName": "Eastern Michigan University",
+      "bdl": 212,
+      "bdlName": "Eastern Michigan Eagles"
+    },
+    {
+      "ncaa": 331,
+      "ncaaName": "Kent State University",
+      "bdl": 213,
+      "bdlName": "Kent State Golden Flashes"
+    },
+    {
+      "ncaa": 400,
+      "ncaaName": "University of Massachusetts, Amherst",
+      "bdl": 214,
+      "bdlName": "Massachusetts Minutemen"
+    },
+    {
+      "ncaa": 414,
+      "ncaaName": "Miami University (Ohio)",
+      "bdl": 215,
+      "bdlName": "Miami (OH) RedHawks"
+    },
+    {
+      "ncaa": 503,
+      "ncaaName": "Northern Illinois University",
+      "bdl": 216,
+      "bdlName": "Northern Illinois Huskies"
+    },
+    {
+      "ncaa": 519,
+      "ncaaName": "Ohio University",
+      "bdl": 217,
+      "bdlName": "Ohio Bobcats"
+    },
+    {
+      "ncaa": 709,
+      "ncaaName": "University of Toledo",
+      "bdl": 218,
+      "bdlName": "Toledo Rockets"
+    },
+    {
+      "ncaa": 774,
+      "ncaaName": "Western Michigan University",
+      "bdl": 219,
+      "bdlName": "Western Michigan Broncos"
+    },
+    {
+      "ncaa": 14927,
+      "ncaaName": "Belmont University",
+      "bdl": 220,
+      "bdlName": "Belmont Bruins"
+    },
+    {
+      "ncaa": 72,
+      "ncaaName": "Bradley University",
+      "bdl": 221,
+      "bdlName": "Bradley Braves"
+    },
+    {
+      "ncaa": 189,
+      "ncaaName": "Drake University",
+      "bdl": 222,
+      "bdlName": "Drake Bulldogs"
+    },
+    {
+      "ncaa": 219,
+      "ncaaName": "University of Evansville",
+      "bdl": 223,
+      "bdlName": "Evansville Purple Aces"
+    },
+    {
+      "ncaa": 299,
+      "ncaaName": "Illinois State University",
+      "bdl": 224,
+      "bdlName": "Illinois State Redbirds"
+    },
+    {
+      "ncaa": 305,
+      "ncaaName": "Indiana State University",
+      "bdl": 225,
+      "bdlName": "Indiana State Sycamores"
+    },
+    {
+      "ncaa": 454,
+      "ncaaName": "Murray State University",
+      "bdl": 226,
+      "bdlName": "Murray State Racers"
+    },
+    {
+      "ncaa": 504,
+      "ncaaName": "University of Northern Iowa",
+      "bdl": 227,
+      "bdlName": "Northern Iowa Panthers"
+    },
+    {
+      "ncaa": 659,
+      "ncaaName": "Southern Illinois University at Carbondale",
+      "bdl": 228,
+      "bdlName": "Southern Illinois Salukis"
+    },
+    {
+      "ncaa": 302,
+      "ncaaName": "University of Illinois Chicago",
+      "bdl": 229,
+      "bdlName": "UIC Flames"
+    },
+    {
+      "ncaa": 735,
+      "ncaaName": "Valparaiso University",
+      "bdl": 230,
+      "bdlName": "Valparaiso Beacons"
+    },
+    {
+      "ncaa": 721,
+      "ncaaName": "U.S. Air Force Academy",
+      "bdl": 231,
+      "bdlName": "Air Force Falcons"
+    },
+    {
+      "ncaa": 66,
+      "ncaaName": "Boise State University",
+      "bdl": 232,
+      "bdlName": "Boise State Broncos"
+    },
+    {
+      "ncaa": 156,
+      "ncaaName": "Colorado State University",
+      "bdl": 233,
+      "bdlName": "Colorado State Rams"
+    },
+    {
+      "ncaa": 96,
+      "ncaaName": "California State University, Fresno",
+      "bdl": 234,
+      "bdlName": "Fresno State Bulldogs"
+    },
+    {
+      "ncaa": 1104,
+      "ncaaName": "Grand Canyon University",
+      "bdl": 235,
+      "bdlName": "Grand Canyon Lopes"
+    },
+    {
+      "ncaa": 466,
+      "ncaaName": "University of Nevada, Reno",
+      "bdl": 236,
+      "bdlName": "Nevada Wolf Pack"
+    },
+    {
+      "ncaa": 473,
+      "ncaaName": "University of New Mexico",
+      "bdl": 237,
+      "bdlName": "New Mexico Lobos"
+    },
+    {
+      "ncaa": 626,
+      "ncaaName": "San Diego State University",
+      "bdl": 238,
+      "bdlName": "San Diego State Aztecs"
+    },
+    {
+      "ncaa": 630,
+      "ncaaName": "San Jose State University",
+      "bdl": 239,
+      "bdlName": "San Jos\u00e9 State Spartans"
+    },
+    {
+      "ncaa": 465,
+      "ncaaName": "University of Nevada, Las Vegas",
+      "bdl": 240,
+      "bdlName": "UNLV Rebels"
+    },
+    {
+      "ncaa": 731,
+      "ncaaName": "Utah State University",
+      "bdl": 241,
+      "bdlName": "Utah State Aggies"
+    },
+    {
+      "ncaa": 811,
+      "ncaaName": "University of Wyoming",
+      "bdl": 242,
+      "bdlName": "Wyoming Cowboys"
+    },
+    {
+      "ncaa": 127,
+      "ncaaName": "Central Connecticut State University",
+      "bdl": 243,
+      "bdlName": "Central Connecticut Blue Devils"
+    },
+    {
+      "ncaa": 136,
+      "ncaaName": "Chicago State University",
+      "bdl": 244,
+      "bdlName": "Chicago State Cougars"
+    },
+    {
+      "ncaa": 222,
+      "ncaaName": "Fairleigh Dickinson University, Metropolitan Campus",
+      "bdl": 245,
+      "bdlName": "Fairleigh Dickinson Knights"
+    },
+    {
+      "ncaa": 349,
+      "ncaaName": "Le Moyne College",
+      "bdl": 246,
+      "bdlName": "Le Moyne Dolphins"
+    },
+    {
+      "ncaa": 361,
+      "ncaaName": "Long Island University",
+      "bdl": 247,
+      "bdlName": "Long Island University Sharks"
+    },
+    {
+      "ncaa": 408,
+      "ncaaName": "Mercyhurst University",
+      "bdl": 248,
+      "bdlName": "Mercyhurst Lakers"
+    },
+    {
+      "ncaa": 470,
+      "ncaaName": "University of New Haven",
+      "bdl": 249,
+      "bdlName": "New Haven Chargers"
+    },
+    {
+      "ncaa": 682,
+      "ncaaName": "Stonehill College",
+      "bdl": 251,
+      "bdlName": "Stonehill Skyhawks"
+    },
+    {
+      "ncaa": 748,
+      "ncaaName": "Wagner College",
+      "bdl": 252,
+      "bdlName": "Wagner Seahawks"
+    },
+    {
+      "ncaa": 201,
+      "ncaaName": "Eastern Illinois University",
+      "bdl": 253,
+      "bdlName": "Eastern Illinois Panthers"
+    },
+    {
+      "ncaa": 30136,
+      "ncaaName": "Lindenwood University",
+      "bdl": 254,
+      "bdlName": "Lindenwood Lions"
+    },
+    {
+      "ncaa": 32,
+      "ncaaName": "University of Arkansas at Little Rock",
+      "bdl": 255,
+      "bdlName": "Little Rock Trojans"
+    },
+    {
+      "ncaa": 444,
+      "ncaaName": "Morehead State University",
+      "bdl": 256,
+      "bdlName": "Morehead State Eagles"
+    },
+    {
+      "ncaa": 660,
+      "ncaaName": "Southern Illinois University Edwardsville",
+      "bdl": 257,
+      "bdlName": "SIU Edwardsville Cougars"
+    },
+    {
+      "ncaa": 654,
+      "ncaaName": "Southeast Missouri State University",
+      "bdl": 258,
+      "bdlName": "Southeast Missouri State Redhawks"
+    },
+    {
+      "ncaa": 661,
+      "ncaaName": "University of Southern Indiana",
+      "bdl": 259,
+      "bdlName": "Southern Indiana Screaming Eagles"
+    },
+    {
+      "ncaa": 691,
+      "ncaaName": "Tennessee State University",
+      "bdl": 260,
+      "bdlName": "Tennessee State Tigers"
+    },
+    {
+      "ncaa": 692,
+      "ncaaName": "Tennessee Technological University",
+      "bdl": 261,
+      "bdlName": "Tennessee Tech Golden Eagles"
+    },
+    {
+      "ncaa": 695,
+      "ncaaName": "University of Tennessee at Martin",
+      "bdl": 262,
+      "bdlName": "UT Martin Skyhawks"
+    },
+    {
+      "ncaa": 771,
+      "ncaaName": "Western Illinois University",
+      "bdl": 263,
+      "bdlName": "Western Illinois Leathernecks"
+    },
+    {
+      "ncaa": 23,
+      "ncaaName": "American University",
+      "bdl": 264,
+      "bdlName": "American University Eagles"
+    },
+    {
+      "ncaa": 725,
+      "ncaaName": "U.S. Military Academy",
+      "bdl": 265,
+      "bdlName": "Army Black Knights"
+    },
+    {
+      "ncaa": 68,
+      "ncaaName": "Boston University",
+      "bdl": 266,
+      "bdlName": "Boston University Terriers"
+    },
+    {
+      "ncaa": 83,
+      "ncaaName": "Bucknell University",
+      "bdl": 267,
+      "bdlName": "Bucknell Bison"
+    },
+    {
+      "ncaa": 153,
+      "ncaaName": "Colgate University",
+      "bdl": 268,
+      "bdlName": "Colgate Raiders"
+    },
+    {
+      "ncaa": 285,
+      "ncaaName": "College of the Holy Cross",
+      "bdl": 269,
+      "bdlName": "Holy Cross Crusaders"
+    },
+    {
+      "ncaa": 342,
+      "ncaaName": "Lafayette College",
+      "bdl": 270,
+      "bdlName": "Lafayette Leopards"
+    },
+    {
+      "ncaa": 352,
+      "ncaaName": "Lehigh University",
+      "bdl": 271,
+      "bdlName": "Lehigh Mountain Hawks"
+    },
+    {
+      "ncaa": 369,
+      "ncaaName": "Loyola University Maryland",
+      "bdl": 272,
+      "bdlName": "Loyola Maryland Greyhounds"
+    },
+    {
+      "ncaa": 726,
+      "ncaaName": "U.S. Naval Academy",
+      "bdl": 273,
+      "bdlName": "Navy Midshipmen"
+    },
+    {
+      "ncaa": 8,
+      "ncaaName": "University of Alabama",
+      "bdl": 274,
+      "bdlName": "Alabama Crimson Tide"
+    },
+    {
+      "ncaa": 31,
+      "ncaaName": "University of Arkansas, Fayetteville",
+      "bdl": 275,
+      "bdlName": "Arkansas Razorbacks"
+    },
+    {
+      "ncaa": 37,
+      "ncaaName": "Auburn University",
+      "bdl": 276,
+      "bdlName": "Auburn Tigers"
+    },
+    {
+      "ncaa": 235,
+      "ncaaName": "University of Florida",
+      "bdl": 277,
+      "bdlName": "Florida Gators"
+    },
+    {
+      "ncaa": 257,
+      "ncaaName": "University of Georgia",
+      "bdl": 278,
+      "bdlName": "Georgia Bulldogs"
+    },
+    {
+      "ncaa": 334,
+      "ncaaName": "University of Kentucky",
+      "bdl": 279,
+      "bdlName": "Kentucky Wildcats"
+    },
+    {
+      "ncaa": 365,
+      "ncaaName": "Louisiana State University",
+      "bdl": 280,
+      "bdlName": "LSU Tigers"
+    },
+    {
+      "ncaa": 430,
+      "ncaaName": "Mississippi State University",
+      "bdl": 281,
+      "bdlName": "Mississippi State Bulldogs"
+    },
+    {
+      "ncaa": 434,
+      "ncaaName": "University of Missouri, Columbia",
+      "bdl": 282,
+      "bdlName": "Missouri Tigers"
+    },
+    {
+      "ncaa": 522,
+      "ncaaName": "University of Oklahoma",
+      "bdl": 283,
+      "bdlName": "Oklahoma Sooners"
+    },
+    {
+      "ncaa": 433,
+      "ncaaName": "University of Mississippi",
+      "bdl": 284,
+      "bdlName": "Ole Miss Rebels"
+    },
+    {
+      "ncaa": 648,
+      "ncaaName": "University of South Carolina, Columbia",
+      "bdl": 285,
+      "bdlName": "South Carolina Gamecocks"
+    },
+    {
+      "ncaa": 694,
+      "ncaaName": "University of Tennessee, Knoxville",
+      "bdl": 286,
+      "bdlName": "Tennessee Volunteers"
+    },
+    {
+      "ncaa": 697,
+      "ncaaName": "Texas A&M University, College Station",
+      "bdl": 287,
+      "bdlName": "Texas A&M Aggies"
+    },
+    {
+      "ncaa": 703,
+      "ncaaName": "University of Texas at Austin",
+      "bdl": 288,
+      "bdlName": "Texas Longhorns"
+    },
+    {
+      "ncaa": 736,
+      "ncaaName": "Vanderbilt University",
+      "bdl": 289,
+      "bdlName": "Vanderbilt Commodores"
+    },
+    {
+      "ncaa": 6,
+      "ncaaName": "Alabama A&M University",
+      "bdl": 290,
+      "bdlName": "Alabama A&M Bulldogs"
+    },
+    {
+      "ncaa": 7,
+      "ncaaName": "Alabama State University",
+      "bdl": 291,
+      "bdlName": "Alabama State Hornets"
+    },
+    {
+      "ncaa": 17,
+      "ncaaName": "Alcorn State University",
+      "bdl": 292,
+      "bdlName": "Alcorn State Braves"
+    },
+    {
+      "ncaa": 2678,
+      "ncaaName": "University of Arkansas, Pine Bluff",
+      "bdl": 293,
+      "bdlName": "Arkansas-Pine Bluff Golden Lions"
+    },
+    {
+      "ncaa": 61,
+      "ncaaName": "Bethune-Cookman University",
+      "bdl": 294,
+      "bdlName": "Bethune-Cookman Wildcats"
+    },
+    {
+      "ncaa": 228,
+      "ncaaName": "Florida A&M University",
+      "bdl": 295,
+      "bdlName": "Florida A&M Rattlers"
+    },
+    {
+      "ncaa": 261,
+      "ncaaName": "Grambling State University",
+      "bdl": 296,
+      "bdlName": "Grambling Tigers"
+    },
+    {
+      "ncaa": 314,
+      "ncaaName": "Jackson State University",
+      "bdl": 297,
+      "bdlName": "Jackson State Tigers"
+    },
+    {
+      "ncaa": 432,
+      "ncaaName": "Mississippi Valley State University",
+      "bdl": 298,
+      "bdlName": "Mississippi Valley State Delta Devils"
+    },
+    {
+      "ncaa": 553,
+      "ncaaName": "Prairie View A&M University",
+      "bdl": 299,
+      "bdlName": "Prairie View A&M Panthers"
+    },
+    {
+      "ncaa": 665,
+      "ncaaName": "Southern University, Baton Rouge",
+      "bdl": 300,
+      "bdlName": "Southern Jaguars"
+    },
+    {
+      "ncaa": 699,
+      "ncaaName": "Texas Southern University",
+      "bdl": 301,
+      "bdlName": "Texas Southern Tigers"
+    },
+    {
+      "ncaa": 693,
+      "ncaaName": "University of Tennessee at Chattanooga",
+      "bdl": 302,
+      "bdlName": "Chattanooga Mocs"
+    },
+    {
+      "ncaa": 198,
+      "ncaaName": "East Tennessee State University",
+      "bdl": 303,
+      "bdlName": "East Tennessee State Buccaneers"
+    },
+    {
+      "ncaa": 244,
+      "ncaaName": "Furman University",
+      "bdl": 304,
+      "bdlName": "Furman Paladins"
+    },
+    {
+      "ncaa": 406,
+      "ncaaName": "Mercer University",
+      "bdl": 305,
+      "bdlName": "Mercer Bears"
+    },
+    {
+      "ncaa": 625,
+      "ncaaName": "Samford University",
+      "bdl": 306,
+      "bdlName": "Samford Bulldogs"
+    },
+    {
+      "ncaa": 141,
+      "ncaaName": "The Citadel",
+      "bdl": 307,
+      "bdlName": "The Citadel Bulldogs"
+    },
+    {
+      "ncaa": 459,
+      "ncaaName": "The University of North Carolina at Greensboro",
+      "bdl": 308,
+      "bdlName": "UNC Greensboro Spartans"
+    },
+    {
+      "ncaa": 741,
+      "ncaaName": "Virginia Military Institute",
+      "bdl": 309,
+      "bdlName": "VMI Keydets"
+    },
+    {
+      "ncaa": 769,
+      "ncaaName": "Western Carolina University",
+      "bdl": 310,
+      "bdlName": "Western Carolina Catamounts"
+    },
+    {
+      "ncaa": 2915,
+      "ncaaName": "Wofford College",
+      "bdl": 311,
+      "bdlName": "Wofford Terriers"
+    },
+    {
+      "ncaa": 199,
+      "ncaaName": "East Texas A&M University",
+      "bdl": 312,
+      "bdlName": "East Texas A&M Lions"
+    },
+    {
+      "ncaa": 287,
+      "ncaaName": "Houston Christian University",
+      "bdl": 313,
+      "bdlName": "Houston Christian Huskies"
+    },
+    {
+      "ncaa": 2743,
+      "ncaaName": "University of the Incarnate Word",
+      "bdl": 314,
+      "bdlName": "Incarnate Word Cardinals"
+    },
+    {
+      "ncaa": 346,
+      "ncaaName": "Lamar University",
+      "bdl": 315,
+      "bdlName": "Lamar Cardinals"
+    },
+    {
+      "ncaa": 402,
+      "ncaaName": "McNeese State University",
+      "bdl": 316,
+      "bdlName": "McNeese Cowboys"
+    },
+    {
+      "ncaa": 474,
+      "ncaaName": "LSU New Orleans",
+      "bdl": 317,
+      "bdlName": "New Orleans Privateers"
+    },
+    {
+      "ncaa": 483,
+      "ncaaName": "Nicholls State University",
+      "bdl": 318,
+      "bdlName": "Nicholls Colonels"
+    },
+    {
+      "ncaa": 508,
+      "ncaaName": "Northwestern State University",
+      "bdl": 319,
+      "bdlName": "Northwestern State Demons"
+    },
+    {
+      "ncaa": 655,
+      "ncaaName": "Southeastern Louisiana University",
+      "bdl": 320,
+      "bdlName": "SE Louisiana Lions"
+    },
+    {
+      "ncaa": 676,
+      "ncaaName": "Stephen F. Austin State University",
+      "bdl": 321,
+      "bdlName": "Stephen F. Austin Lumberjacks"
+    },
+    {
+      "ncaa": 26172,
+      "ncaaName": "Texas A&M University-Corpus Christi",
+      "bdl": 322,
+      "bdlName": "Texas A&M-Corpus Christi Islanders"
+    },
+    {
+      "ncaa": 536,
+      "ncaaName": "The University of Texas Rio Grande Valley",
+      "bdl": 323,
+      "bdlName": "UT Rio Grande Valley Vaqueros"
+    },
+    {
+      "ncaa": 183,
+      "ncaaName": "University of Denver",
+      "bdl": 324,
+      "bdlName": "Denver Pioneers"
+    },
+    {
+      "ncaa": 2707,
+      "ncaaName": "University of Missouri-Kansas City",
+      "bdl": 325,
+      "bdlName": "Kansas City Roos"
+    },
+    {
+      "ncaa": 494,
+      "ncaaName": "University of North Dakota",
+      "bdl": 326,
+      "bdlName": "North Dakota Fighting Hawks"
+    },
+    {
+      "ncaa": 493,
+      "ncaaName": "North Dakota State University",
+      "bdl": 327,
+      "bdlName": "North Dakota State Bison"
+    },
+    {
+      "ncaa": 464,
+      "ncaaName": "University of Nebraska at Omaha",
+      "bdl": 328,
+      "bdlName": "Omaha Mavericks"
+    },
+    {
+      "ncaa": 527,
+      "ncaaName": "Oral Roberts University",
+      "bdl": 329,
+      "bdlName": "Oral Roberts Golden Eagles"
+    },
+    {
+      "ncaa": 650,
+      "ncaaName": "University of South Dakota",
+      "bdl": 330,
+      "bdlName": "South Dakota Coyotes"
+    },
+    {
+      "ncaa": 649,
+      "ncaaName": "South Dakota State University",
+      "bdl": 331,
+      "bdlName": "South Dakota State Jackrabbits"
+    },
+    {
+      "ncaa": 620,
+      "ncaaName": "University of St. Thomas (Minnesota)",
+      "bdl": 332,
+      "bdlName": "St. Thomas-Minnesota Tommies"
+    },
+    {
+      "ncaa": 27,
+      "ncaaName": "Appalachian State University",
+      "bdl": 333,
+      "bdlName": "App State Mountaineers"
+    },
+    {
+      "ncaa": 30,
+      "ncaaName": "Arkansas State University",
+      "bdl": 334,
+      "bdlName": "Arkansas State Red Wolves"
+    },
+    {
+      "ncaa": 149,
+      "ncaaName": "Coastal Carolina University",
+      "bdl": 335,
+      "bdlName": "Coastal Carolina Chanticleers"
+    },
+    {
+      "ncaa": 253,
+      "ncaaName": "Georgia Southern University",
+      "bdl": 336,
+      "bdlName": "Georgia Southern Eagles"
+    },
+    {
+      "ncaa": 254,
+      "ncaaName": "Georgia State University",
+      "bdl": 337,
+      "bdlName": "Georgia State Panthers"
+    },
+    {
+      "ncaa": 317,
+      "ncaaName": "James Madison University",
+      "bdl": 338,
+      "bdlName": "James Madison Dukes"
+    },
+    {
+      "ncaa": 671,
+      "ncaaName": "University of Louisiana at Lafayette",
+      "bdl": 339,
+      "bdlName": "Louisiana Ragin' Cajuns"
+    },
+    {
+      "ncaa": 388,
+      "ncaaName": "Marshall University",
+      "bdl": 340,
+      "bdlName": "Marshall Thundering Herd"
+    },
+    {
+      "ncaa": 523,
+      "ncaaName": "Old Dominion University",
+      "bdl": 341,
+      "bdlName": "Old Dominion Monarchs"
+    },
+    {
+      "ncaa": 646,
+      "ncaaName": "University of South Alabama",
+      "bdl": 342,
+      "bdlName": "South Alabama Jaguars"
+    },
+    {
+      "ncaa": 664,
+      "ncaaName": "The University of Southern Mississippi",
+      "bdl": 343,
+      "bdlName": "Southern Miss Golden Eagles"
+    },
+    {
+      "ncaa": 670,
+      "ncaaName": "Texas State University",
+      "bdl": 344,
+      "bdlName": "Texas State Bobcats"
+    },
+    {
+      "ncaa": 716,
+      "ncaaName": "Troy University",
+      "bdl": 345,
+      "bdlName": "Troy Trojans"
+    },
+    {
+      "ncaa": 498,
+      "ncaaName": "University of Louisiana Monroe",
+      "bdl": 346,
+      "bdlName": "UL Monroe Warhawks"
+    },
+    {
+      "ncaa": 2,
+      "ncaaName": "Abilene Christian University",
+      "bdl": 347,
+      "bdlName": "Abilene Christian Wildcats"
+    },
+    {
+      "ncaa": 30135,
+      "ncaaName": "California Baptist University",
+      "bdl": 348,
+      "bdlName": "California Baptist Lancers"
+    },
+    {
+      "ncaa": 667,
+      "ncaaName": "Southern Utah University",
+      "bdl": 349,
+      "bdlName": "Southern Utah Thunderbirds"
+    },
+    {
+      "ncaa": 1395,
+      "ncaaName": "Tarleton State University",
+      "bdl": 350,
+      "bdlName": "Tarleton State Texans"
+    },
+    {
+      "ncaa": 702,
+      "ncaaName": "University of Texas at Arlington",
+      "bdl": 351,
+      "bdlName": "UT Arlington Mavericks"
+    },
+    {
+      "ncaa": 30095,
+      "ncaaName": "Utah Tech University",
+      "bdl": 352,
+      "bdlName": "Utah Tech Trailblazers"
+    },
+    {
+      "ncaa": 30024,
+      "ncaaName": "Utah Valley University",
+      "bdl": 353,
+      "bdlName": "Utah Valley Wolverines"
+    },
+    {
+      "ncaa": 260,
+      "ncaaName": "Gonzaga University",
+      "bdl": 354,
+      "bdlName": "Gonzaga Bulldogs"
+    },
+    {
+      "ncaa": 370,
+      "ncaaName": "Loyola Marymount University",
+      "bdl": 355,
+      "bdlName": "Loyola Marymount Lions"
+    },
+    {
+      "ncaa": 528,
+      "ncaaName": "Oregon State University",
+      "bdl": 356,
+      "bdlName": "Oregon State Beavers"
+    },
+    {
+      "ncaa": 534,
+      "ncaaName": "University of the Pacific",
+      "bdl": 357,
+      "bdlName": "Pacific Tigers"
+    },
+    {
+      "ncaa": 541,
+      "ncaaName": "Pepperdine University",
+      "bdl": 358,
+      "bdlName": "Pepperdine Waves"
+    },
+    {
+      "ncaa": 551,
+      "ncaaName": "University of Portland",
+      "bdl": 359,
+      "bdlName": "Portland Pilots"
+    },
+    {
+      "ncaa": 610,
+      "ncaaName": "Saint Mary's College of California",
+      "bdl": 360,
+      "bdlName": "Saint Mary's Gaels"
+    },
+    {
+      "ncaa": 627,
+      "ncaaName": "University of San Diego",
+      "bdl": 361,
+      "bdlName": "San Diego Toreros"
+    },
+    {
+      "ncaa": 629,
+      "ncaaName": "University of San Francisco",
+      "bdl": 362,
+      "bdlName": "San Francisco Dons"
+    },
+    {
+      "ncaa": 631,
+      "ncaaName": "Santa Clara University",
+      "bdl": 363,
+      "bdlName": "Santa Clara Broncos"
+    },
+    {
+      "ncaa": 1356,
+      "ncaaName": "Seattle University",
+      "bdl": 364,
+      "bdlName": "Seattle U Redhawks"
+    },
+    {
+      "ncaa": 754,
+      "ncaaName": "Washington State University",
+      "bdl": 365,
+      "bdlName": "Washington State Cougars"
+    },
+    {
+      "ncaa": 11740,
+      "ncaaName": "University of West Florida",
+      "bdl": 732,
+      "bdlName": "Argonauts"
+    }
+  ]
+}

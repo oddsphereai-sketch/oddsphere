@@ -1,0 +1,3 @@
+export const CBB_FULL_D1_SCORE_RELEASE="cbb_candidate_2026_11_05_r5_complete_d1_program_priors" as const;
+export const CBB_FULL_D1_MARKET_MODEL_RELEASE="cbb_candidate_2026_11_05_r19_complete_d1_program_priors" as const;
+export const CBB_FULL_D1_READER_RECEIPT_RELEASE="cbb_market_behavior_2026_11_05_r15_complete_d1_program_priors" as const;

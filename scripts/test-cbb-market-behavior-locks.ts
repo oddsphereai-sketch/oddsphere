@@ -16,7 +16,7 @@ import {gradeCbbProvisional} from "../lib/cbb/provisionalGradePolicy";
 import {adaptCbbProvisionalGame} from "../lib/services/cbb/adaptCbbProvisionalToDailyEdge";
 import {buildCbbProvisionalBoard} from "../lib/cbb/provisionalBoard";
 import {writeCbbMemberGame,cbbMemberGameForReader,type CbbStoredMemberGame} from "../lib/services/cbb/cbbMemberGameStore";
-import {writeLockedCbbTracking,cbbLockedGradeRelease,cbbLockedModelRelease} from "../lib/services/cbb/cbbTrackingWriter";
+import {writeLockedCbbTracking,cbbLockedGradeRelease,cbbLockedModelRelease,CBB_TRACKING_WRITER_RELEASE} from "../lib/services/cbb/cbbTrackingWriter";
 import {readCbbProvisionalSnapshot} from "../lib/cbb/provisionalLifecycle";
 import {cbbCurrentSplitEvidence} from "../lib/cbb/owlsSplitEvidence";
 import {cbbBehaviorFlows,cbbHistoryAtDecision} from "../lib/services/cbb/cbbMarketBehaviorInputs";
@@ -59,7 +59,7 @@ async function main(){
  const trackingDb={from:(table:string)=>table==="games"?{select:()=>{const q={eq:()=>q,maybeSingle:async()=>({data:{id:44,external_id:777,game_date:start,slate_date:"2026-11-02"},error:null})};return q;}}:{select:()=>{const q={eq:()=>q,then:(resolve:(r:unknown)=>unknown)=>resolve({data:tracked,error:null})};return q;},insert:async(row:Record<string,unknown>)=>{tracked.push(structuredClone(row));return {error:null};}}} as unknown as Parameters<typeof writeLockedCbbTracking>[1];
  assert.equal(await writeLockedCbbTracking(frozen.record,trackingDb),3);
  assert.ok(tracked.every(row=>row.model_version===CBB_MARKET_BEHAVIOR_MODEL_RELEASE&&row.calibration_version===CBB_MARKET_BEHAVIOR_GRADE_RELEASE&&
-  row.model_used==="cbb_r18_current_source_forecast_restoration"&&(row.snapshot_json as Record<string,unknown>).release==="cbb_tracking_writer_2026_11_04_r21_current_source_forecast_restoration"));
+  row.model_used==="cbb_r18_current_source_forecast_restoration"&&(row.snapshot_json as Record<string,unknown>).release===CBB_TRACKING_WRITER_RELEASE));
  const trackingBytes=JSON.stringify(tracked);assert.equal(await writeLockedCbbTracking(frozen.record,trackingDb),0);assert.equal(JSON.stringify(tracked),trackingBytes);
  assert.equal(tracked.find(row=>row.market==="spread")?.line_value,-2.5);
  const corrupt=structuredClone(frozen.record);corrupt.snapshot.board.score.home+=1;

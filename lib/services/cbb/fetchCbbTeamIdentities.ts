@@ -1,7 +1,10 @@
 import { completeCbbTeamIdentitiesFromEvents, resolveCbbTeamIdentities,
-  type CbbTeamIdentity, type EspnCbbTeam } from "../../cbb/teamIdentity";
+  verifiedEspnLogo,type CbbTeamIdentity, type EspnCbbTeam } from "../../cbb/teamIdentity";
 import type { EspnCbbEvent } from "../../cbb/dataset";
 import type { CbbGame, CbbTeam } from "../../cbb/types";
+import {cbbOfficialD1FixtureContext} from "../../cbb/crossDivisionIdentity";
+import {computeSlateDate} from "../../dates/slateDate";
+import {CBB_FULL_D1_COVERAGE_START} from "../../cbb/crossDivisionPrior";
 
 const ESPN_CBB = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball";
 
@@ -39,6 +42,19 @@ export async function fetchCbbTeamIdentities(args: {
     teams.set(team.id, team);
   }
   const fetchedAt = new Date().toISOString();
-  return completeCbbTeamIdentitiesFromEvents({ identities: resolveCbbTeamIdentities([...teams.values()], catalog),
+  const identities=completeCbbTeamIdentitiesFromEvents({ identities: resolveCbbTeamIdentities([...teams.values()], catalog),
     games: args.games, events, fetchedAt });
+  for(const game of args.games){
+    if(computeSlateDate("cbb",game.date)<CBB_FULL_D1_COVERAGE_START)continue;
+    const context=cbbOfficialD1FixtureContext(game,events,fetchedAt);if(!context)continue;
+    for(const [team,code,id,logo] of [[game.home_team,context.homeAbbreviation,context.homeEspnId,context.homeLogo],
+      [game.visitor_team,context.awayAbbreviation,context.awayEspnId,context.awayLogo]] as const){
+      const prior=identities.get(team.id);if(!prior)continue;
+      const verifiedLogo=verifiedEspnLogo(logo??undefined,id),verifiedCode=code&&/^[A-Za-z0-9 .&'-]{1,16}$/.test(code)?code:null;
+      identities.set(team.id,{...prior,espnTeamId:id,espnAbbreviation:verifiedCode??prior.espnAbbreviation,
+        logoUrl:verifiedLogo??prior.logoUrl,status:verifiedLogo?"verified_exact_event":prior.status,
+        ...(!team.abbreviation?.trim()&&verifiedCode?{officialAbbreviationEvidence:{espnTeamId:id,espnEventId:context.espnEventId,observedAt:fetchedAt}}:{})});
+    }
+  }
+  return identities;
 }

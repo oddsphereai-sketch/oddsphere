@@ -1,0 +1,478 @@
+{
+  "capturedAt": "2026-11-05T03:19:08.620Z",
+  "source": "paired official completed fixtures; exact D1, date/time, both final scores",
+  "schools": [
+    {
+      "bdlId": 379,
+      "bdlName": "Ecclesia Royals",
+      "espnId": "3120",
+      "espnName": "Ecclesia Royals",
+      "sourceEventId": "401727242",
+      "sourceDay": "2024-12-17"
+    },
+    {
+      "bdlId": 382,
+      "bdlName": "La Sierra Golden Eagles",
+      "espnId": "3167",
+      "espnName": "La Sierra Golden Eagles",
+      "sourceEventId": "401727272",
+      "sourceDay": "2024-12-28"
+    },
+    {
+      "bdlId": 383,
+      "bdlName": "Columbia International Rams",
+      "espnId": "3242",
+      "espnName": "Columbia International Rams",
+      "sourceEventId": "401732528",
+      "sourceDay": "2024-12-30"
+    },
+    {
+      "bdlId": 385,
+      "bdlName": "East-West University Phantoms",
+      "espnId": "3107",
+      "espnName": "East West Phantoms",
+      "sourceEventId": "401721058",
+      "sourceDay": "2024-12-30"
+    },
+    {
+      "bdlId": 386,
+      "bdlName": "Thomas (ME) Terriers",
+      "espnId": "2645",
+      "espnName": "Thomas College Terriers",
+      "sourceEventId": "401824943",
+      "sourceDay": "2025-11-03"
+    },
+    {
+      "bdlId": 388,
+      "bdlName": "Lincoln University (CA) Oaklanders",
+      "espnId": "124946",
+      "espnName": "Lincoln (CA) Oaklanders",
+      "sourceEventId": "401718473",
+      "sourceDay": "2024-12-21"
+    },
+    {
+      "bdlId": 400,
+      "bdlName": "Virginia-Lynchburg Dragons",
+      "espnId": "3229",
+      "espnName": "Virginia Lynchburg Dragons",
+      "sourceEventId": "401723717",
+      "sourceDay": "2025-01-18"
+    },
+    {
+      "bdlId": 403,
+      "bdlName": "Northern New Mexico Eagles",
+      "espnId": "3141",
+      "espnName": "Northern New Mexico Eagles",
+      "sourceEventId": "401726436",
+      "sourceDay": "2024-12-28"
+    },
+    {
+      "bdlId": 529,
+      "bdlName": "Central State (OH) Marauders",
+      "espnId": "2119",
+      "espnName": "Central State Marauders",
+      "sourceEventId": "401729951",
+      "sourceDay": "2024-11-20"
+    },
+    {
+      "bdlId": 1012,
+      "bdlName": "Builders",
+      "espnId": "3111",
+      "espnName": "Apprentice School Builders",
+      "sourceEventId": "401726036",
+      "sourceDay": "2024-12-10"
+    },
+    {
+      "bdlId": 1002,
+      "bdlName": "Tigers",
+      "espnId": "2098",
+      "espnName": "Campbellsville Tigers",
+      "sourceEventId": "401726437",
+      "sourceDay": "2024-11-12"
+    },
+    {
+      "bdlId": 1318,
+      "bdlName": "College Of Biblical Studies Ambassadors",
+      "espnId": "128256",
+      "espnName": "College of Biblical Studies Ambassadors",
+      "sourceEventId": "401731990",
+      "sourceDay": "2024-12-30"
+    },
+    {
+      "bdlId": 810,
+      "bdlName": "Majors",
+      "espnId": "2398",
+      "espnName": "Millsaps Majors",
+      "sourceEventId": "401829447",
+      "sourceDay": "2025-11-03"
+    },
+    {
+      "bdlId": 498,
+      "bdlName": "Erskine Flying Fleet",
+      "espnId": "2215",
+      "espnName": "Erskine Flying Fleet",
+      "sourceEventId": "401727425",
+      "sourceDay": "2024-11-07"
+    },
+    {
+      "bdlId": 497,
+      "bdlName": "Midway University Eagles",
+      "espnId": "111166",
+      "espnName": "Midway Eagles",
+      "sourceEventId": "401727059",
+      "sourceDay": "2024-12-29"
+    },
+    {
+      "bdlId": 1321,
+      "bdlName": "Franklin Grizzlies",
+      "espnId": "2233",
+      "espnName": "Franklin Grizzlies",
+      "sourceEventId": "401720992",
+      "sourceDay": "2024-11-08"
+    },
+    {
+      "bdlId": 1310,
+      "bdlName": "Mighty Banyans",
+      "espnId": "128550",
+      "espnName": "New College Mighty Banyans",
+      "sourceEventId": "401726393",
+      "sourceDay": "2024-12-06"
+    },
+    {
+      "bdlId": 578,
+      "bdlName": "Fisk Bulldogs",
+      "espnId": "2225",
+      "espnName": "Fisk Bulldogs",
+      "sourceEventId": "401721227",
+      "sourceDay": "2024-11-13"
+    },
+    {
+      "bdlId": 722,
+      "bdlName": "Oaks",
+      "espnId": "2381",
+      "espnName": "Menlo Oaks",
+      "sourceEventId": "401722409",
+      "sourceDay": "2024-11-12"
+    },
+    {
+      "bdlId": 415,
+      "bdlName": "Bethesda University Flames",
+      "espnId": "3246",
+      "espnName": "Bethesda Flames",
+      "sourceEventId": "401720919",
+      "sourceDay": "2024-12-30"
+    },
+    {
+      "bdlId": 1329,
+      "bdlName": "Mississippi University For Women Owls",
+      "espnId": "126826",
+      "espnName": "Mississippi U for Women Owls",
+      "sourceEventId": "401726442",
+      "sourceDay": "2024-11-09"
+    },
+    {
+      "bdlId": 422,
+      "bdlName": "Southern Virginia Knights",
+      "espnId": "2896",
+      "espnName": "Southern Virginia Knights",
+      "sourceEventId": "401724538",
+      "sourceDay": "2024-12-11"
+    },
+    {
+      "bdlId": 568,
+      "bdlName": "Central Penn Knights",
+      "espnId": "3164",
+      "espnName": "Central Penn Knights",
+      "sourceEventId": "401723751",
+      "sourceDay": "2024-12-01"
+    },
+    {
+      "bdlId": 429,
+      "bdlName": "Calumet College Crimson Wave",
+      "espnId": "502",
+      "espnName": "Calumet St. Joseph Crimson Wave",
+      "sourceEventId": "401724525",
+      "sourceDay": "2024-12-22"
+    },
+    {
+      "bdlId": 1335,
+      "bdlName": "Mount Saint Mary (NY) Knights",
+      "espnId": "289",
+      "espnName": "Mount St Mary Knights",
+      "sourceEventId": "401721789",
+      "sourceDay": "2024-11-12"
+    },
+    {
+      "bdlId": 673,
+      "bdlName": "Cheyney (PA) Wolves",
+      "espnId": "2129",
+      "espnName": "Cheyney (PA) Wolves",
+      "sourceEventId": "401723697",
+      "sourceDay": "2025-01-16"
+    },
+    {
+      "bdlId": 903,
+      "bdlName": "Rangers",
+      "espnId": "2823",
+      "espnName": "Northwestern (OK) Rangers",
+      "sourceEventId": "401823322",
+      "sourceDay": "2025-11-08"
+    },
+    {
+      "bdlId": 1339,
+      "bdlName": "Ripon Red Hawks",
+      "espnId": "2891",
+      "espnName": "Ripon Red Hawks",
+      "sourceEventId": "401828476",
+      "sourceDay": "2025-11-10"
+    },
+    {
+      "bdlId": 1284,
+      "bdlName": "Nittany Lions",
+      "espnId": "130195",
+      "espnName": "Penn State Shenango Nittany Lions",
+      "sourceEventId": "401740670",
+      "sourceDay": "2025-01-24"
+    },
+    {
+      "bdlId": 763,
+      "bdlName": "Storm",
+      "espnId": "2564",
+      "espnName": "Simpson (IA) Storm",
+      "sourceEventId": "401828905",
+      "sourceDay": "2025-11-10"
+    },
+    {
+      "bdlId": 477,
+      "bdlName": "Bob Jones Bruins",
+      "espnId": "3243",
+      "espnName": "Bob Jones Bruins",
+      "sourceEventId": "401719255",
+      "sourceDay": "2024-12-12"
+    },
+    {
+      "bdlId": 598,
+      "bdlName": "Fort Valley State Wildcats",
+      "espnId": "2232",
+      "espnName": "Fort Valley State Wildcats",
+      "sourceEventId": "401726399",
+      "sourceDay": "2024-12-30"
+    },
+    {
+      "bdlId": 761,
+      "bdlName": "Tigers",
+      "espnId": "2679",
+      "espnName": "Voorhees Tigers",
+      "sourceEventId": "401727843",
+      "sourceDay": "2024-11-11"
+    },
+    {
+      "bdlId": 579,
+      "bdlName": "Washington College (MD) Shoremen",
+      "espnId": "2689",
+      "espnName": "Washington Maryland Shoremen",
+      "sourceEventId": "401721805",
+      "sourceDay": "2024-11-25"
+    },
+    {
+      "bdlId": 1117,
+      "bdlName": "Boyce Bulldogs",
+      "espnId": "109700",
+      "espnName": "Boyce Bulldogs",
+      "sourceEventId": "401727321",
+      "sourceDay": "2024-11-06"
+    },
+    {
+      "bdlId": 1349,
+      "bdlName": "Misericordia Cougars",
+      "espnId": "111902",
+      "espnName": "Misericordia Cougars",
+      "sourceEventId": "401730556",
+      "sourceDay": "2024-12-17"
+    },
+    {
+      "bdlId": 1193,
+      "bdlName": "Beavers",
+      "espnId": "170",
+      "espnName": "City College NY Beavers",
+      "sourceEventId": "401823314",
+      "sourceDay": "2025-12-22"
+    },
+    {
+      "bdlId": 506,
+      "bdlName": "Dallas Christian Crusaders",
+      "espnId": "2937",
+      "espnName": "Dallas Christian Crusaders",
+      "sourceEventId": "401721212",
+      "sourceDay": "2024-12-30"
+    },
+    {
+      "bdlId": 535,
+      "bdlName": "Howard Payne Yellow Jackets",
+      "espnId": "2758",
+      "espnName": "Howard Payne Yellow Jackets",
+      "sourceEventId": "401733682",
+      "sourceDay": "2024-12-21"
+    },
+    {
+      "bdlId": 419,
+      "bdlName": "Texas Lutheran Bulldogs",
+      "espnId": "2639",
+      "espnName": "Texas Lutheran Bulldogs",
+      "sourceEventId": "401716120",
+      "sourceDay": "2024-12-29"
+    },
+    {
+      "bdlId": 636,
+      "bdlName": "Brescia Bearcats",
+      "espnId": "2855",
+      "espnName": "Brescia Bearcats",
+      "sourceEventId": "401721953",
+      "sourceDay": "2024-12-29"
+    },
+    {
+      "bdlId": 465,
+      "bdlName": "St. Mary's (MD) Seahawks",
+      "espnId": "117",
+      "espnName": "St. Mary's (MD) Seahawks",
+      "sourceEventId": "401817152",
+      "sourceDay": "2025-12-22"
+    },
+    {
+      "bdlId": 1307,
+      "bdlName": "Bryant & Stratton Bobcats",
+      "espnId": "131603",
+      "espnName": "Bryant & Stratton-Albany Bobcats",
+      "sourceEventId": "401831529",
+      "sourceDay": "2025-12-06"
+    },
+    {
+      "bdlId": 1358,
+      "bdlName": "Roberts Wesleyan Redhawks",
+      "espnId": "128531",
+      "espnName": "Roberts Wesleyan Redhawks",
+      "sourceEventId": "401823017",
+      "sourceDay": "2025-12-06"
+    },
+    {
+      "bdlId": 1360,
+      "bdlName": "Old Westbury Panthers",
+      "espnId": "16231",
+      "espnName": "SUNY Old Westbury Panthers",
+      "sourceEventId": "401727277",
+      "sourceDay": "2024-11-04"
+    },
+    {
+      "bdlId": 1120,
+      "bdlName": "York College Nebraska Panthers",
+      "espnId": "109998",
+      "espnName": "York (NE) Panthers",
+      "sourceEventId": "401729955",
+      "sourceDay": "2024-11-04"
+    },
+    {
+      "bdlId": 1365,
+      "bdlName": "Stanton Elks",
+      "espnId": "128501",
+      "espnName": "Stanton Elks",
+      "sourceEventId": "401826910",
+      "sourceDay": "2025-12-28"
+    },
+    {
+      "bdlId": 464,
+      "bdlName": "Southern-New Orleans Knights",
+      "espnId": "2573",
+      "espnName": "Southern New Orleans Knights",
+      "sourceEventId": "401726457",
+      "sourceDay": "2024-12-20"
+    },
+    {
+      "bdlId": 537,
+      "bdlName": "Elmira Soaring Eagles",
+      "espnId": "347",
+      "espnName": "Elmira Soaring Eagles",
+      "sourceEventId": "401820612",
+      "sourceDay": "2025-12-29"
+    },
+    {
+      "bdlId": 1268,
+      "bdlName": "Beavers",
+      "espnId": "2070",
+      "espnName": "Blackburn Beavers",
+      "sourceEventId": "401725962",
+      "sourceDay": "2024-12-28"
+    },
+    {
+      "bdlId": 911,
+      "bdlName": "Wolves",
+      "espnId": "2444",
+      "espnName": "Newberry Wolves",
+      "sourceEventId": "401726010",
+      "sourceDay": "2024-11-13"
+    },
+    {
+      "bdlId": 1121,
+      "bdlName": "Union (TN) Bulldogs",
+      "espnId": "237",
+      "espnName": "Union (TN) Bulldogs",
+      "sourceEventId": "401721950",
+      "sourceDay": "2024-11-04"
+    },
+    {
+      "bdlId": 792,
+      "bdlName": "UT Dallas Comets",
+      "espnId": "2905",
+      "espnName": "UT Dallas Comets",
+      "sourceEventId": "401727060",
+      "sourceDay": "2024-11-07"
+    },
+    {
+      "bdlId": 1123,
+      "bdlName": "Penn State-Schuylkill Nittany Lions",
+      "espnId": "128344",
+      "espnName": "Penn State Schuylkill Nittany Lions",
+      "sourceEventId": "401721715",
+      "sourceDay": "2025-01-05"
+    },
+    {
+      "bdlId": 908,
+      "bdlName": "Wolfpack",
+      "espnId": "100",
+      "espnName": "Loyola New Orleans Wolfpack",
+      "sourceEventId": "401716070",
+      "sourceDay": "2024-12-20"
+    },
+    {
+      "bdlId": 1436,
+      "bdlName": "Livingstone Blue Bears",
+      "espnId": "2940",
+      "espnName": "Livingstone Blue Bears",
+      "sourceEventId": "401722192",
+      "sourceDay": "2024-12-04"
+    },
+    {
+      "bdlId": 523,
+      "bdlName": "Kentucky Wesleyan Panthers",
+      "espnId": "2316",
+      "espnName": "Kentucky Wesleyan Panthers",
+      "sourceEventId": "401726440",
+      "sourceDay": "2024-12-21"
+    },
+    {
+      "bdlId": 1392,
+      "bdlName": "Falcons",
+      "espnId": "128218",
+      "espnName": "Friends Falcons",
+      "sourceEventId": "401722303",
+      "sourceDay": "2024-12-29"
+    },
+    {
+      "bdlId": 1407,
+      "bdlName": "Muskingum Fighting Muskies",
+      "espnId": "332",
+      "espnName": "Muskingum Fighting Muskies",
+      "sourceEventId": "401721066",
+      "sourceDay": "2024-12-30"
+    }
+  ]
+}

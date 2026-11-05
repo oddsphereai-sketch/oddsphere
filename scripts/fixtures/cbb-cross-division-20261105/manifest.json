@@ -1,0 +1,15 @@
+{
+  "historicalSourceSha256": "fc4f52a6784f36f770048a9ee19cd2d4f496fefb73226eae28d90be458848c04",
+  "historicalGames": 237,
+  "boxRows": 474,
+  "normalizedGames": 229,
+  "forwardSourceSha256": "cc1e3b9a6bfa2982bbbbe5568b4cb7d54228d9f0495527b5da92471f6cc8f6a8",
+  "scopeStartsAtEasternDate": "2026-11-05",
+  "productionWrites": 0,
+  "additionalSourceSha256": {
+    "ncaa-membership-source": "612348459e62720f5b36b5ff2a28cf9d0b397a375baa4be280d892e10e37f726",
+    "published-strength-source": "a31dc41554ad2968ba80b45906bcd8c6189d95a8acce7a956af80cd6ce4f415f",
+    "existing-current-training": "311dcb1611b3a4e36e9d8777e6e49e6b154d2fac6897b591a8590645683109a6",
+    "prepublication-inputs": "d1a53911e0a8ffd4483d3a03ad1fe294db7355208b7fbe8bebadfb14c89a1f8a"
+  }
+}

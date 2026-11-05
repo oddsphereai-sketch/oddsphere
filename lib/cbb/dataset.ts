@@ -19,7 +19,8 @@ function factors(box: CbbBox, opponent: CbbBox, possessions: number): CbbFourFac
   };
 }
 
-export function buildCbbTrainingGames(games: CbbGame[], boxes: CbbBox[], venues: CbbVenue[]) {
+export function buildCbbTrainingGames(games: CbbGame[], boxes: CbbBox[], venues: CbbVenue[],
+  options: { includeLowerDivisionOpponents?: boolean;divisionOneTeamIds?:ReadonlySet<number> } = {}) {
   const boxMap = new Map(boxes.map(box => [`${box.game.id}:${box.team.id}`, box]));
   const venueMap = new Map(venues.map(venue => [venue.gameId, venue]));
   const accepted: CbbTrainingGame[] = [];
@@ -27,7 +28,11 @@ export function buildCbbTrainingGames(games: CbbGame[], boxes: CbbBox[], venues:
   const reject = (reason: string) => { rejected[reason] = (rejected[reason] ?? 0) + 1; };
   for (const game of games) {
     if (game.status !== "post" || game.status_state !== "final") { reject("not_final"); continue; }
-    if (!game.home_team.conference_id || !game.visitor_team.conference_id) { reject("non_di_or_unknown"); continue; }
+    const homeD1=options.divisionOneTeamIds?options.divisionOneTeamIds.has(game.home_team.id):!!game.home_team.conference_id,
+      awayD1=options.divisionOneTeamIds?options.divisionOneTeamIds.has(game.visitor_team.id):!!game.visitor_team.conference_id;
+    if (options.includeLowerDivisionOpponents ? !homeD1&&!awayD1 : !homeD1||!awayD1) {
+      reject("non_di_or_unknown"); continue;
+    }
     if (!Number.isFinite(Date.parse(game.date)) || game.home_team.id === game.visitor_team.id ||
       !Number.isInteger(game.home_score) || !Number.isInteger(game.away_score) ||
       game.home_score <= 0 || game.away_score <= 0 || game.home_score === game.away_score) {
