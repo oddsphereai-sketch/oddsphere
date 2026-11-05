@@ -67,6 +67,7 @@ async function main(){
   const read=cbbMemberGameForReader(later.record,{...game,status:"post",status_state:"final",home_score:80,away_score:72});
   assert.equal(read.projected.home,78);assert.equal(read.result?.markets.first_inning.pickResult,"win");
   assert.equal(JSON.stringify(payload),exact,"settlement cannot mutate lock payload");
+  let officialHomeName=game.home_team.full_name;
   let officialGameDate="2026-11-01T19:00:00+00:00";
   const indexRow={snapshot_key:"cbb::member-game::777",storeRelease:frozen.record.release,gameId:"777",startsAt:start,
     lockedAt:frozen.record.snapshot.lockedAt as string|null,memberId:"cbb-777",memberExternalId:"777",memberStart:start,memberLock:frozen.record.snapshot.lockedAt as string|null};
@@ -74,7 +75,8 @@ async function main(){
   const overlayDb={from:(table:string)=>table==="lab_response_snapshots"?{
     select:(fields:string)=>({in:async()=>{if(fields.includes("storeRelease:"))return {data:missingIndex?[]:[indexRow],error:null};fullReads++;return {data:[{snapshot_key:"cbb::member-game::777",payload:frozen.record}],error:null};}})
   }:{select:()=>({eq:()=>({in:async()=>({data:[{external_id:777,status:"STATUS_FINAL",home_score:80,
-    away_score:72,game_date:officialGameDate}],error:null})})})}} as unknown as Parameters<typeof overlayCbbLockedMemberGames>[1];
+    away_score:72,game_date:officialGameDate,home_team:{external_id:game.home_team.id,display_name:officialHomeName},
+    away_team:{external_id:game.visitor_team.id,display_name:game.visitor_team.full_name}}],error:null})})})}} as unknown as Parameters<typeof overlayCbbLockedMemberGames>[1];
   const oldBoard=cbbDailyEdgeResponse("2026-11-01",[first.record.memberGame],before);
   const lockedBoard=await overlayCbbLockedMemberGames(oldBoard,overlayDb);
   assert.equal(lockedBoard.games[0].lockedAt,frozen.record.snapshot.lockedAt);
@@ -90,7 +92,12 @@ async function main(){
   await assert.rejects(overlayCbbLockedMemberGames(oldBoard,overlayDb),/missing member game record/);
   missingIndex=false;
   officialGameDate="2026-11-01T19:01:00+00:00";
-  await assert.rejects(overlayCbbLockedMemberGames(oldBoard,overlayDb),/locked result identity missing/);
+  const correctedOfficial=await overlayCbbLockedMemberGames(oldBoard,overlayDb);
+  assert.equal(correctedOfficial.games[0].gameStartAt,start,"official time correction cannot reinterpret the frozen public start");
+  assert.equal(JSON.stringify(payload),exact);
+  officialHomeName="Wrong school";
+  await assert.rejects(overlayCbbLockedMemberGames(oldBoard,overlayDb),/school changed/);
+  officialHomeName=game.home_team.full_name;
   officialGameDate="2026-11-01T19:00:00+00:00";
   payload=structuredClone(first.record);
   await assert.rejects(writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,

@@ -39,6 +39,29 @@ direct/context/fail-closed tests, the full model-change gate, current-main
 integration safety, protected PR checks and postmerge normal-writer verification.
 Evidence: `model-audits/2026-11-05-nfl-source-reaction-health.json`.
 
+## Owner-directed CBB fixture-clock and unsupported-card repair — November 5
+
+The owner requested that the refresh failure be fixed and explicitly preferred
+removing unsupported unlocked lower-division cards to publishing unreliable
+99.9%/100% forecasts. Publisher R39 /incumbent model R22 /receipt R18 /tracking
+R25 apply that scoped admission and fixture-clock repair. All-source collection
+continues for those fixtures. No market-only law or missing quote is invented;
+no historical locked record is suppressed or changed. In the fixed current-day
+input, publication is 43 incumbent games instead of 65, with 22 unsupported cross
+forecasts omitted and zero qualified actionable promotions/demotions.
+
+A verified changed start on an unlocked, same-school fixture resets old numerical
+path, anchors and retained input and requalifies display evidence at the new
+clock. A complete pre-cutoff candidate is required. After a corrected cutoff,
+only a genuinely earlier saved decision may freeze, with the original score and
+market bytes and all four chronology fields consistent. A correction discovered
+too late is isolated, preserves the original decision and cannot invent a lock.
+Already locked records keep exact old time and payload precedence over schedule
+updates. Focused actual-R20 regression, mixed-slate publication, late-clock,
+wrong-school, writer/reader/overlay/tracking and legacy-release tests, full gate,
+current-main integration and normal live refresh proof are required. No equation,
+threshold, stake, alternate writer, cadence or lease change is authorized here.
+
 ## Owner-directed CBB coordinated provider capture — November 5
 
 The owner explicitly requested that Owls, Playbook and The Odds API work together,

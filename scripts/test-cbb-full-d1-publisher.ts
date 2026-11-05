@@ -66,9 +66,9 @@ async function main(){
     return {ok:true,snapshotKey:"offline",expiresAt:now,staleUntil:now};}) as NonNullable<Parameters<typeof refreshCbbMemberBoard>[0]["saveSnapshot"]>;
   const result=await refreshCbbMemberBoard({anchorDate:day,season:2026,now,bdlKey:"offline",owlsKey:"offline",provider,owls,
     trainingGames:[],db,fetcher,loadSchedule:async()=>schedule,saveSnapshot,canonicalHistoryReader,fallbackOdds:[]});
-  assert.equal(result.sourceGames,65);assert.equal(result.published,65);assert.equal(result.scheduleOnly,0);
-  assert.equal(result.unpublishedIncomplete.length,0);assert.equal(result.written,65);assert.equal(result.trackingInserted,0);
-  assert.equal((published as DailyEdgeResponse|null)?.games.length,65);assert.equal(providerCalls,2);assert.equal(owlsCalls,2);assert.equal(freeCalls,1);
+  assert.equal(result.sourceGames,43);assert.equal(result.published,43);assert.equal(result.scheduleOnly,22);
+  assert.equal(result.unpublishedIncomplete.length,0);assert.equal(result.written,43);assert.equal(result.trackingInserted,0);
+  assert.equal((published as DailyEdgeResponse|null)?.games.length,43);assert.equal(providerCalls,2);assert.equal(owlsCalls,2);assert.equal(freeCalls,1);
   assert.equal(JSON.stringify(stored.get("cbb::member-game::nov4-owner-record")),original);
   // Exercise the real sole writer with an injected, bounded source read. The
   // raw prices below are captured Owls contracts in documented Odds API wire
@@ -87,7 +87,7 @@ async function main(){
   const beforeConnected=new Map([...stored].map(([key,value])=>[key,structuredClone(value)]));
   const connected=await refreshCbbMemberBoard({anchorDate:day,season:2026,now:sourceCapture.capturedAt,bdlKey:"offline",owlsKey:"offline",theOddsApiKey:"dummy",
     theOddsApiReader,provider,owls,trainingGames:[],db,fetcher,loadSchedule:async()=>schedule,saveSnapshot,canonicalHistoryReader,fallbackOdds:[]});
-  assert.equal(sourceReads,1);assert.equal(connected.published,65);assert.equal(connected.currentSourceCoverage.theOddsApiRequests,2);
+  assert.equal(sourceReads,1);assert.equal(connected.published,43);assert.equal(connected.currentSourceCoverage.theOddsApiRequests,2);
   assert.ok(connected.currentSourceCoverage.quotesByProvider.the_odds_api>0);
   const connectedMember=(stored.get(`cbb::member-game::${quoteGame.id}`) as CbbStoredMemberGame).memberGame;
   for(const key of ["moneyline","first_inning","total"] as const){
@@ -101,7 +101,7 @@ async function main(){
   const outageOwls={odds:async()=>{throw Error("offline source outage");},splits:async()=>({body:{success:true,data:[]}})} as unknown as OwlsInsightClient;
   const outage=await refreshCbbMemberBoard({anchorDate:day,season:2026,now:sourceCapture.capturedAt,bdlKey:"offline",owlsKey:"offline",theOddsApiKey:"dummy",
     theOddsApiReader,provider,owls:outageOwls,trainingGames:[],db,fetcher,loadSchedule:async()=>schedule,saveSnapshot,canonicalHistoryReader,fallbackOdds:[]});
-  assert.equal(outage.published,65);assert.ok(outage.providerWarnings.includes("Owls current odds request failed"));
+  assert.equal(outage.published,43);assert.ok(outage.providerWarnings.includes("Owls current odds request failed"));
   assert.ok(outage.currentSourceCoverage.quotesByProvider.the_odds_api>0);
   // Free BDL named-book coverage is checked even when retail already covers
   // all three markets, before the paid board fallback is considered.
@@ -145,7 +145,7 @@ async function main(){
   const utcProvider={calls:0,gamesForDates:async(dates:string[])=>{dateCalls.push([...dates]);return [...games,late].filter(g=>dates.includes(g.date.slice(0,10)));}} as unknown as CbbBallDontLieClient;
   const lateResult=await refreshCbbMemberBoard({anchorDate:day,season:2026,now,bdlKey:"offline",owlsKey:"offline",provider:utcProvider,owls,
     trainingGames:[],db,fetcher:sourceFetcher,loadSchedule:async()=>lateSchedule,saveSnapshot,canonicalHistoryReader,fallbackOdds:[]});
-  assert.equal(lateResult.published,66,"the seventh ET day's late game must publish an actual forecast");
+  assert.equal(lateResult.published,44,"the seventh ET day's late game must publish an actual forecast");
   assert.ok((published as DailyEdgeResponse|null)?.games.some(g=>g.external_id===late.id));
   assert.equal(dateCalls.length,2,"reuse the existing bounded two-batch fixture capture");
   assert.ok(dateCalls.every(dates=>dates.length<=7));
@@ -154,7 +154,7 @@ async function main(){
   const incomplete=await refreshCbbMemberBoard({anchorDate:day,season:2026,now,bdlKey:"offline",owlsKey:"offline",
     provider:{...provider,gamesForDates:async()=>[...games,tbd]} as unknown as CbbBallDontLieClient,owls,
     trainingGames:[],db,fetcher:sourceFetcher,loadSchedule:async()=>tbdSchedule,saveSnapshot,canonicalHistoryReader,fallbackOdds:[]});
-  assert.equal(incomplete.published,65);assert.ok(incomplete.unpublishedIncomplete.includes(tbd.id));
+  assert.equal(incomplete.published,43);assert.ok(incomplete.unpublishedIncomplete.includes(tbd.id)||incomplete.unsupportedCrossGameIds.includes(tbd.id));
   const finalResponse=published as DailyEdgeResponse|null;
   assert.ok(finalResponse?.cbbScheduleCoverage);
   const visible=applyCbbScheduleCoverage(tbdSchedule,finalResponse.cbbScheduleCoverage);
@@ -170,7 +170,7 @@ async function main(){
     provider:{...provider,gamesForDates:async()=>[...games,future]} as unknown as CbbBallDontLieClient,owls,
     trainingGames:[],db,fetcher,loadSchedule:async()=>futureSchedule,saveSnapshot,canonicalHistoryReader,fallbackOdds:[]};
   const partial=await refreshCbbMemberBoard(partialArgs);
-  assert.equal(partial.published,65,"an incomplete future D1 venue cannot abort today's complete slate");
+  assert.equal(partial.published,43,"an incomplete future D1 venue cannot abort today's complete slate");
   assert.ok(partial.unpublishedIncomplete.includes(future.id));
   const validFuture=forecastCbbFullDivisionOneBatch([future],now,[],new Map(source.officialDays.map(d=>[d.day,d])))[0];
   assert.equal(validFuture.forecast.inputStatus,"complete");
@@ -178,13 +178,59 @@ async function main(){
   const priorSnapshot=advanceCbbProvisionalSnapshot({existing:null,candidate:priorBoard,startsAt:future.date,now});
   const priorMember=adaptCbbProvisionalGame({game:future,snapshot:priorSnapshot,now,homeLogo:null,awayLogo:null});
   const priorRecord={release:recordRelease(),snapshot:priorSnapshot,memberGame:priorMember};
-  function recordRelease(){return (stored.get(`cbb::member-game::${games[0].id}`) as CbbStoredMemberGame).release;}
+  function recordRelease(){return (stored.get(`cbb::member-game::${games.find(g=>!cbbDivisionOneFixture(g).crossDivision)!.id}`) as CbbStoredMemberGame).release;}
   stored.set(`cbb::member-game::${future.id}`,priorRecord);
   const priorBytes=JSON.stringify(priorRecord),fallback=await refreshCbbMemberBoard(partialArgs);
-  assert.equal(fallback.published,66,"a prior coherent future forecast remains available during a source gap");
+  assert.equal(fallback.published,44,"a prior coherent future forecast remains available during a source gap");
   assert.equal(JSON.stringify(stored.get(`cbb::member-game::${future.id}`)),priorBytes,"incomplete refresh cannot replace the prior member payload");
+  // Actual failed production member (R20/path R5) against the confirmed new
+  // canonical start. Other fixture inputs remain captured; the clock revision
+  // in the offline official response is explicitly synthetic, not a new capture.
+  const clockGame=games.find(g=>g.id===10882665)!;
+  const oldDate=clockGame.date,correctedDate="2026-11-06T00:00:00.000Z",clockNow="2026-11-05T16:50:00.000Z";
+  const beforeClock=new Map([...stored].map(([key,value])=>[key,structuredClone(value)]));
+  const oldClockRecord=JSON.parse(gunzipSync(fs.readFileSync(new URL("./fixtures/cbb-uiw-r20-member-20261105.json.gz",import.meta.url))).toString()) as CbbStoredMemberGame;
+  stored.set(`cbb::member-game::${clockGame.id}`,oldClockRecord);
+  clockGame.date=correctedDate;
+  const clockSchedule=structuredClone(schedule);
+  clockSchedule.games.find(g=>g.externalId===clockGame.id)!.gameStartAt=correctedDate;
+  const clockEvents=structuredClone(official.events);
+  const correctedOfficial=clockEvents.find(e=>String(e.id)==="401919732")!;
+  correctedOfficial.date=correctedDate;
+  for(const competition of correctedOfficial.competitions??[])Object.assign(competition,{date:correctedDate});
+  const clockArgs={anchorDate:day,season:2026,now:clockNow,bdlKey:"offline",owlsKey:"offline",provider,owls,
+    trainingGames:[],db,loadSchedule:async()=>clockSchedule,saveSnapshot,canonicalHistoryReader,fallbackOdds:[],
+    fetcher:(async()=>new Response(JSON.stringify({events:clockEvents}))) as typeof fetch};
+  const clockResult=await refreshCbbMemberBoard(clockArgs);
+  assert.equal(clockResult.published,43,"one revised fixture cannot abort the complete slate");
+  const revised=stored.get(`cbb::member-game::${clockGame.id}`) as CbbStoredMemberGame;
+  assert.equal(revised.snapshot.startsAt,correctedDate);assert.equal(revised.memberGame.gameTime,"7:00 PM");
+  assert.equal(revised.snapshot.board.marketContext.verifiedMarketRead?.pathTape.startsAt,correctedDate);
+  assert.equal(revised.snapshot.fixtureClockRevisions?.[0].previousStartsAt,oldDate);
+  assert.equal(JSON.stringify(stored.get("cbb::member-game::nov4-owner-record")),original);
+  // A previously frozen clock remains the public record even after the source corrects it.
+  const legacyLock=structuredClone(oldClockRecord);legacyLock.snapshot.lockedAt="2026-11-05T22:00:00.000Z";
+  legacyLock.memberGame.lockedAt=legacyLock.snapshot.lockedAt;legacyLock.memberGame.lockState="locked";
+  stored.set(`cbb::member-game::${clockGame.id}`,legacyLock);const legacyClockBytes=JSON.stringify(legacyLock);
+  const withLock=await refreshCbbMemberBoard(clockArgs);
+  assert.equal(withLock.published,43);assert.ok(withLock.problems.includes(`${clockGame.id}:locked_fixture_clock_change_preserved`));
+  assert.equal(JSON.stringify(stored.get(`cbb::member-game::${clockGame.id}`)),legacyClockBytes);
+  // Do not make a late prediction or lock when the newly corrected start passed.
+  stored.set(`cbb::member-game::${clockGame.id}`,oldClockRecord);clockGame.date="2026-11-05T16:00:00.000Z";
+  clockSchedule.games.find(g=>g.externalId===clockGame.id)!.gameStartAt=clockGame.date;
+  const lateClock=await refreshCbbMemberBoard(clockArgs);
+  assert.equal(lateClock.published,43);assert.ok(lateClock.problems.includes(`${clockGame.id}:fixture_clock_correction_requires_prelock_evidence`));
+  assert.equal(JSON.stringify(stored.get(`cbb::member-game::${clockGame.id}`)),JSON.stringify(oldClockRecord));
+  clockGame.date=oldDate;stored.clear();for(const [key,value] of beforeClock)stored.set(key,value);
   const game=games.find(g=>cbbDivisionOneFixture(g).crossDivision)!;
-  const record=stored.get(`cbb::member-game::${game.id}`) as CbbStoredMemberGame;
+  assert.ok(!stored.has(`cbb::member-game::${game.id}`),"unsupported cross-domain priors do not publish");
+  assert.equal(result.unsupportedCrossGameIds.length,22);
+  // Genuine legacy cross publication remains immutable when it later locks.
+  const domainLegacy=forecastCbbFullDivisionOneBatch([game],now,[],new Map(source.officialDays.map(d=>[d.day,d])))[0];
+  const legacyBoard=buildCbbGameForecastBoard(domainLegacy.forecast,domainLegacy.coverage);
+  const legacySnapshot=advanceCbbProvisionalSnapshot({existing:null,candidate:legacyBoard,startsAt:game.date,now});
+  const record:CbbStoredMemberGame={release:recordRelease(),snapshot:legacySnapshot,memberGame:adaptCbbProvisionalGame({game,snapshot:legacySnapshot,now,homeLogo:null,awayLogo:null})};
+  stored.set(`cbb::member-game::${game.id}`,record);
   assert.ok(record.snapshot.board.gameForecast);assert.equal(record.snapshot.board.marketContext.verifiedMarketRead,null,
     "D1 numerical reader may not alter the cross-domain game forecast");
   const lockAt=new Date(Date.parse(game.date)-3600_000).toISOString();
@@ -226,7 +272,7 @@ async function main(){
   stored.set(trainingKey,{release:CBB_CURRENT_TRAINING_RELEASE,season:2026,updatedAt:now,games:core,crossDivisionGames:[{
     ...core[0],id:99999999,divisionOneId:core[0].homeId,opponentId:core[0].awayId}]});
   await assert.rejects(readCbbCurrentTraining(2026,db),/receipt corrupt/);
-  console.log(JSON.stringify({privatePublisherForecasts:65,placeholderCards:0,newUnpricedWinnerRecords:1,
+  console.log(JSON.stringify({privatePublisherForecasts:43,placeholderCards:0,newUnpricedWinnerRecords:1,
     quotedHoldTracksOnlyModelWinner:true,crossTrainingPartitionChecked:true,
     noFabricatedSpreadOrTotal:true,lockWriterAndReaderExact:true,november4Unchanged:true,
     networkRequests:0,productionWrites:0,mockedExistingProviderCalls:{bdl:providerCalls,owls:owlsCalls,espn:freeCalls}}));

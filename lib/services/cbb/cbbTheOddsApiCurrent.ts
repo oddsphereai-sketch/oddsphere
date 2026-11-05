@@ -36,6 +36,22 @@ export function normalizeCbbTheOddsApiCurrent(games:CbbGame[],body:unknown,reque
  }
  return {eventsReturned:body.length,quotes,rejections};
 }
+// Whitelist only non-secret acquisition facts. The normal cron response body
+// is not retained by refreshLogger; these receipts make ordinary cycles
+// verifiable without another paid read or manual refresh.
+function observed(receipt:CbbTheOddsApiReceipt):CbbTheOddsApiReceipt{
+ const rejectionReasons:Record<string,number>={};
+ for(const row of receipt.rejections)rejectionReasons[row.reason]=(rejectionReasons[row.reason]??0)+1;
+ console.info(`[cbb-source-receipt] ${JSON.stringify({release:receipt.release,provider:"the_odds_api",status:receipt.status,
+   requestedAt:receipt.requestedAt,availableAt:receipt.availableAt,requests:receipt.requests,paidRequests:receipt.paidRequests,
+   creditsUsed:receipt.creditsUsed,creditsRemaining:receipt.creditsRemaining,eventsReturned:receipt.eventsReturned,
+   matchedGames:new Set(receipt.quotes.map(q=>q.gameId)).size,quotes:receipt.quotes.length,rejectionReasons})}`);
+ return receipt;
+}
+function failed(stage:"quota"|"current",status:number|null,requests:number,creditsUsed:number|null,creditsRemaining:number|null){
+ console.info(`[cbb-source-receipt] ${JSON.stringify({release:CBB_THE_ODDS_API_CURRENT_RELEASE,provider:"the_odds_api",
+   status:"read_failed",stage,httpStatus:status,requests,creditsUsed,creditsRemaining})}`);
+}
 export async function fetchCbbTheOddsApiCurrent(args:{apiKey:string;games:CbbGame[];fetcher?:typeof fetch;now?:()=>string;onRequest?:(kind:"quota"|"current")=>void}):Promise<CbbTheOddsApiReceipt>{
  if(!args.apiKey.trim()||!args.games.length)throw Error("CBB The Odds API requires a configured key and actual gap fixtures");
  const fetcher=args.fetcher??fetch,now=args.now??(()=>new Date().toISOString());
@@ -45,12 +61,12 @@ export async function fetchCbbTheOddsApiCurrent(args:{apiKey:string;games:CbbGam
  // leased refresh. No per-game polling, retries or historical requests.
  args.onRequest?.("quota");
  let quota:Response;try{quota=await fetcher(url("sports"),{cache:"no-store",signal:AbortSignal.timeout(8000)});}
- catch{throw Error("CBB The Odds API quota request failed");}
- if(!quota.ok)throw Error(`CBB The Odds API quota read failed (${quota.status})`);
+ catch{failed("quota",null,1,null,null);throw Error("CBB The Odds API quota request failed");}
+ if(!quota.ok){failed("quota",quota.status,1,int(quota.headers.get("x-requests-last")),int(quota.headers.get("x-requests-remaining")));throw Error(`CBB The Odds API quota read failed (${quota.status})`);}
  const remaining=int(quota.headers.get("x-requests-remaining"));
  const receipt:CbbTheOddsApiReceipt={release:CBB_THE_ODDS_API_CURRENT_RELEASE,status:"read",requestedAt,availableAt:now(),requests:1,paidRequests:0,
    creditsUsed:0,creditsRemaining:remaining,eventsReturned:0,quotes:[],rejections:[]};
- if(remaining===null||remaining<RESERVE+CREDITS)return {...receipt,status:remaining===null?"quota_unavailable":"credit_reserve"};
+ if(remaining===null||remaining<RESERVE+CREDITS)return observed({...receipt,status:remaining===null?"quota_unavailable":"credit_reserve"});
  const current=url("sports/basketball_ncaab/odds");
  current.searchParams.set("bookmakers",BOOKS.join(","));current.searchParams.set("markets","h2h,spreads,totals");
  current.searchParams.set("oddsFormat","american");current.searchParams.set("dateFormat","iso");
@@ -62,12 +78,14 @@ export async function fetchCbbTheOddsApiCurrent(args:{apiKey:string;games:CbbGam
  const currentRequestedAt=now();
  args.onRequest?.("current");
  try{response=await fetcher(current,{cache:"no-store",headers:{accept:"application/json"},signal:AbortSignal.timeout(10000)});}
- catch{throw Error("CBB The Odds API current-board request failed");}
- if(!response.ok)throw Error(`CBB The Odds API current-board read failed (${response.status})`);
+ catch{failed("current",null,2,null,remaining);throw Error("CBB The Odds API current-board request failed");}
+ if(!response.ok){failed("current",response.status,2,int(response.headers.get("x-requests-last")),int(response.headers.get("x-requests-remaining")));throw Error(`CBB The Odds API current-board read failed (${response.status})`);}
+ try{
  const declared=Number(response.headers.get("content-length"));if(Number.isFinite(declared)&&declared>MAX_BYTES)throw Error("CBB The Odds API current-board byte budget exceeded");
  const raw=await response.text();if(Buffer.byteLength(raw)>MAX_BYTES)throw Error("CBB The Odds API current-board byte budget exceeded");
  let body:unknown;try{body=JSON.parse(raw);}catch{throw Error("CBB The Odds API current-board JSON invalid");}
  const availableAt=now();
- return {...receipt,...normalizeCbbTheOddsApiCurrent(args.games,body,currentRequestedAt,availableAt),requestedAt:currentRequestedAt,availableAt,requests:2,paidRequests:1,
-   creditsUsed:int(response.headers.get("x-requests-last"))??CREDITS,creditsRemaining:int(response.headers.get("x-requests-remaining"))};
+ return observed({...receipt,...normalizeCbbTheOddsApiCurrent(args.games,body,currentRequestedAt,availableAt),requestedAt:currentRequestedAt,availableAt,requests:2,paidRequests:1,
+   creditsUsed:int(response.headers.get("x-requests-last"))??CREDITS,creditsRemaining:int(response.headers.get("x-requests-remaining"))});
+ }catch(error){failed("current",response.status,2,int(response.headers.get("x-requests-last")),int(response.headers.get("x-requests-remaining")));throw error;}
 }

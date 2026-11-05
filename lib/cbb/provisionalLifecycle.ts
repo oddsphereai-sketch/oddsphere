@@ -14,6 +14,7 @@ export type CbbProvisionalSnapshot = {
   startsAt: string;
   capturedAt: string;
   lockedAt: string | null;
+  fixtureClockRevisions?: Array<{previousStartsAt:string;startsAt:string;observedAt:string;previousCapturedAt:string}>;
   board: CbbProvisionalBoard;
 };
 
@@ -32,18 +33,25 @@ export function advanceCbbProvisionalSnapshot(args: {
 }): CbbProvisionalSnapshot {
   const start = time(args.startsAt, "start"), now = time(args.now, "clock");
   if (args.existing) {
-    if (args.existing.startsAt !== args.startsAt || args.existing.board.gameId !== args.existing.gameId ||
+    if (args.existing.board.gameId !== args.existing.gameId ||
       args.existing.release !== CBB_PROVISIONAL_LIFECYCLE_RELEASE) throw new Error("CBB stored snapshot identity mismatch");
     // Even malformed future candidates must not reinterpret a locked public record.
     if (args.existing.lockedAt !== null) return args.existing;
   }
   const cutoff = start - 60 * 60_000;
+  const revised=!!args.existing&&time(args.existing.startsAt,"stored start")!==start;
+  const revisions=revised?[...(args.existing!.fixtureClockRevisions??[]),{previousStartsAt:args.existing!.startsAt,
+    startsAt:args.startsAt,observedAt:args.now,previousCapturedAt:args.existing!.capturedAt}]:args.existing?.fixtureClockRevisions;
   if (now >= cutoff) {
     if (!args.existing) throw new Error("CBB cannot create a prediction after the T-60 lock cutoff");
-    return { ...args.existing, lockedAt: args.now };
+    // Never invent or backdate a decision after a newly corrected cutoff.
+    if(revised&&time(args.existing.capturedAt,"stored capture")>=cutoff)
+      throw new CbbFixtureClockError("CBB corrected cutoff has no qualifying prelock snapshot");
+    return { ...args.existing,...(revised?{startsAt:args.startsAt,fixtureClockRevisions:revisions}:{}), lockedAt: args.now };
   }
   if (!args.candidate) {
-    if (args.existing) return args.existing;
+    if (args.existing&&!revised) return args.existing;
+    if(revised)throw new CbbFixtureClockError("CBB changed fixture clock requires a complete fresh prelock candidate");
     throw new Error("CBB has no prelock candidate to capture");
   }
   if (args.candidate.gameId !== args.existing?.gameId && args.existing !== null) {
@@ -56,8 +64,11 @@ export function advanceCbbProvisionalSnapshot(args: {
   }
   return { release: CBB_PROVISIONAL_LIFECYCLE_RELEASE,
     gameId: args.candidate.gameId, startsAt: args.startsAt, capturedAt: args.now,
-    lockedAt: null, board: args.candidate };
+    lockedAt: null, board: args.candidate,...(revisions?{fixtureClockRevisions:revisions}:{}) };
 }
+
+/** A source-time correction must not abort unrelated complete games. */
+export class CbbFixtureClockError extends Error {}
 
 /** Reader precedence is exact: stored locked payload wins over every current DTO. */
 export function readCbbProvisionalSnapshot(args: {
