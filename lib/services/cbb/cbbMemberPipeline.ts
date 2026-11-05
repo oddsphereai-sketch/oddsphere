@@ -44,7 +44,7 @@ import {forecastCbbFullDivisionOneBatch} from "@/lib/cbb/fullDivisionOneForecast
 import {buildCbbGameForecastBoard,attachCbbGameOutcome} from "@/lib/cbb/gameForecastBoard";
 import type {CbbProvisionalBoard} from "@/lib/cbb/provisionalLifecycle";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_05_r39_fixture_clock_epoch" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_05_r41_albany_source_identity" as const;
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
 const expandedFixture=(game:CbbGame)=>computeSlateDate("cbb",game.date)>=CBB_FULL_D1_COVERAGE_START;
 const eligibleFixture=(game:CbbGame)=>expandedFixture(game)?cbbDivisionOneFixture(game).eligible:
@@ -166,7 +166,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   const sourceCoverage={release:"cbb_current_source_coverage_2026_11_05_r1_three_provider_join",theOddsApiConfigured:!!args.theOddsApiKey?.trim(),
     requestedGames:sourceScope.length,gapGames:sourceGaps.length,theOddsApiStatus:theOddsApi?.status??(sourceGaps.length?args.theOddsApiKey?.trim()?"read_failed":"missing_key":"not_needed"),
     theOddsApiRequests,theOddsApiPaidAttempts,theOddsApiCreditsUsed:theOddsApi?.creditsUsed??null,
-    theOddsApiCreditsRemaining:theOddsApi?.creditsRemaining??null,eventsReturned:theOddsApi?.eventsReturned??0,theOddsApiRejections:theOddsApi?.rejections??[],
+    theOddsApiCreditsRemaining:theOddsApi?.creditsRemaining??null,eventsReturned:theOddsApi?.eventsReturned??0,theOddsApiRejections:theOddsApi?.rejections??[],theOddsApiUnmatchedEvents:theOddsApi?.unmatchedEvents??[],theOddsApiUnmatchedEventCount:theOddsApi?.unmatchedEventCount??0,
     quotesByProvider:{} as Record<string,number>,unpricedGameIds:[] as number[],quarantined:0,duplicates:0};
   const extraById=new Map<number,CbbQuote[]>();
   for(const quote of theOddsApi?.quotes??[])extraById.set(quote.gameId,[...(extraById.get(quote.gameId)??[]),quote]);

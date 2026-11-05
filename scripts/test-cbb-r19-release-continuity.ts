@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import {gunzipSync} from "node:zlib";
-import {CBB_FULL_D1_MARKET_MODEL_RELEASE,CBB_PREVIOUS_FULL_D1_MARKET_MODEL_RELEASE,CBB_FULL_D1_READER_RECEIPT_RELEASE,CBB_PREVIOUS_FULL_D1_READER_RECEIPT_RELEASE,CBB_SOURCE_ADMISSION_MARKET_MODEL_RELEASE,CBB_SOURCE_ADMISSION_READER_RECEIPT_RELEASE} from "../lib/cbb/fullDivisionOneReleases";
+import {CBB_FIXTURE_CLOCK_MARKET_MODEL_RELEASE,CBB_FIXTURE_CLOCK_READER_RECEIPT_RELEASE,CBB_FULL_D1_MARKET_MODEL_RELEASE,CBB_PREVIOUS_FULL_D1_MARKET_MODEL_RELEASE,CBB_FULL_D1_READER_RECEIPT_RELEASE,CBB_PREVIOUS_FULL_D1_READER_RECEIPT_RELEASE,CBB_SOURCE_ADMISSION_MARKET_MODEL_RELEASE,CBB_SOURCE_ADMISSION_READER_RECEIPT_RELEASE} from "../lib/cbb/fullDivisionOneReleases";
 import {writeCbbMemberGame,cbbMemberGameForReader,type CbbStoredMemberGame} from "../lib/services/cbb/cbbMemberGameStore";
 import {writeLockedCbbTracking} from "../lib/services/cbb/cbbTrackingWriter";
 import type {CbbGame} from "../lib/cbb/types";
@@ -35,7 +35,7 @@ async function check(file:string,expectedModel:string,expectedReceipt:string,exp
   next.snapshot.board.marketContext.verifiedMarketRead!.modelRelease=CBB_FULL_D1_MARKET_MODEL_RELEASE;
   next.snapshot.board.marketContext.verifiedMarketRead!.release=CBB_FULL_D1_READER_RECEIPT_RELEASE;
   tracked.length=0;assert.equal(await writeLockedCbbTracking(next,db),3);
-  assert.ok(tracked.every(r=>r.model_used==="cbb_r22_fixture_clock_epoch"&&r.model_version===CBB_FULL_D1_MARKET_MODEL_RELEASE));
+  assert.ok(tracked.every(r=>r.model_used==="cbb_r23_albany_source_identity"&&r.model_version===CBB_FULL_D1_MARKET_MODEL_RELEASE));
   const corrupt=structuredClone(frozen.record);corrupt.snapshot.board.score.home+=1;
   await assert.rejects(writeLockedCbbTracking(corrupt,db),/receipt differs/);
   console.log(`PASS actual CBB ${expectedLabel} continuity: future lock, exact reader/writer bytes, tracking idempotence, receipt guard, distinct current-release attribution.`);
@@ -43,5 +43,6 @@ async function check(file:string,expectedModel:string,expectedReceipt:string,exp
 async function main(){
  await check("cbb-r19-member-20261105",CBB_PREVIOUS_FULL_D1_MARKET_MODEL_RELEASE,CBB_PREVIOUS_FULL_D1_READER_RECEIPT_RELEASE,"cbb_r19_complete_d1_program_priors");
  await check("cbb-r20-member-20261105",CBB_SOURCE_ADMISSION_MARKET_MODEL_RELEASE,CBB_SOURCE_ADMISSION_READER_RECEIPT_RELEASE,"cbb_r20_complete_source_admission");
+ await check("cbb-r22-member-20261105",CBB_FIXTURE_CLOCK_MARKET_MODEL_RELEASE,CBB_FIXTURE_CLOCK_READER_RECEIPT_RELEASE,"cbb_r22_fixture_clock_epoch");
 }
 void main().catch(error=>{console.error(error);process.exitCode=1;});

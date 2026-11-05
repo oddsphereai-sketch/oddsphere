@@ -1,7 +1,7 @@
 import { cbbProviderInstitutionName as canonicalCbbTeamName } from "./providerInstitutionIdentity";
 
 export const CBB_SHARP_SPLIT_MAPPING_RELEASE =
-  "cbb_sharp_split_mapping_2026_11_05_r5_complete_current_source_aliases" as const;
+  "cbb_sharp_split_mapping_2026_11_05_r6_albany_source_identity" as const;
 
 export type CbbSplitTeamIdentity = {
   homeTeamDisplayName?: string | null;
@@ -14,6 +14,7 @@ export type CbbSplitTeamIdentity = {
 // market capture, quote/split qualification and unlocked reader identity.
 const CBB_MARKET_FULL_NAME_ALIASES = new Map([
   ["California Polytechnic Mustangs", "Cal Poly Mustangs"],
+  ["Albany Great Danes", "UAlbany Great Danes"],
   ["Army Knights", "Army Black Knights"],
   ["Central Connecticut St Blue Devils", "Central Connecticut Blue Devils"],
   ["Arkansas-Little Rock Trojans", "Little Rock Trojans"],
