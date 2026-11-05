@@ -13,7 +13,15 @@ import {
 } from "./cfbMemberFixture";
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE =
+  "cfb_forward_member_snapshot_2026_11_05_r63_professional_pressure_reaction" as const;
+const CFB_PRESSURE_REACTION_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
   "cfb_forward_member_snapshot_2026_11_04_r62_causal_relative_innovation" as const;
+const CFB_PRESSURE_REACTION_PREVIOUS_MEMBER_FIXTURE_RELEASE =
+  "cfb_v1_member_fixture_2026_11_04_r103_causal_relative_innovation" as const;
+const CFB_PRESSURE_REACTION_PREVIOUS_EVIDENCE_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_11_04_r48_causal_reader_receipt" as const;
+const CFB_PRESSURE_REACTION_PREVIOUS_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_11_04_r65_causal_reader_receipt" as const;
 const CFB_CAUSAL_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
   "cfb_forward_member_snapshot_2026_11_04_r61_moneyline_resistance_guard" as const;
 const CFB_CAUSAL_PREVIOUS_MEMBER_FIXTURE_RELEASE =
@@ -63,7 +71,7 @@ export const CFB_PREVIOUS_EVIDENCE_RELEASE =
 export const CFB_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_14_r63_correct_qb_final_winner_coordinator" as const;
 export const CFB_MEMBER_SNAPSHOT_READER_RELEASE =
-  "cfb_member_snapshot_reader_2026_11_04_r47_causal_relative_innovation" as const;
+  "cfb_member_snapshot_reader_2026_11_05_r48_professional_pressure_reaction" as const;
 const CFB_LATE_PREGAME_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
   "cfb_forward_member_snapshot_2026_10_14_r50_late_pregame_lock_recovery" as const;
 const CFB_LATE_PREGAME_PREVIOUS_MEMBER_FIXTURE_RELEASE =
@@ -139,6 +147,12 @@ type SnapshotRow = {
 };
 
 const SUPPORTED_MEMBER_SNAPSHOT_RELEASES = [
+  {
+    snapshotRelease: CFB_PRESSURE_REACTION_PREVIOUS_MEMBER_SNAPSHOT_RELEASE,
+    fixtureRelease: CFB_PRESSURE_REACTION_PREVIOUS_MEMBER_FIXTURE_RELEASE,
+    evidenceRelease: CFB_PRESSURE_REACTION_PREVIOUS_EVIDENCE_RELEASE,
+    memberRelease: CFB_PRESSURE_REACTION_PREVIOUS_MEMBER_RELEASE,
+  },
   {
     snapshotRelease: CFB_CAUSAL_PREVIOUS_MEMBER_SNAPSHOT_RELEASE,
     fixtureRelease: CFB_CAUSAL_PREVIOUS_MEMBER_FIXTURE_RELEASE,

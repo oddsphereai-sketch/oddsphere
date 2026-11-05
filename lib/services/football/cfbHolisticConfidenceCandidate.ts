@@ -5,7 +5,7 @@ import {
 } from "@/lib/services/dailyEdge/confidenceExecutionContract";
 
 export const CFB_HOLISTIC_CONFIDENCE_CANDIDATE_RELEASE =
-  "cfb_holistic_confidence_2026_09_05_r4_confidence_economics_bridge" as const;
+  "cfb_holistic_confidence_2026_11_05_r5_professional_pressure_reaction" as const;
 export const CFB_HOLISTIC_BEST_ANGLE_MIN_SCORE = 60 as const;
 export const CFB_HOLISTIC_LEAN_MIN_SCORE = 55 as const;
 export const CFB_HOLISTIC_WATCHLIST_MIN_SCORE = 51.5 as const;
@@ -18,6 +18,13 @@ export const CFB_HOLISTIC_LEAN_FAVORITE_PRICE_FLOOR = -500 as const;
 
 export type CfbHolisticSelectedSide = "home" | "away" | "over" | "under";
 export type CfbHolisticEvidenceDirection = "support" | "resistance" | "neutral" | "unknown";
+export type CfbProfessionalPressureReaction =
+  | "response_confirms_pressure"
+  | "response_opposes_pressure"
+  | "held_against_pressure"
+  | "pressure_without_response"
+  | "response_without_pressure"
+  | "no_directional_evidence";
 
 export type CfbHolisticConfidenceInput = {
   market: CfbV1Market;
@@ -57,6 +64,8 @@ export type CfbHolisticConfidenceResult = {
     resistanceCount: number;
     multiChannelAffirmation: boolean;
   };
+  professionalPressureReaction: CfbProfessionalPressureReaction;
+  sourceConflict: boolean;
   executionStatus: "bet" | "shop";
 };
 
@@ -77,7 +86,15 @@ export function evaluateCfbHolisticConfidence(
   if (!Number.isFinite(input.evaluatedPrice) || input.evaluatedPrice === 0) throw new Error("CFB holistic candidate price must be a real American quote.");
   assertProbability(input.marketFairProbability);
   const modelConfidenceScore = 100 * input.modelProbability;
-  const sharp = boundedContribution(input.sharpMoneyMinusTicketsPp, CFB_HOLISTIC_SHARP_MAX_POINTS, 20);
+  const professionalReaction = adjudicateCfbProfessionalPressureReaction(input);
+  // A qualified split describes pressure. Once the same market has responded,
+  // an opposed or held response adjudicates that pressure; the raw split may
+  // not survive as a separate positive vote against the observed book action.
+  const sharp = boundedContribution(
+    professionalReaction.suppressSplitContribution ? null : input.sharpMoneyMinusTicketsPp,
+    CFB_HOLISTIC_SHARP_MAX_POINTS,
+    20,
+  );
   const movementSupportPp = selectedSideMovementSupportPp(input);
   const movement = boundedContribution(movementSupportPp, CFB_HOLISTIC_MOVEMENT_MAX_POINTS, 4);
   const publicContribution = boundedContribution(input.publicMoneyMinusTicketsPp, CFB_HOLISTIC_PUBLIC_MAX_POINTS, 20);
@@ -89,7 +106,7 @@ export function evaluateCfbHolisticConfidence(
   const confidenceScore = clamp(modelConfidenceScore + evidenceConfidenceAdjustment, 0, 100);
   const uncappedConfidenceGrade = gradeForScore(confidenceScore);
   const priceTierCeiling = favoritePriceTierCeiling(input.market, input.evaluatedPrice);
-  const marketEvidenceBallot = categoricalEvidenceBallot(input);
+  const marketEvidenceBallot = categoricalEvidenceBallot(input, professionalReaction.suppressSplitContribution);
   const decisionGradeCeiling = input.market === "spread"
     ? spreadDecisionGradeCeiling(input.decisionGrade, marketEvidenceBallot.multiChannelAffirmation)
     : null;
@@ -115,6 +132,8 @@ export function evaluateCfbHolisticConfidence(
     priceTierCeiling,
     decisionGradeCeiling,
     marketEvidenceBallot,
+    professionalPressureReaction: professionalReaction.reaction,
+    sourceConflict: professionalReaction.sourceConflict,
     executionStatus: executionStatusForQuote({
       americanPrice: input.evaluatedPrice,
       expectedValue: input.exactPriceExpectedValue,
@@ -133,18 +152,72 @@ function spreadDecisionGradeCeiling(
   return "Best Angle";
 }
 
-function categoricalEvidenceBallot(input: CfbHolisticConfidenceInput): {
+function categoricalEvidenceBallot(
+  input: CfbHolisticConfidenceInput,
+  suppressSplitContribution: boolean,
+): {
   supportCount: number;
   resistanceCount: number;
   multiChannelAffirmation: boolean;
 } {
-  const directions = [input.sharpDirection, input.movementDirection, input.publicDirection];
+  const directions = [
+    suppressSplitContribution ? "neutral" : input.sharpDirection,
+    input.movementDirection,
+    input.publicDirection,
+  ];
   const supportCount = directions.filter((direction) => direction === "support").length;
   const resistanceCount = directions.filter((direction) => direction === "resistance").length;
   return {
     supportCount,
     resistanceCount,
     multiChannelAffirmation: supportCount >= 2 && resistanceCount === 0,
+  };
+}
+
+export function adjudicateCfbProfessionalPressureReaction(
+  input: Pick<CfbHolisticConfidenceInput, "sharpDirection" | "movementDirection">,
+): {
+  reaction: CfbProfessionalPressureReaction;
+  sourceConflict: boolean;
+  suppressSplitContribution: boolean;
+} {
+  const pressure = input.sharpDirection;
+  const response = input.movementDirection;
+  const pressureDirectional = pressure === "support" || pressure === "resistance";
+  const responseDirectional = response === "support" || response === "resistance";
+  if (pressureDirectional && responseDirectional) {
+    const opposed = pressure !== response;
+    return {
+      reaction: opposed ? "response_opposes_pressure" : "response_confirms_pressure",
+      sourceConflict: opposed,
+      suppressSplitContribution: opposed,
+    };
+  }
+  if (pressureDirectional && response === "neutral") {
+    return {
+      reaction: "held_against_pressure",
+      sourceConflict: true,
+      suppressSplitContribution: true,
+    };
+  }
+  if (pressureDirectional) {
+    return {
+      reaction: "pressure_without_response",
+      sourceConflict: false,
+      suppressSplitContribution: false,
+    };
+  }
+  if (responseDirectional) {
+    return {
+      reaction: "response_without_pressure",
+      sourceConflict: false,
+      suppressSplitContribution: true,
+    };
+  }
+  return {
+    reaction: "no_directional_evidence",
+    sourceConflict: false,
+    suppressSplitContribution: true,
   };
 }
 

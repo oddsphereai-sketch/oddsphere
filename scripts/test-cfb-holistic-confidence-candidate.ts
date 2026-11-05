@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  adjudicateCfbProfessionalPressureReaction,
   CFB_HOLISTIC_CONFIDENCE_CANDIDATE_RELEASE,
   evaluateCfbHolisticConfidence,
   favoritePriceTierCeiling,
@@ -21,7 +22,7 @@ const umass: CfbHolisticConfidenceInput = {
   selectedSideLineDelta: -0.5,
   selectedSideImpliedProbabilityDeltaPp: 0.46,
   sharpDirection: "support",
-  movementDirection: "neutral",
+  movementDirection: "support",
   publicDirection: "neutral",
 };
 
@@ -130,6 +131,42 @@ const multiChannelSpread = evaluateCfbHolisticConfidence({
 });
 assert.equal(multiChannelSpread.confidenceGrade, "Best Angle", "two independent affirming channels preserve a tested premium Spread path");
 assert.equal(multiChannelSpread.marketEvidenceBallot.multiChannelAffirmation, true);
+
+const supportedPressureResistedByBooks = evaluateCfbHolisticConfidence({
+  ...umass,
+  sharpMoneyMinusTicketsPp: 22,
+  sharpDirection: "support",
+  movementDirection: "resistance",
+  selectedSideLineDelta: 1,
+  selectedSideImpliedProbabilityDeltaPp: -2,
+});
+assert.equal(supportedPressureResistedByBooks.professionalPressureReaction, "response_opposes_pressure");
+assert.equal(supportedPressureResistedByBooks.sourceConflict, true);
+assert.equal(supportedPressureResistedByBooks.evidenceContributions.sharp, 0,
+  "professional pressure cannot remain a positive vote after the books respond against it");
+assert.ok(supportedPressureResistedByBooks.evidenceContributions.movement < 0);
+
+const opposedPressureResistedByBooks = evaluateCfbHolisticConfidence({
+  ...umass,
+  sharpMoneyMinusTicketsPp: -22,
+  sharpDirection: "resistance",
+  movementDirection: "support",
+  selectedSideLineDelta: -1,
+  selectedSideImpliedProbabilityDeltaPp: 2,
+});
+assert.equal(opposedPressureResistedByBooks.professionalPressureReaction, "response_opposes_pressure");
+assert.equal(opposedPressureResistedByBooks.sourceConflict, true);
+assert.equal(opposedPressureResistedByBooks.evidenceContributions.sharp, 0,
+  "the symmetric promotion path uses the observed response, not a negative split vote");
+assert.ok(opposedPressureResistedByBooks.evidenceContributions.movement > 0);
+
+const heldPressure = adjudicateCfbProfessionalPressureReaction({
+  sharpDirection: "support",
+  movementDirection: "neutral",
+});
+assert.equal(heldPressure.reaction, "held_against_pressure");
+assert.equal(heldPressure.suppressSplitContribution, true,
+  "a held book cannot be described as confirmation of the pressure it resisted");
 
 const resisted = evaluateCfbHolisticConfidence({
   ...umass,

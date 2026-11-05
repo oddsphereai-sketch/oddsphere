@@ -316,6 +316,44 @@ probabilities, picks, grades, prices, stakes or actionability: board impact is
 0 promotions / 0 demotions / 0 removals. Evidence:
 `docs/model-audits/2026-11-04-pro-reader-auditability.json`.
 
+## CFB professional pressure/reaction adjudication — November 5 candidate
+
+The future-unlocked CFB candidate advances score/model/distribution/probability/
+representative-score to R29/R28/R26/R30/R26, calibration/grade/decision/tuple to
+R34/R32/R61/R47, holistic confidence to R5, market forecast to candidate R41 /
+production R43, complete reader/artifact to R9/R7, evidence/member/context to
+R49/R66/R6 (`cfbfec6`), fixture/outcome/snapshot/snapshot-reader/tracking to
+R104/R83/R63/R48/R54, and the sole writer to R152.
+
+The independent PMF remains the only prior; no market level or split percentage is
+weighted or blended with it. A qualified professional split is treated as pressure
+at its own source and contract. When fresh, target-excluded named books subsequently
+respond, that response adjudicates the pressure. An opposed or held response
+preserves the split as conflict context but the raw split can no longer remain a
+separate positive confidence vote or veto a coherent named-book consequence.
+
+Two agreeing named books may apply one opening-to-current relative innovation even
+when an intermediate buyback occurred. Cross-book disagreement, missing or one-book
+evidence, target-book self-reference, stale/future evidence, wrong contracts and
+economically flat paths still preserve the independent axis. The paired symmetric
+path permits a book response supporting the prediction to overcome opposing
+pressure under the same evidence requirements. Public consensus remains context
+only; offered price/EV remain grade/execution inputs only.
+
+On the exact latest 103-game board, one direct pressure/response conflict qualified:
+JMU-USM Spread. Its stored grade and candidate grade both remain Lean, while its
+market confidence adjustment changes from +1.539 to -0.836; direct board impact is
+0 promotions, 0 demotions and 0 actionable-count change. A zero-write live focused
+replay applied a 0.293-point home-margin response and a 2.010-point Total response,
+yielding JMU 38.03, USM 20.05, JMU -13.5 Lean and Under 58.5 No Play at that exact
+capture. Cross-sport conformance scenarios pass for NBA, NFL, NHL, UCL/EPL and CBB;
+their existing readers already preserve source clocks and give the observed response
+precedence, so their model releases do not change. Every prior locked CFB payload,
+including the November 4 R42/R60/R48/R65/R62/R103 family, retains exact stored
+precedence. Evidence and rollback:
+`docs/model-audits/2026-11-05-cfb-professional-pressure-reaction-predeclaration.md`
+and `docs/model-audits/2026-11-05-cfb-professional-pressure-reaction-result.md`.
+
 ## EPL coherent relative-path reader and truthful soccer/CBB provenance — November 4
 
 Future-unlocked EPL advances to model `epl_goals_coherent_2026_11_04_r24_relative_path_joint_pmf`,

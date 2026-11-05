@@ -10,6 +10,8 @@ import { withFirstTrackedSplitObservation } from "@/lib/services/splitDisplayMov
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_PRESSURE_REACTION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_PRESSURE_REACTION_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_FINAL_WINNER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -86,6 +88,12 @@ import { readCfbForwardEvidence } from "./cfbForwardEvidenceStore";
 import { cfbForwardContextSharpHistoryBooks } from "./cfbForwardEvidenceCapture";
 import {
   CFB_V1_CALIBRATION_RELEASE,
+  CFB_V1_PRESSURE_REACTION_PREVIOUS_CALIBRATION_RELEASE,
+  CFB_V1_PRESSURE_REACTION_PREVIOUS_GRADE_POLICY_RELEASE,
+  CFB_V1_PRESSURE_REACTION_PREVIOUS_DECISION_RELEASE,
+  CFB_V1_PRESSURE_REACTION_PREVIOUS_MODEL_RELEASE,
+  CFB_V1_PRESSURE_REACTION_PREVIOUS_DISTRIBUTION_RELEASE,
+  CFB_V1_PRESSURE_REACTION_PREVIOUS_PROBABILITY_RELEASE,
   CFB_V1_RESISTANCE_PREVIOUS_CALIBRATION_RELEASE,
   CFB_V1_RESISTANCE_PREVIOUS_GRADE_POLICY_RELEASE,
   CFB_V1_BASE_DISTRIBUTION_RELEASE,
@@ -137,15 +145,15 @@ import {
 } from "./cfbV1Decision";
 import { isGameInCfbWeeklyWindow, resolveCfbVisibleWindows } from "./cfbWeeklyWindow";
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
-import { CFB_MARKET_SHARP_AWARE_COORDINATOR_INTEGRATION_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
+import { CFB_MARKET_SHARP_AWARE_COORDINATOR_INTEGRATION_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_PRESSURE_REACTION_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
 import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 import { isCurrentMarketCycleOpening } from "../dailyEdge/marketCycleOpening";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_11_04_r103_causal_relative_innovation" as const;
+  "cfb_v1_member_fixture_2026_11_05_r104_professional_pressure_reaction" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_11_04_r82_causal_relative_innovation" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_11_05_r83_professional_pressure_reaction" as const;
 export const CFB_MEMBER_GAME_LIFECYCLE_RELEASE =
   "cfb_member_game_lifecycle_2026_10_14_r3_precutoff_card_lock_recovery" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
@@ -1104,6 +1112,14 @@ export function selectLatestCfbMemberEvidenceRows(
     : null;
   const pmfCoherencePrevious = pmfCoherencePreviousComplete ?? pmfCoherencePreviousBoundary ??
     pmfCoherencePreviousLockOverlay;
+  const pressureReactionPreviousRows = rows.filter((row) =>
+    String(row.payload.decisions.decisionRelease) === CFB_V1_PRESSURE_REACTION_PREVIOUS_DECISION_RELEASE);
+  const pressureReactionPrevious = completeRowsForRelease(
+    pressureReactionPreviousRows,
+    CFB_FORWARD_PRESSURE_REACTION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_PRESSURE_REACTION_PREVIOUS_MEMBER_RELEASE,
+    CFB_V1_PRESSURE_REACTION_PREVIOUS_DECISION_RELEASE,
+  );
   const currentDecisionRows = rows.filter((row) =>
     row.payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE);
   const current = completeRowsForRelease(currentDecisionRows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
@@ -1134,7 +1150,7 @@ export function selectLatestCfbMemberEvidenceRows(
   const resistancePrevious = completeRowsForRelease(resistancePreviousRows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE) ??
     (resistancePriorAuthority ? immutableBoundaryTransitionRows(resistancePreviousRows, now, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE, resistancePriorAuthority) ??
       immutableLockOverlayRows(resistancePreviousRows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE, resistancePriorAuthority) : null);
-  const coordinatorIntegrationPreviousAuthority = resistancePrevious ?? marketEvidencePrevious ?? priceContextPrevious ?? normalizedPmfPrevious ?? owlsGradePrevious ?? pmfCoherencePrevious ?? parlayLeanPrevious ?? coordinatorIntegrationPrevious ?? finalWinnerPrevious ??
+  const coordinatorIntegrationPreviousAuthority = pressureReactionPrevious ?? resistancePrevious ?? marketEvidencePrevious ?? priceContextPrevious ?? normalizedPmfPrevious ?? owlsGradePrevious ?? pmfCoherencePrevious ?? parlayLeanPrevious ?? coordinatorIntegrationPrevious ?? finalWinnerPrevious ??
     exactPriceActionabilityPrevious ?? marketReaderPreviousAuthority;
   const immutableBoundaryTransition = coordinatorIntegrationPreviousAuthority
     ? immutableBoundaryTransitionRows(
@@ -1147,6 +1163,7 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (pressureReactionPrevious) return pressureReactionPrevious;
   if (marketEvidencePrevious) return marketEvidencePrevious;
   if (priceContextPrevious) return priceContextPrevious;
   if (normalizedPmfPrevious) return normalizedPmfPrevious;
@@ -1348,27 +1365,34 @@ function latestValidRowsForRelease(
       ? CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE
       : exactPricePrevious
         ? CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE
-        : CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE;
+        : decisionRelease === CFB_V1_PRESSURE_REACTION_PREVIOUS_DECISION_RELEASE
+          ? CFB_MARKET_SHARP_AWARE_PRESSURE_REACTION_PREVIOUS_PRODUCTION_RELEASE
+          : CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE;
   const expectedPolicyRelease = exactPricePrevious
     ? CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_GRADE_POLICY_RELEASE
     : decisionRelease === CFB_V1_DECISION_RELEASE ? CFB_V1_GRADE_POLICY_RELEASE
+    : decisionRelease === CFB_V1_PRESSURE_REACTION_PREVIOUS_DECISION_RELEASE ? CFB_V1_PRESSURE_REACTION_PREVIOUS_GRADE_POLICY_RELEASE
     : decisionRelease === CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE || decisionRelease === CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE
       ? CFB_V1_RESISTANCE_PREVIOUS_GRADE_POLICY_RELEASE : CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE;
   const expectedModelRelease = priorCompatibilityFamily
     ? CFB_V1_PMF_COHERENCE_PREVIOUS_MODEL_RELEASE
-    : CFB_V1_MODEL_RELEASE;
+    : decisionRelease === CFB_V1_PRESSURE_REACTION_PREVIOUS_DECISION_RELEASE
+      ? CFB_V1_PRESSURE_REACTION_PREVIOUS_MODEL_RELEASE : CFB_V1_MODEL_RELEASE;
   const expectedDistributionRelease = priorCompatibilityFamily
     ? CFB_V1_PMF_COHERENCE_PREVIOUS_DISTRIBUTION_RELEASE
-    : CFB_V1_DISTRIBUTION_RELEASE;
+    : decisionRelease === CFB_V1_PRESSURE_REACTION_PREVIOUS_DECISION_RELEASE
+      ? CFB_V1_PRESSURE_REACTION_PREVIOUS_DISTRIBUTION_RELEASE : CFB_V1_DISTRIBUTION_RELEASE;
   const expectedProbabilityRelease = priorCompatibilityFamily
     ? CFB_V1_PMF_COHERENCE_PREVIOUS_PROBABILITY_RELEASE
-    : CFB_V1_PROBABILITY_RELEASE;
+    : decisionRelease === CFB_V1_PRESSURE_REACTION_PREVIOUS_DECISION_RELEASE
+      ? CFB_V1_PRESSURE_REACTION_PREVIOUS_PROBABILITY_RELEASE : CFB_V1_PROBABILITY_RELEASE;
   const expectedCalibrationRelease = priorCompatibilityFamily
     ? CFB_V1_PMF_COHERENCE_PREVIOUS_CALIBRATION_RELEASE
     : decisionRelease === CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE ? CFB_V1_NORMALIZED_PMF_PREVIOUS_CALIBRATION_RELEASE
     : decisionRelease === CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE ? CFB_V1_PRICE_CONTEXT_PREVIOUS_CALIBRATION_RELEASE
     : decisionRelease === CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE ? CFB_V1_MARKET_EVIDENCE_PREVIOUS_CALIBRATION_RELEASE
     : decisionRelease === CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE ? CFB_V1_RESISTANCE_PREVIOUS_CALIBRATION_RELEASE
+    : decisionRelease === CFB_V1_PRESSURE_REACTION_PREVIOUS_DECISION_RELEASE ? CFB_V1_PRESSURE_REACTION_PREVIOUS_CALIBRATION_RELEASE
     : decisionRelease === CFB_V1_DECISION_RELEASE ? CFB_V1_CALIBRATION_RELEASE : CFB_V1_OWLS_PREVIOUS_CALIBRATION_RELEASE;
   const latest = new Map<string, CfbForwardStoredEvidence>();
   for (const row of rows) {

@@ -23,6 +23,9 @@ async function main(): Promise<void> {
     .filter((value) => value.startsWith("--matchup="))
     .map((value) => value.slice(10).toUpperCase()));
   const compactAll = process.argv.includes("--compact-all");
+  const auditProviderGameIds = process.argv
+    .filter((value) => value.startsWith("--game="))
+    .map((value) => value.slice(7));
   let focusedPayloads: readonly CfbForwardEvidencePayload[] = [];
   const result = await runCfbForwardEvidenceWriter({
     client: createClient(url, serviceKey, { auth: { persistSession: false } }),
@@ -45,6 +48,7 @@ async function main(): Promise<void> {
         : [];
     },
     auditForceUnlocked: process.argv.includes("--force-unlocked"),
+    auditProviderGameIds: auditProviderGameIds.length > 0 ? auditProviderGameIds : undefined,
     auditWindowStartDate: process.argv.find((value) => value.startsWith("--window="))?.slice(9),
     auditDisableNearTiePmfCoherence: process.argv.includes("--disable-near-tie-pmf-coherence"),
   });

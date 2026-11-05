@@ -19,9 +19,9 @@ import {
 import type { CfbV1Forecast } from "./cfbV1Decision";
 
 export const CFB_COMPLETE_MARKET_READER_RELEASE =
-  "cfb_complete_market_reader_2026_11_04_r8_causal_relative_innovation" as const;
+  "cfb_complete_market_reader_2026_11_05_r9_professional_pressure_reaction" as const;
 export const CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE =
-  "cfb_market_reader_artifact_2026_11_04_r6_causal_relative_innovation" as const;
+  "cfb_market_reader_artifact_2026_11_05_r7_professional_pressure_reaction" as const;
 
 type Market = "moneyline" | "spread" | "total";
 type Axis = "margin" | "total";
@@ -80,6 +80,7 @@ export type CfbMarketReaderReceipt = {
   ledger: CfbMarketReaderLedgerEntry[];
   margin: { disposition: CfbCompleteMarketReaderResult["namedMarginStatus"]; applied: boolean };
   total: { disposition: CfbCompleteMarketReaderResult["namedTotalStatus"]; applied: boolean };
+  pressureReactionConflict: { margin: boolean; total: boolean };
 };
 type SplitRead = {
   provenance: "named_sharp" | "fallback" | "public";
@@ -105,6 +106,8 @@ export type CfbCompleteMarketReaderResult = {
     "reversal" | "source_conflict" | "partial_named_move" | "flat" | "model_support_unavailable";
   namedMarginStatus: "applied" | "missing" | "insufficient" | "line_mismatch" |
     "reversal" | "source_conflict" | "partial_named_move" | "flat" | "model_support_unavailable";
+  marginPressureReactionConflict: boolean;
+  totalPressureReactionConflict: boolean;
   receipt: CfbMarketReaderReceipt;
 };
 
@@ -198,9 +201,13 @@ export function applyCfbCompleteMarketReader(args: {
     totalEvidenceRoute: namedTotalTarget !== null ? "named_economic_path" : "independent",
     namedTotalStatus: totalRead.status,
     namedMarginStatus: marginRead.status,
+    marginPressureReactionConflict: marginRead.pressureReactionConflict,
+    totalPressureReactionConflict: totalRead.pressureReactionConflict,
     receipt: buildReceipt({ observations, splitContext, marginStatus: marginRead.status,
       totalStatus: totalRead.status, marginApplied: marginRead.target !== null,
-      totalApplied: totalRead.target !== null }),
+      totalApplied: totalRead.target !== null,
+      marginPressureReactionConflict: marginRead.pressureReactionConflict,
+      totalPressureReactionConflict: totalRead.pressureReactionConflict }),
   };
 }
 
@@ -209,14 +216,19 @@ function qualifyWithNamedSharp<T extends { status: CfbCompleteMarketReaderResult
   sharpSide: Side | null,
   priorMean: number,
   proposedMean: number | null,
-): { status: T["status"]; target: number | null } {
-  if (proposedMean === null) return { status: read.status, target: null };
-  if (sharpSide === null) return { status: read.status, target: proposedMean };
+): { status: T["status"]; target: number | null; pressureReactionConflict: boolean } {
+  if (proposedMean === null) return { status: read.status, target: null, pressureReactionConflict: false };
+  if (sharpSide === null) return { status: read.status, target: proposedMean, pressureReactionConflict: false };
   const sharpDirection = sharpSide === "first" ? 1 : -1;
   const innovationDirection = Math.sign(proposedMean - priorMean);
-  return innovationDirection !== 0 && innovationDirection !== sharpDirection
-    ? { status: "source_conflict", target: null }
-    : { status: read.status, target: proposedMean };
+  // The split is pressure; the complete named-book change is the response.
+  // Preserve an opposed response as conflict context, but do not let raw flow
+  // veto the verified economic consequence or count as a second score vote.
+  return {
+    status: read.status,
+    target: proposedMean,
+    pressureReactionConflict: innovationDirection !== 0 && innovationDirection !== sharpDirection,
+  };
 }
 
 function buildReceipt(args: {
@@ -226,6 +238,8 @@ function buildReceipt(args: {
   totalStatus: CfbCompleteMarketReaderResult["namedTotalStatus"];
   marginApplied: boolean;
   totalApplied: boolean;
+  marginPressureReactionConflict: boolean;
+  totalPressureReactionConflict: boolean;
 }): CfbMarketReaderReceipt {
   const ledger: CfbMarketReaderLedgerEntry[] = [];
   for (const market of ["moneyline", "spread", "total"] as const) {
@@ -263,6 +277,20 @@ function buildReceipt(args: {
   };
   apply("margin", args.marginStatus);
   apply("total", args.totalStatus);
+  for (const [axis, conflict] of [
+    ["margin", args.marginPressureReactionConflict],
+    ["total", args.totalPressureReactionConflict],
+  ] as const) {
+    if (!conflict) continue;
+    ledger.push({
+      at: args.splitContext.asOf,
+      market: axis === "margin" ? "margin_axis" : "total_axis",
+      source: "professional_pressure_vs_named_price_reaction",
+      evidence: "axis_decision",
+      disposition: "source_conflict",
+      pmfEffect: "none",
+    });
+  }
   ledger.sort((left, right) => Date.parse(left.at) - Date.parse(right.at) ||
     left.market.localeCompare(right.market) || left.source.localeCompare(right.source));
   return {
@@ -274,6 +302,10 @@ function buildReceipt(args: {
     ledger,
     margin: { disposition: args.marginStatus, applied: args.marginApplied },
     total: { disposition: args.totalStatus, applied: args.totalApplied },
+    pressureReactionConflict: {
+      margin: args.marginPressureReactionConflict,
+      total: args.totalPressureReactionConflict,
+    },
   };
 }
 
@@ -324,9 +356,6 @@ function namedMarginPriceOnlyTarget(args: {
     if (boundary !== null && named.some((trail) =>
       trail.openingAxis === null || trail.currentAxis === null)) {
       return { status: "line_mismatch", delta: null } as const;
-    }
-    if (named.some((trail) => trail.priceReversalCount > 0 || trail.reversalCount > 0)) {
-      return { status: "reversal", delta: null } as const;
     }
     // A moved spread number and its juice are one economic observation.
     // Books need not quote the evaluated number: normalize each book against
@@ -407,9 +436,6 @@ function namedTotalMarketTarget(args: {
   if (named.length < 2) return { status: "insufficient", targetTotal: null };
   if (named.some((trail) => trail.openingAxis === null || trail.currentAxis === null)) {
     return { status: "line_mismatch", targetTotal: null };
-  }
-  if (named.some((trail) => trail.reversalCount > 0 || trail.priceReversalCount > 0)) {
-    return { status: "reversal", targetTotal: null };
   }
   // Compare each book's two prices against the same independent scoring PMF
   // at the *respective* quoted lines. A new number and its compensating juice
