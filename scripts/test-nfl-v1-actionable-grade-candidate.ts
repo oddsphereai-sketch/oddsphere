@@ -1005,6 +1005,7 @@ const unfavorableTotalBooks = comparableCurrentBooks.map((book) => ({
   ...book,
   total: { ...book.total!, line: 44.5, overPrice: 160, underPrice: -180 },
 }));
+const forecastBeforePriceOnlyGradeComparison = JSON.stringify(paidTotalMoveUnder);
 const favorableTotalBundle = buildNflV1ActionableGradeBundle({
   providerGameId,
   awayTeam,
@@ -1032,8 +1033,7 @@ assert.equal(favorableTotalDecision.modelProbability, unfavorableTotalDecision.m
 assert.equal(favorableTotalDecision.side, "Under 44.5");
 assert.notEqual(favorableTotalDecision.grade, unfavorableTotalDecision.grade,
   "price-aware play grades may change only after the forecast side and probability are frozen");
-assert.equal(paidTotalMoveUnder.expectedHomeScore + paidTotalMoveUnder.expectedAwayScore,
-  paidTotalMoveUnder.expectedHomeScore + paidTotalMoveUnder.expectedAwayScore,
+assert.equal(JSON.stringify(paidTotalMoveUnder), forecastBeforePriceOnlyGradeComparison,
   "play-grade evaluation must not mutate the released score forecast");
 assert.throws(() => buildNflMarketEvidenceOutcomeForecast({
   baseForecast: paidBase,
