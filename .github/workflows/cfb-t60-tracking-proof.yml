@@ -1,0 +1,27 @@
+name: CFB T-60 tracking proof
+on:
+  pull_request:
+    paths:
+      - 'app/api/cron/cfb-forward-evidence/route.ts'
+      - 'lib/services/football/cfbOfficialTrackingRecord.ts'
+      - 'lib/services/football/cfbForwardEvidenceWriter.ts'
+      - 'scripts/operator/audit-cfb-published-tracking-denominators.ts'
+      - 'scripts/test-cfb-v1-production.ts'
+      - '.github/workflows/cfb-t60-tracking-proof.yml'
+  merge_group:
+permissions:
+  contents: read
+jobs:
+  cfb-t60-tracking-proof:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1
+      SUPABASE_SERVICE_ROLE_KEY: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node --import tsx scripts/test-cfb-v1-production.ts

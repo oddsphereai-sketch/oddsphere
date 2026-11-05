@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -91,6 +92,7 @@ import {
   resolveCfbForwardCollectionNeed,
   retainLatestCfbPlaybookObservation,
   runCfbOfficialTrackingSafely,
+  writeCfbOfficialTracking,
   runCfbForwardEvidenceWriter,
   selectQuarterbackTeams,
   selectCfbSharpFallbackGames,
@@ -120,6 +122,7 @@ import { fetchBalldontlieNcaafQuarterbacks } from "../lib/services/football/ball
 import { ingestCfbFinalScores } from "../lib/services/football/cfbScoreIngestService";
 import {
   buildCfbOfficialTrackingRecords,
+  isEligibleCfbOfficialTrackingPayload,
   buildCfbDisplayedBookLineRecoveryRecords,
   buildCfbEspnOpeningRecoveryRecords,
   buildCfbNamedBookLineRecoveryRecords,
@@ -3128,6 +3131,78 @@ assert.equal(tracking.every((row) => row.locked_at === lockedAt), true);
 assert.equal(tracking.every((row) => row.model_version === CFB_V1_DECISION_RELEASE), true);
 assert.equal(tracking.every((row) => row.snapshot_json && !("pmf" in (row.snapshot_json.forecast as Record<string, unknown>))), true);
 assert.equal(tracking.every((row) => row.snapshot_json?.football_market_scoped_tracking_release === FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE), true);
+
+// Original R59/R58 priced T-60 locks survive R60 without changing their
+// stored side, line, price, probability or grade. This is history materialization.
+const originalPreCausalPayload = structuredClone(payload) as unknown as CfbForwardEvidencePayload;
+Object.assign(originalPreCausalPayload, {
+  schemaRelease: CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  memberRelease: CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_MEMBER_RELEASE,
+});
+Object.assign(originalPreCausalPayload.authoritativeForecast!, {
+  release: "cfb_market_sharp_aware_production_2026_10_27_r41_near_tie_pmf_winner_coherence",
+});
+Object.assign(originalPreCausalPayload.decisions, { decisionRelease: CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE });
+for (const decision of originalPreCausalPayload.decisions.evaluatedBets) {
+  Object.assign(decision, { decisionRelease: CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE });
+}
+const originalPreCausalBytes = structuredClone(originalPreCausalPayload);
+assert.equal(isEligibleCfbOfficialTrackingPayload(originalPreCausalPayload), true);
+const originalPreCausalCandidates = cfbTrackingCandidatesForRun([{ ...evidence, payload: originalPreCausalPayload }], [], gameStartAt);
+assert.equal(originalPreCausalCandidates[0]?.mode, "official_t60", "a valid original priced lock cannot become a replacement No Play forecast");
+const originalPreCausalRecords = buildCfbOfficialTrackingRecords({ payload: originalPreCausalPayload, gameId: 9001 });
+assert.deepEqual(originalPreCausalRecords.map(r => [r.pick, r.side, r.line_value, r.odds_american, r.model_probability, r.play_grade]),
+  tracking.map(r => [r.pick, r.side, r.line_value, r.odds_american, r.model_probability, r.play_grade]));
+assert.equal(originalPreCausalRecords.every(r => r.model_version === CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE), true);
+assert.deepEqual(originalPreCausalPayload, originalPreCausalBytes, "writer history materialization leaves exact locked payloads unchanged");
+for (const invalid of [
+  { ...originalPreCausalPayload, memberRelease: CFB_FORWARD_MEMBER_RELEASE },
+  { ...originalPreCausalPayload, captureTiming: "late_first_observation" },
+  { ...originalPreCausalPayload, authoritativeForecast: { ...originalPreCausalPayload.authoritativeForecast, release: "unreleased" } },
+]) assert.equal(isEligibleCfbOfficialTrackingPayload(invalid as CfbForwardEvidencePayload), false, "mixed, late and unknown release locks fail closed");
+
+// The real sole tracking writer must ignore an already-materialized historical
+// candidate before rebuilding it, then insert each new market once. No provider
+// requests or replacement prediction writes are available in this test client.
+const writtenTracking: PredictionRecordRow[] = [];
+const alreadyTrackedId = 900099;
+const alreadyTrackedKeys = ["moneyline", "spread", "total"].map(market => ({ external_id: alreadyTrackedId, market }));
+const untouchedLegacy = structuredClone(originalPreCausalPayload);
+untouchedLegacy.game.providerGameId = String(alreadyTrackedId);
+Object.assign(untouchedLegacy, { schemaRelease: "unreadable-old-schema" });
+const historyClient = { from(table: string) {
+  let data: unknown[] = table === "prediction_records" ? [...alreadyTrackedKeys, ...writtenTracking] : [];
+  const q = {
+    select() { return q; }, eq() { return q; }, in() { return q; },
+    upsert(rows: Array<Record<string, unknown>>) {
+      assert(rows.length > 0);
+      assert(rows.every(r => r.external_id !== alreadyTrackedId), "canonical old games are never rewritten during a new lock");
+      data = rows.map((r, i) => ({ id: 9001 + i, external_id: r.external_id })); return q;
+    },
+    insert(rows: PredictionRecordRow[]) {
+      assert.equal(table, "prediction_records");
+      assert.equal(rows.length, 3);
+      writtenTracking.push(...rows);
+      data = rows.map((_, i) => ({ id: 100 + i })); return q;
+    },
+    then(resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) {
+      return Promise.resolve({ data, error: null }).then(resolve, reject);
+    },
+  }; return q;
+} } as unknown as import("@supabase/supabase-js").SupabaseClient;
+const runOriginalLock = () => writeCfbOfficialTracking({ client: historyClient, apply: true, metadata: [],
+  balldontlieApiKey: "test-no-provider", now: gameStartAt, candidates: [
+    { payload: untouchedLegacy, mode: "published_pregame_accuracy_recovery", publishedPregamePayload: untouchedLegacy },
+    ...originalPreCausalCandidates,
+  ] });
+const firstOriginalLock = await runOriginalLock();
+assert.equal(firstOriginalLock.trackingRecordsInserted, 3);
+assert.equal(firstOriginalLock.trackingError, null);
+const repeatOriginalLock = await runOriginalLock();
+assert.equal(repeatOriginalLock.trackingRecordsInserted, 0, "retry is idempotent across the release transition");
+assert.deepEqual(writtenTracking.map(r => [r.pick, r.line_value, r.odds_american, r.model_probability, r.play_grade]),
+  originalPreCausalRecords.map(r => [r.pick, r.line_value, r.odds_american, r.model_probability, r.play_grade]));
+assert.deepEqual(originalPreCausalPayload, originalPreCausalBytes);
 
 const recoveryCutoffAt = new Date(Date.parse(game.scheduledStart) - 60 * 60_000).toISOString();
 const recoverySourceCapturedAt = new Date(Date.parse(recoveryCutoffAt) - 10 * 60_000).toISOString();
