@@ -26,8 +26,8 @@ Exact live-source replay:
 | Current numerical version | 9–0 | 9–0, explicitly separate |
 
 Lifetime +1 goal becomes 58–9 over 67 games. The unadjusted eligible locked
-Lifetime is 51–16. Five older records lacking acceptable alternate-line evidence
-remain excluded under the existing source-verification rules. Aggregate-only
+Lifetime is 51–16. Five older verified locks have no settlement grade; they remain pending and
+outside settled alternate-line counts. No outcome is invented for those records. Aggregate-only
 imports cannot invent original line-level evidence.
 
 This is a derived tracking-reader correction. No prediction, probability, price,
