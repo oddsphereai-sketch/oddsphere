@@ -737,7 +737,7 @@ assert.equal(counterSignalPromotion.finalGrade, "Lean", "a validated counter-sig
 const counterSignalResistance = applyCfbBalancedPositiveValueRule({
   market: "spread", finalGrade: "Watchlist", probabilityGrade: "Watchlist", executionStatus: "bet",
   expectedValue: 0.04, modelProbability: 0.542, marketFairProbability: 0.502, evaluatedPrice: -108,
-  evaluatedLine: -15.5, sharpDirection: "unknown", publicDirection: "resistance", movementDirection: "unknown",
+  evaluatedLine: -15.5, sharpDirection: "resistance", publicDirection: "neutral", movementDirection: "unknown",
   reasonCodes: ["bounded_market_evidence_support"],
   calibrationFamily: "authoritative_market_sharp_spread_counter_signal",
 });
@@ -1357,10 +1357,44 @@ assert.equal(
   "transport byte-length corruption fails closed",
 );
 // The immediately previous public snapshot remains readable without rerunning
-// the new resistance guard on its stored locked picks or evidence.
+// the causal reader on its stored locked picks or evidence.
+const causalPreviousSnapshot = {
+  ...structuredClone(compactMemberSnapshot),
+  snapshotRelease: "cfb_forward_member_snapshot_2026_11_04_r61_moneyline_resistance_guard",
+  evidenceRelease: "cfb_forward_evidence_snapshot_2026_10_15_r47_full_product_coordinator_compatibility",
+  memberRelease: "cfb_v1_member_release_2026_10_15_r64_full_product_coordinator_compatibility",
+  fixtureRelease: "cfb_v1_member_fixture_2026_11_04_r102_recommendation_edge_units",
+  fixture: { ...structuredClone(member), fixtureRelease: "cfb_v1_member_fixture_2026_11_04_r102_recommendation_edge_units" },
+};
+const causalPreviousJson = JSON.stringify(causalPreviousSnapshot);
+const causalPreviousCompressed = gzipSync(Buffer.from(causalPreviousJson));
+const causalPreviousEnvelope = {
+  ...compactMemberEnvelope,
+  envelopeRelease: causalPreviousSnapshot.snapshotRelease,
+  snapshotRelease: causalPreviousSnapshot.snapshotRelease,
+  checksum: createHash("sha256").update(causalPreviousJson).digest("hex"),
+  uncompressedBytes: Buffer.byteLength(causalPreviousJson),
+  compressedBytes: causalPreviousCompressed.byteLength,
+  payload: causalPreviousCompressed.toString("base64"),
+};
+let causalSnapshotQueries = 0;
+const causalSnapshotClient = { from() {
+  const current = ++causalSnapshotQueries === 1;
+  const query = { select() { return query; }, eq() { return query; }, like() { return query; }, order() { return query; },
+    maybeSingle() { return Promise.resolve({ data: null, error: null }); },
+    limit() { return Promise.resolve({ data: current ? [] : [{ payload: causalPreviousEnvelope }], error: null }); } };
+  return query;
+} } as unknown as SupabaseClient;
+const causalSnapshotRead = await readCfbForwardMemberSnapshot({ client: causalSnapshotClient, season: 2026, now: lockedAt });
+assert.deepEqual(causalSnapshotRead?.fixture, causalPreviousSnapshot.fixture,
+  "immediate prior locked snapshot retains exact reader precedence under the causal release");
+
+// The earlier resistance snapshot also remains exact.
 const resistancePreviousSnapshot = {
   ...structuredClone(compactMemberSnapshot),
   snapshotRelease: "cfb_forward_member_snapshot_2026_10_31_r60_market_evidence_integrity",
+  evidenceRelease: "cfb_forward_evidence_snapshot_2026_10_15_r47_full_product_coordinator_compatibility",
+  memberRelease: "cfb_v1_member_release_2026_10_15_r64_full_product_coordinator_compatibility",
   fixtureRelease: "cfb_v1_member_fixture_2026_10_31_r100_market_evidence_integrity",
   fixture: { ...structuredClone(member), fixtureRelease: "cfb_v1_member_fixture_2026_10_31_r100_market_evidence_integrity" },
 };
@@ -4209,7 +4243,8 @@ assert.match(writerSource, /requireDecisionSideFromForecast: true/, "the CFB wri
 assert.match(writerSource, /publicScoreDirectionTolerancePoints: CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS/, "the CFB writer must apply the publication contract's narrow 0.5-point mean/median tolerance");
 assert.match(writerSource, /executionStatus: decision\.gradeAdjustment\?\.executionStatus/, "the CFB writer must pass its explicit Bet\/Shop axis into shared coherence");
 assert.equal((writerSource.match(/fetchCfbOwlsProvider\(\{/g) ?? []).length, 1, "Owls must remain one bounded league-level capture rather than a per-game loop");
-assert.match(writerSource, /const modelSharpSplits = cfbModelSharpSplits\(sharpApiSplits\)/, "Owls evidence must remain outside CFB prediction and grade authority in this provider-only migration");
+assert.match(writerSource, /const modelSharpSplits = cfbModelSharpSplits\(\{[\s\S]*providerGameId: plan\.game\.providerGameId,[\s\S]*kickoffAt: plan\.game\.scheduledStart,[\s\S]*evaluatedAt: args\.now/, "the promoted reader must bind Owls evidence to the exact game and causal clock");
+assert.match(writerSource, /row\.provider === "owls"[\s\S]*row\.sportsbook === "circa"[\s\S]*row\.sourceSemantics === "sharp_adjacent"/, "only exact Owls Circa sharp-adjacent rows may receive model authority");
 assert.match(owlsProviderSource, /targetEligible: false,[\s\S]*marketReadingEligible: false/, "Owls sharp prices must be capture-only until a separate market-reader release");
 assert.match(cfbRouteSource, /owlsApiKey: requiredEnv\("OWLS_INSIGHT_API_KEY"\)/, "the production CFB writer must require Owls");
 assert.doesNotMatch(cfbRouteSource, /SHARPAPI_KEY/, "the production CFB writer route must not require the cancelled SharpAPI subscription");

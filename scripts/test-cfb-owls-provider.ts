@@ -133,10 +133,21 @@ const legacy: CfbSharpApiSplitRecord = {
   release: CFB_SHARP_API_SPLITS_RELEASE,
   provider: "sharpapi",
 };
-assert.deepEqual(cfbModelSharpSplits([...owlsSplits, legacy]), [legacy],
-  "Owls evidence must remain outside prediction/grade authority in this migration");
+const admitted = cfbModelSharpSplits({
+  rows: [...owlsSplits, legacy],
+  providerGameId: game.providerGameId,
+  kickoffAt: game.scheduledStart,
+  evaluatedAt: "2026-10-28T00:40:00.000Z",
+});
+assert.deepEqual(admitted.map((row) => [row.provider, row.sportsbook]), [["owls", "circa"]],
+  "only exact, fresh Owls Circa sharp-adjacent evidence may reach the model");
+assert.equal(cfbModelSharpSplits({ rows: owlsSplits, providerGameId: "wrong-game",
+  kickoffAt: game.scheduledStart, evaluatedAt: "2026-10-28T00:40:00.000Z" }).length, 0);
+assert.equal(cfbModelSharpSplits({ rows: owlsSplits, providerGameId: game.providerGameId,
+  kickoffAt: game.scheduledStart, evaluatedAt: "2026-10-28T03:42:00.000Z" }).length, 0,
+"stale rows fail closed");
 
-console.log("CFB Owls capture: exact identity, complete prices/splits, and production neutrality passed.");
+console.log("CFB Owls capture: exact identity, complete prices/splits, and strict Circa model admission passed.");
 
 async function runLiveProbe(): Promise<void> {
   const startDate = new Intl.DateTimeFormat("en-CA", {

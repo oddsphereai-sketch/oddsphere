@@ -5,6 +5,7 @@ import type { CfbMarketInformedOutcomeForecast } from "./cfbMarketInformedOutcom
 import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 import type { CfbKickoffWeatherSnapshot } from "./cfbKickoffWeather";
 import type { CfbForwardContextCapture } from "./cfbForwardEvidenceCapture";
+import type { CfbMarketReaderReceipt } from "./cfbCompleteMarketReader";
 import type { CfbEspnReferenceLine } from "./cfbEspnReferenceLine";
 import type { CfbVerifiedQuarterbackAvailability } from "./cfbVerifiedAvailability";
 import type { DailyEdgeGameAvailability } from "@/lib/services/dailyEdge/gameAvailability";
@@ -28,9 +29,9 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_10_15_r47_full_product_coordinator_compatibility" as const;
+  "cfb_forward_evidence_snapshot_2026_11_04_r48_causal_reader_receipt" as const;
 export const CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_10_14_r46_correct_qb_final_winner_coordinator" as const;
+  "cfb_forward_evidence_snapshot_2026_10_15_r47_full_product_coordinator_compatibility" as const;
 export const CFB_FORWARD_FINAL_WINNER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_12_r45_provider_team_identity_consensus_authority_split_specialization" as const;
 export const CFB_FORWARD_PROVIDER_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
@@ -106,9 +107,9 @@ export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
   "cfb_forward_evidence_collector_2026_10_29_r66_owls_grade_price_ingestion" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_10_15_r64_full_product_coordinator_compatibility" as const;
+  "cfb_v1_member_release_2026_11_04_r65_causal_reader_receipt" as const;
 export const CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_10_14_r63_correct_qb_final_winner_coordinator" as const;
+  "cfb_v1_member_release_2026_10_15_r64_full_product_coordinator_compatibility" as const;
 export const CFB_FORWARD_FINAL_WINNER_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_12_r62_provider_team_identity_consensus_authority_split_specialization" as const;
 export const CFB_FORWARD_PROVIDER_IDENTITY_PREVIOUS_MEMBER_RELEASE =
@@ -449,6 +450,7 @@ export type CfbForwardEvidencePayload = {
     marketReaderNamedMarginStatus?: string;
     marketReaderNamedTotalStatus?: string;
     marketReaderTotalEvidenceRoute?: string;
+    marketReaderReceipt?: CfbMarketReaderReceipt;
     finalWinnerCoordinatorRelease?: string;
     finalWinnerCoordinatorArtifactRelease?: string;
     finalWinnerCoordinatorBoundaryRelease?: string;

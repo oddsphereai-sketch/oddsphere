@@ -56,6 +56,44 @@ The release-pure current 10-game/40-market read-only comparison produced two pro
 demotions, zero actionable removals, zero side changes, and an unchanged six actionables; it used
 one Owls board request, zero paid fallback requests, and zero writes.
 
+## CFB causal relative-innovation market reader — November 4 candidate
+
+The future-unlocked CFB candidate advances score/model/distribution/probability/
+representative-score to R28/R27/R25/R29/R25, calibration/grade/decision/tuple to
+R33/R31/R60/R46, market forecast to production R42, complete reader/artifact to
+R8/R6, evidence/member/context to R48/R65/R5 (`cfbfec5`), fixture/snapshot/
+snapshot-reader/tracking to R103/R62/R47/R52, and the sole writer to R150.
+
+The independent football PMF is the sole prior. The reader no longer reflects
+Playbook/public splits into the PMF and no longer interpolates 50–75% toward a
+current market level. It builds one chronological Moneyline/Spread/Total ledger,
+treats each line-plus-price change as one economic observation, excludes the
+evaluated book family, and may apply at most one agreed source-relative innovation
+per axis. Missing, partial, flat, bought-back, reversed, stale, future, wrong-line
+or source-conflicted evidence preserves that independent axis.
+
+Only exact-game, fresh, pre-kickoff Owls Circa `sharp_adjacent` rows can enter the
+model evidence set. DraftKings/BetMGM and Playbook splits remain displayed retail
+context with zero PMF and grade authority. Circa flow can confirm or veto a
+qualified named-price innovation but is never converted directly into points.
+One final PMF owns scores, probabilities, picks and downstream exact-price grades.
+The stored receipt records the target exclusions, chronological dispositions and
+actual PMF consequence. Prior locked rows remain byte-for-byte authoritative and
+are never migrated to these semantics.
+
+The exact zero-write frozen-input comparison covers 103 games / 309 market axes:
+173 evaluated and 136 held under both readers. Incumbent grades are 21 Best /
+60 Lean / 75 Watchlist / 17 No Play; candidate grades are 27 / 53 / 72 / 21.
+Actionables move 81→80 through 8 promotions and 9 demotions, with 0 additions,
+0 removals, 15 side changes, 21 score changes and 0 Total-direction changes. Every
+game input was cloned, frozen and hash-stamped before both implementations ran;
+the candidate replay also had to equal the authoritative writer byte-for-byte.
+The Odds API was disabled and writes were zero. Deterministic focused tests cover
+paired promotion and demotion, Owls admission/rejection, public neutrality,
+one-innovation ownership, conflict/reversal fallback, audit-only predecessor
+isolation, locked writer immutability and reader precedence. Evidence:
+`docs/model-audits/2026-11-04-cfb-causal-relative-innovation.md`.
+
 ## NBA composed named-book opposition — November 4
 
 The authoritative NBA grade policy advances to

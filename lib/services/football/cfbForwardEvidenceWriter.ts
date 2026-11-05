@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
 import type { IWeatherProvider } from "@/lib/providers/interfaces/IWeatherProvider";
 import { SharpApiAbortError, SharpApiClientError } from "@/lib/providers/real_api/_sharpApiClient";
 import { computeSlateDate } from "@/lib/dates/slateDate";
@@ -69,6 +70,7 @@ import {
   CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
+  CFB_SHARP_MAX_AGE_MINUTES,
   type CfbMarketSharpAwareForecast,
 } from "./cfbMarketSharpAwareShadow";
 import {
@@ -183,7 +185,7 @@ import { fetchCfbOwlsProvider } from "./cfbOwlsProvider";
 import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_11_04_r149_moneyline_resistance_guard" as const;
+  "cfb_forward_evidence_writer_2026_11_04_r150_causal_relative_innovation" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -277,6 +279,33 @@ export type CfbForwardAuditForecast = {
 };
 
 /**
+ * Audit-only dependency injection for an exact predecessor replay. Production
+ * never imports or selects an alternate implementation; the operator supplies
+ * functions loaded from the immutable predecessor commit and `apply=true`
+ * rejects the option before any read or provider request.
+ */
+export type CfbCausalReaderAuditImplementation = {
+  label: string;
+  modelSharpSplits: (rows: readonly CfbSharpApiSplitRecord[], context: {
+    providerGameId: string;
+    kickoffAt: string;
+    evaluatedAt: string;
+  }) => CfbSharpApiSplitRecord[];
+  buildMarketForecast: typeof buildCfbMarketSharpAwareForecast;
+  applyCompleteReader: typeof applyCfbCompleteMarketReader;
+  applyMarketGrades: typeof applyCfbMarketSharpAwareGrades;
+};
+
+export type CfbCausalReaderSameInputComparison = {
+  providerGameId: string;
+  inputSha256: string;
+  incumbentLabel: string;
+  candidateLabel: string;
+  incumbent: CfbV1DecisionBundle;
+  candidate: CfbV1DecisionBundle;
+};
+
+/**
  * Movement is evidence only when the opening and current quote come from the
  * same sportsbook. The execution quote remains independently price-shopped.
  */
@@ -355,9 +384,28 @@ export function buildCfbForwardPayloadsWithIsolation<T>(
  * incumbent legacy evidence until an explicit model release promotes Owls.
  */
 export function cfbModelSharpSplits(
-  rows: readonly CfbSharpApiSplitRecord[],
+  args: {
+    rows: readonly CfbSharpApiSplitRecord[];
+    providerGameId: string;
+    kickoffAt: string;
+    evaluatedAt: string;
+  },
 ): CfbSharpApiSplitRecord[] {
-  return rows.filter((row) => row.provider !== "owls");
+  const evaluatedAt = Date.parse(args.evaluatedAt);
+  const kickoffAt = Date.parse(args.kickoffAt);
+  return args.rows.filter((row) => {
+    const capturedAt = Date.parse(row.capturedAt);
+    const ageMinutes = (evaluatedAt - capturedAt) / 60_000;
+    return row.provider === "owls" &&
+      row.providerGameId === args.providerGameId &&
+      row.providerEventId.trim().length > 0 &&
+      row.sportsbook === "circa" &&
+      row.sourceSemantics === "sharp_adjacent" &&
+      Number.isFinite(capturedAt) && Number.isFinite(evaluatedAt) && Number.isFinite(kickoffAt) &&
+      capturedAt <= evaluatedAt && capturedAt < kickoffAt &&
+      ageMinutes >= 0 && ageMinutes <= CFB_SHARP_MAX_AGE_MINUTES &&
+      (row.moneyline !== null || row.spread !== null || row.total !== null);
+  });
 }
 
 export async function runCfbForwardEvidenceWriter(args: {
@@ -395,9 +443,16 @@ export async function runCfbForwardEvidenceWriter(args: {
   auditOwlsGradeComparison?: (comparison: { providerGameId: string; before: CfbV1DecisionBundle; after: CfbV1DecisionBundle }) => void;
   /** Same-PMF before/after price-context comparison, prohibited on production-writing jobs. */
   auditPriceContextComparison?: (comparison: { providerGameId: string; before: CfbV1DecisionBundle; after: CfbV1DecisionBundle }) => void;
+  /** Exact frozen-input predecessor implementation; prohibited on writing jobs. */
+  auditIncumbentCausalReader?: CfbCausalReaderAuditImplementation;
+  /** Receives exact same-input incumbent/candidate bundles; prohibited on writing jobs. */
+  auditCausalReaderComparison?: (comparison: CfbCausalReaderSameInputComparison) => void;
 }): Promise<CfbForwardWriterResult> {
-  if (args.apply && (args.auditWindowStartDate || args.auditForceUnlocked || args.auditForceTheOddsApi || args.auditDisableIndependentPriceLane || args.auditDisableCompleteMarketReader || args.auditDisableNearTiePmfCoherence || args.auditOwlsGradeComparison || args.auditPriceContextComparison)) {
+  if (args.apply && (args.auditWindowStartDate || args.auditForceUnlocked || args.auditForceTheOddsApi || args.auditDisableIndependentPriceLane || args.auditDisableCompleteMarketReader || args.auditDisableNearTiePmfCoherence || args.auditOwlsGradeComparison || args.auditPriceContextComparison || args.auditIncumbentCausalReader || args.auditCausalReaderComparison)) {
     throw new Error("CFB audit planning overrides are forbidden when apply=true.");
+  }
+  if ((args.auditIncumbentCausalReader === undefined) !== (args.auditCausalReaderComparison === undefined)) {
+    throw new Error("CFB same-input audit requires both the incumbent implementation and comparison callback.");
   }
   const writerEvidence = await readCfbForwardWriterEvidence({ client: args.client, season: args.season, now: args.now });
   if (writerEvidence.quarantined.length > 0) {
@@ -844,7 +899,12 @@ export async function runCfbForwardEvidenceWriter(args: {
     // The owner separated the market-reader promotion from this provider
     // migration. Preserve every legacy SharpAPI row's incumbent behavior, but
     // keep new Owls rows display/evidence-only until that separate release.
-    const modelSharpSplits = cfbModelSharpSplits(sharpApiSplits);
+    const modelSharpSplits = cfbModelSharpSplits({
+      rows: sharpApiSplits,
+      providerGameId: plan.game.providerGameId,
+      kickoffAt: plan.game.scheduledStart,
+      evaluatedAt: args.now,
+    });
     const sharpApiSplitsStatus = sharpSplitsAttempt.result === null
       ? "request_failed" as const
       : freshSharpApiSplits.length > 0
@@ -996,6 +1056,16 @@ export async function runCfbForwardEvidenceWriter(args: {
       namedMarginStatus: "missing" as const,
       namedTotalStatus: "missing" as const,
       totalEvidenceRoute: "independent" as const,
+      receipt: {
+        release: CFB_COMPLETE_MARKET_READER_RELEASE,
+        prior: "independent_pmf" as const,
+        publicSplitAuthority: 0 as const,
+        maximumInnovationsPerAxis: 1 as const,
+        targetExcludedSportsbooks: {},
+        ledger: [],
+        margin: { disposition: "missing" as const, applied: false },
+        total: { disposition: "missing" as const, applied: false },
+      },
     } : applyCfbCompleteMarketReader({
       forecast: baseForecast,
       independentForecast: weeklyForecast.forecast,
@@ -1055,12 +1125,16 @@ export async function runCfbForwardEvidenceWriter(args: {
       histories: marketHistoryByGame.get(plan.game.providerGameId) ?? [],
       currentObservation: marketReaderObservation,
     });
-    const finalizeGrades = (bundle: CfbV1DecisionBundle) => {
+    const finalizeGrades = (
+      bundle: CfbV1DecisionBundle,
+      gradeReader: typeof applyCfbMarketSharpAwareGrades = applyCfbMarketSharpAwareGrades,
+      gradeSharpSplits: CfbSharpApiSplitRecord[] = modelSharpSplits,
+    ) => {
       const marketAwareDecisions = outcomeAnchor || independentPriceLaneEnabled
-        ? applyCfbMarketSharpAwareGrades({
+        ? gradeReader({
             bundle,
             homeTeam: plan.game.home.abbreviation,
-            sharpSplits: modelSharpSplits,
+            sharpSplits: gradeSharpSplits,
             playbookLine,
             publicSplits: playbookSplits,
             operationalOpening,
@@ -1086,6 +1160,193 @@ export async function runCfbForwardEvidenceWriter(args: {
       return { fullDecisionBundle, publishedHealthHolds };
     };
     const { fullDecisionBundle, publishedHealthHolds } = finalizeGrades(decisionBundle);
+    if (args.auditIncumbentCausalReader && args.auditCausalReaderComparison) {
+      const frozenInput = structuredClone({
+        providerGameId: plan.game.providerGameId,
+        awayTeam: plan.game.away.abbreviation,
+        homeTeam: plan.game.home.abbreviation,
+        gameStartsAt: plan.game.scheduledStart,
+        awayFbs: plan.game.away.fbs,
+        homeFbs: plan.game.home.fbs,
+        awayConferenceId: plan.game.away.conferenceId,
+        homeConferenceId: plan.game.home.conferenceId,
+        stage: plan.stage === "t60" && decisionHealthHolds.length === 0 ? "t60_locked" as const : "unlocked" as const,
+        lockedAt: plan.stage === "t60" && decisionHealthHolds.length === 0 ? capturedAt : null,
+        evaluatedAt: capturedAt,
+        decisionHealthHolds,
+        independentForecast: weeklyForecast.forecast,
+        outcomeAnchor,
+        currentBooks,
+        supplementalGradingBooks: gradeBooks,
+        movementCurrent,
+        operationalOpening,
+        playbookLine,
+        playbookSplits,
+        priorSpreadSplits,
+        allSharpSplits: sharpApiSplits,
+        weather,
+        histories: marketHistoryByGame.get(plan.game.providerGameId) ?? [],
+        captureCurrentBooks,
+        captureOpeningBooks,
+      });
+      deepFreezeCfbAuditValue(frozenInput);
+      const inputSha256 = createHash("sha256").update(JSON.stringify(frozenInput)).digest("hex");
+      const evaluate = (implementation: CfbCausalReaderAuditImplementation): CfbV1DecisionBundle => {
+        const auditSharpSplits = implementation.modelSharpSplits(frozenInput.allSharpSplits, {
+          providerGameId: frozenInput.providerGameId,
+          kickoffAt: frozenInput.gameStartsAt,
+          evaluatedAt: frozenInput.evaluatedAt,
+        });
+        const auditForecastWithoutWeather = frozenInput.outcomeAnchor
+          ? implementation.buildMarketForecast({
+              independentForecast: frozenInput.independentForecast,
+              anchor: frozenInput.outcomeAnchor,
+              current: frozenInput.movementCurrent,
+              operationalOpening: frozenInput.operationalOpening,
+              sharpSplits: auditSharpSplits,
+              playbookLine: frozenInput.playbookLine,
+              publicSplits: frozenInput.playbookSplits,
+              priorSpreadSplits: frozenInput.priorSpreadSplits,
+              evaluatedAt: frozenInput.evaluatedAt,
+            })
+          : frozenInput.independentForecast;
+        const auditBaseForecast = frozenInput.outcomeAnchor && frozenInput.weather.independentTotalAdjustmentPoints < 0
+          ? implementation.buildMarketForecast({
+              independentForecast: frozenInput.independentForecast,
+              anchor: frozenInput.outcomeAnchor,
+              current: frozenInput.movementCurrent,
+              operationalOpening: frozenInput.operationalOpening,
+              sharpSplits: auditSharpSplits,
+              playbookLine: frozenInput.playbookLine,
+              publicSplits: frozenInput.playbookSplits,
+              priorSpreadSplits: frozenInput.priorSpreadSplits,
+              kickoffWeather: frozenInput.weather,
+              evaluatedAt: frozenInput.evaluatedAt,
+            })
+          : auditForecastWithoutWeather;
+        const auditFixedEvaluatedSportsbookByMarket = frozenInput.outcomeAnchor &&
+          frozenInput.weather.independentTotalAdjustmentPoints < 0
+          ? Object.fromEntries(implementation.applyMarketGrades({
+              bundle: buildCfbV1DecisionBundle({
+                priceContextPolicy: "legacy_three_book_consensus",
+                providerGameId: frozenInput.providerGameId,
+                awayTeam: frozenInput.awayTeam,
+                homeTeam: frozenInput.homeTeam,
+                gameStartsAt: frozenInput.gameStartsAt,
+                comparableCurrentBooks: frozenInput.currentBooks,
+                stage: frozenInput.stage,
+                evaluatedAt: frozenInput.evaluatedAt,
+                lockedAt: frozenInput.lockedAt,
+                healthHolds: frozenInput.decisionHealthHolds,
+                forecast: auditForecastWithoutWeather,
+                contextLines: {
+                  homeSpread: frozenInput.playbookLine?.homeSpread ?? null,
+                  totalLine: frozenInput.playbookLine?.total ?? null,
+                },
+              }),
+              homeTeam: frozenInput.homeTeam,
+              sharpSplits: auditSharpSplits,
+              playbookLine: frozenInput.playbookLine,
+              publicSplits: frozenInput.playbookSplits,
+              operationalOpening: frozenInput.operationalOpening,
+              current: frozenInput.movementCurrent,
+            }).evaluatedBets.map((decision) => [decision.market, decision.evaluatedQuote.sportsbook]))
+          : undefined;
+        const auditReaderSeedBundle = buildCfbV1DecisionBundle({
+          providerGameId: frozenInput.providerGameId,
+          awayTeam: frozenInput.awayTeam,
+          homeTeam: frozenInput.homeTeam,
+          gameStartsAt: frozenInput.gameStartsAt,
+          comparableCurrentBooks: frozenInput.currentBooks,
+          supplementalGradingBooks: frozenInput.supplementalGradingBooks,
+          stage: frozenInput.stage,
+          evaluatedAt: frozenInput.evaluatedAt,
+          lockedAt: frozenInput.lockedAt,
+          healthHolds: frozenInput.decisionHealthHolds,
+          forecast: auditBaseForecast,
+          contextLines: {
+            homeSpread: frozenInput.playbookLine?.homeSpread ?? null,
+            totalLine: frozenInput.playbookLine?.total ?? null,
+          },
+          fixedEvaluatedSportsbookByMarket: auditFixedEvaluatedSportsbookByMarket,
+        });
+        const auditEvaluatedSportsbookByMarket: Partial<Record<CfbV1Market, string>> = {
+          ...auditFixedEvaluatedSportsbookByMarket,
+          ...Object.fromEntries(auditReaderSeedBundle.evaluatedBets.map((decision) =>
+            [decision.market, decision.evaluatedQuote.sportsbook])),
+        };
+        const auditSpreadDecision = auditReaderSeedBundle.evaluatedBets.find((decision) => decision.market === "spread") ?? null;
+        const auditSpreadLine = auditSpreadDecision?.evaluatedQuote.line ?? null;
+        const auditHomeSpread = auditSpreadLine === null || auditSpreadDecision === null
+          ? null
+          : auditSpreadDecision.side === frozenInput.homeTeam || auditSpreadDecision.side.startsWith(`${frozenInput.homeTeam} `)
+            ? auditSpreadLine
+            : -auditSpreadLine;
+        const auditTotalLine = auditReaderSeedBundle.evaluatedBets.find((decision) => decision.market === "total")
+          ?.evaluatedQuote.line ?? null;
+        const auditObservation = buildCfbForwardMarketReaderObservation({
+          capturedAt: frozenInput.evaluatedAt,
+          currentBooks: frozenInput.captureCurrentBooks,
+          openingBooks: frozenInput.captureOpeningBooks,
+          operationalOpening: frozenInput.operationalOpening?.quote ?? null,
+          decisions: auditReaderSeedBundle.evaluatedBets,
+          homeTeam: frozenInput.homeTeam,
+          playbookSplits: frozenInput.playbookSplits,
+          sharpApiSplits: auditSharpSplits,
+        });
+        const auditMarketReader = implementation.applyCompleteReader({
+          forecast: auditBaseForecast,
+          independentForecast: frozenInput.independentForecast,
+          histories: frozenInput.histories,
+          currentObservation: auditObservation,
+          kickoffAt: frozenInput.gameStartsAt,
+          awayFbs: frozenInput.awayFbs,
+          homeFbs: frozenInput.homeFbs,
+          awayConferenceId: frozenInput.awayConferenceId,
+          homeConferenceId: frozenInput.homeConferenceId,
+          evaluatedLines: { homeSpread: auditHomeSpread, total: auditTotalLine },
+          evaluatedSportsbooks: auditEvaluatedSportsbookByMarket,
+        });
+        const auditForecast = reconcileCfbNearTiePmfWinnerCoherence(auditMarketReader.forecast).forecast;
+        const auditDecisionBundle = buildCfbV1DecisionBundle({
+          providerGameId: frozenInput.providerGameId,
+          awayTeam: frozenInput.awayTeam,
+          homeTeam: frozenInput.homeTeam,
+          gameStartsAt: frozenInput.gameStartsAt,
+          comparableCurrentBooks: frozenInput.currentBooks,
+          supplementalGradingBooks: frozenInput.supplementalGradingBooks,
+          stage: frozenInput.stage,
+          evaluatedAt: frozenInput.evaluatedAt,
+          lockedAt: frozenInput.lockedAt,
+          healthHolds: frozenInput.decisionHealthHolds,
+          forecast: auditForecast,
+          contextLines: {
+            homeSpread: frozenInput.playbookLine?.homeSpread ?? null,
+            totalLine: frozenInput.playbookLine?.total ?? null,
+          },
+          fixedEvaluatedSportsbookByMarket: auditEvaluatedSportsbookByMarket,
+        });
+        return finalizeGrades(auditDecisionBundle, implementation.applyMarketGrades, auditSharpSplits).fullDecisionBundle;
+      };
+      const candidateReplay = evaluate({
+        label: CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
+        modelSharpSplits: (rows, context) => cfbModelSharpSplits({ rows, ...context }),
+        buildMarketForecast: buildCfbMarketSharpAwareForecast,
+        applyCompleteReader: applyCfbCompleteMarketReader,
+        applyMarketGrades: applyCfbMarketSharpAwareGrades,
+      });
+      if (JSON.stringify(candidateReplay) !== JSON.stringify(fullDecisionBundle)) {
+        throw new Error(`CFB candidate same-input replay diverged from the authoritative writer for ${plan.game.providerGameId}.`);
+      }
+      args.auditCausalReaderComparison({
+        providerGameId: plan.game.providerGameId,
+        inputSha256,
+        incumbentLabel: args.auditIncumbentCausalReader.label,
+        candidateLabel: CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
+        incumbent: evaluate(args.auditIncumbentCausalReader),
+        candidate: candidateReplay,
+      });
+    }
     if (args.auditOwlsGradeComparison) {
       const baseline = buildCfbV1DecisionBundle({
         providerGameId: plan.game.providerGameId, awayTeam: plan.game.away.abbreviation,
@@ -1211,6 +1472,7 @@ export async function runCfbForwardEvidenceWriter(args: {
         marketReaderNamedMarginStatus: marketReader.namedMarginStatus,
         marketReaderNamedTotalStatus: marketReader.namedTotalStatus,
         marketReaderTotalEvidenceRoute: marketReader.totalEvidenceRoute,
+        marketReaderReceipt: marketReader.receipt,
         finalWinnerCoordinatorRelease: CFB_FINAL_WINNER_COORDINATOR_RELEASE,
         finalWinnerCoordinatorArtifactRelease: CFB_FINAL_WINNER_COORDINATOR_ARTIFACT_RELEASE,
         finalWinnerCoordinatorBoundaryRelease: CFB_FINAL_WINNER_COORDINATOR_BOUNDARY_RELEASE,
@@ -2338,6 +2600,12 @@ export function cfbAvailabilityReportForModel(
   report: DailyEdgeGameAvailability | null,
 ): DailyEdgeGameAvailability | null {
   return report?.source === "Playbook" ? report : null;
+}
+
+function deepFreezeCfbAuditValue(value: unknown): void {
+  if (value === null || typeof value !== "object" || Object.isFrozen(value)) return;
+  Object.freeze(value);
+  for (const child of Object.values(value as Record<string, unknown>)) deepFreezeCfbAuditValue(child);
 }
 
 function emptyResult(reason: string, tracking: TrackingResult, memberSnapshot: MemberSnapshotResult): CfbForwardWriterResult {
