@@ -98,7 +98,7 @@ const eplRecord = (locked_at: string | null, id = 1, created_at = "2026-08-19T12
   competition: "english_premier_league",
   snapshot_json: null,
 } as PredictionRecordRow);
-check("tracking aggregate contract adds audited NFL recovery while retaining UCL actionable history", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v19_nfl_published_pregame_recovery_2026_11_02");
+check("tracking aggregate contract adds audited NFL recovery while retaining UCL actionable history", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v20_ucl_alt_locked_lifetime_2026_11_05");
 check("unlocked EPL row is excluded from official tracking", !isTrackingRecordEligible(eplRecord(null)));
 check("locked EPL row is officially tracking-eligible", isTrackingRecordEligible(eplRecord("2026-08-21T18:00:00Z")));
 check("EPL receives a separate member-facing competition key", trackingDisplaySport(eplRecord("2026-08-21T18:00:00Z")) === "epl");

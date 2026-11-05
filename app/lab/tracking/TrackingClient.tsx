@@ -107,7 +107,7 @@ type AlternateLineMetrics = {
 type AlternateLineCategory = {
   sport: string;
   market: "spread" | "total";
-  source: "current_release" | "prior_release";
+  source: "current_release" | "prior_release" | "locked_history";
   sourceLabel: string;
   coverageFrom: string;
   coverageTo: string;
@@ -1112,7 +1112,7 @@ function AlternateLinePerformanceRows({
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                   {!embedded ? <p className="text-[12px] font-bold text-gray-200">{alternateMarketLabel(row.sport, row.market)}</p> : null}
                   <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-gray-500">
-                    {row.original.settled.toLocaleString()} graded · {coverage}
+                    {row.sport === "ucl" ? `${row.sourceLabel} · ` : null}{row.original.settled.toLocaleString()} graded · {coverage}
                   </p>
                 </div>
                 <div className="text-right text-[9.5px] tabular-nums text-gray-500">
