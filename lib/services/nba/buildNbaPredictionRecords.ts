@@ -57,6 +57,8 @@ const LOCK_MINUTES_BEFORE_TIP = 60;
 /** Model version tag — must be stable across passes for the unique key
  * to dedupe properly. v0 is the active NBA model (nbaAutoModelV1). */
 export const NBA_PREDICTION_RECORD_MODEL_VERSION = NBA_PREDICTION_RECORD_RELEASE;
+export const NBA_SNAPSHOT_EVIDENCE_METADATA_RELEASE =
+  "nba_snapshot_evidence_metadata_2026_11_04_r1_authoritative_member_capture" as const;
 
 export type CreateNbaRecordsOptions = {
   slateDate: string;
@@ -191,6 +193,60 @@ function shouldBeLocked(tipIsoUtc: string | null, now: Date): boolean {
   return now.getTime() >= lockBoundaryMs;
 }
 
+export function buildNbaSnapshotEvidenceMetadata(opts: {
+  memberGame: ReturnType<typeof adaptNbaToDailyEdgeResponse>["games"][number];
+  market: "moneyline" | "spread" | "total";
+  pickSide: MarketIntelligence["pick_side"];
+}): {
+  release: typeof NBA_SNAPSHOT_EVIDENCE_METADATA_RELEASE;
+  public_splits: Record<string, unknown> | null;
+  splits_state: "available" | "unavailable";
+  current_price: Record<string, unknown>;
+  has_splits: boolean;
+} {
+  const edge = opts.market === "spread"
+    ? opts.memberGame.markets.first_inning
+    : opts.memberGame.markets[opts.market];
+  const publicRows = edge.publicSplits ?? [];
+  const picked = opts.pickSide === null
+    ? null
+    : publicRows.find((row) => row.side === opts.pickSide) ?? null;
+  const opposing = picked === null
+    ? null
+    : publicRows.find((row) => row !== picked) ?? null;
+  const professionalRows = edge.sportsbookSplits?.rows ?? [];
+  const hasSplits = publicRows.length === 2 || professionalRows.length === 2;
+  const oddsStops = edge.oddsTrail?.length ?? 0;
+  const lineStops = edge.lineTrail?.length ?? 0;
+  const movementState = oddsStops > 1 || lineStops > 1
+    ? "tracked"
+    : oddsStops === 1 || lineStops === 1
+      ? "current_only"
+      : "unavailable";
+  return {
+    release: NBA_SNAPSHOT_EVIDENCE_METADATA_RELEASE,
+    public_splits: picked && opposing
+      ? {
+          picked_side: picked.side,
+          picked_handle_pct: picked.moneyPct,
+          picked_bets_pct: picked.betsPct,
+          opp_handle_pct: opposing.moneyPct,
+          opp_bets_pct: opposing.betsPct,
+        }
+      : null,
+    splits_state: hasSplits ? "available" : "unavailable",
+    current_price: {
+      odds_american: edge.currentPriceAmerican ?? edge.priceAmerican,
+      sportsbook: edge.currentPriceSportsbook ?? edge.marketSource,
+      observed_at: edge.currentPriceObservedAt ?? null,
+      movement_state: movementState,
+      odds_trail_stops: oddsStops,
+      line_trail_stops: lineStops,
+    },
+    has_splits: hasSplits,
+  };
+}
+
 function buildSnapshot(opts: {
   dto: NbaDailyEdgeDto;
   gameDto: NbaDailyEdgeDto["games"][number];
@@ -221,15 +277,14 @@ function buildSnapshot(opts: {
   // payload bloat. Mirrors MLB writer's namespaced shape so the
   // calibrationReport extractor can read NBA paths consistently.
   //
-  // Field naming honesty (2026-06-10):
-  //   • `current_price` (formerly `line_movement`) — stores the current
-  //     book's odds + sportsbook. Pre-fix this was labeled "line_movement"
-  //     even though no movement/delta data was tracked. The NBA pipeline
-  //     does not yet ingest open-to-current deltas; do not imply it does.
-  //   • `splits_state` — explicit categorical: "available" / "unavailable".
-  //     Pre-fix `public_splits` was the only signal; consumers reading
-  //     `data_integrity.has_splits` could infer state but card UI did not
-  //     surface it explicitly.
+  // Duplicate audit metadata is derived from the exact member DTO embedded in
+  // the same snapshot. It must never disagree with the authoritative capture
+  // about split availability or same-book movement coverage.
+  const evidenceMetadata = buildNbaSnapshotEvidenceMetadata({
+    memberGame: opts.memberGame,
+    market: opts.market,
+    pickSide: opts.intel.pick_side,
+  });
   return {
     sport: "nba",
     model_version: NBA_PREDICTION_RECORD_MODEL_VERSION,
@@ -251,21 +306,10 @@ function buildSnapshot(opts: {
     predicted_away_score: opts.projection.away_score,
     predicted_total: opts.projection.total,
     predicted_spread_home: opts.projection.spread_home,
-    public_splits: opts.intel.splits.pick_side !== null && opts.intel.splits.other_side !== null
-      ? {
-          picked_side: opts.intel.pick_side,
-          picked_handle_pct: opts.intel.splits.pick_side.handle_pct,
-          picked_bets_pct: opts.intel.splits.pick_side.bets_pct,
-          opp_handle_pct: opts.intel.splits.other_side.handle_pct,
-          opp_bets_pct: opts.intel.splits.other_side.bets_pct,
-        }
-      : null,
-    splits_state: opts.sources.has_splits ? "available" : "unavailable",
-    current_price: {
-      odds_american: opts.intel.current_price.odds_american,
-      sportsbook: opts.intel.current_price.sportsbook,
-      note: "Current price only — open-to-current line movement is not tracked in the NBA pipeline.",
-    },
+    snapshot_evidence_metadata_release: evidenceMetadata.release,
+    public_splits: evidenceMetadata.public_splits,
+    splits_state: evidenceMetadata.splits_state,
+    current_price: evidenceMetadata.current_price,
     fair_reference: {
       mode: opts.intel.fair_reference_mode,
       books: opts.intel.fair_reference_books,
@@ -276,7 +320,7 @@ function buildSnapshot(opts: {
       limited_book_coverage: opts.sources.limited_book_coverage,
       book_count: opts.sources.book_count,
       has_lines: opts.sources.has_lines,
-      has_splits: opts.sources.has_splits,
+      has_splits: evidenceMetadata.has_splits,
       has_opportunities: opts.sources.has_opportunities,
     },
     displayed_context_markets: {},

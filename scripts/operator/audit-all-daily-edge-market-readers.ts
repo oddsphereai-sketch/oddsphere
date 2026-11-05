@@ -8,6 +8,10 @@
  */
 
 import { auditDailyEdgeBoards, DAILY_EDGE_DEEP_AUDIT_SPORTS } from "../../lib/services/dailyEdgeDeepAudit";
+import {
+  resolveDailyEdgeAuditHttpPayload,
+  type DailyEdgeAuditHttpPayload,
+} from "../../lib/services/dailyEdgeAuditTransport";
 
 type Row = Record<string, any>;
 type Issue = {
@@ -192,14 +196,14 @@ async function main(): Promise<void> {
     headers: { authorization: `Bearer ${token}`, "cache-control": "no-cache" },
     signal: AbortSignal.timeout(30_000),
   });
-  const payload = await response.json() as { boards?: Record<string, Row> };
-  if (!response.ok || !payload.boards) throw new Error(`Production board read failed: HTTP ${response.status}`);
+  const payload = await response.json() as DailyEdgeAuditHttpPayload;
+  const resolved = resolveDailyEdgeAuditHttpPayload({ status: response.status, ok: response.ok, payload });
   const sports = requestedSport ? [requestedSport] : DAILY_EDGE_DEEP_AUDIT_SPORTS;
   const summaries: Record<string, Row> = {};
   const issues: Issue[] = [];
   const selectedBoards: Record<string, Row> = {};
   for (const sport of sports) {
-    const board = payload.boards[sport];
+    const board = resolved.boards[sport];
     if (!board) continue;
     selectedBoards[sport] = board;
     const result = auditBoard(sport, board);
@@ -213,6 +217,9 @@ async function main(): Promise<void> {
     readOnly: true,
     providerCalls: 0,
     productionWrites: 0,
+    httpStatus: response.status,
+    diagnosticResponse: resolved.diagnosticResponse,
+    upstreamResult: resolved.upstreamResult,
     transportSummary: transport.summary,
     summaries,
     issueCounts: Object.fromEntries([...new Set(issues.map((issue) => issue.reason))].sort().map((reason) => [
@@ -221,6 +228,7 @@ async function main(): Promise<void> {
     ])),
     issues,
   }, null, 2));
+  if (resolved.hasCriticals || transport.summary.criticalIssues > 0) process.exitCode = 1;
 }
 
 void main().catch((error) => {

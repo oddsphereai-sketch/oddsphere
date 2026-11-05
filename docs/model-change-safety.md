@@ -27,6 +27,28 @@ board contraction openly, do not add a compensating play quota, and run focused
 side-symmetry, promotion/demotion, writer/reader precedence, full model-change,
 latest-main integration and post-deployment live checks before completion.
 
+## Owner-directed pro reader auditability repair — November 4
+
+The remaining NBA/NHL repair is presentation and auditability only. NBA duplicate
+snapshot metadata must derive from the exact embedded member DTO for future
+unlocked writes; it may not independently claim missing splits or absent movement.
+NBA and NHL member signals/explanations must expose the authoritative stored
+posture/receipt when identity and release validation pass. A stored conflict may
+remain `market_neutral` because the shared signal enum has no conflict member, but
+the explanation must state the conflict; held resistance must not be mislabeled as
+a directional sharp buy. These presentation changes may not alter a score,
+probability, selected side, grade, stake, price or tracking tuple.
+
+Exact locked cards remain byte-authoritative. The NHL adapter therefore accepts
+the new stored-receipt presentation only when `lockedAt` is null, and the NBA
+adapter's existing locked-member DTO precedence remains unchanged. The operator
+audit may inspect an authorized HTTP 409 only when the payload includes diagnostic
+boards and the upstream audit result, and it must still exit nonzero for criticals.
+Required proof is focused posture/metadata/transport coverage, NHL receipt and NBA
+lock precedence tests, full type checking, model-change verification and latest-main
+integration safety. Paired actionable board impact is 0/0/0 because no decision
+field changes.
+
 ## Owner-directed NHL professional split ingestion repair — November 4
 
 The cross-sport sharp-reader audit found that NHL member cards displayed exact
