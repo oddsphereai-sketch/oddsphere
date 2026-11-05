@@ -1,3 +1,4 @@
+import { buildLifetimeRecords, lifetimeSourceLabel } from "@/lib/services/tracking/lifetimeRecords";
 import type {
   AlternateLineCategory,
   AlternateLinePerformance,
@@ -55,6 +56,7 @@ type FoundationBaseline = {
 export type PublicTrackingFoundationSnapshot = {
   baselines?: FoundationBaseline[];
   bySportMarket?: FoundationBucket[];
+  actionableHistory?: { bySportMarket: FoundationBucket[] };
   thisWeek?: {
     from: string;
     to: string;
@@ -130,76 +132,6 @@ function visibleBuckets(buckets: FoundationBucket[]): FoundationBucket[] {
   );
 }
 
-function buildLifetimeRows(
-  bySportMarket: FoundationBucket[],
-  baselines: FoundationBaseline[],
-): PublicTrackingCategoryRow[] {
-  const baselineByKey = new Map(baselines.map((baseline) => [`${baseline.sport}:${baseline.market}`, baseline]));
-  const liveByKey = new Map(bySportMarket.map((bucket) => [`${bucket.sport}:${bucket.market}`, bucket]));
-  const keys = new Set([...baselineByKey.keys(), ...liveByKey.keys()]);
-  const rows: PublicTrackingCategoryRow[] = [];
-
-  for (const key of keys) {
-    const [sport, market] = key.split(":");
-    if (!sport || !market) continue;
-    const baseline = baselineByKey.get(key);
-    const live = liveByKey.get(key);
-    const liveDecided = (live?.metrics.wins ?? 0) + (live?.metrics.losses ?? 0);
-    const livePending = live?.metrics.pending ?? 0;
-
-    if (baseline && liveDecided > 0) {
-      const wins = baseline.lifetime_wins + (live?.metrics.wins ?? 0);
-      const decided = baseline.lifetime_total + liveDecided;
-      rows.push({
-        sport,
-        market,
-        detail: `Lifetime · live +${liveDecided}`,
-        metrics: {
-          picks: decided,
-          wins,
-          losses: decided - wins,
-          pushes: live?.metrics.pushes ?? 0,
-          voids: live?.metrics.voids ?? 0,
-          pending: livePending,
-          winPct: decided > 0 ? (wins / decided) * 100 : null,
-        },
-      });
-      continue;
-    }
-
-    if (baseline) {
-      rows.push({
-        sport,
-        market,
-        detail: "Lifetime",
-        metrics: {
-          picks: baseline.lifetime_total,
-          wins: baseline.lifetime_wins,
-          losses: baseline.lifetime_total - baseline.lifetime_wins,
-          pushes: 0,
-          voids: 0,
-          pending: livePending,
-          winPct: baseline.lifetime_pct,
-        },
-      });
-      continue;
-    }
-
-    if (live && (liveDecided > 0 || live.metrics.pending > 0)) {
-      rows.push({
-        sport,
-        market,
-        detail: "Since launch",
-        metrics: mapMetric(live.metrics),
-      });
-    }
-  }
-
-  const mlbHasNrfiAndYrfi = rows.some((row) => row.sport === "mlb" && row.market === "nrfi")
-    && rows.some((row) => row.sport === "mlb" && row.market === "yrfi");
-  return sortRows(rows.filter((row) => !(mlbHasNrfiAndYrfi && row.sport === "mlb" && row.market === "first_inning")));
-}
-
 export function buildPublicTrackingCategoryWindows(
   snapshot: PublicTrackingFoundationSnapshot | null,
 ): PublicTrackingCategoryWindow[] {
@@ -215,7 +147,16 @@ export function buildPublicTrackingCategoryWindows(
     market: bucket.market,
     metrics: mapMetric(bucket.metrics),
   }));
-  const lifetimeRows = buildLifetimeRows(snapshot?.bySportMarket ?? [], snapshot?.baselines ?? []);
+  const lifetimeRows = buildLifetimeRecords(
+    snapshot?.bySportMarket ?? [],
+    snapshot?.baselines ?? [],
+    snapshot?.actionableHistory?.bySportMarket ?? [],
+  ).map((record) => ({
+    sport: record.sport,
+    market: record.market,
+    detail: lifetimeSourceLabel(record),
+    metrics: mapMetric(record.metrics),
+  }));
 
   return [
     {

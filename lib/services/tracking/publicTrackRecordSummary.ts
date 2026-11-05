@@ -247,6 +247,10 @@ export function applyPublicUclTrackingVisibility(input: {
     ...input.foundation,
     baselines: withoutUcl(input.foundation.baselines),
     bySportMarket: withoutUcl(input.foundation.bySportMarket),
+    actionableHistory: input.foundation.actionableHistory ? {
+      ...input.foundation.actionableHistory,
+      bySportMarket: withoutUcl(input.foundation.actionableHistory.bySportMarket),
+    } : undefined,
     thisWeek: input.foundation.thisWeek ? {
       ...input.foundation.thisWeek,
       bySportMarket: withoutUcl(input.foundation.thisWeek.bySportMarket),

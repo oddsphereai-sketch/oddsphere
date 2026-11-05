@@ -104,6 +104,7 @@ const uclAlternateCategory = {
 const storedFoundation: PublicTrackingFoundationSnapshot = {
   ...snapshot,
   baselines: [...(snapshot.baselines ?? []), { sport: "ucl", market: "match_result", lifetime_wins: 100, lifetime_total: 174, lifetime_pct: 57.5 }],
+  actionableHistory: { bySportMarket: [{ sport: "ucl", market: "total", metrics: metrics(20, 10) }] },
   bySportMarket: [...(snapshot.bySportMarket ?? []), { sport: "ucl", market: "match_result", metrics: uclMetric }],
   thisWeek: { ...snapshot.thisWeek!, bySportMarket: [...snapshot.thisWeek!.bySportMarket, { sport: "ucl", market: "match_result", metrics: uclMetric }] },
   thisMonth: { ...snapshot.thisMonth!, bySportMarket: [...snapshot.thisMonth!.bySportMarket, { sport: "ucl", market: "match_result", metrics: uclMetric }] },
@@ -130,6 +131,8 @@ const storedCurrent = {
 } as TrackingResponse;
 const rollbackVisible = applyPublicUclTrackingVisibility({ current: storedCurrent, foundation: storedFoundation, includeUcl: false });
 assert.equal(rollbackVisible.foundation?.baselines?.some((row) => row.sport === "ucl"), false, "disabled public summary removes stored UCL foundation baselines");
+assert.equal(rollbackVisible.foundation?.actionableHistory?.bySportMarket.some((row) => row.sport === "ucl"), false, "rollback filters locked history before the shared lifetime reader");
+assert.equal(buildPublicTrackingCategoryWindows(rollbackVisible.foundation).some(window => window.rows.some(row => row.sport === "ucl")), false);
 assert.equal(rollbackVisible.foundation?.bySportMarket?.some((row) => row.sport === "ucl"), false);
 assert.equal(rollbackVisible.foundation?.thisWeek?.bySportMarket.some((row) => row.sport === "ucl"), false);
 assert.equal(rollbackVisible.foundation?.thisMonth?.bySportMarket.some((row) => row.sport === "ucl"), false);

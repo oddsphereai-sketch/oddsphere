@@ -290,7 +290,7 @@ export async function refreshTrackingFoundationResponseSnapshot(input: {
       ttlMs: TRACKING_SNAPSHOT_TTL_MS,
       staleMs: TRACKING_SNAPSHOT_STALE_MS,
       source: input.source ?? "cron",
-      payloadVersion: "tracking-foundation-v9-ucl-alt-locked-lifetime",
+      payloadVersion: "tracking-foundation-v10-locked-grade-precedence",
     });
     if (!write.ok) return { ok: false, snapshotKey, error: write.error };
     return {

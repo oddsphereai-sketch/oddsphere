@@ -9,6 +9,10 @@ on:
       - 'app/lab/tracking/**'
       - 'app/api/lab/tracking-foundation/**'
       - 'scripts/test-ucl-alternate-line-lifetime.ts'
+      - 'scripts/test-homepage-tracking-parity.ts'
+      - 'scripts/test-homepage-category-tracker.ts'
+      - 'scripts/test-tracking-ucl-lifetime.ts'
+      - 'scripts/test-tracking-locked-grade.ts'
       - '.github/workflows/tracking-history-proof.yml'
   merge_group:
 permissions:
@@ -16,6 +20,9 @@ permissions:
 jobs:
   tracking-history-proof:
     runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1
+      SUPABASE_SERVICE_ROLE_KEY: test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,4 +30,4 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: node --import tsx scripts/test-ucl-alternate-line-lifetime.ts && node --import tsx scripts/test-alternate-line-performance.ts && node --import tsx scripts/test-tracking-aggregates.ts && node --import tsx scripts/test-tracking-page.ts && node --import tsx scripts/test-official-tracking-markets.ts
+      - run: node --import tsx scripts/test-homepage-tracking-parity.ts && node --import tsx scripts/test-homepage-category-tracker.ts && node --import tsx scripts/test-tracking-ucl-lifetime.ts && node --import tsx scripts/test-tracking-locked-grade.ts && node --import tsx scripts/test-ucl-alternate-line-lifetime.ts && node --import tsx scripts/test-alternate-line-performance.ts && node --import tsx scripts/test-tracking-aggregates.ts && node --import tsx scripts/test-tracking-page.ts && node --import tsx scripts/test-official-tracking-markets.ts
