@@ -15,7 +15,7 @@ public records retain exact precedence.
 The owner explicitly directed completion of review and live publication for
 November 5 and future slates, with actual predictions instead of empty cards and
 all November 4 locked public records unchanged. This scoped authorization covers
-the R5 independent /R19 incumbent market /R15 receipt /R35 publisher /R24 adapter
+the R5 independent /R19 incumbent market /R15 receipt /R36 publisher /R24 adapter
 /R22 tracking /R4 training /R8 fixture family and the separately versioned cross
 forecast and frozen-winner R1 contracts listed in the release registry.
 
@@ -51,6 +51,12 @@ must be rejected before forecast-board construction, without blocking complete
 games or replacing a prior coherent member payload. Mixed complete/incomplete
 slate and prior-payload preservation regressions are required. This changes no
 score equation, market consequence, probability, grade, price or stake.
+
+R36 retains those numerical and lifecycle contracts while reusing a single
+immutable timezone formatter in split matching. Full-slate pre/post output must
+remain exact; the resource regression uses the captured 480 fixtures and 128
+source games and bounds ICU constructor calls. No source, signal or market input
+is removed to reduce memory. Runtime stages remain visible in the existing logs.
 
 ## Owner-directed Daily Edge health and NFL conviction repair — November 5
 
