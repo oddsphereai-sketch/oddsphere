@@ -2,7 +2,6 @@ import { createClient } from "@supabase/supabase-js";
 import { computeSlateDate } from "../../lib/dates/slateDate";
 import { readCfbForwardWriterEvidence } from "../../lib/services/football/cfbForwardEvidenceStore";
 import { candidateTrackingMarkets, cfbTrackingCandidatesForRun } from "../../lib/services/football/cfbForwardEvidenceWriter";
-import { CFB_V1_DECISION_RELEASE } from "../../lib/services/football/cfbV1Decision";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -35,9 +34,16 @@ async function main(): Promise<void> {
     : await client.from("prediction_records")
         .select("external_id,market")
         .eq("sport", "cfb")
-        .eq("model_version", CFB_V1_DECISION_RELEASE)
         .in("external_id", externalIds);
   if (error) throw new Error(`CFB tracking audit read failed: ${error.message}`);
+  const gameCensus = date ? await client.from("games")
+    .select("external_id,status").eq("sport", "cfb").eq("slate_date", date) : { data: [], error: null };
+  if (gameCensus.error) throw new Error(`CFB tracking game census read failed: ${gameCensus.error.message}`);
+  const candidateIds = new Set(planned.map(row => row.externalId));
+  const completedGamesWithoutPublishedEvidence = (gameCensus.data ?? [])
+    .filter(row => ["final", "completed", "status_final"].includes(String(row.status).toLowerCase())
+      && !candidateIds.has(Number(row.external_id)))
+    .map(row => Number(row.external_id));
   const existing = new Set((data ?? []).map((row) => `${row.external_id}:${row.market}`));
   const byMarket = Object.fromEntries((["moneyline", "spread", "total"] as const).map((market) => [market, planned.filter((row) => row.market === market).length]));
   const unpublishedMarkets = candidates.flatMap((candidate) => {
@@ -69,6 +75,7 @@ async function main(): Promise<void> {
     publishedT60AccuracyLockGames: candidates.filter((row) => row.mode === "published_t60_accuracy_lock").length,
     recoveryGames: candidates.filter((row) => row.mode === "published_pregame_accuracy_recovery").length,
     predictions: planned.length,
+    completedGamesWithoutPublishedEvidence,
     byMarket,
     existingByMarket: Object.fromEntries(([
       "moneyline",
@@ -80,6 +87,7 @@ async function main(): Promise<void> {
     missingRows: planned.filter((row) => !existing.has(`${row.externalId}:${row.market}`)),
     unpublishedMarkets,
   }, null, 2)}\n`);
+  if (planned.some(row => !existing.has(`${row.externalId}:${row.market}`)) || completedGamesWithoutPublishedEvidence.length > 0) process.exitCode = 1;
 }
 
 void main();
