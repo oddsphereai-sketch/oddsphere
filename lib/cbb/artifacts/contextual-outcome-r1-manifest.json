@@ -1,0 +1,15 @@
+{
+  "envelopeRelease": "cbb_private_outcome_artifact_2026_11_05_r1",
+  "runtimeModelRelease": "cbb_contextual_outcome_2026_11_05_r1",
+  "engineRelease": "cbb_contextual_outcome_forecast_2026_11_05_v4_natural_clock_noise_units",
+  "methodSha256": "a628ff6195b2733f391405ced63a6d8b26f30fbc773506c209e7d89c315215b7",
+  "modelJSONSha256": "a2fdc05f17819017cc362e9f9be42f164274b4c9a492b85a9a06bddfb975b799",
+  "modelObjectSha256": "f0ef986d4298d96b6e5674de04a8f650ae699a6770fc1eed9882f6cd51a2f1de",
+  "calibrationJSONSha256": "a4142c83f1256e4d1223a997ba2ef8766b23b5b5687db214d1cc8f031e96abd7",
+  "calibrationMethodSha256": "c27ab973cb5d3a870940960c25c367060f16b73da6a8e904c5943255bf672d75",
+  "compressedSha256": "08b5cad624f5f5e9c6a8414e6c9fbac5a53b6ef03afeac15f529a2b2fd47b901",
+  "uncompressedSha256": "46f4d659dae1adb0fbfb0a027dc7802b474ea30cb307b89c72e6245d2b19b41c",
+  "compressedBytes": 594139,
+  "uncompressedBytes": 10011985,
+  "availableBy": "2026-11-05T15:44:57.112Z"
+}

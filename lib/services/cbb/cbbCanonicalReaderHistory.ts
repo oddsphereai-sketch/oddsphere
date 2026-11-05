@@ -1,8 +1,9 @@
 import {isMissingRpcFunction} from "@/lib/db/missingRpcFunction";
+import {CBB_CANONICAL_CONSUMER_CONTEXT_BOOKS} from "./cbbCanonicalMarketEvidence";
 import type { supabase } from "@/lib/db/supabase";
 import type { CbbCanonicalPriceRow, CbbCanonicalSplitRow } from "./cbbCanonicalMarketEvidence";
 
-export const CBB_CANONICAL_READER_HISTORY_RELEASE = "cbb_canonical_reader_history_2026_11_05_r3_indexed_price_watermark" as const;
+export const CBB_CANONICAL_READER_HISTORY_RELEASE = "cbb_canonical_reader_history_2026_11_05_r4_indexed_consumer_suffix" as const;
 const PAGE_SIZE = 1000;
 const MAX_ROWS = 32_000;
 const MAX_BYTES = 24_000_000;
@@ -52,7 +53,7 @@ export async function readCbbCanonicalReaderHistory(args: {
       let q = args.db.from(table).select(select).eq("league","cbb").eq("provider","owls")
         .in("canonical_event_id",ids.map(String)).gte("fetched_at",since).lte("inserted_at",args.asOf);
       q = kind === "price" ? q.in("sportsbook",["circa","pinnacle","ps3838","bookmaker"])
-        : kind==="retail"?q.in("sportsbook",["draftkings","betmgm"]).gte("fetched_at",new Date(Math.max(floor,at-3*3600_000)).toISOString())
+        : kind==="retail"?q.in("sportsbook",[...CBB_CANONICAL_CONSUMER_CONTEXT_BOOKS]).gte("fetched_at",new Date(Math.max(floor,at-3*3600_000)).toISOString())
         : q.in("source_book",["circa","draftkings","betmgm"]);
       return q;
     };
@@ -81,14 +82,16 @@ export async function readCbbCanonicalReaderHistory(args: {
       if (!Number.isSafeInteger(highId) || highId < 0) throw new Error("invalid high-water ID");
       receipt.highWaterId = highId;
       if (!highId) return {rows,receipt:{...receipt,complete:true,reason:"no_observations_in_window"}};
-      while (receipt.lastId < highId) {
+      const newestFirst=kind==="retail";
+      while (newestFirst?receipt.lastId!==1:receipt.lastId < highId) {
         if (now() >= deadline) { receipt.reason = "deadline_exceeded"; break; }
         if (rows.length >= rowLimit) {
           // The indexed watermark may belong to another book or time. At an
           // exact row cap, prove the filtered window has no remaining row.
           receipt.queries++;
-          const probe=await query("id").gt("id",receipt.lastId).lte("id",highId)
-            .order("id",{ascending:true}).limit(1)
+          let probeQuery=query("id").lte("id",highId);
+          probeQuery=newestFirst?probeQuery.lt("id",receipt.lastId):probeQuery.gt("id",receipt.lastId);
+          const probe=await probeQuery.order("id",{ascending:!newestFirst}).limit(1)
             .abortSignal(AbortSignal.timeout(Math.max(1,deadline-now())));
           if(probe.error)throw probe.error;
           receipt.complete=(probe.data??[]).length===0;
@@ -97,18 +100,21 @@ export async function readCbbCanonicalReaderHistory(args: {
         }
         receipt.queries++;
         const size = Math.min(PAGE_SIZE,rowLimit-rows.length);
-        const page = await query(fields).gt("id",receipt.lastId).lte("id",highId).order("id",{ascending:true}).limit(size)
+        let pageQuery=query(fields).lte("id",highId);
+        pageQuery=newestFirst?(receipt.lastId?pageQuery.lt("id",receipt.lastId):pageQuery):pageQuery.gt("id",receipt.lastId);
+        const page = await pageQuery.order("id",{ascending:!newestFirst}).limit(size)
           .abortSignal(AbortSignal.timeout(Math.max(1,deadline-now())));
         if (page.error) throw page.error;
         const data = (page.data ?? []) as unknown as Row[];
-        if (data.some((r,i)=>!Number.isSafeInteger(Number(r.id)) || Number(r.id) <= (i ? Number(data[i-1].id) : receipt.lastId) || Number(r.id)>highId)) {
+        if (data.some((r,i)=>!Number.isSafeInteger(Number(r.id))||Number(r.id)<=0||Number(r.id)>highId||
+          (newestFirst?(i>0?Number(r.id)>=Number(data[i-1].id):receipt.lastId>0&&Number(r.id)>=receipt.lastId):Number(r.id)<=(i?Number(data[i-1].id):receipt.lastId)))) {
           throw new Error("non-monotonic canonical observation IDs");
         }
         const bytes = Buffer.byteLength(JSON.stringify(data));
         if (receipt.bytes + bytes > byteLimit) { receipt.reason = "byte_budget_exceeded"; break; }
         rows.push(...data); receipt.rows = rows.length; receipt.bytes += bytes;
         if (data.length) receipt.lastId = Number(data.at(-1)!.id);
-        if (data.length < size || receipt.lastId === highId) {
+        if (data.length < size || (newestFirst?receipt.lastId===1:receipt.lastId === highId)) {
           receipt.complete = true; receipt.reason = "complete_bounded_window"; break;
         }
       }
@@ -123,6 +129,10 @@ export async function readCbbCanonicalReaderHistory(args: {
     sourceWindow:"six_hour_bootstrap_or_explicit_since" as const,
     priceRows:price.rows as CbbCanonicalPriceRow[],splitRows:split.rows as CbbCanonicalSplitRow[],
     retailPriceRows:retail.receipt.complete?retail.rows as CbbCanonicalPriceRow[]:[],retailPrice:retail.receipt,
+    // Partial newer context remains usable with its incomplete-window receipt.
+    // Existing complete-only consumers retain the preceding field's contract.
+    retailObservedRows:retail.rows as CbbCanonicalPriceRow[],
+    retailHistoryOrder:"latest_first;partial_window_omits_older_prefix_not_current_tail" as const,
     price:price.receipt,split:split.receipt,complete:price.receipt.complete&&split.receipt.complete,
     elapsedMs:now()-started,providerRequests:0 as const,databaseWrites:0 as const};
 }

@@ -5,7 +5,7 @@ import { computeSlateDate } from "../../dates/slateDate";
 import type { CbbGame, CbbMarket } from "../../cbb/types";
 import type { MarketPriceObservationV2, MarketSplitObservationV2 } from "../../types/domain/MarketIntelligenceV2";
 
-export const CBB_CANONICAL_MARKET_EVIDENCE_RELEASE = "cbb_canonical_market_evidence_2026_11_03_r4_retail_response_receipts" as const;
+export const CBB_CANONICAL_MARKET_EVIDENCE_RELEASE = "cbb_canonical_market_evidence_2026_11_05_r5_general_consumer_context" as const;
 export type CbbCanonicalPriceRow = MarketPriceObservationV2 & { id: number | string; inserted_at: string };
 export type CbbCanonicalSplitRow = MarketSplitObservationV2 & { id: number | string; inserted_at: string };
 /** An opaque native event ID needs an independent named fixture/time join.
@@ -86,6 +86,7 @@ type Common = {
   run: string; runStartedAt: string; observed: string; fetched: string; inserted: string;
   selection: string; id: number | string; hash: string; sourceIdentity: SourceIdentity;
 };
+export const CBB_CANONICAL_CONSUMER_CONTEXT_BOOKS=Object.freeze(["draftkings","betmgm","fanduel","fanatics","bovada","hardrock","betr","stations","south_point","wynn"] as const);
 const MARKETS: CbbMarket[] = ["moneyline", "spread", "total"];
 const family = (book: string) => book === "ps3838" ? "pinnacle" : book;
 const epoch = (value: string | null | undefined) => typeof value === "string" ? Date.parse(value) : NaN;
@@ -111,7 +112,7 @@ function identity(game: CbbGame, eventId: string, attestations: CbbCanonicalEven
   return { kind: "independent_named_fixture_join", orientation: orientation(match.homeTeam, match.awayTeam)! };
 }
 function common(row: CbbCanonicalPriceRow | CbbCanonicalSplitRow, game: CbbGame, decision: number,
-  attestations: CbbCanonicalEventAttestation[], kind: "price" | "split"): Common | string {
+  attestations: CbbCanonicalEventAttestation[], kind: "price" | "split",retailBooks:ReadonlySet<string>): Common | string {
   if (row.provider !== "owls" || row.league !== "cbb") return "unsupported_or_unattributed_provider_or_league";
   if (!validId(row.id) || !validHash(row.raw_payload_hash)) return "native_observation_id_or_payload_hash_missing";
   if (row.canonical_event_id !== String(game.id) || !MARKETS.includes(row.market_type)) return "canonical_fixture_or_market_mismatch";
@@ -126,7 +127,7 @@ function common(row: CbbCanonicalPriceRow | CbbCanonicalSplitRow, game: CbbGame,
   if (!run || !runStartedAt || !Number.isFinite(epoch(runStartedAt))) return "native_ingestion_run_unverifiable";
   const observed = kind === "price" ? (row as CbbCanonicalPriceRow).provider_timestamp : (row as CbbCanonicalSplitRow).source_observed_at;
   const fetched = row.fetched_at, inserted = row.inserted_at;
-  const retailResponse = kind === "price" && ["draftkings","betmgm"].includes((row as CbbCanonicalPriceRow).sportsbook) &&
+  const retailResponse = kind === "price" && retailBooks.has((row as CbbCanonicalPriceRow).sportsbook) &&
     (row as CbbCanonicalPriceRow).sharp_book === false;
   // CBB's existing collector records its run-start clock in fetched_at.
   // The DB insertion upper bound, not that earlier clock, proves availability.
@@ -140,7 +141,7 @@ function common(row: CbbCanonicalPriceRow | CbbCanonicalSplitRow, game: CbbGame,
   }
   const book = kind === "price" ? (row as CbbCanonicalPriceRow).sportsbook : (row as CbbCanonicalSplitRow).source_book;
   if (kind === "price" && !(["circa", "pinnacle", "ps3838","bookmaker"].includes(book)&&(row as CbbCanonicalPriceRow).sharp_book===true||
-    ["draftkings","betmgm"].includes(book)&&(row as CbbCanonicalPriceRow).sharp_book===false)) {
+    retailBooks.has(book)&&(row as CbbCanonicalPriceRow).sharp_book===false)) {
     return "unsupported_professional_price_source";
   }
   if (kind === "split") {
@@ -184,7 +185,11 @@ export function pairCbbCanonicalMarketEvidence(args: {
   priceRows?: CbbCanonicalPriceRow[];
   splitRows?: CbbCanonicalSplitRow[];
   eventAttestations?: CbbCanonicalEventAttestation[];
+  /** General retail prices remain observation context, never professional flow
+   * authority. Default preserves the preceding reader's exact source roster. */
+  consumerPriceContext?:boolean;
 }) {
+  const retailBooks:ReadonlySet<string>=new Set(args.consumerPriceContext?CBB_CANONICAL_CONSUMER_CONTEXT_BOOKS:["draftkings","betmgm"]);
   const decision = epoch(args.decisionAt), start = epoch(args.game.date);
   if (![decision, start].every(Number.isFinite) || decision >= start) throw new Error("CBB canonical evidence requires a pregame fixture/cutoff");
   const rejected: CbbCanonicalEvidenceRejection[] = [];
@@ -203,7 +208,7 @@ export function pairCbbCanonicalMarketEvidence(args: {
     const groups = new Map<string, Array<{row:CbbCanonicalPriceRow|CbbCanonicalSplitRow;c:Common}>>();
     const qualified:Array<{row:CbbCanonicalPriceRow|CbbCanonicalSplitRow;c:Common}>=[];
     for(const row of rows){
-      const c=common(row,args.game,decision,args.eventAttestations??[],kind);
+      const c=common(row,args.game,decision,args.eventAttestations??[],kind,retailBooks);
       if(typeof c==="string"){rejected.push({kind,observationIds:[row.id],reason:c});continue;}
       qualified.push({row,c});
     }
@@ -244,7 +249,7 @@ export function pairCbbCanonicalMarketEvidence(args: {
         }
         const hold=cbbImpliedProbability(first.american_price)+cbbImpliedProbability(second.american_price);
         if(hold<.98||hold>1.3){rejected.push({kind,observationIds:ids,reason:"incoherent_two_sided_price_hold"});markCommon(group[0].c,kind,"incoherent_two_sided_price_hold",ids);continue;}
-        const destination=["draftkings","betmgm"].includes(base.book)?retailPricePairs:pricePairs;
+        const destination=retailBooks.has(base.book)?retailPricePairs:pricePairs;
         destination.push({...base,kind:"price",first:{...side(a.c,first.line,first.american_price),priceAmerican:first.american_price,
           decimalPrice:first.decimal_price,noVigProbability:first.no_vig_probability},second:{...side(b.c,second.line,second.american_price),
           priceAmerican:second.american_price,decimalPrice:second.decimal_price,noVigProbability:second.no_vig_probability}});
