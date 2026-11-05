@@ -12,7 +12,7 @@ export function cbbCurrentProviderQuotes(rows:CbbOdds[],game:CbbGame,at:string,r
   return normalizeCbbOdds(rows,{gameId:game.id,startsAt:game.date,asOf:at,fetchedAt:at,phase:"current"}).quotes
     .filter(q=>!isBlockedSportsbook(q.sportsbook)&&Number.isFinite(bookPriorityRank(q.sportsbook))&&
       Date.parse(at)-Date.parse(q.providerObservedAt)<=3600_000)
-    .map(q=>({...q,provider:"balldontlie" as const,...(requestedAt?{requestedAt}:{})}));
+    .map(q=>({...q,provider:"balldontlie" as const,providerEventId:String(q.gameId),...(requestedAt?{requestedAt}:{})}));
 }
 export function resolveCbbCurrentProviderQuotes(primary:CbbQuote[],rows:CbbOdds[],game:CbbGame,at:string){
   return mergeCbbCurrentSourceQuotes([...primary,...cbbCurrentProviderQuotes(rows,game,at)],game.id,at);

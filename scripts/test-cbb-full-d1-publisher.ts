@@ -103,6 +103,27 @@ async function main(){
     theOddsApiReader,provider,owls:outageOwls,trainingGames:[],db,fetcher,loadSchedule:async()=>schedule,saveSnapshot,canonicalHistoryReader,fallbackOdds:[]});
   assert.equal(outage.published,65);assert.ok(outage.providerWarnings.includes("Owls current odds request failed"));
   assert.ok(outage.currentSourceCoverage.quotesByProvider.the_odds_api>0);
+  // Free BDL named-book coverage is checked even when retail already covers
+  // all three markets, before the paid board fallback is considered.
+  stored.clear();for(const [key,value] of beforeConnected)stored.set(key,value);
+  // Explicit synthetic complete-pair control; not an actual offered quote.
+  const bdlRow={id:1,game_id:quoteGame.id,vendor:"pinnacle",updated_at:sourceCapture.capturedAt,
+    moneyline_home_odds:-200,moneyline_away_odds:170,spread_home_value:-4.5,spread_away_value:4.5,
+    spread_home_odds:-110,spread_away_odds:-110,total_value:150.5,total_over_odds:-110,total_under_odds:-110};
+  let bdlOddsReads=0,unneededPaidReads=0;
+  const retailEvent={sport:"ncaab",commence_time:quoteGame.date,home_team:quoteGame.home_team.full_name,away_team:quoteGame.visitor_team.full_name,
+    bookmakers:[{key:"draftkings",last_update:sourceCapture.capturedAt,markets:[
+      {key:"h2h",outcomes:[{name:quoteGame.home_team.full_name,price:-200},{name:quoteGame.visitor_team.full_name,price:170}]},
+      {key:"spreads",outcomes:[{name:quoteGame.home_team.full_name,price:-110,point:-4.5},{name:quoteGame.visitor_team.full_name,price:-110,point:4.5}]},
+      {key:"totals",outcomes:[{name:"Over",price:-110,point:150.5},{name:"Under",price:-110,point:150.5}]}]}]};
+  const retailOwls={odds:async()=>({body:{success:true,data:[retailEvent]}}),
+    splits:async()=>({body:{success:true,data:[]}})} as unknown as OwlsInsightClient;
+  const singleProvider={gamesForDates:async()=>[quoteGame],odds:async()=>{bdlOddsReads++;return [bdlRow];},calls:0} as unknown as CbbBallDontLieClient;
+  const freeFirst=await refreshCbbMemberBoard({anchorDate:day,season:2026,now:sourceCapture.capturedAt,bdlKey:"offline",owlsKey:"offline",theOddsApiKey:"dummy",
+    theOddsApiReader:async()=>{unneededPaidReads++;throw Error("paid source must not be called");},provider:singleProvider,owls:retailOwls,
+    trainingGames:[],db,fetcher,loadSchedule:async()=>schedule,saveSnapshot,canonicalHistoryReader});
+  assert.equal(bdlOddsReads,1);assert.equal(unneededPaidReads,0);assert.equal(freeFirst.currentSourceCoverage.theOddsApiStatus,"not_needed");
+  assert.equal(freeFirst.currentSourceCoverage.quotesByProvider.balldontlie,3);
   // Restore only this in-memory harness before earlier-clock lifecycle cases.
   stored.clear();for(const [key,value] of beforeConnected)stored.set(key,value);
   const tbd=source.games.find(g=>g.id===10882930)!;

@@ -6,7 +6,7 @@ const at="2026-11-02T13:00:00Z",game={id:1,date:"2026-11-03T00:00:00Z"}as CbbGam
 const row={id:1,game_id:1,vendor:"fanatics",updated_at:at,moneyline_home_odds:-100000,moneyline_away_odds:15000,
   spread_home_value:-40.5,spread_away_value:40.5,spread_home_odds:-110,spread_away_odds:-110,total_value:150.5,total_over_odds:-110,total_under_odds:-110}as CbbOdds;
 const quotes=mergeCbbCurrentProviderQuotes([],[row],game,at);
-assert.equal(quotes.length,3);assert.equal(quotes[0].firstPrice,-100000);assert.equal(quotes[0].provider,"balldontlie");
+assert.equal(quotes.length,3);assert.equal(quotes[0].firstPrice,-100000);assert.equal(quotes[0].provider,"balldontlie");assert.equal(quotes[0].providerEventId,"1");
 assert.equal(mergeCbbCurrentProviderQuotes([],[{...row,game_id:2}],game,at).length,0,"exact BDL game ID required");
 assert.equal(mergeCbbCurrentProviderQuotes([],[{...row,updated_at:"2026-11-01T13:00:00Z"}],game,at).length,0,"stale fallback cannot fill a fresh market");
 assert.equal(mergeCbbCurrentProviderQuotes([],[{...row,vendor:"kalshi"}],game,at).length,0);

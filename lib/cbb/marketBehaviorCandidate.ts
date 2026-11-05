@@ -154,7 +154,7 @@ function chooseAxis(episodes:CbbBehaviorEpisode[],axis:"margin"|"total",base:Cbb
     first??={before:candidate.anchor,after:candidate.current,delta:candidate.delta,direction:candidate.direction};
     return [{id:`${candidate.book}:${candidate.market}`,effect:effect(candidate).scoreDelta,observedDirection:candidate.direction,
       beforeSourceAt:Date.parse(first.before.providerObservedAt),afterSourceAt:Date.parse(first.after.providerObservedAt),
-      beforeEarliest:cbbEvidenceReceiptBounds(first.before).earliest,beforeAvailableBy:cbbEvidenceAvailableAt(first.before),afterAvailableBy:cbbEvidenceAvailableAt(first.after),
+      beforeEarliest:Number.isFinite(cbbEvidenceReceiptBounds(first.before).earliest)?cbbEvidenceReceiptBounds(first.before).earliest:null,beforeAvailableBy:cbbEvidenceAvailableAt(first.before),afterAvailableBy:cbbEvidenceAvailableAt(first.after),
       currentSourceAt:Date.parse(candidate.current.providerObservedAt),currentAvailableBy:cbbEvidenceAvailableAt(candidate.current),
       repricedSourceAt:moving.length?Date.parse(moving.at(-1)!.after.providerObservedAt):null,
       currentDirection:stream.recentDirection,resolved:["ongoing","resumed","reversed"].includes(stream.currentResolution)&&stream.recentDirection===candidate.direction,
@@ -408,8 +408,8 @@ export function assertCbbMarketBehaviorGradeReceipt(input:Parameters<typeof grad
     input.forecast.release!==receipt.modelRelease||input.forecast.gameId!==receipt.anchors.gameId||
     input.asOf!==receipt.evaluatedAt||input.forecast.asOf!==receipt.evaluatedAt||
     !receipt.excludedFamilies.includes(cbbBookFamily(input.target.sportsbook))||
-    !receipt.evaluatedTargets.some(q=>semanticKey([q.gameId,q.market,q.sportsbook,q.line,q.firstPrice,q.secondPrice,q.providerObservedAt,q.fetchedAt,q.phase,(q as CbbQuote&{requestedAt?:string}).requestedAt??null,q.provider??null,(q as AttestedQuote).orientationVerified??null,q.canonicalReceipt??null])===
-      semanticKey([input.target.gameId,input.target.market,input.target.sportsbook,input.target.line,input.target.firstPrice,input.target.secondPrice,input.target.providerObservedAt,input.target.fetchedAt,input.target.phase,(input.target as CbbQuote&{requestedAt?:string}).requestedAt??null,input.target.provider??null,(input.target as AttestedQuote).orientationVerified??null,input.target.canonicalReceipt??null]))||
+    !receipt.evaluatedTargets.some(q=>semanticKey([q.gameId,q.market,q.sportsbook,q.line,q.firstPrice,q.secondPrice,q.providerObservedAt,q.fetchedAt,q.phase,(q as CbbQuote&{requestedAt?:string}).requestedAt??null,q.provider??null,q.providerEventId??null,(q as AttestedQuote).orientationVerified??null,q.canonicalReceipt??null])===
+      semanticKey([input.target.gameId,input.target.market,input.target.sportsbook,input.target.line,input.target.firstPrice,input.target.secondPrice,input.target.providerObservedAt,input.target.fetchedAt,input.target.phase,(input.target as CbbQuote&{requestedAt?:string}).requestedAt??null,input.target.provider??null,input.target.providerEventId??null,(input.target as AttestedQuote).orientationVerified??null,input.target.canonicalReceipt??null]))||
     semanticKey(score(input.forecast))!==semanticKey(receipt.finalScore))throw new Error("CBB grade/market score receipt mismatch");
 }
 export function gradeCbbMarketBehavior(input:Parameters<typeof gradeCbbProvisional>[0],receipt:CbbMarketBehaviorReceipt){

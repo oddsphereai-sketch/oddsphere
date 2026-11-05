@@ -1,3 +1,4 @@
+import {expandCbbMarketBehaviorPathStream} from "../lib/cbb/marketBehaviorPath";
 import assert from "node:assert/strict";
 import type { CbbGame } from "../lib/cbb/types";
 import type { CbbBallDontLieClient } from "../lib/cbb/ballDontLie";
@@ -66,7 +67,10 @@ async function main(){
   const episode=receipt.episodes.find(e=>e.book==="circa"&&e.market==="spread")!;
   assert.ok(episode,"the previous genuine pair remains the source anchor");
   assert.equal(episode.current.fetchedAt,"2026-10-29T21:59:02Z");
-  assert.equal(episode.flow?.fetchedAt,"2026-10-29T21:59:01Z","the split retains its own response completion before odds and fallback");
+  assert.equal(episode.flow,undefined,"overlapping in-flight requests cannot invent a later response to received pressure");
+  const nativeStream=receipt.pathTape.streams.find(stream=>stream.book==="circa"&&stream.market==="spread")!;
+  assert.equal(expandCbbMarketBehaviorPathStream(receipt.pathTape,nativeStream).flows[0].fetchedAt,"2026-10-29T21:59:01Z",
+    "the original split response is still retained exactly for interpretation at the decision");
   assert.equal(receipt.evaluatedAt,"2026-10-29T22:00:30Z","the decision can advance independently after fallback");
   assert.ok(receipt.evaluatedTargets.every(q=>q.requestedAt==="2026-10-29T21:58:30Z"));
   assert.equal(clockCalls,5);assert.equal(priceCalls,2);assert.equal(splitCalls,2);assert.equal(result.owlsCalls,2);

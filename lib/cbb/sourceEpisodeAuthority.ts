@@ -3,7 +3,7 @@
 export type CbbSourceEpisode = {
   id:string; effect:number; observedDirection:-1|0|1;
   beforeSourceAt:number; afterSourceAt:number;
-  beforeEarliest:number;beforeAvailableBy:number; afterAvailableBy:number;
+  beforeEarliest:number|null;beforeAvailableBy:number; afterAvailableBy:number;
   currentSourceAt:number; currentAvailableBy:number;
   currentDirection:-1|0|1; resolved:boolean;
   qualifiedReaction?:boolean;
@@ -22,10 +22,10 @@ const same=(a:number,b:number)=>Math.abs(a-b)<=1e-7;
 
 export function selectCbbSourceEpisode(rows:readonly CbbSourceEpisode[]):CbbSourceAuthority{
   if(!rows.length||new Set(rows.map(row=>row.id)).size!==rows.length||rows.some(row=>
-    !row.id||![row.effect,row.beforeSourceAt,row.afterSourceAt,row.beforeEarliest,row.beforeAvailableBy,row.afterAvailableBy,
+    !row.id||![row.effect,row.beforeSourceAt,row.afterSourceAt,row.beforeAvailableBy,row.afterAvailableBy,
       row.currentSourceAt,row.currentAvailableBy].every(Number.isFinite)||
     row.beforeSourceAt>=row.afterSourceAt||row.afterSourceAt>row.currentSourceAt||
-    row.beforeEarliest>row.beforeAvailableBy||row.beforeAvailableBy>row.afterAvailableBy||row.afterAvailableBy>row.currentAvailableBy||
+    row.beforeEarliest!==null&&(!Number.isFinite(row.beforeEarliest)||row.beforeEarliest>row.beforeAvailableBy)||row.beforeAvailableBy>row.afterAvailableBy||row.afterAvailableBy>row.currentAvailableBy||
     row.repricedSourceAt!=null&&(!Number.isFinite(row.repricedSourceAt)||row.repricedSourceAt>row.currentSourceAt)))
     throw new Error("CBB source authorship requires distinct ordered economic episodes");
   const result=(chosen:CbbSourceEpisode,reason:CbbSourceAuthority["reason"],followers:string[]=[],opponents:string[]=[]):CbbSourceAuthority=>
@@ -41,7 +41,7 @@ export function selectCbbSourceEpisode(rows:readonly CbbSourceEpisode[]):CbbSour
     // An old source cannot be called superseded if it was observed again
     // after the later episode began. A last-move timestamp alone is insufficient.
     const later=rows.filter(row=>row.resolved&&row.currentDirection===row.observedDirection&&rows.every(other=>other===row||
-      other.currentSourceAt<row.beforeSourceAt&&other.currentAvailableBy<=row.beforeEarliest));
+      row.beforeEarliest!==null&&other.currentSourceAt<row.beforeSourceAt&&other.currentAvailableBy<=row.beforeEarliest));
     if(later.length===1)return result(later[0],"later_episode_supersedes_old_observations",[],rows.filter(row=>row!==later[0]).map(row=>row.id));
     return {status:"unresolved",reason:"current_source_opposition",selectedId:null,authorIds:[],followerIds:[],opposingIds:rows.map(row=>row.id).sort()};
   }
@@ -49,7 +49,7 @@ export function selectCbbSourceEpisode(rows:readonly CbbSourceEpisode[]):CbbSour
   // polling times alone do not prove that A led B. Use both native and arrival
   // ordering, without manufacturing precision inside a concurrent collection.
   const leaders=rows.filter(row=>row.resolved&&row.currentDirection===row.observedDirection&&rows.every(other=>other===row||
-    row.afterSourceAt<=other.beforeSourceAt&&row.afterAvailableBy<=other.beforeEarliest));
+    other.beforeEarliest!==null&&row.afterSourceAt<=other.beforeSourceAt&&row.afterAvailableBy<=other.beforeEarliest));
   if(leaders.length===1)return result(leaders[0],"observed_leader_with_followers",rows.filter(row=>row!==leaders[0]).map(row=>row.id));
   const reacting=rows.filter(row=>row.qualifiedReaction&&row.resolved&&row.currentDirection===row.observedDirection);
   if(reacting.length===1)return result(reacting[0],"qualified_source_response");

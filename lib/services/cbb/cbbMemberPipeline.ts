@@ -134,14 +134,14 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   if(needsFallback.length){
     try{
       const quoteDates=[...new Set(needsFallback.map(game=>game.date.slice(0,10)))];
-      const bdlRequestedAt=nowClock();
+      const bdlRequestedAt=args.fallbackOdds===undefined&&typeof provider.odds==="function"?nowClock():undefined;
       const rows=args.fallbackOdds??(typeof provider.odds==="function"?await provider.odds(quoteDates,"current"):[]);
       asOf=nowClock();
       for(const game of candidateGames.filter(game=>Date.parse(game.date)>Date.parse(asOf)&&!prior.get(game.id)?.snapshot.lockedAt)){
         const primary=namedById.get(game.id)!;
         // Retain every complete transport pair until the one final three-source
         // merge. A preliminary conflict must not be erased and revived later.
-        primary.quotes.push(...cbbCurrentProviderQuotes(rows,game,asOf,args.fallbackOdds===undefined?bdlRequestedAt:undefined));
+        primary.quotes.push(...cbbCurrentProviderQuotes(rows,game,asOf,bdlRequestedAt));
       }
     }catch(error){providerWarnings.push(`BDL odds gap fill unavailable: ${error instanceof Error?error.message:"source failure"}`);}
   }
