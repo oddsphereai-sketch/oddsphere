@@ -1,0 +1,65 @@
+{
+  "auditDate": "2026-11-04",
+  "release": "daily_edge_professional_opposition_audit_2026_11_04_r2_causal_split_receipt_timing",
+  "scope": "read_only_operator_semantic_classification",
+  "behaviorChanges": {
+    "prediction": false,
+    "projection": false,
+    "probability": false,
+    "pick": false,
+    "grade": false,
+    "stake": false,
+    "price": false,
+    "lockedPayload": false
+  },
+  "classificationContract": {
+    "liveUnexplained": "Strong displayed professional-book opposition remains a review finding when no structured reader state or exact stored-posture explanation accounts for it.",
+    "explainedPosture": "Exact stored support, resistance, held-resistance, conflict or unresolved-reader explanations clear the missing-interpretation finding without claiming the raw split predicts the game.",
+    "lateEvidence": "Professional split evidence first available after the prediction receipt is timing context, not evidence the earlier decision ignored an available signal. NBA evidence remains pending through the next exact scheduled writer start plus its bounded ten-minute completion window; it becomes a live finding if still unincorporated afterward or at the lock boundary.",
+    "immutableLocked": "An unexplained immutable locked card is reported separately as historical context and never relabeled as a current mutable product gap.",
+    "arbitraryCopy": "Generic market prose cannot suppress the finding."
+  },
+  "liveReadOnlyProof": {
+    "checkedAtUtc": "2026-11-05T00:54:07Z",
+    "providerCalls": 0,
+    "productionWrites": 0,
+    "nhl": {
+      "games": 4,
+      "markets": 12,
+      "strongOppositionIssues": 0
+    },
+    "nba": {
+      "games": 53,
+      "markets": 159,
+      "immutableLockedContexts": 4,
+      "lateEvidencePending": 0,
+      "liveUnexplainedGaps": 0,
+      "naturalRefreshProof": {
+        "beforeAtUtc": "2026-11-05T00:43:59Z",
+        "predictionGeneratedAtUtc": "2026-11-05T00:16:22.353Z",
+        "professionalEvidenceAtUtc": "2026-11-05T00:26:34.480Z",
+        "authoritativeRefreshDueAtUtc": "2026-11-05T00:42:00.000Z",
+        "refreshWindowEndsAtUtc": "2026-11-05T00:52:00.000Z",
+        "beforePending": [
+          "TOR@DEN total",
+          "TOR@DEN spread"
+        ],
+        "afterAtUtc": "2026-11-05T00:54:07Z",
+        "afterPending": [],
+        "afterLiveUnexplained": [],
+        "manualWriterInvocations": 0
+      }
+    }
+  },
+  "boardImpact": {
+    "promotions": 0,
+    "demotions": 0,
+    "removals": 0
+  },
+  "tests": [
+    "node --import tsx scripts/test-daily-edge-professional-opposition-audit.ts",
+    "npx tsc --noEmit --pretty false",
+    "npm run verify:model-change",
+    "node scripts/verify-integration-safety.mjs --base-ref=origin/main"
+  ]
+}
