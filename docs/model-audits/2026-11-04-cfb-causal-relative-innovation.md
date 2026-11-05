@@ -86,6 +86,8 @@ only to future-unlocked rows.
 ## Publication status
 
 Not published. The valid same-input board-impact comparison is complete. Focused
-checks, `npm run verify:model-change` and integration safety must be rerun on the
-rebased commit before handoff. Rollback is the complete R59/R41/R7 family; never
-rewrite a row already locked under either release.
+checks, TypeScript, `npm run verify:model-change` and integration safety pass on
+fresh production base `f69328f9`. That merge changed no CFB runtime, test or
+audit-operator input file, so the hash-stamped same-input provider replay remains
+the applicable result and was not needlessly repeated. Rollback is the complete
+R59/R41/R7 family; never rewrite a row already locked under either release.
