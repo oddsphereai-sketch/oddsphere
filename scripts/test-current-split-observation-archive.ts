@@ -4,9 +4,9 @@ import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { createClient } from "@supabase/supabase-js";
 import { canonicalSplitJson, currentSplitEventDate, prepareArchivedCurrentSplitFeed,
-  iterateCurrentSplitObservations, splitArchiveBatches } from "../lib/providers/real_api/currentSplitObservationArchive";
+  iterateCurrentSplitObservations, splitArchiveBatches, readOriginalCurrentSplitCapture } from "../lib/providers/real_api/currentSplitObservationArchive";
 import { hydrateCurrentSplitHistory, currentSplitReadDates, validateSharpApiCurrentSplitFeed,
-  applySharpApiCurrentSplitOverlay, __TEST__, type SharpApiCurrentSplitFeed } from "../lib/providers/real_api/sharpApiCurrentSplits";
+  applySharpApiCurrentSplitOverlay, prepareCurrentSplitCapture, __TEST__, type SharpApiCurrentSplitFeed } from "../lib/providers/real_api/sharpApiCurrentSplits";
 
 async function main() {
   const url = new URL(process.env.CURRENT_SPLIT_ARCHIVE_TEST_URL ?? "");
@@ -17,7 +17,7 @@ async function main() {
     const target = new URL(input instanceof Request ? input.url : String(input));
     assert.equal(target.origin, url.origin);
     const headers = new Headers(init?.headers); headers.delete("authorization");
-    if (target.pathname.endsWith("/archive_current_split_observations")) requestBytes.push(Buffer.byteLength(String(init?.body)));
+    if (/\/(archive_current_split_observations|archive_current_split_capture_part|save_current_split_group_history)$/.test(target.pathname)) requestBytes.push(Buffer.byteLength(String(init?.body)));
     target.pathname = target.pathname.replace(/^\/rest\/v1\//, "/");
     return fetch(target, { ...init, headers });
   } } });
@@ -31,8 +31,9 @@ async function main() {
   const current = { ...base, rows: [row("20261107", 1)] };
   const previousJson = JSON.stringify(previous);
   const merged = __TEST__.mergeCurrentSplitFeeds(previous, current);
-  const hot = await prepareArchivedCurrentSplitFeed({ client: db, previous, current, merged });
+  const hot = await prepareCurrentSplitCapture(previous, current, db);
   assert.equal(JSON.stringify(previous), previousJson, "archiving never mutates its original receipt");
+  assert.equal(await readOriginalCurrentSplitCapture(db, createHash("sha256").update(previousJson).digest("hex")), previousJson, "original baseline capture restores every serialized byte");
   assert.equal(hot.rows.length, 3, "past event is archived, future and unknown-date rows stay hot");
   assert.ok(validateSharpApiCurrentSplitFeed(hot, "cfb"));
   assert.equal(currentSplitEventDate({ event_id: "invalid-20261345" }), null);
@@ -57,17 +58,26 @@ async function main() {
   const partials = Array.from({ length: 120 }, (_, i) => ({ ...row("20261027", i + 1), moneyline: { handle_pct: { away: null, home: null }, bets_pct: { away: 53, home: 47 } } }));
   const later = { ...base, rows: partials };
   const legacyLater = __TEST__.mergeCurrentSplitFeeds(merged, later);
-  const hotLater = await prepareArchivedCurrentSplitFeed({ client: db, previous: hot, current: later,
-    merged: __TEST__.mergeCurrentSplitFeeds(hot, later) });
+  const hotLater = await prepareCurrentSplitCapture(hot, later, db);
   assert.deepEqual((await hydrateCurrentSplitHistory(hotLater, undefined, db)).rows, legacyLater.rows, "cold restore retains the same last-complete fallback through >96 partial captures");
   const all = []; for await (const observation of iterateCurrentSplitObservations(db, hotLater)) all.push(observation.payload);
   const hashes = new Set(all.map((r) => createHash("sha256").update(canonicalSplitJson(r)).digest("hex")));
   for (const source of [...previous.rows, ...current.rows, ...partials]) assert(hashes.has(createHash("sha256").update(canonicalSplitJson(source)).digest("hex")), "every original and new observation remains available for research");
   assert(all.length > legacyLater.rows.length, "research retains observations beyond the display-history cap");
   const beforeRetry = all.length;
-  await prepareArchivedCurrentSplitFeed({ client: db, previous: hotLater, current: later, merged: hotLater });
+  await prepareCurrentSplitCapture(hotLater, later, db);
   let afterRetry = 0; for await (const saved of iterateCurrentSplitObservations(db, hotLater)) { assert(saved.id > 0); afterRetry++; }
   assert.equal(afterRetry, beforeRetry, "retries append no duplicate or replacement evidence");
+
+  const complete = { ...base, rows: [row("20261027", 121)] };
+  const expectedComplete = __TEST__.mergeCurrentSplitFeeds(legacyLater, complete);
+  const hotComplete = await prepareCurrentSplitCapture(hotLater, complete, db);
+  const correction = { ...base, rows: [{ ...partials.at(-1)!, fetched_at: complete.rows[0]!.fetched_at, _correction_available_at: "2026-11-05T12:01:00Z" }] };
+  const expectedCorrection = __TEST__.mergeCurrentSplitFeeds(expectedComplete, correction);
+  const hotCorrection = await prepareCurrentSplitCapture(hotComplete, correction, db);
+  const retainedCorrection = await hydrateCurrentSplitHistory(hotCorrection, undefined, db);
+  assert.deepEqual(retainedCorrection.rows, expectedCorrection.rows, "historical reads cannot resurrect an older complete observation already evicted by the existing display rules");
+  assert(!retainedCorrection.rows.some((r) => r.event_id === previous.rows[0]!.event_id && r.fetched_at === previous.rows[0]!.fetched_at));
 
   const locked = { date: "2026-10-27", sport: "cfb", games: [{ id: "locked", awayTeam: "Away", homeTeam: "Home", gameStartAt: "2026-10-27T20:00:00Z", lockState: "locked", lockedAt: "2026-10-27T19:00:00Z", markets: { moneyline: { exactLockedEvidence: [1, 2, 3] } } }] };
   const lockedJson = JSON.stringify(locked);
@@ -77,11 +87,13 @@ async function main() {
   if (process.argv[2]) {
     const captured = JSON.parse(readFileSync(process.argv[2], "utf8"));
     const entry = Array.isArray(captured) ? captured.find((r) => r.snapshot_key.includes("::cfb::")) : captured;
-    const payload = entry.payload.encoding === "gzip-base64" ? JSON.parse(gunzipSync(Buffer.from(entry.payload.payload, "base64"))) : entry.payload;
+    const payload = entry.payload.encoding === "gzip-base64" ? JSON.parse(gunzipSync(Buffer.from(entry.payload.payload, "base64")).toString("utf8")) : entry.payload;
     const fixture = validateSharpApiCurrentSplitFeed(payload, "cfb"); assert(fixture);
     const next = { ...fixture, rows: fixture.rows.slice(-5).map((r) => ({ ...r, _offline_archive_parity_test: true })) };
     const expected = __TEST__.mergeCurrentSplitFeeds(fixture, next);
-    const prepared = await prepareArchivedCurrentSplitFeed({ client: db, previous: fixture, current: next, merged: expected });
+    const prepared = await prepareCurrentSplitCapture(fixture, next, db);
+    const originalJson = JSON.stringify(fixture);
+    assert.equal(await readOriginalCurrentSplitCapture(db, createHash("sha256").update(originalJson).digest("hex")), originalJson);
     const hydrated = await hydrateCurrentSplitHistory(prepared, undefined, db);
     // Synthetic scenario uses a distinct event identity; compare only native
     // fixture identities so this shared disposable archive adds no test inputs.

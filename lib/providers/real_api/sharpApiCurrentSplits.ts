@@ -9,7 +9,7 @@ import type { MarketSplitDisplaySection } from "@/lib/types/domain/Recommendatio
 import type { Sport } from "@/lib/types/domain/Sport";
 import { revalidateTag, unstable_cache } from "next/cache";
 import { decodeCurrentSplitFeedTransport, encodeCurrentSplitFeedTransport } from "./currentSplitFeedTransport";
-import { CURRENT_SPLIT_ARCHIVE_PROTOCOL, iterateCurrentSplitObservations,
+import { CURRENT_SPLIT_ARCHIVE_PROTOCOL, currentSplitGroupKey, iterateCurrentSplitGroupHistory,
   prepareArchivedCurrentSplitFeed, splitArchiveState } from "./currentSplitObservationArchive";
 import type { supabase as SupabaseClient } from "@/lib/db/supabase";
 
@@ -155,8 +155,7 @@ async function readDurableCurrentSplits(
           rows: owls.rows,
         };
         const { supabase } = await import("@/lib/db/supabase");
-        const feed = await prepareArchivedCurrentSplitFeed({ client: supabase, previous: validatedStored, current,
-          merged: mergeCurrentSplitFeeds(validatedStored, current) });
+        const feed = await prepareCurrentSplitCapture(validatedStored, current, supabase);
         await upsertLabResponseSnapshot({
           snapshotKey: key,
           kind: "daily_edge",
@@ -205,18 +204,51 @@ export async function readStoredSharpApiCurrentSplits(
 /** No date scope retains the historical API contract. Site callers pass exact
  * game dates; research exports can stream every version from the archive. */
 export async function hydrateCurrentSplitHistory(feed: SharpApiCurrentSplitFeed, eventDates?: readonly string[],
-  client?: typeof SupabaseClient): Promise<SharpApiCurrentSplitFeed> {
+  client?: typeof SupabaseClient, groupKeys?: readonly string[]): Promise<SharpApiCurrentSplitFeed> {
   const state = splitArchiveState(feed);
   if (!state) return feed;
-  const coldDates = eventDates?.filter((date) => date < state.hotFromDate);
+  const coldDates = groupKeys ? undefined : eventDates?.filter((date) => date < state.hotFromDate);
   if (coldDates?.length === 0) return feed;
   const db = client ?? (await import("@/lib/db/supabase")).supabase;
   const history: Json[] = [];
-  for await (const row of iterateCurrentSplitObservations(db, feed, coldDates)) {
-    history.push(row.payload);
+  const groupOrders = { ...state.groupOrders }, coldGroups = new Set(state.coldGroups);
+  for await (const row of iterateCurrentSplitGroupHistory(db, feed, coldDates, groupKeys)) {
+    const snapshot = validateSharpApiCurrentSplitFeed(row.payload, feed.sport);
+    if (!snapshot || snapshot.release !== feed.release || snapshot.source !== feed.source
+      || snapshot.rows.some((item) => currentSplitGroupKey(item) !== row.group_key)) throw new Error("Retained split history receipt is invalid");
+    history.push(...snapshot.rows);
+    groupOrders[row.group_key] = row.first_observation_id; coldGroups.add(row.group_key);
   }
   const historical = { ...feed, rows: history };
-  return mergeCurrentSplitFeeds(historical, feed);
+  // The persisted index is already the unchanged trim's result. Do not run
+  // another trim merely to read it: an explicit legacy recovery can retain an
+  // additional pre-lock observation. Current hot values retain key precedence.
+  const groups = new Map<string, Json[]>();
+  for (const row of history) { const key = splitRowKey(row); groups.set(key, [...(groups.get(key) ?? []), row]); }
+  const hotGroups = new Map<string, Json[]>();
+  for (const row of feed.rows) { const key = splitRowKey(row); hotGroups.set(key, [...(hotGroups.get(key) ?? []), row]); }
+  for (const [key, rows] of hotGroups) {
+    const retained = groups.get(key);
+    if (!retained) { groups.set(key, rows); continue; }
+    const replacements = new Map(rows.map((row) => [splitObservationKey(row), row]));
+    const retainedKeys = new Set(retained.map(splitObservationKey));
+    groups.set(key, [...retained.map((row) => replacements.get(splitObservationKey(row)) ?? row),
+      ...rows.filter((row) => !retainedKeys.has(splitObservationKey(row)))]);
+  }
+  for (const key of groups.keys()) if (!Number.isSafeInteger(groupOrders[key]) || groupOrders[key] <= 0) throw new Error("Retained split history group order is missing");
+  const ordered = [...groups].sort(([a], [b]) => {
+    if (!Number.isSafeInteger(groupOrders[a]) || !Number.isSafeInteger(groupOrders[b])) throw new Error("Retained split history group order is missing");
+    return groupOrders[a] - groupOrders[b];
+  });
+  return { ...historical, rows: ordered.flatMap(([, rows]) => rows), observationArchive: { ...state, groupOrders, coldGroups: [...coldGroups] } } as SharpApiCurrentSplitFeed;
+}
+
+export async function prepareCurrentSplitCapture(previous: SharpApiCurrentSplitFeed | null, current: SharpApiCurrentSplitFeed,
+  client?: typeof SupabaseClient): Promise<SharpApiCurrentSplitFeed> {
+  const db = client ?? (await import("@/lib/db/supabase")).supabase;
+  const prior = previous && splitArchiveState(previous)
+    ? await hydrateCurrentSplitHistory(previous, undefined, db, [...new Set(current.rows.map(currentSplitGroupKey))]) : previous;
+  return prepareArchivedCurrentSplitFeed({ client: db, previous: prior, current, merged: mergeCurrentSplitFeeds(prior, current) });
 }
 
 export function currentSplitReadDates(slateDate: string, starts: readonly (string | null | undefined)[]): string[] {
@@ -711,7 +743,7 @@ function mergeCurrentSplitFeeds(
 }
 
 function splitRowKey(row: Json): string {
-  return `${text(row.event_id) ?? ""}::${normalize(text(row.sportsbook) ?? "")}`;
+  return currentSplitGroupKey(row);
 }
 
 function splitObservationKey(row: Json): string {

@@ -46,7 +46,7 @@ async function main() {
       return Response.json({ sport: "ncaab", data: [{ event_id: "ncaab:New@Game-20261106", away_team: "New", home_team: "Game", splits: [{ book: "circa", as_of: feed.fetchedAt, moneyline: { away_handle_pct: 61, home_handle_pct: 39 } }] }] });
     }
     assert.equal(url.hostname, "127.0.0.1", "the test cannot access any live database");
-    if (url.pathname === "/rest/v1/rpc/archive_current_split_observations") return Response.json({ code: "PGRST202", message: "Archive migration is not installed" }, { status: 404 });
+    if (/\/rpc\/archive_current_split_(observations|capture_part)$/.test(url.pathname)) return Response.json({ code: "PGRST202", message: "Archive migration is not installed" }, { status: 404 });
     if (url.pathname === "/rest/v1/lab_response_snapshots") return Response.json([{ payload: stored, generated_at: feed.fetchedAt, expires_at: feed.fetchedAt, stale_until: feed.fetchedAt }]);
     assert.equal(url.pathname, "/rest/v1/rpc/upsert_lab_response_snapshot");
     const row = JSON.parse(String(init?.body));
