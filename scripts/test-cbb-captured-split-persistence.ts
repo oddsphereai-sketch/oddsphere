@@ -109,7 +109,7 @@ async function main(){
   assert.equal(mergeDk(dk,response,[dto,duplicate]).games[0].markets.moneyline.sportsbookSplits,null,"selected-game reads retain the full duplicate-fixture guard");
   const futureMarket={...dk,games:dk.games.map(g=>({...g,markets:{moneyline:{...g.markets.moneyline!,observedAt:at}}}))};
   assert.equal(mergeDk(futureMarket).games[0].markets.moneyline.sportsbookSplits,null,"a market cannot postdate its page receipt");
-  assert.equal(mergeDk(dk,enriched).games[0].markets.moneyline.sportsbookSplits?.sourceBook,"circa","fresh native Circa keeps priority");
+  assert.equal(mergeDk(dk,enriched).games[0].markets.moneyline.sportsbookSplits?.sourceBook,"draftkings_network","fresh DraftKings silently owns unlocked member display");
   assert.equal(mergeDk(dk,{...response,games:[retained]}).games[0].markets.moneyline.sportsbookSplits?.sourceBook,"draftkings_network","fresh DKN replaces retained stale source without renewing it");
   const lockedBoard={...response,games:[frozen.record.memberGame]};
   assert.strictEqual(mergeDk(dk,lockedBoard).games[0],lockedBoard.games[0],"locked reader preserves exact payload object");

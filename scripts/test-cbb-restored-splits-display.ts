@@ -25,10 +25,10 @@ const primary=(input:DailyEdgeResponse)=>JSON.stringify({...input,games:input.ga
   Object.entries(game.markets).map(([key,value])=>{const {sportsbookSplits,sharpBookAvailability,...unchanged}=value;void sportsbookSplits;void sharpBookAvailability;return[key,unchanged];}))}))});
 assert.equal(primary(restored),primary(board),"forecast, exact price, grade, stake and model evidence must remain unchanged");
 
-assert.equal(render([...pair("circa","2026-10-31T13:00:00Z"),...pair()]).games[0].markets.moneyline.sportsbookSplits?.sourceBook,"circa");
+assert.equal(render([...pair("circa","2026-10-31T13:00:00Z"),...pair()]).games[0].markets.moneyline.sportsbookSplits?.sourceBook,"draftkings");
 assert.equal(render([...pair("circa","2026-10-31T09:00:00Z"),...pair()]).games[0].markets.moneyline.sportsbookSplits?.sourceBook,"draftkings");
 const preferred=structuredClone(restored);preferred.games[0].markets.moneyline.sportsbookSplits={...section,sourceBook:"circa"};
-assert.equal(render(pair(),preferred).games[0].markets.moneyline.sportsbookSplits?.sourceBook,"circa","fresh stored Circa retains priority");
+assert.equal(render(pair(),preferred).games[0].markets.moneyline.sportsbookSplits?.sourceBook,"draftkings","fresh DraftKings silently replaces Circa for unlocked display");
 for(const rows of [
   pair().slice(0,1),
   pair().map(row=>({...row,money_pct:null})),
@@ -53,5 +53,5 @@ for(const game of [
   assert.equal(JSON.stringify(input),bytes);
   assert.equal(JSON.stringify(result),bytes);
 }
-assert.equal(CBB_READER_EVIDENCE_RELEASE,"cbb_reader_evidence_2026_11_03_r10_separate_source_line_history");
+assert.equal(CBB_READER_EVIDENCE_RELEASE,"cbb_reader_evidence_2026_11_03_r11_predecision_availability");
 console.log("CBB restored named-book display: source identity, percentages, chronology, priority, immutable locks and decision neutrality passed.");

@@ -247,16 +247,14 @@ function buildSharpBookEvidence(args: {
   evaluatedAt: string;
 }): Pick<NbaMemberMarketEvidence, "sportsbookSplits" | "sharpBookAvailability"> {
   const section = (sourceBook: SharpSourceBook) => latestSourceSection({ ...args, sourceBook });
+  const draftkings = section("draftkings");
   const circa = section("circa");
-  const fallback = [section("draftkings"), section("betmgm")]
-    .filter((candidate): candidate is MarketSplitDisplaySection => candidate !== null)
-    .sort((left, right) => sectionTime(right) - sectionTime(left))[0] ?? null;
-  const circaIsStale = circa?.rows.some((row) => row.isStale === true) ?? false;
-  const displayed = circa === null
-    ? fallback
-    : circaIsStale && sectionTime(fallback) > sectionTime(circa)
-      ? fallback
-      : circa;
+  const betmgm = section("betmgm");
+  const candidates = [draftkings, circa, betmgm]
+    .filter((candidate): candidate is MarketSplitDisplaySection => candidate !== null);
+  const displayed = candidates.find((candidate) => !candidate.rows.some((row) => row.isStale === true))
+    ?? candidates.sort((left, right) => sectionTime(right) - sectionTime(left))[0]
+    ?? null;
   const rawSharp = args.rows.filter((row) =>
     row.market === args.market &&
     ["owls", "sharpapi"].includes(canonical(row.provider)) &&
