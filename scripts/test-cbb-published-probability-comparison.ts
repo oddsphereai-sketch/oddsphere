@@ -72,6 +72,8 @@ const snapshot = { release: "cbb_candidate_2026_10_29_r1_locked_board_contract",
   capturedAt: at, lockedAt: null, board } as Parameters<typeof adaptCbbProvisionalGame>[0]["snapshot"];
 const unlocked = adaptCbbProvisionalGame({ game, snapshot, homeLogo: null, awayLogo: null, now: at });
 const oldLock = adaptCbbProvisionalGame({ game, snapshot: { ...snapshot, lockedAt: lock }, homeLogo: null, awayLogo: null, now: lock });
+assert.equal(unlocked.breakdown?.sharpRead?.key, "no_data", "a board with no selected top-market evidence remains honestly no_data");
+assert.equal(oldLock.breakdown?.sharpRead?.key, "no_data", "legacy locked adapter output retains the exact prior sharp-read semantic");
 for (const key of ["moneyline", "first_inning", "total"] as const) {
   assert.equal(unlocked.markets[key].publishedProbabilityComparisonBasis, "stored_no_vig");
   assert.equal(oldLock.markets[key].publishedProbabilityComparisonBasis, undefined);

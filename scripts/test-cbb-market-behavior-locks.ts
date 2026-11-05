@@ -46,6 +46,7 @@ async function main(){
  assert.equal(initial.record.memberGame.markets.first_inning.recommendationConfidence,null,"an informational negative-EV watch has no actionable recommendation confidence");
  assert.notEqual(initial.record.memberGame.markets.first_inning.sharpStatus,"confirm");
  assert.notEqual(initial.record.memberGame.markets.first_inning.marketSignal,"market_confirmed");
+ assert.notEqual(initial.record.memberGame.breakdown?.sharpRead?.key,"no_data","a stored unlocked market read must not be described as absent");
  assert.notEqual(initial.record.memberGame.markets.first_inning.guidedWatchOut,"Professional books disagree with this side.","the corrected final side must not inherit obsolete opposition to the original independent side");
  const frozen=await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:lock},db);
  const bytes=JSON.stringify(stored);assert.equal(writes,2);

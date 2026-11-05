@@ -16,7 +16,7 @@ for(const [p,hash] of golden){
  const before=JSON.stringify({game,market});
  const html=renderToStaticMarkup(createElement(SoccerThreeWayForecast,{game,market}));
  assert.equal(createHash("sha256").update(html).digest("hex"),hash,"legacy captured forecast markup is exact after removing only the global never-stored r2 paragraph");
- for(const release of ["ucl_goals_coherent_2026_11_04_r22_current_strength_scoring_prior","epl_goals_coherent_2026_10_31_r23_partial_price_publication"]){
+ for(const release of ["ucl_goals_coherent_2026_11_04_r22_current_strength_scoring_prior","epl_goals_coherent_2026_11_04_r24_relative_path_joint_pmf"]){
   const open={...game,lockState:"open",lockedAt:null,soccerModelProvenance:{release}} as unknown as DailyEdgeGameDto;
   const current=renderToStaticMarkup(createElement(SoccerThreeWayForecast,{game:open,market}));
   assert(!current.includes("untouched final quarter"));assert(!current.includes("model-probability band won"),"an unbound historical result cannot claim current release reliability");
