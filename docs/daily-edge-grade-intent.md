@@ -49,3 +49,10 @@ This is a CBB candidate policy, not an already deployed all-sport standard.
 NFL, NBA, CFB, NHL, MLB, WNBA and soccer require their own active-path review
 before any corresponding production change. Their present policies must not be
 described as uniform merely because they use the same member labels.
+
+The initial bounded active-path inventory is recorded in
+[`model-audits/2026-11-05-daily-edge-grade-policy-inventory.md`](model-audits/2026-11-05-daily-edge-grade-policy-inventory.md).
+It distinguishes the reproduced NBA terminal price-guard bypass from deliberate
+alternate promotion routes and existing sport-specific value exceptions. Fixing
+the demonstrated bypass does not justify deleting every contextual promotion
+route or changing qualified forecasts, probabilities or historical grades.
