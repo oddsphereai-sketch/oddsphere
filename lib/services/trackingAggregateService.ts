@@ -48,6 +48,7 @@ import {
 } from "./ucl/uclTrackingForecastContinuity";
 import {
   buildAlternateLineCategories,
+  buildLockedAlternateLineCategories,
   type AlternateLinePerformance,
   type AlternateLineSourceRow,
 } from "./tracking/alternateLinePerformance";
@@ -88,12 +89,7 @@ export type DimensionRow<K extends string = string> = {
 export type TrackingDisplaySport = TrackedSport | "epl";
 
 export const TRACKING_AGGREGATE_CONTRACT_VERSION =
-  "tracking_aggregate_v19_nfl_published_pregame_recovery_2026_11_02" as const;
-
-const UCL_PRIOR_ALT_LINE_MODEL_RELEASE =
-  "ucl_goals_coherent_2026_09_03_r6_authenticated_match_stats_manifest" as const;
-const UCL_PRIOR_ALT_LINE_CALIBRATION_RELEASE =
-  "ucl_grade_policy_2026_09_03_r6_owner_approved_epl_v23_transfer" as const;
+  "tracking_aggregate_v20_ucl_alt_locked_lifetime_2026_11_05" as const;
 
 /**
  * Sport+market joint split with the Best Angle / Lean cuts most members
@@ -289,8 +285,8 @@ export function filterCompleteUclTrackingCohorts(records: PredictionRecordRow[])
  * Calendar tracking and current-model tracking intentionally have different
  * release boundaries. Calendar windows are the immutable public record of
  * what members saw on each slate, so a model deployment must never make an
- * already locked result disappear. Lifetime/current-model accuracy remains
- * release-pure and admits only the active UCL model+calibration tuple.
+ * already locked result disappear. Current-model aggregate accuracy remains
+ * release-pure. Public locked lifetime history uses the calendar scope.
  */
 export function selectTrackingRecordsByScope(records: PredictionRecordRow[]): {
   calendarRecords: PredictionRecordRow[];
@@ -867,20 +863,6 @@ export async function computeTrackingAggregate(opts: {
     currentReleaseRecords: records,
   } = selectTrackingRecordsByScope(launchFiltered);
 
-  // UCL's prior locked release is useful line-level history, but it must never
-  // be blended into the active release. Keep only the explicitly identified
-  // r6 manifest and surface it as a separately labeled lifetime archive.
-  const priorUclManifest = filterCompleteUclTrackingCohorts(
-    launchFiltered.filter((record) =>
-      isPublicallyTracked(record.sport, record.slate_date)
-      && isUclTrackingRecord(record)
-      && record.model_version === UCL_PRIOR_ALT_LINE_MODEL_RELEASE
-      && record.calibration_version === UCL_PRIOR_ALT_LINE_CALIBRATION_RELEASE,
-    ),
-  ).filter(isTrackingRecordEligible).map(withUclFrozenTrackingForecast);
-  const priorUclRecords = dedupePredictionRecordsForTracking(priorUclManifest)
-    .filter((record) => !isTossUp(record));
-
   // W-L accuracy counts EVERY prediction that has a side. `no_bet` is a GUIDANCE
   // signal ("we don't advise betting this"), NOT a tracking exclusion — a
   // stand-down total or model-wrong-side ML is still a graded right/wrong call
@@ -895,8 +877,8 @@ export async function computeTrackingAggregate(opts: {
 
   // Grades — calendar rows include immutable prior-release locks so a release
   // transition cannot erase yesterday/week/month/recent results. The current
-  // release and separately labeled archive remain release-pure below.
-  const recordIds = [...new Set([...calendarRecords, ...priorUclRecords]
+  // model aggregate remains release-pure; public Lifetime keeps every eligible lock.
+  const recordIds = [...new Set(calendarRecords
     .map((r) => r.id)
     .filter((x): x is number => x !== undefined))];
   const grades = await fetchGradesForRecordIds(opts.supabase, recordIds);
@@ -912,11 +894,6 @@ export async function computeTrackingAggregate(opts: {
     record,
     grade: record.id !== undefined ? gradeByRecordId.get(record.id) ?? null : null,
   }));
-  const priorUclRows: AlternateLineSourceRow[] = priorUclRecords.map((record) => ({
-    record,
-    grade: record.id !== undefined ? gradeByRecordId.get(record.id) ?? null : null,
-    displaySport: "ucl",
-  }));
   const alternateRows: AlternateLineSourceRow[] = rows.map((row) => ({
     ...row,
     displaySport: trackingDisplaySport(row.record),
@@ -929,27 +906,33 @@ export async function computeTrackingAggregate(opts: {
     weekly: {
       from: weekFrom,
       to: today,
-      rows: buildAlternateLineCategories(calendarAlternateRows, { from: weekFrom, to: today }),
+      rows: buildLockedAlternateLineCategories(calendarAlternateRows, { from: weekFrom, to: today }),
     },
     monthly: {
       from: monthFrom,
       to: today,
-      rows: buildAlternateLineCategories(calendarAlternateRows, { from: monthFrom, to: today }),
+      rows: buildLockedAlternateLineCategories(calendarAlternateRows, { from: monthFrom, to: today }),
     },
     lifetime: {
       from: opts.from ?? TRACKING_LAUNCH_DATE,
       to: today,
-      rows: buildAlternateLineCategories(alternateRows, {
+      rows: buildLockedAlternateLineCategories(calendarAlternateRows, {
+        sourceLabel: "Locked lifetime · all model versions",
         from: opts.from ?? TRACKING_LAUNCH_DATE,
         to: today,
       }),
     },
-    archives: buildAlternateLineCategories(priorUclRows, {
+    // Keep the release-pure view explicitly separate from public lifetime.
+    currentRelease: {
       from: opts.from ?? TRACKING_LAUNCH_DATE,
       to: today,
-      source: "prior_release",
-      sourceLabel: "Prior locked release",
-    }),
+      rows: buildAlternateLineCategories(alternateRows, {
+        from: opts.from ?? TRACKING_LAUNCH_DATE, to: today,
+        source: "current_release", sourceLabel: "Current model version",
+      }),
+    },
+    // Prior locked releases are included once in Lifetime, not appended again.
+    archives: [],
   };
   if (records.length === 0 && calendarRecords.length === 0) return result;
 

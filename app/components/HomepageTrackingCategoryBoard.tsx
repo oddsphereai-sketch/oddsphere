@@ -102,7 +102,7 @@ function alternateMarketLabel(sport: string, market: AlternateLineCategory["mark
 }
 
 function alternateSourceLabel(row: AlternateLineCategory): string {
-  if (row.source === "prior_release") return row.sourceLabel;
+  if (row.source === "prior_release" || row.source === "locked_history") return row.sourceLabel;
   return row.sourceLabel === "Current release"
     ? row.sourceLabel
     : `Current release · ${row.sourceLabel}`;

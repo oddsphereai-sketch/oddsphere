@@ -1,0 +1,26 @@
+name: Tracking history proof
+on:
+  pull_request:
+    paths:
+      - 'lib/services/trackingAggregateService.ts'
+      - 'lib/services/tracking/**'
+      - 'lib/services/labResponseSnapshots.ts'
+      - 'lib/services/labResponseSnapshotWriter.ts'
+      - 'app/lab/tracking/**'
+      - 'app/api/lab/tracking-foundation/**'
+      - 'scripts/test-ucl-alternate-line-lifetime.ts'
+      - '.github/workflows/tracking-history-proof.yml'
+  merge_group:
+permissions:
+  contents: read
+jobs:
+  tracking-history-proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node --import tsx scripts/test-ucl-alternate-line-lifetime.ts && node --import tsx scripts/test-alternate-line-performance.ts && node --import tsx scripts/test-tracking-aggregates.ts && node --import tsx scripts/test-tracking-page.ts && node --import tsx scripts/test-official-tracking-markets.ts

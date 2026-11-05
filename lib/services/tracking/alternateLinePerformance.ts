@@ -35,7 +35,7 @@ export type AlternateLineAdjustment = {
 export type AlternateLineCategory = {
   sport: AlternateLineDisplaySport;
   market: "spread" | "total";
-  source: "current_release" | "prior_release";
+  source: "current_release" | "prior_release" | "locked_history";
   sourceLabel: string;
   coverageFrom: string;
   coverageTo: string;
@@ -55,6 +55,8 @@ export type AlternateLinePerformance = {
   monthly: AlternateLineWindow;
   lifetime: AlternateLineWindow;
   archives: AlternateLineCategory[];
+  /** Release-pure comparison; never label this as public Lifetime. */
+  currentRelease?: AlternateLineWindow;
 };
 
 export type AlternateLineSourceRow = {
@@ -303,4 +305,20 @@ export function buildAlternateLineCategories(
     ))
     .filter((row): row is AlternateLineCategory => row !== null)
     .sort((a, b) => a.sport.localeCompare(b.sport) || a.market.localeCompare(b.market));
+}
+
+/** Public UCL history spans released locks; numerical current-model reporting
+ * stays separate. Other sports retain their existing projection and labels. */
+export function buildLockedAlternateLineCategories(
+  rows: AlternateLineSourceRow[],
+  input: { from: string; to: string; sourceLabel?: string },
+): AlternateLineCategory[] {
+  const range = { from: input.from, to: input.to };
+  return [
+    ...buildAlternateLineCategories(rows.filter(row => row.displaySport !== "ucl"), range),
+    ...buildAlternateLineCategories(rows.filter(row => row.displaySport === "ucl"), {
+      ...range, source: "locked_history",
+      sourceLabel: input.sourceLabel ?? "Locked history · all model versions",
+    }),
+  ].sort((a, b) => a.sport.localeCompare(b.sport) || a.market.localeCompare(b.market));
 }
