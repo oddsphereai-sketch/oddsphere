@@ -1,0 +1,60 @@
+{
+  "protocol": "current_split_observation_archive_v1",
+  "starting_main": "224a43088a67c30c278c1caf982baf2655f0ca0f",
+  "integrated_base": "fb905d957c02d5b09e5bc4fc79d8d3d6af35dcdf",
+  "owner_scope": "Deploy exact transport and verify memory reduction, then stop historical cache growth without losing observations, changing locked records or breaking historical research and normal site processes.",
+  "storage_contract": {
+    "current_split_observation_archive": "Append-only exact normalized observation versions in queryable JSONB. Canonical SHA-256 deduplicates identical values; every unknown field and original clock is retained. UPDATE, DELETE and TRUNCATE are prohibited. No TTL or cleanup deletion.",
+    "current_split_capture_archive": "Append-only gzip/base64 parts of the original normalized feed JSON. These preserve exact serialized bytes, ordering and duplicate multiplicity. Each part is at most 180,000 base64 characters, checked before acknowledgement; full original JSON SHA-256 is verified on recovery. Original provider raw fields never mapped by the existing collector are outside this contract.",
+    "current_split_group_history": "Rebuildable retained-display index, separate from immutable source observations and public locked records. It stores the unchanged JS display-history result and ordered references to immutable observation hashes. Its source receipt may advance; historical reads verify those references. This prevents research-only older versions from being resurrected as current display context.",
+    "lab_response_snapshots": "The same sole collector writes the same current-feed key through the same existing snapshot RPC. Source rows dated before the three-day hot partition move out only after original captures, observation versions and retained-history index are acknowledged. This boundary changes loading, not data retention. Future and unknown-date source rows stay hot."
+  },
+  "reader_contract": {
+    "ordinary_site": "Current readers pass the same UTC/Eastern game-date domains already used by their matcher. Dates still inside the hot partition return the same current rows without a cold query. Older dates load the retained index in bounded pages of five groups. Original event/book group order and hot-value precedence are preserved. No numerical selector, source qualification, freshness window, canonical writer, model release, grade, price, stake, probability or lock rule changes.",
+    "legacy_unspecific_lookback": "readStoredSharpApiCurrentSplits(sport) still reconstructs the complete retained-history view, including archived events. Explicit date arguments avoid scanning unrelated history.",
+    "research_all_versions": "iterateCurrentSplitObservations(client, feed, optionalEventDates) streams every indexed original version using keyset pages. It does not apply the display-history cap. The native JSONB table is also available to existing privileged research tools.",
+    "original_receipts": "readOriginalCurrentSplitCapture(client, captureSha256) restores the original normalized capture JSON and verifies every part and the complete original checksum. Its 128MB in-memory reader limit is not an archive retention limit; larger captures remain recoverable by streaming stored gzip parts.",
+    "locked_records": "Existing locked public records remain authoritative and are never updated, reconstructed or reinterpreted by this archive. Historical source access does not authorize replacing any stored locked evidence. Existing reader/writer lock tests and sampled live hashes must remain exact.",
+    "source_chronology": "Original fetched_at, _oddsphere_received_at, per-market source clocks and recovery markers remain exact. archived_at is a storage clock and must not be substituted for historical source availability. A missing prior quote, stale split or unattested source reaction remains missing, stale or unattested. Quote-history capture and model admission rules are unchanged."
+  },
+  "failure_contract": [
+    "Before the additive migration is installed, the collector continues the full legacy cache. It never prunes on a missing archive function.",
+    "After initialization, missing functions, incomplete acknowledgements, checksum failures, oversized records, stale retained-index writes or a failed current-cache write fail the capture and preserve the prior current cache. Already acknowledged immutable evidence remains available for idempotent retry.",
+    "No new provider fetch, independent refresh, prediction writer or cron cadence is introduced. The existing collector and per-sport lease remain authoritative.",
+    "All observations supplied by the existing normalized collector are archived before the existing 96-observation display trim. The unchanged last-complete fallback remains a display rule, not a deletion rule for research."
+  ],
+  "verification": {
+    "real_disposable_stack": "PostgreSQL 17.6 / official PostgREST 14.5 with service-only privileges matching the hosted service role",
+    "private_cfb_fixture_original_rows": 26233,
+    "private_cfb_fixture_hot_rows": 13209,
+    "private_cfb_fixture_reconstructed_retained_rows": 26233,
+    "private_cfb_exact_retained_rows_sha256": "bbd6326a8bfd7ccc414d248cd537e4458a13a23a6435ab9518b58d59342a1486",
+    "largest_tested_archive_request_bytes": 240014,
+    "tests": [
+      "Exact full CFB retained row sequence, complete original receipt byte recovery, historical and current date scopes, Unicode/unknown fields and duplicate row multiplicity",
+      "Every new observation beyond the display-history cap remains in the immutable archive; original source clocks stay exact",
+      "Corrections do not resurrect an older complete observation already evicted by the existing display rules",
+      "Missing migration, incomplete acknowledgement, idempotent retry and unknown-date preservation",
+      "Database checksum verification and rejection of observation/capture UPDATE, DELETE and TRUNCATE; anonymous/authenticated reads denied",
+      "Repeated migration leaves all archive observations intact",
+      "Current-date reads do not query cold history; original group order and exact locked reader bytes remain unchanged",
+      "Full model-change gate, focused transport/split/continuity/collector suites, TypeScript, focused lint and current-main integration safety"
+    ]
+  },
+  "sampled_source_partition": [
+    { "sport": "cfb", "total": 26233, "hot": 13209, "archived_from_hot": 13024 },
+    { "sport": "cbb", "total": 7484, "hot": 7484, "archived_from_hot": 0 },
+    { "sport": "nfl", "total": 6805, "hot": 3753, "archived_from_hot": 3052 },
+    { "sport": "nba", "total": 13313, "hot": 7340, "archived_from_hot": 5973 },
+    { "sport": "nhl", "total": 12710, "hot": 6665, "archived_from_hot": 6045 }
+  ],
+  "future_research_examples": [
+    "SELECT event_id, observed_at, payload, archived_at FROM current_split_observation_archive WHERE sport='cfb' AND event_date='2026-10-27' ORDER BY id;",
+    "SELECT capture_sha256, fetched_at, capture_kind, row_count, decoded_bytes, parts FROM current_split_capture_archive WHERE sport='cfb' AND part=0 ORDER BY id;",
+    "Use payload->>'_oddsphere_received_at' and the original per-market source clock for point-in-time admission. Never infer an earlier quote or source reaction merely because a receipt was archived.",
+    "Retained display references can be joined through current_split_group_history.observation_sha256s to immutable observations with ordinality; original full captures can be decoded independently for auditing or future adjustments."
+  ],
+  "rollout": "Additive migration is applied only from the reviewed merged file. Normal scheduled captures perform idempotent baseline archival, then acknowledged partitioning. Verify all active sports, current and historical readers, source byte preservation, archive coverage, locked hashes, collector health and live memory across multiple cycles.",
+  "rollback": "Do not deploy a pre-archive reader over a partitioned cache. Keep an archive-aware reader, or first reconstruct the exact complete retained feed through readStoredSharpApiCurrentSplits, remove only archive transport metadata, restore it through the existing snapshot writer, and verify coverage before rolling code back. Never delete immutable archive data or rewrite locked public records.",
+  "limits": "Archive storage grows with genuinely new source captures, intentionally preserving research history. Routine current-cache transfers do not reload all historical events. Unknown-date observations remain hot rather than being silently dropped; all five sampled active feeds have zero unknown-date rows. No guarantee of model qualification or forecast correctness follows from archival alone."
+}
