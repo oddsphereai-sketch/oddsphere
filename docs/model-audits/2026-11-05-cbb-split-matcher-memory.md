@@ -33,6 +33,20 @@ construction during the entire batch. This avoids flaky RSS/time assertions whil
 preventing the repeated native allocation. It is part of the existing full-D1
 focused test and mandatory model-change gate.
 
+The broader read-only publisher still peaked at 1,845,008 KB after the first
+fix. The same native-allocation defect also existed in shared slate-date/hour
+helpers, the DraftKings source-date matcher and the CBB card's two ET time formatters. R36 reuses those immutable
+formatters too. Date results are never cached. All sports' timezone/DST/midnight
+and board-roll outputs are compared against the original options; repeated
+formatting must allocate at most four timezone formatters. Existing full-D1
+reader/writer tests retain byte-exact locked payloads.
+
+The final mutation-blocked full publisher profile reaches its first member
+write in 10.34 seconds at 379,792 KB peak RSS. It uses saved provider fixtures
+and current stored evidence; it still does not prove external-provider latency
+or successful production publication. Date formatting regressions additionally
+cover the shared DraftKings source-date fallback and invalid-date behavior.
+
 Only publisher R36 advances. Independent/model/grade/adapter/quote/tracking
 semantics remain those already reviewed for R35. No input or market signal is
 removed. There is no promotion/demotion, score, probability, side, price or stake

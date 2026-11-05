@@ -56,7 +56,9 @@ R36 retains those numerical and lifecycle contracts while reusing a single
 immutable timezone formatter in split matching. Full-slate pre/post output must
 remain exact; the resource regression uses the captured 480 fixtures and 128
 source games and bounds ICU constructor calls. No source, signal or market input
-is removed to reduce memory. Runtime stages remain visible in the existing logs.
+is removed to reduce memory. The shared slate-date/hour, DraftKings source-date and CBB card-time formatters likewise reuse immutable
+ICU objects, with exact all-sport timezone/DST/roll parity. No date results are
+cached. Runtime stages remain visible in the existing logs.
 
 ## Owner-directed Daily Edge health and NFL conviction repair — November 5
 

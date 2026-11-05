@@ -37,7 +37,9 @@ ET month/day formatter in the CBB split matcher. The prior full-slate matcher
 created ICU formatters per source/fixture comparison and reproduced a 2.7 GB
 native-memory peak against the 2 GB production allocation. The stored 480-fixture /
 128-source-game regression requires exact pre-repair output and a bounded formatter
-allocation count. The sole writer, lease, cadence and provider calls are unchanged.
+allocation count. The shared slate-date/hour, DraftKings source-date and CBB card-time formatters are also reused with
+exact timezone/DST/roll parity and no cached date results. The sole writer,
+lease, cadence and provider calls are unchanged.
 
 R35 supersedes the R34 publication lifecycle: an incomplete later-day D1 venue
 cannot abort the whole board. Only complete forecasts construct candidates, and

@@ -46,6 +46,21 @@ const SPORT_TIMEZONE: Record<Sport, string> = {
   soccer: "America/New_York",
 };
 
+// Keep immutable ICU formatters, not date results. Repeated constructor calls
+// retain native allocations outside V8's heap budget on large rolling slates.
+const slateDateFormatters=new Map<string,Intl.DateTimeFormat>();
+const slateHourFormatters=new Map<string,Intl.DateTimeFormat>();
+const dateFormatter=(timeZone:string)=>{
+  let formatter=slateDateFormatters.get(timeZone);
+  if(!formatter){formatter=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"});slateDateFormatters.set(timeZone,formatter);}
+  return formatter;
+};
+const hourFormatter=(timeZone:string)=>{
+  let formatter=slateHourFormatters.get(timeZone);
+  if(!formatter){formatter=new Intl.DateTimeFormat("en-US",{timeZone,hour:"2-digit",hourCycle:"h23"});slateHourFormatters.set(timeZone,formatter);}
+  return formatter;
+};
+
 /** Returns the IANA timezone used to anchor a sport's slate date. */
 export function slateTimezone(sport: Sport): string {
   return SPORT_TIMEZONE[sport];
@@ -69,12 +84,7 @@ export function computeSlateDate(sport: Sport, input: Date | string): string {
   }
   const tz = SPORT_TIMEZONE[sport];
   // en-CA → YYYY-MM-DD. Locale picked for format, not for English-vs-French.
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(d);
+  const parts = dateFormatter(tz).formatToParts(d);
   const year = parts.find((p) => p.type === "year")?.value;
   const month = parts.find((p) => p.type === "month")?.value;
   const day = parts.find((p) => p.type === "day")?.value;
@@ -194,10 +204,6 @@ export function currentSoccerBoardDate(now: Date = new Date()): string {
 
 function hourInTimeZone(now: Date, timeZone: string): number {
   return Number(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      hour: "2-digit",
-      hourCycle: "h23",
-    }).format(now),
+    hourFormatter(timeZone).format(now),
   );
 }

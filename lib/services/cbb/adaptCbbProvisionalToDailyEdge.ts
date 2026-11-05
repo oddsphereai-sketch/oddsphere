@@ -22,8 +22,10 @@ const verdict=(grade:GradeLabel):Verdict=>grade==="Best Angle"?"best_angle":grad
 const gradeCode=(grade:GradeLabel,reference:BoardRow["referenceState"],action:boolean|undefined):Grade|null=>
   action===undefined?(grade==="Best Angle"?"best_signal":grade==="Lean"?reference==="agrees"?"sharp_confirmed":"model_only":grade==="Watchlist"?"market_watch":null):
   grade==="Best Angle"?action?"best_signal":"model_only":grade==="Lean"?action?"sharp_confirmed":"model_only":grade==="Watchlist"?"market_watch":null;
-const etTime=(date:string)=>new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"}).format(new Date(date));
-const etMinutes=(date:string)=>{const parts=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date(date));
+const etTimeFormatter=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"});
+const etMinuteFormatter=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hour:"2-digit",minute:"2-digit",hourCycle:"h23"});
+const etTime=(date:string)=>etTimeFormatter.format(new Date(date));
+const etMinutes=(date:string)=>{const parts=etMinuteFormatter.formatToParts(new Date(date));
   return Number(parts.find(p=>p.type==="hour")?.value??0)*60+Number(parts.find(p=>p.type==="minute")?.value??0);};
 const selectionLabel=(game:CbbGame,row:BoardRow):string|null=>{
   if(row.selection===null)return null;
