@@ -7,6 +7,7 @@ import { resolveReaderContract, formatContractLine, type ContractKind, type Cont
 import {KALSHI_EVENT_DATE_MATCH_RELEASE} from "@/lib/providers/owls/predictionMarketEventDate";
 import {marketDisplayGameIdentity,CBB_MARKET_TRACKING_RELEASE} from "@/lib/cbb/marketDisplayIdentity";
 import {recoverCfbHistoricalChart,supplementCfbPrelockMarket,CFB_CHART_CONTINUITY_RELEASE} from "@/lib/providers/owls/cfbHistoricalChart";
+import type {PrelockMarketKind} from "@/lib/providers/owls/prelockMarketCache";
 
 export async function GET(request: Request): Promise<Response> {
   const query = new URL(request.url).searchParams;
@@ -45,7 +46,7 @@ export async function GET(request: Request): Promise<Response> {
   const market=selection?resolveReaderContract(contracts,gameMatch,selection):gameMatch;
   const side=selection?.side??(["away","home","draw"].includes(requestedSide??"")?requestedSide:gameMatch?.outcomes.slice().sort((a,b)=>b.probability-a.probability)[0]?.side);
   if(game&&side&&predictionMarketLockBoundary(game,Date.now())!==undefined){
-    const archive=readPredictionMarketPrelock(await readPredictionMarketPrelockFeed(sport as PredictionMarketSport).catch(()=>null),game,kind,side,selection?.line??null);
+    const archive=readPredictionMarketPrelock(await readPredictionMarketPrelockFeed(sport as PredictionMarketSport,kind as PrelockMarketKind).catch(()=>null),game,kind,side,selection?.line??null);
     const recovered=recoverCfbHistoricalChart(game,kind,side,selection?.line??null,feed,contracts);
     if(archive?.market){
       const market=supplementCfbPrelockMarket(game,archive.market,recovered?.market??null);
