@@ -5,6 +5,7 @@ import {advanceCbbProvisionalSnapshot,CbbFixtureClockError} from "../lib/cbb/pro
 import {cbbContextAtFixtureClock} from "../lib/services/cbb/cbbMarketBehaviorInputs";
 import {writeCbbMemberGame,cbbMemberGameForReader,type CbbStoredMemberGame} from "../lib/services/cbb/cbbMemberGameStore";
 import {cbbFixtureChronology} from "../lib/services/cbb/adaptCbbProvisionalToDailyEdge";
+import {overlayCbbLockedMemberGames} from "../lib/services/cbb/cbbMemberReader";
 import {mergeCbbReaderEvidence} from "../lib/services/cbb/cbbReaderMarketEvidence";
 import {cbbDailyEdgeResponse} from "../lib/services/cbb/adaptCbbProvisionalToDailyEdge";
 import type {CbbGame} from "../lib/cbb/types";
@@ -25,6 +26,24 @@ async function main(){
  assert.equal(renewed.record.snapshot.fixtureClockRevisions?.[0].previousStartsAt,snapshot.startsAt);
  assert.equal(renewed.record.memberGame.gameTime,"7:00 PM");assert.equal(renewed.record.memberGame.gameStartMinutes,19*60);
  assert.equal(renewed.record.memberGame.scheduledLockAt,"2026-11-05T23:00:00.000Z");
+ // Reproduce the actual SSR cache race: old cached clock, newly saved DTO.
+ const cached=cbbDailyEdgeResponse("2026-11-05",[initial.memberGame],initial.snapshot.capturedAt);
+ const cachedBytes=JSON.stringify(cached),savedBytes=JSON.stringify(renewed.record);
+ let fullReads=0,indexStart=game.date,fullPayload=renewed.record;
+ const overlayDb={from:(table:string)=>{assert.equal(table,"lab_response_snapshots");return {select:(fields:string)=>({in:async()=>{
+  if(fields.includes("storeRelease:"))return {data:[{snapshot_key:`cbb::member-game::${game.id}`,storeRelease:initial.release,
+   gameId:String(game.id),startsAt:indexStart,lockedAt:null,memberId:initial.memberGame.id,memberExternalId:String(game.id),memberStart:indexStart,memberLock:null}],error:null};
+  fullReads++;return {data:[{snapshot_key:`cbb::member-game::${game.id}`,payload:fullPayload}],error:null};
+ }})};}} as unknown as Parameters<typeof overlayCbbLockedMemberGames>[1];
+ const reconciled=await overlayCbbLockedMemberGames(cached,overlayDb);
+ assert.equal(fullReads,1);assert.deepEqual(reconciled.games[0],renewed.record.memberGame,"serve the saved corrected DTO without recomputing predictions");
+ assert.equal(JSON.stringify(cached),cachedBytes);assert.equal(JSON.stringify(renewed.record),savedBytes);
+ const unchanged=await overlayCbbLockedMemberGames(reconciled,overlayDb);
+ assert.equal(fullReads,1,"no full payload read for unchanged unlocked clocks");assert.deepEqual(unchanged.games,reconciled.games);
+ fullPayload=structuredClone(renewed.record);fullPayload.memberGame.homeTeamDisplayName="Wrong school";
+ await assert.rejects(overlayCbbLockedMemberGames(cached,overlayDb),/identity mismatch/);
+ fullPayload=renewed.record;indexStart="2026-11-06T01:00:00.000Z";
+ await assert.rejects(overlayCbbLockedMemberGames(cached,overlayDb),/identity mismatch/);
  stored=structuredClone(initial);const beforeWrites=writes;
  await assert.rejects(writeCbbMemberGame({game:{...game,home_team:{...game.home_team,id:999}},candidate,homeLogo:null,awayLogo:null,now},db),/school identity/);
  assert.equal(writes,beforeWrites);
