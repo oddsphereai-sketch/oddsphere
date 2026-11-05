@@ -1,0 +1,169 @@
+{
+  "starting_production_base": "6df2750c6417ed71cd9dc0803466870b56ac36de",
+  "measured_at": "2026-11-05T16:31:52.12453+00:00",
+  "database_disk_bytes": 12697193619,
+  "largest_disk_relations": [
+    {
+      "relname": "prop_scoring_runs",
+      "table_bytes": 3202359296,
+      "index_bytes": 212992
+    },
+    {
+      "relname": "market_split_observations_v2",
+      "table_bytes": 1436254208,
+      "index_bytes": 1725677568
+    },
+    {
+      "relname": "market_price_observations_v2",
+      "table_bytes": 805019648,
+      "index_bytes": 1114955776
+    },
+    {
+      "relname": "cfb_forward_evidence_snapshots",
+      "table_bytes": 1537277952,
+      "index_bytes": 51716096
+    },
+    {
+      "relname": "nfl_forward_evidence_snapshots",
+      "table_bytes": 534052864,
+      "index_bytes": 6955008
+    },
+    {
+      "relname": "market_intelligence_snapshots_v2",
+      "table_bytes": 365166592,
+      "index_bytes": 42180608
+    },
+    {
+      "relname": "lab_response_snapshots",
+      "table_bytes": 378331136,
+      "index_bytes": 3383296
+    },
+    {
+      "relname": "mlb_prop_tracking_entries",
+      "table_bytes": 300531712,
+      "index_bytes": 29016064
+    }
+  ],
+  "row_estimates": [
+    {
+      "relname": "cfb_forward_evidence_snapshots",
+      "estimated_rows": 118166
+    },
+    {
+      "relname": "prop_scoring_runs",
+      "estimated_rows": 1575
+    },
+    {
+      "relname": "nfl_forward_evidence_snapshots",
+      "estimated_rows": 16811
+    },
+    {
+      "relname": "market_price_observations_v2",
+      "estimated_rows": 4123311
+    },
+    {
+      "relname": "market_split_observations_v2",
+      "estimated_rows": 3724612
+    }
+  ],
+  "prelock_capacity": [
+    {
+      "sport": "cfb",
+      "generatedAt": "2026-11-05T16:31:04.933+00:00",
+      "rows": 1403,
+      "events": 182,
+      "wireBytes": 3351943,
+      "decodedBytes": 32063234,
+      "sha256": "e5dcedad2c00e361da2a9d88282bd09bb20f8755729cdb636344c44b44f6027a",
+      "existingCacheStringBytes": 3351842,
+      "brotliCacheStringBytes": 2551854,
+      "topRowBytes": 72753,
+      "checkpointFrames": 4184
+    },
+    {
+      "sport": "cbb",
+      "generatedAt": "2026-11-05T16:31:14.641+00:00",
+      "rows": 1671,
+      "events": 314,
+      "wireBytes": 3322155,
+      "decodedBytes": 35866394,
+      "sha256": "2bf87c313da175adaaf7f95c39dc5ac7f4545210291eead625a16acf3d0d301c",
+      "existingCacheStringBytes": 3322054,
+      "brotliCacheStringBytes": 2365574,
+      "topRowBytes": 77156,
+      "checkpointFrames": 4868
+    }
+  ],
+  "exact_market_views": [
+    {
+      "sport": "cfb",
+      "rows": 1403,
+      "sourceSha256": "e5dcedad2c00e361da2a9d88282bd09bb20f8755729cdb636344c44b44f6027a",
+      "originalUnchanged": true,
+      "readerComparisons": 1403,
+      "nonNullPreservedReaders": 1403,
+      "parts": [
+        {
+          "kind": "moneyline",
+          "rows": 338,
+          "decodedBytes": 11775532,
+          "nextCacheEntryBytes": 1314018,
+          "selectedRowsSha256": "631bdd9ba67512d33db5a43f6241b234159bffc1af302901c0d4369f2154eebf"
+        },
+        {
+          "kind": "spread",
+          "rows": 549,
+          "decodedBytes": 10668464,
+          "nextCacheEntryBytes": 966198,
+          "selectedRowsSha256": "95fa30a24ec19107ebf8604806bd2d29fce23a9d17869e5ce00c116111c603df"
+        },
+        {
+          "kind": "total",
+          "rows": 516,
+          "decodedBytes": 9619578,
+          "nextCacheEntryBytes": 829422,
+          "selectedRowsSha256": "6610b1d1090dbe3c623bc9c88e4fa0cf13f64ec927b1a80b0f1d41064ad06e34"
+        }
+      ]
+    },
+    {
+      "sport": "cbb",
+      "rows": 1671,
+      "sourceSha256": "2bf87c313da175adaaf7f95c39dc5ac7f4545210291eead625a16acf3d0d301c",
+      "originalUnchanged": true,
+      "readerComparisons": 1671,
+      "nonNullPreservedReaders": 1671,
+      "parts": [
+        {
+          "kind": "moneyline",
+          "rows": 341,
+          "decodedBytes": 12298060,
+          "nextCacheEntryBytes": 1097974,
+          "selectedRowsSha256": "f392617f5db63739e74dd5f168c36918204c4a9d71dbcfa82202b952258bf6c6"
+        },
+        {
+          "kind": "spread",
+          "rows": 611,
+          "decodedBytes": 11573767,
+          "nextCacheEntryBytes": 1004554,
+          "selectedRowsSha256": "9754ba1662214f2b23d04a2e1c9463573c2a1460152b9fc822ac9e435bcfe504"
+        },
+        {
+          "kind": "total",
+          "rows": 719,
+          "decodedBytes": 11994735,
+          "nextCacheEntryBytes": 1001482,
+          "selectedRowsSha256": "1f6fdf1fb48a7d9a3b4895a5436370874c9b9bf4cdab54910eab7a1b9f055c6a"
+        }
+      ]
+    }
+  ],
+  "scope": "Read-only derived cache partition by sport and existing exact market kind. No database writes/migration, retention edits, provider requests, stored source/locked mutations or model rule changes. Same 30-second TTL and capture invalidation tag. Legacy full-feed helper remains complete.",
+  "proof": "Installed Next IncrementalCache rejects the synthetic oversized original but retains/reuses all four market kinds; same tag invalidates them. All 3074 live source receipts return identical non-null frozen-reader results; source feed JSON hashes unchanged. Full verify:model-change pre/main/post, TypeScript, lint and focused CFB/CBB lock/chart tests passed.",
+  "limits": [
+    "Disk relation size is not resident RAM or process commitment attribution.",
+    "A cold market-cache miss still reads and decodes the complete original compressed source. Different market kinds have independent shared entries.",
+    "The six measured CFB/CBB entries are 0.83 to 1.31 MB; future growth may require finer indexed read views. No data is truncated to meet cache limits.",
+    "No claim that this cache change alone clears the whole-host memory warning."
+  ]
+}
