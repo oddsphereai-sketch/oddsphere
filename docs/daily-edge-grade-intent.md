@@ -1,5 +1,16 @@
 # Daily Edge play-grade intent
 
+November 5 Lean-quality amendment: the owner subsequently rejected treating
+every positive point-estimate EV as an adequate Lean. For the scoped CBB R8/R7
+candidate, Lean/Best eligibility additionally uses an explicit fitted-location
+sensitivity and one-adverse-resolved-case recommendation-risk policy. Marginal
+positive EV can be Watch; an impractical return unable to support the declared
+risk can be No Play even when nominal EV is positive. Preserve nominal p/EV and
+the complete forecast. This is a declared conservative product policy, with a
+data-sized reserve, not a confidence guarantee, source checklist or play quota.
+See `model-audits/2026-11-05-cbb-contextual-lean-quality.md`; earlier rules below
+describe the immediately preceding R7/R6 family and existing immutable locks.
+
 Owner clarification: November 5, 2026. This defines shared product meaning;
 it is not authorization to copy one sport's numerical calibration into another.
 

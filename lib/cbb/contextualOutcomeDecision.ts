@@ -8,7 +8,7 @@ import {buildCbbInterpretedDecision} from "./contextualInterpretedDecision";
 import type {CbbContextualFeatureInput} from "./contextualForecastFeatures";
 import type {CbbScoreLawNumerics} from "./contextualScoreLawResearch";
 import type {CbbQuote} from "./types";
-export const CBB_OUTCOME_DECISION_RELEASE="cbb_outcome_decision_2026_11_05_r7_noplay_price_lanes" as const;
+export const CBB_OUTCOME_DECISION_RELEASE="cbb_outcome_decision_2026_11_05_r8_contextual_recommendation_risk" as const;
 function canonical(v:unknown):unknown{if(Array.isArray(v))return v.map(canonical);if(v&&typeof v==="object")return Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>[k,canonical(x)]));return v;}
 export function cbbOutcomeIndependentInputSha256(independent:CbbContextualFeatureInput["independent"]){
  return createHash("sha256").update(JSON.stringify(canonical({gameId:independent.gameId,asOf:independent.asOf,release:independent.release,inputStatus:independent.inputStatus,
@@ -21,7 +21,11 @@ export function forecastCbbOutcomeDecision(args:{artifact:CbbOutcomeArtifact;inp
  const {artifact,input,calibration}=args;assertCbbContextualForecastCalibrationBinding({...args,asOf:input.asOf});
  const forecast=predictCbbContextualOutcomeForecast(artifact,{gameId:input.independent.gameId,asOf:input.asOf,input},args.mode);
  const workingLatentLocations={marginMean:forecast.margin.mean,totalMean:forecast.total.mean,marginSd:forecast.margin.sd,totalSd:forecast.total.sd};
- const latent=applyCbbJointCovarianceCalibration(workingLatentLocations,calibration.parameters),decision=buildCbbInterpretedDecision({input,interpretation:forecast.receipt,latent,targets:args.targets,numerics:args.numerics});
+ const latent=applyCbbJointCovarianceCalibration(workingLatentLocations,calibration.parameters);
+ const recommendationRisk={calibrationGames:artifact.trainingGameIds.length,
+  marginLocationSd:Math.sqrt(forecast.margin.varianceComponents.sourceLocation+forecast.margin.varianceComponents.functionPosterior)*Math.exp(calibration.parameters.logMarginScale),
+  totalLocationSd:Math.sqrt(forecast.total.varianceComponents.sourceLocation+forecast.total.varianceComponents.functionPosterior)*Math.exp(calibration.parameters.logTotalScale)};
+ const decision=buildCbbInterpretedDecision({input,interpretation:forecast.receipt,latent,targets:args.targets,numerics:args.numerics,recommendationRisk});
  return{release:CBB_OUTCOME_DECISION_RELEASE,authority:"offline_research_only" as const,mode:args.mode,gameId:decision.gameId,asOf:decision.asOf,
   artifact:{release:artifact.release,methodSha256:artifact.methodSha256,trainingRowsSha256:artifact.trainingRowsSha256,availableBy:artifact.availableBy,
    objectSha256:cbbContextualForecastObjectSha256(artifact),factorObjectSha256:artifact.baseFactorObjectSha256},

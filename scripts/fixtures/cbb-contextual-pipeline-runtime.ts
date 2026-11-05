@@ -11,7 +11,8 @@ export function makeCbbPipelineTestRuntime(){
  const evaluate:CbbContextualOutcomeRuntime["evaluate"]=args=>{
   const {input,independent,targets,coverage}=args,u=independent.uncertainty;
   const latent={marginMean:independent.margin,totalMean:independent.total,marginSd:u.marginSd,totalSd:u.totalSd,correlation:u.marginTotalCorrelation};
-  const d=buildCbbInterpretedDecision({input,interpretation:buildCbbContextualMarketInterpretation(input),targets,latent});
+  const d=buildCbbInterpretedDecision({input,interpretation:buildCbbContextualMarketInterpretation(input),targets,latent,
+   recommendationRisk:{marginLocationSd:0,totalLocationSd:0,calibrationGames:137}});
   const working={margin:{mean:independent.margin,sd:u.marginSd},total:{mean:independent.total,sd:u.totalSd}};
   const decision={release:CBB_OUTCOME_DECISION_RELEASE,authority:"offline_research_only",mode:"retrospective_development",gameId:independent.gameId,asOf:input.asOf,
    fixtureIdentity:{homeId:independent.homeId,awayId:independent.awayId},independentInputSha256:cbbOutcomeIndependentInputSha256(independent),

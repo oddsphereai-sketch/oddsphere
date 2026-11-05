@@ -5,7 +5,7 @@ import {normalCdf} from "../lib/cbb/model";
 import {buildCbbInterpretedDecision} from "../lib/cbb/contextualInterpretedDecision";
 import {buildCbbContextualMarketInterpretation} from "../lib/cbb/contextualMarketInterpretation";
 import {CBB_OUTCOME_DECISION_RELEASE,cbbOutcomeIndependentInputSha256} from "../lib/cbb/contextualOutcomeDecision";
-import {buildCbbContextualOutcomeBoard,type CbbOutcomeDecision} from "../lib/cbb/contextualOutcomeBoard";
+import {buildCbbContextualOutcomeBoard,CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,type CbbOutcomeDecision} from "../lib/cbb/contextualOutcomeBoard";
 import {CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE,CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE,CBB_CONTEXTUAL_OUTCOME_EVIDENCE_RELEASE,CBB_CONTEXTUAL_OUTCOME_MANIFEST,readCbbContextualOutcomeEvidence,type CbbReleasedOutcomeBoard} from "../lib/services/cbb/cbbContextualOutcomeRuntime";
 import {encodeCbbContextualEvidence,decodeCbbContextualEvidence} from "../lib/services/cbb/cbbContextualEvidenceCodec";
 import {adaptCbbProvisionalGame} from "../lib/services/cbb/adaptCbbProvisionalToDailyEdge";
@@ -27,11 +27,13 @@ const margin=2,sd=11,zero=normalCdf((.5-margin)/sd)-normalCdf((-.5-margin)/sd);
 const independent:CbbForecast={release:CBB_FULL_D1_SCORE_RELEASE,gameId:game.id,asOf:at,homeId:71,awayId:72,homeScore:74,awayScore:72,margin,total:146,possessions:70,homeWinProbability:(1-normalCdf((.5-margin)/sd))/(1-zero),inputStatus:"complete",issues:[],uncertainty:{marginSd:sd,totalSd:15,marginTotalCorrelation:.1,marginCorrection:0,totalCorrection:0,fitThroughSeason:2024,games:100}};
 const quote=(market:CbbMarket):CbbContextualQuote=>({provider:"owls",gameId:game.id,sportsbook:"draftkings",market,line:market==="moneyline"?null:market==="spread"?-3.5:36.5,firstPrice:market==="moneyline"?-900:-110,secondPrice:market==="moneyline"?600:-110,providerObservedAt:"2026-11-05T17:58:00Z",fetchedAt:"2026-11-05T17:59:00Z",requestedAt:"2026-11-05T17:58:59Z",phase:"current",orientationVerified:true,sourceEventId:"event9001"});
 const targets=[quote("moneyline"),quote("spread"),quote("total")];
-function releasedBoard(priced=true,customTargets=targets,latent={marginMean:5,totalMean:25,marginSd:11,totalSd:15,correlation:.1}):CbbReleasedOutcomeBoard{
- const input:CbbContextualFeatureInput={independent,asOf:at,startsAt:start,currentQuotes:priced?customTargets:[]},d=buildCbbInterpretedDecision({input,interpretation:buildCbbContextualMarketInterpretation(input),latent,targets:priced?customTargets:[]});
+function releasedBoard(priced=true,customTargets=targets,latent={marginMean:5,totalMean:25,marginSd:11,totalSd:15,correlation:.1},legacyContextual=false):CbbReleasedOutcomeBoard{
+ const input:CbbContextualFeatureInput={independent,asOf:at,startsAt:start,currentQuotes:priced?customTargets:[]},d=buildCbbInterpretedDecision({input,interpretation:buildCbbContextualMarketInterpretation(input),latent,targets:priced?customTargets:[],
+  recommendationRisk:legacyContextual?undefined:{marginLocationSd:0,totalLocationSd:0,calibrationGames:137}});
+ if(legacyContextual){for(const row of d.marketDecisions)delete (row as {recommendationRisk?:unknown}).recommendationRisk;}
  // Fixed-law metadata exercises the stored receipt contract. It makes no claim
  // that these synthetic points were produced by the private fitted artifact.
- const decision={release:CBB_OUTCOME_DECISION_RELEASE,authority:"offline_research_only",mode:"future",gameId:game.id,asOf:at,fixtureIdentity:{homeId:71,awayId:72},independentInputSha256:cbbOutcomeIndependentInputSha256(independent),
+ const decision={release:legacyContextual?CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE:CBB_OUTCOME_DECISION_RELEASE,authority:"offline_research_only",mode:"future",gameId:game.id,asOf:at,fixtureIdentity:{homeId:71,awayId:72},independentInputSha256:cbbOutcomeIndependentInputSha256(independent),
   artifact:{release:CBB_CONTEXTUAL_OUTCOME_MANIFEST.engineRelease,methodSha256:CBB_CONTEXTUAL_OUTCOME_MANIFEST.methodSha256,trainingRowsSha256:"a".repeat(64),availableBy:CBB_CONTEXTUAL_OUTCOME_MANIFEST.availableBy,objectSha256:CBB_CONTEXTUAL_OUTCOME_MANIFEST.modelObjectSha256,factorObjectSha256:"b".repeat(64)},
   interpretation:d.interpretation,finalScore:d.finalScore,finalUncertainty:d.finalUncertainty,gameOutcome:{selection:d.finalScore.homeWinProbability>=.5?"first":"second",probability:Math.max(d.finalScore.homeWinProbability,1-d.finalScore.homeWinProbability)},marketDecisions:d.marketDecisions,gradePolicy:d.policy,
   workingForecast:{},calibration:{forecastArtifactObjectSha256:CBB_CONTEXTUAL_OUTCOME_MANIFEST.modelObjectSha256,calibrationMethodSha256:CBB_CONTEXTUAL_OUTCOME_MANIFEST.calibrationMethodSha256},numericalTrace:{workingLatentLocations:latent,finalLatentDistribution:latent,law:d.lawNumerics,reference:d.sourceReferenceNumerics},interpretationMeaning:"Synthetic frozen joint-law receipt",limits:"No model-fit claim"} as unknown as CbbOutcomeDecision;
@@ -88,6 +90,37 @@ export async function testCbbContextualOutcomeLocks(){
   // covariance release, new source labels or corrected probabilities.
   const legacy=buildCbbProvisionalBoard(independent,targets);stored=null;await writeCbbMemberGame({game,candidate:legacy,homeLogo:null,awayLogo:null,now:at},db);const old=(await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:lock},db)).record;tracked.length=0;await writeLockedCbbTracking(old,tracking);for(const r of tracked)(r.snapshot_json as Record<string,unknown>).release="cbb_tracking_writer_2026_11_05_r24_coordinated_source_lineage";const oldRecords=JSON.stringify(tracked),oldBytes=JSON.stringify(old);assert.equal(await writeLockedCbbTracking(old,tracking),0);assert.equal(JSON.stringify(tracked),oldRecords);assert.equal(JSON.stringify(old),oldBytes);assert.equal(assertCbbContextualLockedRecord(old),null);
   const legacyNoQuote=buildCbbGameForecastBoard(independent,{kind:"cross_division"});stored=null;await writeCbbMemberGame({game,candidate:legacyNoQuote,homeLogo:null,awayLogo:null,now:at},db);const oldWinner=(await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:lock},db)).record;tracked.length=0;assert.equal(await writeLockedCbbTracking(oldWinner,tracking),1,"Old R1 normal-law winner retains its own verifier and no wager");assert.equal(tracked[0].odds_american,null);
+  // New risk-based priced passes can retain positive nominal EV. They remain
+  // complete forecasts without recommendation confidence or wager exposure.
+  const extremeTargets=[{...targets[0],firstPrice:-100000,secondPrice:5000},...targets.slice(1)];
+  const extremeBoard=releasedBoard(true,extremeTargets,{marginMean:60,totalMean:146,marginSd:11,totalSd:15,correlation:.1});
+  assert.equal(extremeBoard.rows[0].grade,"No Play");assert(extremeBoard.rows[0].expectedValue!>0);
+  stored=null;await writeCbbMemberGame({game,candidate:extremeBoard,homeLogo:null,awayLogo:null,now:at,marketQuotes:extremeTargets},db);
+  const extremeLock=(await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:lock},db)).record;
+  assert.equal(extremeLock.memberGame.markets.moneyline.verdict.key,"no_play");
+  assert.equal(extremeLock.memberGame.markets.moneyline.recommendationConfidence,null);
+  assert.equal(extremeLock.memberGame.markets.moneyline.modelProb,extremeBoard.rows[0].probability);
+  tracked.length=0;assert.equal(await writeLockedCbbTracking(extremeLock,tracking),3);
+  const extremeML=tracked.find(row=>row.market==="moneyline")!;
+  assert.equal(extremeML.no_bet,true);assert.equal(extremeML.play_grade,"no_play");
+  assert.equal(extremeML.expected_value,extremeBoard.rows[0].expectedValue);
+  const extremeBytes=JSON.stringify(extremeLock),extremeTracking=JSON.stringify(tracked);
+  assert.equal(await writeLockedCbbTracking(extremeLock,tracking),0);
+  assert.equal(JSON.stringify(extremeLock),extremeBytes);assert.equal(JSON.stringify(tracked),extremeTracking);
+  // The preceding contextual R7/R6 family shares model R1, but retains its
+  // original grades and tracking evidence when the new grade family ships.
+  const priorContextual=releasedBoard(true,targets,undefined,true);
+  assert.equal(priorContextual.gradeRelease,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE);
+  stored=null;await writeCbbMemberGame({game,candidate:priorContextual,homeLogo:null,awayLogo:null,now:at,marketQuotes:targets},db);
+  const priorLock=(await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:lock},db)).record;
+  const priorBytes=JSON.stringify(priorLock);tracked.length=0;assert.equal(await writeLockedCbbTracking(priorLock,tracking),3);
+  for(const row of tracked)(row.snapshot_json as Record<string,unknown>).release="cbb_tracking_writer_2026_11_05_r29_contextual_noplay_price_lanes";
+  const priorTrackingBytes=JSON.stringify(tracked);
+  assert.equal(await writeLockedCbbTracking(priorLock,tracking),0);
+  assert.equal(JSON.stringify(tracked),priorTrackingBytes);assert.equal(JSON.stringify(priorLock),priorBytes);
+  assert.deepEqual(cbbMemberGameForReader(priorLock,game).markets,priorLock.memberGame.markets);
+  assert.equal((await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:lock},db)).written,false);
+  assert.equal(JSON.stringify(priorLock),priorBytes,"New risk grading cannot replace a legacy contextual lock");
   assert.equal(network,0,"No artifact fetch/provider path was used for adapter, locking, reading or tracking");
  }finally{globalThis.fetch=previousFetch;}
  console.log("PASS contextual outcome lock integration: stored one-law DTO/price/grade, priced No Play accuracy without wager units, vig/zero Watch and positive-value steep Lean, shared fallback safety, lock clone+reader precedence, no tracking reforecast, legacy R1/old tracking exact, zero real IO");

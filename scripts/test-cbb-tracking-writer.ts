@@ -9,6 +9,7 @@ import { hasVerifiedAlternateLineSource } from "../lib/services/tracking/alterna
 import { CBB_SCORE_RESEARCH_RELEASE } from "../lib/cbb/scoreResearch";
 import { CBB_CURRENT_SCORE_RELEASE } from "../lib/cbb/currentScoreRuntime";
 import { CBB_PROVISIONAL_GRADE_RELEASE, CBB_LEGACY_PROVISIONAL_GRADE_RELEASE } from "../lib/cbb/provisionalGradePolicy";
+import {CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE} from "../lib/cbb/contextualOutcomeBoard";
 import { gradePrediction } from "../lib/services/predictionGrader";
 import {CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
@@ -37,6 +38,7 @@ const db={from:(table:string)=>{
 }} as unknown as Parameters<typeof writeLockedCbbTracking>[1];
 
 async function main(){
+  assert.equal(cbbLockedGradeRelease({release:"cbb_contextual_outcome_board_2026_11_05_r1_copy_only",gradeRelease:CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE}),CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,"An existing contextual R6 lock keeps its original grade release after the R7 risk repair");
   assert.equal(await writeLockedCbbTracking({...record,snapshot:first,memberGame:{...memberGame,lockedAt:null}},db),0);
   assert.equal(await writeLockedCbbTracking(record,db),3);
   assert.deepEqual(rows.map(row=>row.market),["moneyline","spread","total"]);

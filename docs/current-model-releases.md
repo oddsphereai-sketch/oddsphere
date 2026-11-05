@@ -1,5 +1,26 @@
 # Current production model releases and qualified research candidates
 
+## CBB contextual Lean quality — November 5 candidate
+
+The owner requested a correction to any-positive-EV Lean eligibility. Candidate
+decision `cbb_outcome_decision_2026_11_05_r8_contextual_recommendation_risk`,
+interpreted R8, grade `cbb_contextual_outcome_grade_2026_11_05_r7_contextual_recommendation_risk`,
+publisher R43, adapter R27 and tracking R30 preserve model R1/covariance R1 and
+all forecast/side/price/nominal-EV outputs. They assess recommendation quality
+using fitted location sensitivity and an explicitly declared additional-adverse-
+case risk policy. Fragile positive estimates become Watch; returns incapable
+of supporting that risk become priced No Play. No source quorum, opponent veto,
+play-count target, hand-set EV percentage or new forecast blend is introduced.
+The policy has an explicit data-sized reserve (currently 1/137 before location
+sensitivity) and is not threshold-free or a calibrated confidence bound.
+Full method, qualifications, paired promotion tests and publication proof are in
+`model-audits/2026-11-05-cbb-contextual-lean-quality.md`.
+
+Earlier R7/R6 public locks keep their exact stored payloads, including grades.
+The R7 legacy codec/mapping remains available for their exact interpretation;
+unlocked future publications alone adopt the new grade family. Existing source,
+fixture, DraftKings display, sole-writer/lease and runtime-limit repairs remain.
+
 ## CBB contextual outcome reader — deployed, first refresh runtime repair
 
 Deployed release identifiers for the owner-directed unified contextual reader:

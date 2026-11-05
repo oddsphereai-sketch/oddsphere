@@ -40,6 +40,16 @@ function logNormalTail(x:number):number{
  }
  throw new CbbScoreLawNumericalError("Gaussian tail did not converge");
 }
+/** E[max(-X,0)] for a declared working Normal(mean,sd²) value sensitivity.
+ * This helper does not change the game score law or claim calibrated EV risk. */
+export function cbbWorkingNormalExpectedDownside(mean:number,sd:number):number{
+ if(!Number.isFinite(mean)||!Number.isFinite(sd)||sd<0)throw new CbbScoreLawNumericalError("invalid working value sensitivity");
+ if(sd===0)return Math.max(-mean,0);
+ if(mean<0)return cbbWorkingNormalExpectedDownside(-mean,sd)-mean;
+ if(mean===0)return sd/Math.sqrt(2*Math.PI);
+ const z=mean/sd,positive=Math.log(sd)-.5*z*z-.5*LOG2PI,negative=Math.log(mean)+logNormalTail(z);
+ return Math.exp(differenceLog(positive,negative));
+}
 function normalIntervalLog(lo:number,hi:number):number{
  if(!(lo<hi))return -Infinity;
  const width=hi-lo,mid=(lo+hi)/2;
