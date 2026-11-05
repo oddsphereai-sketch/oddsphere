@@ -10,6 +10,33 @@ cannot count as blind evidence. These are review obligations, not runtime
 activation gates, quotas, source weights or forecasting rules. Stored locked
 public records retain exact precedence.
 
+## Owner-directed CFB causal market-reader repair — November 4
+
+The owner directed removal of CFB weighting/blending and requested one sharp,
+causal market reader whose evidence can affect the final product without market
+anchoring. The scoped future-unlocked R60/R42/R8 candidate removes both legacy
+public-split PMF reflection and 50–75% current-level interpolation. The independent
+PMF is the prior; one chronological joint-market ledger may apply one agreed
+target-excluded source-relative innovation per axis. A line and its price are one
+economic observation. Missing, flat, partial, stale, future, wrong-line, reversed,
+bought-back or conflicted evidence preserves the independent axis.
+
+Owls receives model admission only for exact-game, fresh, pre-kickoff Circa
+`sharp_adjacent` rows with complete per-market pairs and target-book exclusion.
+Public/retail splits remain visible context with zero forecast and grade authority.
+No percentage is translated directly into points. The final PMF owns the released
+scores, probabilities and picks; exact-price grades consume those outputs and
+qualified categorical evidence without a second numerical forecast adjustment.
+The receipt must disclose every evidence disposition and whether it affected the
+PMF. All prior locked payloads and their reader precedence remain exact.
+
+Publication requires a valid same-input board comparison with paired actionable
+promotion/demotion reporting, focused reader/writer/lock tests, the full model
+gate, independent review, latest-main integration safety, protected PR checks and
+live release/data/reader/lock proof. A different lifecycle cohort cannot be called
+same-input evidence. Until that comparison is valid, this remains a committed
+candidate and must not be published.
+
 ## Owner-directed cross-sport sharp-reader audit repairs — November 4
 
 The owner requested independent sharp-minded reviews across every Daily Edge

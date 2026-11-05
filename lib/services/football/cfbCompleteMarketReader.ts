@@ -9,7 +9,7 @@ import type {
   CfbForwardMarketReaderObservation,
 } from "./cfbForwardEvidenceCapture";
 import { CFB_FORWARD_CONTEXT_CAPTURE_FRESH_MINUTES } from "./cfbForwardEvidenceCapture";
-import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
+import { CFB_OWLS_SPLITS_RELEASE, type CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 import {
   CFB_SHARP_MAX_AGE_MINUTES,
   summarizePmf,
@@ -19,9 +19,9 @@ import {
 import type { CfbV1Forecast } from "./cfbV1Decision";
 
 export const CFB_COMPLETE_MARKET_READER_RELEASE =
-  "cfb_complete_market_reader_2026_10_31_r7_exact_source_named_total_economics" as const;
+  "cfb_complete_market_reader_2026_11_04_r8_causal_relative_innovation" as const;
 export const CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE =
-  "cfb_market_reader_artifact_2026_10_11_r5_consensus_authority_split_specialization" as const;
+  "cfb_market_reader_artifact_2026_11_04_r6_causal_relative_innovation" as const;
 
 type Market = "moneyline" | "spread" | "total";
 type Axis = "margin" | "total";
@@ -31,19 +31,12 @@ type Artifact = {
   trainedThrough: string;
   games: number;
   selectionProtocol: string;
-  margin: {
-    baseConsensusAuthority: number;
-    maximumAdditionalConsensusAuthority: number;
-    disagreementScalePoints: number;
-    upsetRetention: {
-      minimumAbsoluteConsensusMargin: number;
-      maximumAbsoluteConsensusMargin: number;
-    };
-    minimumResolvedSpreadEdgePoints: number;
-  };
-  total: {
-    splitProvenance: "fallback";
-    reflectionAuthority: number;
+  contract: {
+    minimumNamedPriceSources: number;
+    maximumAgeMinutes: number;
+    publicSplitAuthority: number;
+    maximumInnovationsPerAxis: number;
+    conflictPolicy: "preserve_independent_axis";
   };
 };
 type Observation = {
@@ -55,6 +48,8 @@ type Observation = {
 type Trail = {
   source: string;
   sourceClass: "named" | "retail";
+  openingAt: string;
+  currentAt: string;
   openingAxis: number | null;
   currentAxis: number | null;
   openingProbability: number;
@@ -63,6 +58,28 @@ type Trail = {
   reversalCount: number;
   priceReversalCount: number;
   firstMoveAt: string | null;
+};
+
+export type CfbMarketReaderLedgerEntry = {
+  at: string;
+  market: Market | "margin_axis" | "total_axis";
+  source: string;
+  evidence: "named_price" | "retail_price" | "named_sharp_split" | "public_split" | "axis_decision";
+  disposition: "applied" | "context_only" | "target_excluded" | "missing" |
+    "insufficient" | "flat" | "reversal" | "source_conflict" | "line_mismatch" |
+    "model_support_unavailable" | "partial_named_move" | "recorded_no_relative_innovation";
+  pmfEffect: "margin" | "total" | "none";
+};
+
+export type CfbMarketReaderReceipt = {
+  release: typeof CFB_COMPLETE_MARKET_READER_RELEASE;
+  prior: "independent_pmf";
+  publicSplitAuthority: 0;
+  maximumInnovationsPerAxis: 1;
+  targetExcludedSportsbooks: Partial<Record<Market, string>>;
+  ledger: CfbMarketReaderLedgerEntry[];
+  margin: { disposition: CfbCompleteMarketReaderResult["namedMarginStatus"]; applied: boolean };
+  total: { disposition: CfbCompleteMarketReaderResult["namedTotalStatus"]; applied: boolean };
 };
 type SplitRead = {
   provenance: "named_sharp" | "fallback" | "public";
@@ -88,6 +105,7 @@ export type CfbCompleteMarketReaderResult = {
     "reversal" | "source_conflict" | "partial_named_move" | "flat" | "model_support_unavailable";
   namedMarginStatus: "applied" | "missing" | "insufficient" | "line_mismatch" |
     "reversal" | "source_conflict" | "partial_named_move" | "flat" | "model_support_unavailable";
+  receipt: CfbMarketReaderReceipt;
 };
 
 export function applyCfbCompleteMarketReader(args: {
@@ -113,53 +131,17 @@ export function applyCfbCompleteMarketReader(args: {
       .map(observationFromHistory),
     args.currentObservation,
   ].sort((first, second) => Date.parse(first.capturedAt) - Date.parse(second.capturedAt));
-  const base = {
-    independentMargin: args.independentForecast.expectedMarginHome,
-    independentTotal: args.independentForecast.expectedTotal,
-    awayFbs: args.awayFbs,
-    homeFbs: args.homeFbs,
-    awayConferenceId: args.awayConferenceId,
-    homeConferenceId: args.homeConferenceId,
-    kickoffAt: args.kickoffAt,
-    observations,
-  };
   const splitContext = {
+    providerGameId: args.forecast.providerGameId,
     asOf: args.currentObservation.capturedAt,
     kickoffAt: args.kickoffAt,
     homeSpread: args.evaluatedLines.homeSpread,
     total: args.evaluatedLines.total,
     evaluatedSportsbooks: args.evaluatedSportsbooks ?? {},
   };
-  const marginFeatures = residualFeatures(base, "margin", splitContext);
-  // Named price-discovery books form the margin reference when at least two
-  // independent named sources agree on an exact current axis. Retail breadth
-  // remains context, not a vote that can swamp those sources by book count.
-  const marketMargin = (marginFeatures.spread_named_source_count ?? 0) >= 2
-    ? marginFeatures.spread_named_current_axis
-    : marginFeatures.spread_all_current_axis;
-  const spreadConsensusAvailable = marketMargin !== undefined;
-  const independentMargin = args.independentForecast.expectedMarginHome;
-  const disagreement = marketMargin === undefined ? 0 : Math.abs(marketMargin - independentMargin);
-  const consensusAuthority = ARTIFACT.margin.baseConsensusAuthority +
-    ARTIFACT.margin.maximumAdditionalConsensusAuthority *
-      Math.tanh(disagreement / ARTIFACT.margin.disagreementScalePoints);
-  const anchoredMargin = marketMargin === undefined
-    ? args.forecast.expectedMarginHome
-    : independentMargin + consensusAuthority * (marketMargin - independentMargin);
-  const retainIndependentUpset = marketMargin !== undefined &&
-    lineWinner(independentMargin, 0) !== lineWinner(marketMargin, 0) &&
-    Math.abs(marketMargin) >= ARTIFACT.margin.upsetRetention.minimumAbsoluteConsensusMargin &&
-    Math.abs(marketMargin) <= ARTIFACT.margin.upsetRetention.maximumAbsoluteConsensusMargin;
-  const upsetAwareMargin = retainIndependentUpset ? independentMargin : anchoredMargin;
   const spreadBoundary = args.evaluatedLines.homeSpread === null
     ? null
     : -args.evaluatedLines.homeSpread;
-  const unresolvedSpreadCrossing = spreadBoundary !== null &&
-    lineWinner(upsetAwareMargin, spreadBoundary) !== lineWinner(args.forecast.expectedMarginHome, spreadBoundary) &&
-    Math.abs(upsetAwareMargin - spreadBoundary) < ARTIFACT.margin.minimumResolvedSpreadEdgePoints;
-  const consensusMargin = unresolvedSpreadCrossing
-    ? args.forecast.expectedMarginHome
-    : upsetAwareMargin;
   // Adjudicate the named spread and ML paths against the same pre-reader PMF
   // before touching the score. The spread number and its price are one
   // economic observation; a named path cannot be counted again as consensus.
@@ -171,11 +153,12 @@ export function applyCfbCompleteMarketReader(args: {
     spreadBoundary,
     pmf: args.forecast.pmf,
   });
-  const proposedMargin = namedMarginRead.targetMargin ??
-    (namedMarginRead.status === "source_conflict" || namedMarginRead.status === "reversal"
-      ? args.forecast.expectedMarginHome : consensusMargin);
+  const marginSharp = consensusSplitSide(observations, "spread", "named_sharp", splitContext) ??
+    consensusSplitSide(observations, "moneyline", "named_sharp", splitContext);
+  const marginRead = qualifyWithNamedSharp(namedMarginRead, marginSharp, args.forecast.expectedMarginHome,
+    namedMarginRead.targetMargin);
+  const proposedMargin = marginRead.target ?? args.forecast.expectedMarginHome;
 
-  const fallbackTotalSide = consensusSplitSide(observations, "total", ARTIFACT.total.splitProvenance, splitContext);
   const totalBoundary = args.evaluatedLines.total;
   const namedTotalRead = totalBoundary === null
     ? { status: "model_support_unavailable" as const, targetTotal: null }
@@ -186,21 +169,12 @@ export function applyCfbCompleteMarketReader(args: {
       boundary: totalBoundary,
       pmf: args.forecast.pmf,
     });
-  const namedTotalTarget = namedTotalRead.targetTotal;
-  // Public money-ticket pressure against named books holding their price is
-  // resistance, not confirmation. A partial lead, buyback, or disagreement
-  // similarly cannot be silently resolved by a lower-provenance split.
-  const namedBlocksFallback = ["flat", "partial_named_move", "reversal", "source_conflict"]
-    .includes(namedTotalRead.status);
-  const fallbackTotalQualified = fallbackTotalSide !== null && !namedBlocksFallback;
-  const totalEvidenceAvailable = totalBoundary !== null &&
-    (fallbackTotalQualified || namedTotalTarget !== null);
-  const releasedTotal = args.forecast.expectedTotal;
-  const proposedTotal = namedTotalTarget ?? (!totalEvidenceAvailable ||
-      lineWinner(releasedTotal, totalBoundary!) === fallbackTotalSide
-    ? releasedTotal
-    : releasedTotal + ARTIFACT.total.reflectionAuthority *
-      (2 * totalBoundary! - 2 * releasedTotal));
+  const totalSharp = consensusSplitSide(observations, "total", "named_sharp", splitContext);
+  const totalRead = qualifyWithNamedSharp(namedTotalRead, totalSharp, args.forecast.expectedTotal,
+    namedTotalRead.targetTotal);
+  const namedTotalTarget = totalRead.target;
+  const totalEvidenceAvailable = namedTotalTarget !== null;
+  const proposedTotal = namedTotalTarget ?? args.forecast.expectedTotal;
   const marginPmf = tiltCfbMarginWithinTotals(
     args.forecast.pmf,
     proposedMargin - args.forecast.expectedMarginHome,
@@ -210,19 +184,7 @@ export function applyCfbCompleteMarketReader(args: {
     marginPmf,
     proposedTotal - marginSummary.expectedTotal,
   );
-  const desiredTotalSide = totalBoundary === null || namedTotalTarget !== null ||
-      !fallbackTotalQualified
-    ? null
-    : fallbackTotalSide;
-  const finalPmf = totalBoundary !== null && desiredTotalSide !== null
-    ? alignTotalPmfSide({
-      basePmf: marginPmf,
-      initialPmf: initialTotalPmf,
-      initialTargetTotal: proposedTotal,
-      boundary: totalBoundary,
-      side: desiredTotalSide,
-    })
-    : initialTotalPmf;
+  const finalPmf = initialTotalPmf;
   const summary = summarizePmf(finalPmf);
   const totalSideFlipped = totalBoundary !== null &&
     pmfTotalSide(finalPmf, totalBoundary) !== pmfTotalSide(args.forecast.pmf, totalBoundary);
@@ -231,12 +193,87 @@ export function applyCfbCompleteMarketReader(args: {
     marginShiftPoints: summary.expectedMarginHome - args.forecast.expectedMarginHome,
     totalShiftPoints: summary.expectedTotal - args.forecast.expectedTotal,
     totalSideFlipped,
-    marginEvidenceAvailable: spreadConsensusAvailable || namedMarginRead.targetMargin !== null,
+    marginEvidenceAvailable: marginRead.target !== null,
     totalEvidenceAvailable,
-    totalEvidenceRoute: namedTotalTarget !== null ? "named_economic_path"
-      : fallbackTotalQualified && totalBoundary !== null ? "fallback_split" : "independent",
-    namedTotalStatus: namedTotalRead.status,
-    namedMarginStatus: namedMarginRead.status,
+    totalEvidenceRoute: namedTotalTarget !== null ? "named_economic_path" : "independent",
+    namedTotalStatus: totalRead.status,
+    namedMarginStatus: marginRead.status,
+    receipt: buildReceipt({ observations, splitContext, marginStatus: marginRead.status,
+      totalStatus: totalRead.status, marginApplied: marginRead.target !== null,
+      totalApplied: totalRead.target !== null }),
+  };
+}
+
+function qualifyWithNamedSharp<T extends { status: CfbCompleteMarketReaderResult["namedMarginStatus"] }>(
+  read: T,
+  sharpSide: Side | null,
+  priorMean: number,
+  proposedMean: number | null,
+): { status: T["status"]; target: number | null } {
+  if (proposedMean === null) return { status: read.status, target: null };
+  if (sharpSide === null) return { status: read.status, target: proposedMean };
+  const sharpDirection = sharpSide === "first" ? 1 : -1;
+  const innovationDirection = Math.sign(proposedMean - priorMean);
+  return innovationDirection !== 0 && innovationDirection !== sharpDirection
+    ? { status: "source_conflict", target: null }
+    : { status: read.status, target: proposedMean };
+}
+
+function buildReceipt(args: {
+  observations: Observation[];
+  splitContext: SplitContext;
+  marginStatus: CfbCompleteMarketReaderResult["namedMarginStatus"];
+  totalStatus: CfbCompleteMarketReaderResult["namedTotalStatus"];
+  marginApplied: boolean;
+  totalApplied: boolean;
+}): CfbMarketReaderReceipt {
+  const ledger: CfbMarketReaderLedgerEntry[] = [];
+  for (const market of ["moneyline", "spread", "total"] as const) {
+    const target = args.splitContext.evaluatedSportsbooks[market];
+    for (const trail of marketTrails(args.observations, market, args.splitContext.asOf, target)) {
+      ledger.push({
+        at: trail.currentAt,
+        market,
+        source: trail.source,
+        evidence: trail.sourceClass === "named" ? "named_price" : "retail_price",
+        disposition: trail.sourceClass === "named" ? "recorded_no_relative_innovation" : "context_only",
+        pmfEffect: "none",
+      });
+    }
+    for (const read of splitReads(args.observations, market, args.splitContext)) {
+      ledger.push({
+        at: args.splitContext.asOf,
+        market,
+        source: read.provenance === "named_sharp" ? "circa" : read.provenance,
+        evidence: read.provenance === "public" ? "public_split" : "named_sharp_split",
+        disposition: read.provenance === "public" ? "context_only" : "recorded_no_relative_innovation",
+        pmfEffect: "none",
+      });
+    }
+  }
+  const apply = (axis: "margin" | "total", status: CfbMarketReaderLedgerEntry["disposition"]) => {
+    ledger.push({
+      at: args.splitContext.asOf,
+      market: axis === "margin" ? "margin_axis" : "total_axis",
+      source: "joint_named_price_path",
+      evidence: "axis_decision",
+      disposition: status,
+      pmfEffect: status === "applied" ? axis : "none",
+    });
+  };
+  apply("margin", args.marginStatus);
+  apply("total", args.totalStatus);
+  ledger.sort((left, right) => Date.parse(left.at) - Date.parse(right.at) ||
+    left.market.localeCompare(right.market) || left.source.localeCompare(right.source));
+  return {
+    release: CFB_COMPLETE_MARKET_READER_RELEASE,
+    prior: "independent_pmf",
+    publicSplitAuthority: 0,
+    maximumInnovationsPerAxis: 1,
+    targetExcludedSportsbooks: { ...args.splitContext.evaluatedSportsbooks },
+    ledger,
+    margin: { disposition: args.marginStatus, applied: args.marginApplied },
+    total: { disposition: args.totalStatus, applied: args.totalApplied },
   };
 }
 
@@ -469,13 +506,12 @@ function alignTotalPmfSide(args: {
 function assertArtifact(): void {
   if (
     ARTIFACT.release !== CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE ||
-    ARTIFACT.games !== 373 ||
-    ARTIFACT.margin.baseConsensusAuthority !== 0.5 ||
-    ARTIFACT.margin.maximumAdditionalConsensusAuthority !== 0.25 ||
-    ARTIFACT.margin.disagreementScalePoints !== 7 ||
-    ARTIFACT.margin.minimumResolvedSpreadEdgePoints !== 1 ||
-    ARTIFACT.total.splitProvenance !== "fallback" ||
-    ARTIFACT.total.reflectionAuthority !== 1
+    ARTIFACT.games !== 0 ||
+    ARTIFACT.contract.minimumNamedPriceSources !== 2 ||
+    ARTIFACT.contract.maximumAgeMinutes !== CFB_FORWARD_CONTEXT_CAPTURE_FRESH_MINUTES ||
+    ARTIFACT.contract.publicSplitAuthority !== 0 ||
+    ARTIFACT.contract.maximumInnovationsPerAxis !== 1 ||
+    ARTIFACT.contract.conflictPolicy !== "preserve_independent_axis"
   ) {
     throw new Error("CFB complete market-reader artifact contract mismatch.");
   }
@@ -607,6 +643,8 @@ function marketTrails(observations: Observation[], market: Market, asOfAt: strin
     return [{
       source,
       sourceClass: NAMED.has(source) ? "named" : "retail",
+      openingAt: opening[0],
+      currentAt: last.current[0],
       openingAxis: axisValue(market, opening),
       currentAxis: axisValue(market, last.current),
       openingProbability: probabilityValue(market, opening),
@@ -724,6 +762,7 @@ function sharpSide(record: CfbSharpApiSplitRecord, market: Market): {
 }
 
 type SplitContext = {
+  providerGameId: string;
   asOf: string;
   kickoffAt: string;
   homeSpread: number | null;
@@ -760,6 +799,9 @@ function splitReads(observations: Observation[], market: Market, context: SplitC
       }]);
     }
     for (const record of observation.sharpApiSplits) {
+      if (record.release !== CFB_OWLS_SPLITS_RELEASE || record.provider !== "owls" ||
+        record.providerGameId !== context.providerGameId || !record.providerEventId.trim() ||
+        record.sportsbook !== "circa" || record.sourceSemantics !== "sharp_adjacent") continue;
       if (!fresh(record.capturedAt, CFB_SHARP_MAX_AGE_MINUTES)) continue;
       if (canonical(record.sportsbook) === canonical(context.evaluatedSportsbooks[market] ?? "")) continue;
       if (market === "total" &&

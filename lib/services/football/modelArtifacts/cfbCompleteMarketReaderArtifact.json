@@ -1,22 +1,13 @@
 {
-  "release": "cfb_market_reader_artifact_2026_10_11_r5_consensus_authority_split_specialization",
-  "trainedThrough": "2026-10-11",
-  "games": 373,
-  "selectionProtocol": "chronological_2026_target_excluded_consensus_authority_with_incident_holdout_and_split_provenance_forensics",
-  "margin": {
-    "mode": "continuous_target_excluded_spread_consensus_authority_with_football_key_three_upset_retention",
-    "baseConsensusAuthority": 0.5,
-    "maximumAdditionalConsensusAuthority": 0.25,
-    "disagreementScalePoints": 7,
-    "upsetRetention": {
-      "minimumAbsoluteConsensusMargin": 2.5,
-      "maximumAbsoluteConsensusMargin": 3.5
-    },
-    "minimumResolvedSpreadEdgePoints": 1
-  },
-  "total": {
-    "mode": "fallback_split_directional_reflection_at_exact_evaluated_total",
-    "splitProvenance": "fallback",
-    "reflectionAuthority": 1
+  "release": "cfb_market_reader_artifact_2026_11_04_r6_causal_relative_innovation",
+  "trainedThrough": "2026-11-04",
+  "games": 0,
+  "selectionProtocol": "source_relative_causal_innovation_without_level_blending",
+  "contract": {
+    "minimumNamedPriceSources": 2,
+    "maximumAgeMinutes": 120,
+    "publicSplitAuthority": 0,
+    "maximumInnovationsPerAxis": 1,
+    "conflictPolicy": "preserve_independent_axis"
   }
 }

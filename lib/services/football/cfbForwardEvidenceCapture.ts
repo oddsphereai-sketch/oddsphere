@@ -8,8 +8,8 @@ import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 import type { CfbV1ExactPriceDecision, CfbV1Forecast, CfbV1Market } from "./cfbV1Decision";
 
 export const CFB_FORWARD_CONTEXT_CAPTURE_RELEASE =
-  "cfb_daily_edge_forward_context_capture_2026_10_27_r4_owls_price_provenance" as const;
-export const CFB_FORWARD_CONTEXT_CAPTURE_SCHEMA = "cfbfec4" as const;
+  "cfb_daily_edge_forward_context_capture_2026_11_04_r5_causal_reader_receipt" as const;
+export const CFB_FORWARD_CONTEXT_CAPTURE_SCHEMA = "cfbfec5" as const;
 export const CFB_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET = 8 as const;
 export const CFB_FORWARD_CONTEXT_CAPTURE_MAX_PROVENANCE_RECORDS_PER_MARKET = 2 as const;
 export const CFB_FORWARD_CONTEXT_CAPTURE_MAX_MARKET_BYTES = 8 * 1024;
@@ -71,8 +71,8 @@ export type CfbForwardContextMarket = {
 export type CfbForwardContextCapture = {
   release: typeof CFB_FORWARD_CONTEXT_CAPTURE_RELEASE;
   schema: typeof CFB_FORWARD_CONTEXT_CAPTURE_SCHEMA;
-  mode: "capture_only";
-  productionDecisionEffect: false;
+  mode: "production_receipt";
+  productionDecisionEffect: boolean;
   gameId: string;
   capturedAt: string;
   releases: {
@@ -194,8 +194,8 @@ export function buildCfbForwardContextCapture(args: {
     const capture = withBytes({
       release: CFB_FORWARD_CONTEXT_CAPTURE_RELEASE,
       schema: CFB_FORWARD_CONTEXT_CAPTURE_SCHEMA,
-      mode: "capture_only" as const,
-      productionDecisionEffect: false as const,
+      mode: "production_receipt" as const,
+      productionDecisionEffect: hash(args.independentForecast.pmf) !== hash(args.authoritativeForecast.pmf),
       gameId: args.payload.game.providerGameId,
       capturedAt: args.payload.capturedAt,
       releases: {

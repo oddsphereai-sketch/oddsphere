@@ -12,7 +12,7 @@ import {
   tiltCfbTotalWithinMargins,
 } from "../lib/services/football/cfbMarketSharpAwareShadow";
 import type { CfbV1Forecast } from "../lib/services/football/cfbV1Decision";
-import { CFB_SHARP_API_SPLITS_RELEASE } from "../lib/services/football/cfbSharpApiSplits";
+import { CFB_OWLS_SPLITS_RELEASE, CFB_SHARP_API_SPLITS_RELEASE } from "../lib/services/football/cfbSharpApiSplits";
 
 const pmf = [
   { home: 17, away: 14, probability: 0.08 },
@@ -149,9 +149,10 @@ const independent = applyCfbCompleteMarketReader({
   ...common,
   currentObservation: observation(["circa"]),
 });
-assert.equal(independent.marginEvidenceAvailable, true);
+assert.equal(independent.marginEvidenceAvailable, false);
 assert.equal(independent.totalEvidenceAvailable, false);
-assert.ok(Math.abs(independent.marginShiftPoints) > 1e-6, "target-excluded movement must be allowed to move the score axis");
+assert.ok(Math.abs(independent.marginShiftPoints) < 1e-9,
+  "one named source cannot move the independent score axis");
 assert.ok(Math.abs(independent.forecast.expectedMarginHome -
   (independent.forecast.expectedHomePoints - independent.forecast.expectedAwayPoints)) < 1e-9);
 assert.ok(Math.abs(independent.forecast.expectedTotal -
@@ -186,10 +187,10 @@ const retailMajorityResult = applyCfbCompleteMarketReader({ ...common, currentOb
 assert.ok(Math.abs(namedOnlyResult.forecast.expectedMarginHome -
   retailMajorityResult.forecast.expectedMarginHome) < 1e-9,
 "retail book count cannot overrule two named books at a different spread number");
-assert.equal(staticConsensus.marginEvidenceAvailable, true);
+assert.equal(staticConsensus.marginEvidenceAvailable, false);
 assert.ok(
-  Math.abs(staticConsensus.marginShiftPoints) > 1e-6,
-  "a static target-excluded consensus must retain authority without movement or splits",
+  Math.abs(staticConsensus.marginShiftPoints) < 1e-9,
+  "a static market level cannot anchor the independent PMF",
 );
 
 const keyThreeUpset = applyCfbCompleteMarketReader({
@@ -200,37 +201,33 @@ assert.ok(
   Math.abs(keyThreeUpset.forecast.expectedMarginHome - forecast.expectedMarginHome) < 1e-9,
   "an independent upset must survive the empirically retained football key-three band",
 );
-assert.match(CFB_COMPLETE_MARKET_READER_RELEASE, /r7_exact_source_named_total_economics/);
-assert.equal(CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE, "cfb_market_reader_artifact_2026_10_11_r5_consensus_authority_split_specialization");
+assert.match(CFB_COMPLETE_MARKET_READER_RELEASE, /r8_causal_relative_innovation/);
+assert.equal(CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE, "cfb_market_reader_artifact_2026_11_04_r6_causal_relative_innovation");
 const artifact = JSON.parse(readFileSync(
   new URL("../lib/services/football/modelArtifacts/cfbCompleteMarketReaderArtifact.json", import.meta.url),
   "utf8",
 )) as {
-  margin: { baseConsensusAuthority: number; minimumResolvedSpreadEdgePoints: number };
-  total: { splitProvenance: string; reflectionAuthority: number };
+  contract: { minimumNamedPriceSources: number; publicSplitAuthority: number; maximumInnovationsPerAxis: number };
 };
-assert.equal(artifact.margin.baseConsensusAuthority, 0.5);
-assert.equal(artifact.margin.minimumResolvedSpreadEdgePoints, 1);
-assert.equal(artifact.total.splitProvenance, "fallback");
-assert.equal(artifact.total.reflectionAuthority, 1);
+assert.equal(artifact.contract.minimumNamedPriceSources, 2);
+assert.equal(artifact.contract.publicSplitAuthority, 0);
+assert.equal(artifact.contract.maximumInnovationsPerAxis, 1);
 
 const totalReflection = applyCfbCompleteMarketReader({
   ...common,
   currentObservation: observation(["circa"], true),
 });
-assert.equal(totalReflection.totalEvidenceAvailable, true);
-assert.equal(totalReflection.totalSideFlipped, true);
-assert.ok(totalReflection.forecast.expectedTotal > 48, "fallback Total flow must be able to reflect an Under baseline to Over");
+assert.equal(totalReflection.totalEvidenceAvailable, false);
+assert.equal(totalReflection.totalSideFlipped, false);
+assert.ok(Math.abs(totalReflection.forecast.expectedTotal - forecast.expectedTotal) < 1e-9,
+  "public/fallback Total splits are context-only and cannot reflect the PMF");
 assert.ok(Math.abs(totalReflection.forecast.expectedTotal -
   (totalReflection.forecast.expectedHomePoints + totalReflection.forecast.expectedAwayPoints)) < 1e-9);
 const reflectedOverProbability = totalReflection.forecast.pmf.reduce((sum, cell) => {
   const total = cell.home + cell.away;
   return sum + (total > 48 ? cell.probability : total === 48 ? 0.5 * cell.probability : 0);
 }, 0);
-assert.ok(
-  reflectedOverProbability > 0.5,
-  "the final PMF—not only its mean score—must agree with the fallback Total read",
-);
+assert.ok(Number.isFinite(reflectedOverProbability));
 
 for (const [caseName, mutate] of [
   ["wrong total line", (sample: CfbForwardMarketReaderObservation) => {
@@ -288,6 +285,37 @@ assert.ok(namedPriceOnly.totalShiftPoints > 0,
   "two independent named books moving Over price at a fixed Total must update the coherent score distribution");
 assert.ok(Math.abs(namedPriceOnly.forecast.expectedTotal -
   (namedPriceOnly.forecast.expectedHomePoints + namedPriceOnly.forecast.expectedAwayPoints)) < 1e-9);
+assert.equal(namedPriceOnly.receipt.publicSplitAuthority, 0);
+assert.equal(namedPriceOnly.receipt.maximumInnovationsPerAxis, 1);
+assert.equal(namedPriceOnly.receipt.total.applied, true);
+assert.equal(namedPriceOnly.receipt.ledger.filter((entry) => entry.pmfEffect === "total").length, 1,
+  "one economic Total episode can author at most one PMF innovation");
+const sharpConflict = structuredClone(namedPriceOnlyObservation);
+sharpConflict.sharpApiSplits = [{
+  release: CFB_OWLS_SPLITS_RELEASE,
+  provider: "owls",
+  providerGameId: forecast.providerGameId,
+  providerEventId: "exact-reader-test-event",
+  sportsbook: "circa",
+  sourceSemantics: "sharp_adjacent",
+  capturedAt: sharpConflict.capturedAt,
+  moneyline: null,
+  spread: null,
+  total: {
+    line: 48,
+    over: { moneyPct: 25, ticketsPct: 50 },
+    under: { moneyPct: 75, ticketsPct: 50 },
+  },
+}];
+const sharpConflictResult = applyCfbCompleteMarketReader({ ...common, currentObservation: sharpConflict });
+assert.equal(sharpConflictResult.namedTotalStatus, "source_conflict");
+assert.ok(Math.abs(sharpConflictResult.totalShiftPoints) < 1e-9,
+  "opposed exact Owls Circa flow vetoes rather than blending with named price innovation");
+const wrongGameSharp = structuredClone(sharpConflict);
+wrongGameSharp.sharpApiSplits![0]!.providerGameId = "wrong-game";
+const wrongGameSharpResult = applyCfbCompleteMarketReader({ ...common, currentObservation: wrongGameSharp });
+assert.equal(wrongGameSharpResult.namedTotalStatus, "applied",
+  "a wrong-game split is unavailable and cannot veto an otherwise qualified price innovation");
 const validPriorNamed = structuredClone(namedPriceOnlyObservation);
 validPriorNamed.capturedAt = "2026-10-10T21:55:00.000Z";
 validPriorNamed.markets.total.families = validPriorNamed.markets.total.families.map((family) => [

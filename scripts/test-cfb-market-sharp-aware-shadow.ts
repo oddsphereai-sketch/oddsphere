@@ -65,11 +65,14 @@ const resistanceFavoriteInput = {
   movementDirection: "neutral" as const, reasonCodes: ["retained_watch"],
 };
 assert.equal(applyCfbBalancedPositiveValueRule(resistanceFavoriteInput).finalGrade, "Lean");
-for (const channel of ["sharpDirection", "publicDirection", "movementDirection"] as const) {
+for (const channel of ["sharpDirection", "movementDirection"] as const) {
   const opposed = applyCfbBalancedPositiveValueRule({ ...resistanceFavoriteInput, [channel]: "resistance" });
   assert.equal(opposed.finalGrade, "Watchlist", `${channel} resistance prevents the expensive-favorite promotion`);
   assert.deepEqual(opposed.reasonCodes, ["retained_watch"]);
 }
+assert.equal(applyCfbBalancedPositiveValueRule({ ...resistanceFavoriteInput,
+  publicDirection: "resistance",
+}).finalGrade, "Lean", "public consensus resistance remains context-only and cannot veto a grade");
 assert.equal(applyCfbBalancedPositiveValueRule({ ...resistanceFavoriteInput,
   sharpDirection: "resistance", publicDirection: "resistance", movementDirection: "resistance",
 }).finalGrade, "Watchlist", "three opposing channels cannot manufacture a market-confirmed favorite Lean");
@@ -127,11 +130,12 @@ assert.equal(mismatchedMovement.expectedTotal.toFixed(9), noSharp.expectedTotal.
 const publicHomeOver = publicSplitSet({ homeTickets: 40, homeMoney: 60, overTickets: 40, overMoney: 60 });
 const withPublic = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [], playbookLine, publicSplits: publicHomeOver, evaluatedAt: observedAt });
 assert.equal(withPublic.publicConsensusAdjustment.source, "playbook_public_consensus");
-assert.equal(withPublic.publicConsensusAdjustment.homeMarginShiftPoints, 0.75);
-assert.equal(withPublic.publicConsensusAdjustment.totalShiftPoints, 0.75);
+assert.equal(withPublic.publicConsensusAdjustment.homeMarginShiftPoints, 0);
+assert.equal(withPublic.publicConsensusAdjustment.totalShiftPoints, 0);
 assert.ok(noSharp.expectedMarginHome + anchor.homeSpread < 0, "fixture starts on the away cover side");
-assert.ok(withPublic.expectedMarginHome + anchor.homeSpread > 0, "qualified eight-book spread divergence performs a real coherent side flip");
-assert.equal(withPublic.expectedTotal.toFixed(9), noSharp.expectedTotal.toFixed(9), "spread arbitration preserves the independent total");
+assert.equal(withPublic.expectedMarginHome.toFixed(9), noSharp.expectedMarginHome.toFixed(9),
+  "public consensus is recorded context and cannot reflect the PMF");
+assert.equal(withPublic.expectedTotal.toFixed(9), noSharp.expectedTotal.toFixed(9));
 const weakSameDirection = publicSplitSet({ homeTickets: 49, homeMoney: 51, overTickets: 50, overMoney: 50 });
 const retainedPublic = buildCfbMarketSharpAwareShadowForecast({
   independentForecast: independent,
@@ -142,7 +146,7 @@ const retainedPublic = buildCfbMarketSharpAwareShadowForecast({
   priorSpreadSplits: [publicHomeOver.spread],
   evaluatedAt: observedAt,
 });
-assert.equal(retainedPublic.expectedMarginHome.toFixed(9), withPublic.expectedMarginHome.toFixed(9), "a same-side favorite signal does not disappear at an arbitrary five-point cutoff");
+assert.equal(retainedPublic.expectedMarginHome.toFixed(9), noSharp.expectedMarginHome.toFixed(9));
 const weakOppositeDirection = publicSplitSet({ homeTickets: 51, homeMoney: 49, overTickets: 50, overMoney: 50 });
 const endedPublic = buildCfbMarketSharpAwareShadowForecast({
   independentForecast: independent,
@@ -193,20 +197,20 @@ const sharpHomeOver = sharpRecord({
 });
 const withSharp = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [sharpHomeOver], evaluatedAt: observedAt });
 assert.equal(withSharp.sharpAdjustment.source, "circa");
-assert.equal(withSharp.sharpAdjustment.homeMarginShiftPoints, 1.5);
-assert.equal(withSharp.sharpAdjustment.totalShiftPoints, 1.5);
+assert.equal(withSharp.sharpAdjustment.homeMarginShiftPoints, 0);
+assert.equal(withSharp.sharpAdjustment.totalShiftPoints, 0);
 assert.equal(withSharp.expectedMarginHome.toFixed(9), noSharp.expectedMarginHome.toFixed(9), "small-sample Circa splits remain recorded without an unvalidated score mutation");
 assert.equal(withSharp.expectedTotal.toFixed(9), noSharp.expectedTotal.toFixed(9));
 
 const publicAwayUnder = publicSplitSet({ homeTickets: 60, homeMoney: 40, overTickets: 60, overMoney: 40 });
 const opposingInputs = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [sharpHomeOver], playbookLine, publicSplits: publicAwayUnder, evaluatedAt: observedAt });
-assert.equal(opposingInputs.sharpAdjustment.homeMarginShiftPoints, 1.5);
-assert.equal(opposingInputs.publicConsensusAdjustment.homeMarginShiftPoints, -0.75);
+assert.equal(opposingInputs.sharpAdjustment.homeMarginShiftPoints, 0);
+assert.equal(opposingInputs.publicConsensusAdjustment.homeMarginShiftPoints, 0);
 assert.equal(opposingInputs.expectedMarginHome.toFixed(9), noSharp.expectedMarginHome.toFixed(9), "a qualified spread read that confirms the independent cover side leaves the score unchanged");
 const weakSharpHomeOver = sharpRecord({ homeTickets: 44, homeMoney: 56, overTickets: 44, overMoney: 56 });
 const weakSharpOpposed = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [weakSharpHomeOver], playbookLine, publicSplits: publicAwayUnder, evaluatedAt: observedAt });
-assert.ok(weakSharpOpposed.sharpAdjustment.homeMarginShiftPoints > 0);
-assert.ok(weakSharpOpposed.sharpAdjustment.adjustedAnchor.homeSpread <= anchor.homeSpread, "opposing public consensus cannot reverse a qualifying Circa anchor direction");
+assert.equal(weakSharpOpposed.sharpAdjustment.homeMarginShiftPoints, 0);
+assert.equal(weakSharpOpposed.sharpAdjustment.adjustedAnchor.homeSpread, anchor.homeSpread);
 
 const mass = withSharp.pmf.reduce((sum, cell) => sum + cell.probability, 0);
 const expectedHome = withSharp.pmf.reduce((sum, cell) => sum + cell.home * cell.probability, 0);
@@ -321,7 +325,7 @@ const publicPromoted = buildCfbMarketEvidenceGradeShadow({
   operationalOpening: null,
 });
 assert.equal(publicPromoted.publicDirection, "support");
-assert.ok(publicPromoted.confidenceAdjustment > 0, "public money contributes bounded support without becoming a hard promotion switch");
+assert.equal(publicPromoted.confidenceAdjustment, 0, "public money remains context-only for grading");
 assert.equal(publicPromoted.reasonCodes.includes("holistic_confidence_price_eligible"), true);
 
 const circaPriorityPromotion = buildCfbMarketEvidenceGradeShadow({
@@ -345,7 +349,7 @@ const publicResisted = buildCfbMarketEvidenceGradeShadow({
   operationalOpening: null,
 });
 assert.equal(publicResisted.publicDirection, "resistance");
-assert.ok(publicResisted.confidenceAdjustment < 0, "public resistance lowers rather than vetoes confidence");
+assert.equal(publicResisted.confidenceAdjustment, 0, "public resistance remains context-only for grading");
 
 const negative = buildCfbMarketEvidenceGradeShadow({
   decision: { ...moneyline, grade: "No Play", edgePercentagePoints: -3.1, expectedValue: -0.11 },

@@ -69,6 +69,7 @@ import {
   CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
+  CFB_SHARP_MAX_AGE_MINUTES,
   type CfbMarketSharpAwareForecast,
 } from "./cfbMarketSharpAwareShadow";
 import {
@@ -183,7 +184,7 @@ import { fetchCfbOwlsProvider } from "./cfbOwlsProvider";
 import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_11_04_r149_moneyline_resistance_guard" as const;
+  "cfb_forward_evidence_writer_2026_11_04_r150_causal_relative_innovation" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -355,9 +356,28 @@ export function buildCfbForwardPayloadsWithIsolation<T>(
  * incumbent legacy evidence until an explicit model release promotes Owls.
  */
 export function cfbModelSharpSplits(
-  rows: readonly CfbSharpApiSplitRecord[],
+  args: {
+    rows: readonly CfbSharpApiSplitRecord[];
+    providerGameId: string;
+    kickoffAt: string;
+    evaluatedAt: string;
+  },
 ): CfbSharpApiSplitRecord[] {
-  return rows.filter((row) => row.provider !== "owls");
+  const evaluatedAt = Date.parse(args.evaluatedAt);
+  const kickoffAt = Date.parse(args.kickoffAt);
+  return args.rows.filter((row) => {
+    const capturedAt = Date.parse(row.capturedAt);
+    const ageMinutes = (evaluatedAt - capturedAt) / 60_000;
+    return row.provider === "owls" &&
+      row.providerGameId === args.providerGameId &&
+      row.providerEventId.trim().length > 0 &&
+      row.sportsbook === "circa" &&
+      row.sourceSemantics === "sharp_adjacent" &&
+      Number.isFinite(capturedAt) && Number.isFinite(evaluatedAt) && Number.isFinite(kickoffAt) &&
+      capturedAt <= evaluatedAt && capturedAt < kickoffAt &&
+      ageMinutes >= 0 && ageMinutes <= CFB_SHARP_MAX_AGE_MINUTES &&
+      (row.moneyline !== null || row.spread !== null || row.total !== null);
+  });
 }
 
 export async function runCfbForwardEvidenceWriter(args: {
@@ -844,7 +864,12 @@ export async function runCfbForwardEvidenceWriter(args: {
     // The owner separated the market-reader promotion from this provider
     // migration. Preserve every legacy SharpAPI row's incumbent behavior, but
     // keep new Owls rows display/evidence-only until that separate release.
-    const modelSharpSplits = cfbModelSharpSplits(sharpApiSplits);
+    const modelSharpSplits = cfbModelSharpSplits({
+      rows: sharpApiSplits,
+      providerGameId: plan.game.providerGameId,
+      kickoffAt: plan.game.scheduledStart,
+      evaluatedAt: args.now,
+    });
     const sharpApiSplitsStatus = sharpSplitsAttempt.result === null
       ? "request_failed" as const
       : freshSharpApiSplits.length > 0
@@ -996,6 +1021,16 @@ export async function runCfbForwardEvidenceWriter(args: {
       namedMarginStatus: "missing" as const,
       namedTotalStatus: "missing" as const,
       totalEvidenceRoute: "independent" as const,
+      receipt: {
+        release: CFB_COMPLETE_MARKET_READER_RELEASE,
+        prior: "independent_pmf" as const,
+        publicSplitAuthority: 0 as const,
+        maximumInnovationsPerAxis: 1 as const,
+        targetExcludedSportsbooks: {},
+        ledger: [],
+        margin: { disposition: "missing" as const, applied: false },
+        total: { disposition: "missing" as const, applied: false },
+      },
     } : applyCfbCompleteMarketReader({
       forecast: baseForecast,
       independentForecast: weeklyForecast.forecast,
@@ -1211,6 +1246,7 @@ export async function runCfbForwardEvidenceWriter(args: {
         marketReaderNamedMarginStatus: marketReader.namedMarginStatus,
         marketReaderNamedTotalStatus: marketReader.namedTotalStatus,
         marketReaderTotalEvidenceRoute: marketReader.totalEvidenceRoute,
+        marketReaderReceipt: marketReader.receipt,
         finalWinnerCoordinatorRelease: CFB_FINAL_WINNER_COORDINATOR_RELEASE,
         finalWinnerCoordinatorArtifactRelease: CFB_FINAL_WINNER_COORDINATOR_ARTIFACT_RELEASE,
         finalWinnerCoordinatorBoundaryRelease: CFB_FINAL_WINNER_COORDINATOR_BOUNDARY_RELEASE,

@@ -11,18 +11,17 @@ import type {
   CfbV1Market,
 } from "./cfbV1Decision";
 import {
-  combineFootballOutcomeEvidenceShift,
   readFootballOutcomeMarketMovement,
   type FootballOutcomeMarketMovement,
 } from "./footballOutcomeMarketMovement";
 import { evaluateCfbHolisticConfidence } from "./cfbHolisticConfidenceCandidate";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_10_27_r39_near_tie_pmf_winner_coherence" as const;
+  "cfb_market_sharp_aware_candidate_2026_11_04_r40_causal_relative_innovation" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_10_27_r41_near_tie_pmf_winner_coherence" as const;
+  "cfb_market_sharp_aware_production_2026_11_04_r42_causal_relative_innovation" as const;
 export const CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE =
   "cfb_market_sharp_aware_production_2026_10_15_r40_full_product_coordinator_compatibility" as const;
 export const CFB_MARKET_SHARP_AWARE_COORDINATOR_INTEGRATION_PREVIOUS_PRODUCTION_RELEASE =
@@ -44,19 +43,11 @@ export const CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE =
 export const CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE =
   "cfb_market_sharp_aware_production_2026_10_03_r26_verified_quote_market_flip_continuity" as const;
 export const CFB_MARKET_SHADOW_WEIGHT = 0 as const;
-export const CFB_LEGACY_SPLIT_ARBITRATION_MONEYLINE_DOMINANT_BAND_POINTS = 2.5 as const;
 export const CFB_SHARP_SIGNED_GAP_THRESHOLD_PP = 10 as const;
-export const CFB_SHARP_FULL_STRENGTH_GAP_PP = 20 as const;
-export const CFB_SHARP_MAX_MARGIN_SHIFT_POINTS = 1.5 as const;
-export const CFB_SHARP_MAX_TOTAL_SHIFT_POINTS = 1.5 as const;
 export const CFB_SHARP_MAX_AGE_MINUTES = 120 as const;
 export const CFB_SHARP_LINE_MATCH_TOLERANCE_POINTS = 0.5 as const;
 export const CFB_PUBLIC_SIGNED_GAP_SUPPORT_THRESHOLD_PP = 8 as const;
 export const CFB_PUBLIC_SIGNED_GAP_RESISTANCE_THRESHOLD_PP = 12 as const;
-export const CFB_PUBLIC_FULL_STRENGTH_GAP_PP = 20 as const;
-export const CFB_PUBLIC_MAX_MARGIN_SHIFT_POINTS = 0.75 as const;
-export const CFB_PUBLIC_MAX_TOTAL_SHIFT_POINTS = 0.75 as const;
-export const CFB_PUBLIC_WITH_CIRCA_WEIGHT = 0.5 as const;
 export const CFB_PUBLIC_LINE_MATCH_TOLERANCE_POINTS = 0.5 as const;
 export const CFB_WATCHLIST_NEAR_NEUTRAL_MIN_EDGE_PP = 0 as const;
 export const CFB_WATCHLIST_NEAR_NEUTRAL_MIN_EV = -0.03 as const;
@@ -104,7 +95,7 @@ export type CfbMarketEvidenceDirection = "support" | "resistance" | "neutral" | 
 
 export type CfbMarketSharpAwareShadowForecast = CfbV1Forecast & {
   shadowRelease: typeof CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE;
-  forecastBasis: "independent_score_with_validated_spread_arbitration";
+  forecastBasis: "independent_score_before_causal_market_reader";
   marketWeight: typeof CFB_MARKET_SHADOW_WEIGHT;
   sharpAdjustment: {
     source: "circa" | null;
@@ -198,34 +189,20 @@ export function buildCfbMarketSharpAwareShadowForecast(args: {
     ? signedGap(sharp.total.over)
     : null;
   const publicRead = publicForecastRead({ ...args, playbookLine: args.playbookLine ?? null, publicSplits: args.publicSplits ?? null });
-  const sharpHomeMarginShiftPoints = signedPointShift(homeMarginGapPp, CFB_SHARP_MAX_MARGIN_SHIFT_POINTS, CFB_SHARP_SIGNED_GAP_THRESHOLD_PP, CFB_SHARP_FULL_STRENGTH_GAP_PP);
-  const sharpTotalShiftPoints = signedPointShift(overTotalGapPp, CFB_SHARP_MAX_TOTAL_SHIFT_POINTS, CFB_SHARP_SIGNED_GAP_THRESHOLD_PP, CFB_SHARP_FULL_STRENGTH_GAP_PP);
-  const publicHomeMarginShiftPoints = signedPointShift(publicRead.homeMarginGapPp, CFB_PUBLIC_MAX_MARGIN_SHIFT_POINTS, CFB_PUBLIC_SIGNED_GAP_SUPPORT_THRESHOLD_PP, CFB_PUBLIC_FULL_STRENGTH_GAP_PP);
-  const publicTotalShiftPoints = signedPointShift(publicRead.overTotalGapPp, CFB_PUBLIC_MAX_TOTAL_SHIFT_POINTS, CFB_PUBLIC_SIGNED_GAP_SUPPORT_THRESHOLD_PP, CFB_PUBLIC_FULL_STRENGTH_GAP_PP);
   const movement = readFootballOutcomeMarketMovement({
     opening: args.operationalOpening?.quote ?? null,
     current: args.current ?? null,
     evaluatedAt: args.evaluatedAt,
   });
-  const homeMarginShiftPoints = combineFootballOutcomeEvidenceShift({
-    sharpShift: sharpHomeMarginShiftPoints,
-    movementShift: movement.homeMarginShiftPoints,
-    publicShift: publicHomeMarginShiftPoints,
-    maximum: CFB_SHARP_MAX_MARGIN_SHIFT_POINTS,
-  });
-  const totalShiftPoints = combineFootballOutcomeEvidenceShift({
-    sharpShift: sharpTotalShiftPoints,
-    movementShift: movement.totalShiftPoints,
-    publicShift: publicTotalShiftPoints,
-    maximum: CFB_SHARP_MAX_TOTAL_SHIFT_POINTS,
-  });
-  const adjustedAnchor: CfbCanonicalMarketAnchor = {
-    ...args.anchor,
-    homeSpread: -( -args.anchor.homeSpread + homeMarginShiftPoints),
-    totalLine: args.anchor.totalLine + totalShiftPoints,
-  };
-  const pmfWithoutWeather = applyValidatedSpreadArbitration(args.independentForecast, args.anchor, args.publicSplits ?? null, args.priorSpreadSplits ?? [], args.evaluatedAt);
-  const pmf = applyValidatedSpreadArbitration(independentForecast, args.anchor, args.publicSplits ?? null, args.priorSpreadSplits ?? [], args.evaluatedAt);
+  // Legacy point-shift diagnostics are deliberately not authoritative. The
+  // causal reader consumes the raw evidence once and keeps this market-level
+  // anchor unchanged.
+  const adjustedAnchor: CfbCanonicalMarketAnchor = { ...args.anchor };
+  // Public splits and current market levels are receipt context only here.
+  // The complete reader is the sole market-consequence owner and may apply at
+  // most one target-excluded relative innovation per axis.
+  const pmfWithoutWeather = args.independentForecast.pmf.map((cell) => ({ ...cell }));
+  const pmf = independentForecast.pmf.map((cell) => ({ ...cell }));
   const summary = summarizePmf(pmf);
   const summaryWithoutWeather = summarizePmf(pmfWithoutWeather);
   return {
@@ -236,15 +213,15 @@ export function buildCfbMarketSharpAwareShadowForecast(args: {
     ...summary,
     pmf,
     shadowRelease: CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE,
-    forecastBasis: "independent_score_with_validated_spread_arbitration",
+    forecastBasis: "independent_score_before_causal_market_reader",
     marketWeight: CFB_MARKET_SHADOW_WEIGHT,
     sharpAdjustment: {
       source: sharp ? "circa" : null,
       observedAt: sharp?.capturedAt ?? null,
       homeMarginGapPp,
       overTotalGapPp,
-      homeMarginShiftPoints: sharpHomeMarginShiftPoints,
-      totalShiftPoints: sharpTotalShiftPoints,
+      homeMarginShiftPoints: 0,
+      totalShiftPoints: 0,
       adjustedAnchor,
     },
     publicConsensusAdjustment: {
@@ -252,8 +229,8 @@ export function buildCfbMarketSharpAwareShadowForecast(args: {
       observedAt: publicRead.observedAt,
       homeMarginGapPp: publicRead.homeMarginGapPp,
       overTotalGapPp: publicRead.overTotalGapPp,
-      homeMarginShiftPoints: publicHomeMarginShiftPoints,
-      totalShiftPoints: publicTotalShiftPoints,
+      homeMarginShiftPoints: 0,
+      totalShiftPoints: 0,
     },
     marketMovementAdjustment: movement,
     weatherAdjustment: {
@@ -336,12 +313,12 @@ export function buildCfbMarketEvidenceGradeShadow(args: {
     evaluatedPrice: args.decision.evaluatedQuote.price,
     evaluatedLine: args.decision.evaluatedQuote.line,
     sharpMoneyMinusTicketsPp: sharpRead.gapPp,
-    publicMoneyMinusTicketsPp: publicRead.gapPp,
+    publicMoneyMinusTicketsPp: null,
     selectedSideLineDelta: movementRead.lineDelta,
     selectedSideImpliedProbabilityDeltaPp: movementRead.impliedProbabilityDeltaPp,
     sharpDirection: sharpRead.direction,
     movementDirection: movementRead.direction,
-    publicDirection: publicRead.direction,
+    publicDirection: "neutral",
   });
   const finalGrade = holistic.confidenceGrade;
   const reasonCodes = [
@@ -432,7 +409,9 @@ export function applyCfbMarketSharpAwareGrades(args: {
         evaluatedPrice: decision.evaluatedQuote.price,
         evaluatedLine: decision.evaluatedQuote.line,
         sharpDirection: rawAdjustment.sharpDirection,
-        publicDirection: rawAdjustment.publicDirection,
+        // Public consensus remains display/context evidence. It cannot promote,
+        // demote, or confirm an actionable grade in the causal reader release.
+        publicDirection: "neutral",
         movementDirection: rawAdjustment.movementDirection,
         reasonCodes: rawAdjustment.reasonCodes,
         calibrationFamily: decision.calibrationFamily,
@@ -445,7 +424,7 @@ export function applyCfbMarketSharpAwareGrades(args: {
           release: rawAdjustment.release,
           candidateRelease: rawAdjustment.candidateRelease,
           sharpDirection: rawAdjustment.sharpDirection,
-          publicDirection: rawAdjustment.publicDirection,
+          publicDirection: "neutral",
           movementDirection: rawAdjustment.movementDirection,
           confidenceScore: rawAdjustment.confidenceScore,
           confidenceAdjustment: rawAdjustment.confidenceAdjustment,
@@ -559,7 +538,9 @@ export function applyCfbBalancedPositiveValueRule(args: {
     return { finalGrade: "Watchlist", executionStatus: args.executionStatus, reasonCodes: [...args.reasonCodes, "positive_target_excluded_value_guard"] };
   }
 
-  const evidenceDirections = [args.sharpDirection, args.publicDirection, args.movementDirection];
+  // Public consensus is retained in the DTO for member context only. It is
+  // deliberately absent from every promotion/demotion predicate.
+  const evidenceDirections = [args.sharpDirection, args.movementDirection];
   const marketSupportCount = evidenceDirections.filter((direction) => direction === "support").length;
   const marketResistanceCount = evidenceDirections.filter((direction) => direction === "resistance").length;
   const multiChannelMarketConfirmation = marketSupportCount >= 2 && marketResistanceCount === 0;
@@ -576,7 +557,7 @@ export function applyCfbBalancedPositiveValueRule(args: {
     };
   }
 
-  const noResistance = args.sharpDirection !== "resistance" && args.publicDirection !== "resistance" && args.movementDirection !== "resistance";
+  const noResistance = args.sharpDirection !== "resistance" && args.movementDirection !== "resistance";
   const marketConfirmedFavoriteLean =
     args.finalGrade === "Watchlist" &&
     args.market === "moneyline" &&
@@ -743,12 +724,6 @@ function signedGap(side: { ticketsPct: number; moneyPct: number }): number {
   return side.moneyPct - side.ticketsPct;
 }
 
-function signedPointShift(gapPp: number | null, maximum: number, threshold: number, fullStrength: number): number {
-  if (gapPp === null || Math.abs(gapPp) <= threshold) return 0;
-  const strength = Math.min(1, (Math.abs(gapPp) - threshold) / (fullStrength - threshold));
-  return Math.sign(gapPp) * maximum * strength;
-}
-
 function publicForecastRead(args: {
   independentForecast: CfbV1Forecast;
   anchor: CfbCanonicalMarketAnchor;
@@ -829,98 +804,6 @@ function publicSelectedGap(split: CfbForwardPlaybookSplit, side: CanonicalSide):
   if (side === "away") return split.awayMoneyPct !== null && split.awayBetsPct !== null ? split.awayMoneyPct - split.awayBetsPct : null;
   if (side === "over") return split.overMoneyPct !== null && split.overBetsPct !== null ? split.overMoneyPct - split.overBetsPct : null;
   return split.underMoneyPct !== null && split.underBetsPct !== null ? split.underMoneyPct - split.underBetsPct : null;
-}
-
-function applyValidatedSpreadArbitration(
-  forecast: CfbV1Forecast,
-  anchor: CfbCanonicalMarketAnchor,
-  splits: CfbForwardPlaybookSplitSet | null,
-  priorSpreadSplits: CfbForwardPlaybookSplit[],
-  evaluatedAt: string,
-): CfbV1Forecast["pmf"] {
-  const currentSplit = splits?.spread
-    ? eligiblePublicSplit(splits.spread, evaluatedAt, forecast.gameStartsAt)
-    : null;
-  const currentMoneylineSplit = splits?.moneyline
-    ? eligiblePublicSplit(splits.moneyline, evaluatedAt, forecast.gameStartsAt)
-    : null;
-  const currentDirection = currentSplit ? spreadSignalDirection(currentSplit) : null;
-  let signalSide = currentSplit ? qualifyingSpreadSignal(currentSplit) : null;
-  const moneylineMajoritySide = moneylineMoneyMajoritySide(currentMoneylineSplit);
-  if (signalSide !== null && moneylineMajoritySide !== null && moneylineMajoritySide !== signalSide) {
-    signalSide = null;
-  }
-  if (
-    signalSide === null &&
-    currentSplit !== null &&
-    currentDirection !== null &&
-    spreadSignalHasMoneyMajority(currentSplit, currentDirection) &&
-    (moneylineMajoritySide === null || moneylineMajoritySide === currentDirection) &&
-    isFavoriteSpreadSide(currentDirection, anchor.homeSpread) &&
-    Math.abs(forecast.expectedMarginHome + anchor.homeSpread) >= 5
-  ) {
-    const evaluatedMs = Date.parse(evaluatedAt);
-    const gameMs = Date.parse(forecast.gameStartsAt);
-    const retained = [...priorSpreadSplits]
-      .filter((split) => {
-        const capturedMs = Date.parse(split.capturedAt);
-        if (![capturedMs, evaluatedMs, gameMs].every(Number.isFinite)) return false;
-        const ageHours = (evaluatedMs - capturedMs) / 3_600_000;
-        return capturedMs <= gameMs && ageHours >= 0 && ageHours <= 24 && qualifyingSpreadSignal(split) === currentDirection;
-      })
-      .sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0];
-    signalSide = retained ? currentDirection : null;
-  }
-  if (signalSide === null) return forecast.pmf.map((cell) => ({ ...cell }));
-  const independentSide = forecast.expectedMarginHome + anchor.homeSpread >= 0 ? "home" : "away";
-  if (signalSide === independentSide) return forecast.pmf.map((cell) => ({ ...cell }));
-  const targetMargin = -2 * anchor.homeSpread - forecast.expectedMarginHome;
-  const changesOutrightWinner = Math.sign(targetMargin) !== Math.sign(forecast.expectedMarginHome);
-  if (
-    Math.abs(anchor.homeSpread) < CFB_LEGACY_SPLIT_ARBITRATION_MONEYLINE_DOMINANT_BAND_POINTS &&
-    changesOutrightWinner
-  ) {
-    return forecast.pmf.map((cell) => ({ ...cell }));
-  }
-  return tiltCfbMarginWithinTotals(forecast.pmf, targetMargin - forecast.expectedMarginHome);
-}
-
-function spreadSignalDirection(split: CfbForwardPlaybookSplit): "home" | "away" | null {
-  if (
-    split.homeMoneyPct === null || split.homeBetsPct === null ||
-    split.awayMoneyPct === null || split.awayBetsPct === null
-  ) return null;
-  const homeGap = split.homeMoneyPct - split.homeBetsPct;
-  const awayGap = split.awayMoneyPct - split.awayBetsPct;
-  return homeGap >= awayGap ? "home" : "away";
-}
-
-function qualifyingSpreadSignal(split: CfbForwardPlaybookSplit): "home" | "away" | null {
-  if ((split.booksUsed ?? 0) < 8) return null;
-  const direction = spreadSignalDirection(split);
-  if (direction === null) return null;
-  const gap = direction === "home"
-    ? (split.homeMoneyPct ?? 0) - (split.homeBetsPct ?? 0)
-    : (split.awayMoneyPct ?? 0) - (split.awayBetsPct ?? 0);
-  return Math.abs(gap) >= 5 && spreadSignalHasMoneyMajority(split, direction) ? direction : null;
-}
-
-function spreadSignalHasMoneyMajority(
-  split: CfbForwardPlaybookSplit,
-  side: "home" | "away",
-): boolean {
-  const money = side === "home" ? split.homeMoneyPct : split.awayMoneyPct;
-  return money !== null && money >= 50;
-}
-
-function moneylineMoneyMajoritySide(split: CfbForwardPlaybookSplit | null): "home" | "away" | null {
-  if (!split || (split.booksUsed ?? 0) < 8 || split.homeMoneyPct === null || split.awayMoneyPct === null) return null;
-  if (split.homeMoneyPct === split.awayMoneyPct) return null;
-  return split.homeMoneyPct > split.awayMoneyPct ? "home" : "away";
-}
-
-function isFavoriteSpreadSide(side: "home" | "away", homeSpread: number): boolean {
-  return homeSpread < 0 ? side === "home" : homeSpread > 0 ? side === "away" : false;
 }
 
 export function tiltCfbMarginWithinTotals(
