@@ -18,7 +18,7 @@ Publication identifiers: independent
 `cbb_game_forecast_board_2026_11_05_r1_unpriced_outcomes`, forecast-only grade
 `cbb_game_forecast_grade_2026_11_05_r1_no_unquoted_wagers`, frozen outcome
 `cbb_game_outcome_2026_11_05_r1_frozen_winner`, publisher
-`cbb_member_pipeline_2026_11_05_r34_full_division_one_forecasts`, adapter
+`cbb_member_pipeline_2026_11_05_r35_complete_forecast_publication`, adapter
 `cbb_member_adapter_2026_11_05_r24_unpriced_game_forecast`, tracking
 `cbb_tracking_writer_2026_11_05_r22_frozen_unpriced_winners`, training
 `cbb_current_training_2026_11_05_r4_separate_cross_division_receipts`, and fixture
@@ -32,6 +32,11 @@ are documented in
 `docs/model-audits/2026-11-05-cbb-all-division-one-private.md`. The current-input
 43-game /129-market comparison has 0 promotions, 0 demotions, 0 side changes
 and 0 score changes; 22 new cross forecasts add no unqualified wager grades.
+R35 supersedes the R34 publication lifecycle: an incomplete later-day D1 venue
+cannot abort the whole board. Only complete forecasts construct candidates, and
+a prior coherent member payload remains exact when its refresh is incomplete.
+New incomplete fixtures remain internal; no placeholder or replacement forecast
+is invented. R5/R19 scores, R15 reader and all grade/price/stake rules are unchanged.
 
 ## Daily Edge health and NFL conviction-risk grade cap — November 5
 
