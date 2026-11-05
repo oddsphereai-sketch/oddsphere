@@ -1,6 +1,18 @@
 # Model change safety protocol
 
-## Owner-directed CBB unified contextual inference — prepared integration
+## Owner-directed CBB unified contextual inference — production activation
+
+The R1 contextual release was deployed in `a8d5008476b838cf5eb902a0cee8179e1ef0a346`
+at 2026-11-05T21:48:34Z and its actual production readiness check loaded the
+exact private artifact. The first full rolling refresh exceeded the previous
+300-second route limit during member writes, before the slate snapshot was
+published. A scoped route-only repair sets maxDuration to 540 seconds, retaining
+the ten-minute shared lease, sole writer, existing cadence and provider budgets.
+It changes no model inputs, forecast, probability, selection, grade or stake
+formula, so existing numerical release identifiers remain authoritative.
+Verify a complete normal refresh and actual member board before declaring the
+reader activated. Partial updated unlocked member rows are not a completed
+slate publication; all prior locked records retain exact precedence.
 
 The owner's subsequent tier clarification is recorded in
 `daily-edge-grade-intent.md`: top outcome confidence and worthwhile price, with
@@ -21,7 +33,8 @@ this CBB release must not silently regrade other sports.
 The owner requested one contextual market interpretation and forecast with the
 independent model as a data point, no preset model/book blends and no arbitrary
 score offsets. The prepared model R1 /covariance R1 /publisher R42 /adapter R26 and
-tracking R29 family above is not yet deployed. Keep current R38/R39/R41 source, Albany identity and
+tracking R29 family above is deployed; complete board activation is still being
+verified. Keep current R38/R39/R41 source, Albany identity and
 fixture-clock repairs, including transport-native IDs, request starts, response
 completion, unknown observation bounds and locked-record compatibility.
 

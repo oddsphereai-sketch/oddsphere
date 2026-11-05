@@ -10,7 +10,9 @@ import { supabase } from "@/lib/db/supabase";
 import { readCbbSettlementFixtureCatchupDates } from "@/lib/services/cbb/cbbSettlementFixtureCatchup";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+// The rolling contextual batch needs ~4 minutes of inference before member
+// writes and settlement. Leave a minute below the existing ten-minute lease.
+export const maxDuration = 540;
 
 export async function GET(request: Request): Promise<Response> {
   return cronHandler(request, "cbb_daily_refresh", async () => {
