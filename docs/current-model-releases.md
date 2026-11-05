@@ -150,6 +150,18 @@ are documented in
 `docs/model-audits/2026-11-05-cbb-all-division-one-private.md`. The current-input
 43-game /129-market comparison has 0 promotions, 0 demotions, 0 side changes
 and 0 score changes; 22 new cross forecasts add no unqualified wager grades.
+The member reader independently versions the cache-to-record handoff as
+`cbb_member_reader_2026_11_05_r1_cached_fixture_clock_handoff`. A cached board
+may briefly retain an old unlocked start while the sole writer saves the
+corrected fixture. Read full saved payloads only for locks or changed-clock IDs,
+verify school/member/index identity and render the exact current saved DTO.
+Do not blank unrelated cards, bypass identity, recompute any model field or
+mutate the cache input. An index-unlocked/full-record-locked race keeps the exact
+stored lock and official result checks. Unchanged unlocked games retain scalar
+index-only reads. Existing model, publisher, grade, stake, source and lease
+identifiers remain authoritative; this is delivery of the existing record.
+See `model-audits/2026-11-05-cbb-cached-clock-handoff.md`.
+
 R39/R22/R18/R25 supersede publication of unsupported unlocked cross-domain
 priors at the owner's November 5 direction. Current-source collection still
 covers every eligible D1 matchup; an incomplete opponent prior must not become
