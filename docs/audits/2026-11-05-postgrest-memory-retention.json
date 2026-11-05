@@ -113,5 +113,5 @@
     "Later live API sessions have recycled. A two-day-old listener alone is not evidence that request connections fail to recycle.",
     "Current Linux follow-up uses synthetic data and never receives production credentials or fixtures."
   ],
-  "linux_followup": "pending isolated CI replay"
+  "linux_followup": "Completed successfully: run 42043892768. See 2026-11-05-linux-retention-summary.json. Adding raw 19.55MB writes retains substantially more API memory than identical compressed writes; PostgreSQL backend accountable mappings return to the same level. This is controlled synthetic attribution, not a production process census."
 }
