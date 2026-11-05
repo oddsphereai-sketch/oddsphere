@@ -37,8 +37,48 @@ import {
   nflEvidenceCapturedAt,
   usableNflNamedPriceBooks,
   preserveVerifiedNflLockedGames,
+  resolveNflOwlsCoverageHealth,
   runNflForwardEvidenceWriter,
 } from "../lib/services/football/nflForwardEvidenceWriter";
+
+const attestedReaction = (markets: Array<"moneyline" | "spread" | "total">) => Object.fromEntries(markets.map((market) => [market, {
+  flows: [{
+    authority: "source_contract_reaction_context_only",
+    book: "circa",
+    pairedQuoteObservedAt: "2026-11-05T12:45:00.000Z",
+    reactionBaselineObservedAt: "2026-11-05T12:45:00.000Z",
+  }],
+}]));
+assert.deepEqual(resolveNflOwlsCoverageHealth({
+  initialHolds: ["owls_splits_model_partial_contract_coverage"],
+  modelSplitCoverage: false,
+  owlsCoverage: true,
+  finalQualifiedMarkets: ["moneyline"],
+  reactionContext: attestedReaction(["spread", "total"]),
+}), [], "verified own-contract reaction paths must clear the false partial health flag");
+assert.deepEqual(resolveNflOwlsCoverageHealth({
+  initialHolds: ["owls_splits_model_partial_contract_coverage"],
+  modelSplitCoverage: false,
+  owlsCoverage: true,
+  finalQualifiedMarkets: ["moneyline", "spread", "total"],
+  reactionContext: null,
+}), [], "the final evaluated contract, not the initial provisional contract, owns direct coverage health");
+assert.deepEqual(resolveNflOwlsCoverageHealth({
+  initialHolds: ["owls_splits_model_partial_contract_coverage"],
+  modelSplitCoverage: false,
+  owlsCoverage: true,
+  finalQualifiedMarkets: ["moneyline"],
+  reactionContext: { spread: { flows: [{ authority: "public_source_contract_reaction_context_only" }] } },
+}), ["owls_splits_model_partial_contract_coverage"],
+"retail context and an unattested named flow cannot stand in for professional source reaction evidence");
+assert.deepEqual(resolveNflOwlsCoverageHealth({
+  initialHolds: ["owls_splits_model_unqualified", "injury_report_unavailable"],
+  modelSplitCoverage: false,
+  owlsCoverage: false,
+  finalQualifiedMarkets: [],
+  reactionContext: attestedReaction(["moneyline", "spread", "total"]),
+}), ["injury_report_unavailable", "named_book_splits_unavailable"],
+"an old reaction receipt cannot manufacture current Owls feed availability or erase unrelated health findings");
 
 void (async () => {
   await assert.rejects(
@@ -428,7 +468,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_11_05_r111_current_game_starter_authority/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_11_05_r112_source_reaction_health/);
 assert.match(writer, /buildNflMarketBrainShadow/);
 assert.match(writer, /readNflOwlsMarketBrainSplitEvidence/,
   "the NFL shadow must consume the canonical Owls evidence lane");

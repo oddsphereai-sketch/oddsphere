@@ -208,6 +208,32 @@ async function main() {
   assert.deepEqual(read, snapshot);
   assert.equal(JSON.stringify(read?.fixture), JSON.stringify(fixture));
 
+  const starterAuthorityPredecessor = {
+    ...snapshot,
+    snapshotRelease: "nfl_forward_member_snapshot_2026_11_05_r68_current_game_starter_authority",
+    fixtureRelease: "nfl_weekly_member_fixture_2026_11_05_r76_current_game_starter_authority",
+    memberRelease: "nfl_v1_member_release_2026_11_05_r60_current_game_starter_authority",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_11_05_r63_current_game_starter_authority",
+    fixture: {
+      ...fixture,
+      heldMemberFixtureRelease: "nfl_weekly_member_fixture_2026_11_05_r76_current_game_starter_authority",
+    },
+  };
+  storedKey = ["nfl", "daily-edge", 2026, 1,
+    starterAuthorityPredecessor.snapshotRelease, starterAuthorityPredecessor.fixtureRelease,
+    starterAuthorityPredecessor.memberRelease, starterAuthorityPredecessor.decisionRelease].join("::");
+  storedPayload = starterAuthorityPredecessor;
+  const starterAuthorityBefore = JSON.stringify(starterAuthorityPredecessor);
+  const starterAuthorityRead = await readNflForwardMemberSnapshot({
+    client, season: 2026, week: 1, now: "2026-08-27T12:02:00.000Z",
+  });
+  assert.deepEqual(starterAuthorityRead, starterAuthorityPredecessor,
+    "r68/r76/r60/r63 must retain exact locked predecessor precedence under source-reaction health semantics");
+  assert.equal(JSON.stringify(starterAuthorityRead), starterAuthorityBefore,
+    "source-reaction health classification cannot reinterpret any legacy locked field");
+  assert.equal(storedPayload, starterAuthorityPredecessor,
+    "reading the starter-authority predecessor cannot write or replace its immutable stored payload");
+
   const movementContractPredecessor = {
     ...snapshot,
     snapshotRelease: "nfl_forward_member_snapshot_2026_11_01_r58_movement_contract_separation",
