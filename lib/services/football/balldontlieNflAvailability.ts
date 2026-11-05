@@ -390,12 +390,12 @@ function normalizeNflDesignationPlayer(row: BdlNflDesignationRow): DailyEdgeAvai
   const practiceStatus = stringValue(latestPractice?.status);
   const status = gameStatus
     ? titleCaseStatus(gameStatus)
-    : row.active === false
-      ? "Inactive"
+    : practiceStatus && practiceStatus.toLowerCase() !== "full"
+      ? titleCaseStatus(practiceStatus)
       : row.did_not_play === true
         ? "Did Not Play"
-        : practiceStatus && practiceStatus.toLowerCase() !== "full"
-          ? titleCaseStatus(practiceStatus)
+        : row.active === false
+          ? "Inactive"
           : injury
             ? "Status unavailable"
             : null;

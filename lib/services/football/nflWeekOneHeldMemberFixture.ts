@@ -48,7 +48,11 @@ import { isVerifiedEventOpening } from "../dailyEdge/marketCycleOpening";
 import { verifiedTrailMovementDirection } from "../dailyEdge/verifiedTrailMovement";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_11_05_r75_conviction_risk_grade_cap" as const;
+  "nfl_weekly_member_fixture_2026_11_05_r76_current_game_starter_authority" as const;
+const NFL_CURRENT_GAME_STARTER_PREDECESSOR_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_11_05_r59_conviction_risk_grade_cap" as const;
+const NFL_CURRENT_GAME_STARTER_PREDECESSOR_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_11_05_r62_conviction_risk_grade_cap" as const;
 const NFL_CONVICTION_CAP_PREDECESSOR_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_11_04_r58_per_market_source_qualification" as const;
 const NFL_CONVICTION_CAP_PREDECESSOR_DECISION_RELEASE =
@@ -182,6 +186,7 @@ const NFL_EXPECTED_SCORE_TENTHS_COLLECTOR_RELEASES = new Set<string>([
   "nfl_forward_evidence_collector_2026_10_27_r29_owls_capture_only",
   "nfl_forward_evidence_collector_2026_11_02_r30_source_qualified_attempts",
   "nfl_forward_evidence_collector_2026_11_02_r31_exact_quote_availability",
+  "nfl_forward_evidence_collector_2026_11_02_r32_published_rounding_pressure",
   NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
 ]);
 
@@ -371,6 +376,9 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[], preservedLockedIds
     row.payload.decisions.evaluatedBets.every((decision) =>
       decision.decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE);
   const isPreviousAuthority = (row: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }) =>
+    (row.payload.decisions.modelPromotionStatus === NFL_CURRENT_GAME_STARTER_PREDECESSOR_MEMBER_RELEASE &&
+      row.payload.decisions.evaluatedBets.every((decision) =>
+        decision.decisionRelease === NFL_CURRENT_GAME_STARTER_PREDECESSOR_DECISION_RELEASE)) ||
     (row.payload.decisions.modelPromotionStatus === NFL_CONVICTION_CAP_PREDECESSOR_MEMBER_RELEASE &&
       row.payload.decisions.evaluatedBets.every((decision) =>
         decision.decisionRelease === NFL_CONVICTION_CAP_PREDECESSOR_DECISION_RELEASE)) ||
