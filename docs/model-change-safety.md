@@ -60,6 +60,42 @@ is removed to reduce memory. The shared slate-date/hour, DraftKings source-date 
 ICU objects, with exact all-sport timezone/DST/roll parity. No date results are
 cached. Runtime stages remain visible in the existing logs.
 
+## Owner-directed NFL current-game starter authority repair — November 5
+
+The owner identified that Seattle had officially ruled Sam Darnold out and
+named Drew Lock the expected Week 9 starter, while the NFL board remained held.
+The exact-game BALLDONTLIE designation feed correctly reports Darnold `Out` and
+Lock `Limited`, but also carries `active:false` for Lock; the older roster depth
+snapshot separately carries `O`. Those fields cannot override a newer exact-game
+practice/game designation. Explicit current `game_status` remains first
+authority, followed by the newest exact-game practice status; `did_not_play` and
+`active:false` are conservative fallbacks only when the current designation is
+absent. When resolving depth, a current exact-game player report at or after the
+depth capture supersedes the older roster injury flag. An older report cannot
+clear a newer roster flag, and an explicit current Out/Doubtful still fails
+closed.
+
+This future-unlocked repair advances the NFL shadow decision to R8, collector to
+R33, production model/calibration/decision/grade/member to R54/R53/R63/R63/R60,
+fixture/snapshot/writer to R76/R68/R111. Existing locked payloads and the R59/R62
+reader contract remain exact predecessor authority. The independent score law,
+market reader, thresholds, prices and stakes do not change. Drew Lock already has
+valid 2026 Seattle history in the stored current-season state (Weeks 1–2, 48
+attempts), so the repair removes the false `home_quarterback_history_unmatched`
+hold without inventing player history.
+
+The complete no-write current publication rehearsal covers 15 games / 45 markets.
+Its only hold, side or grade change is ARI@SEA, from three held No Plays to SEA Moneyline No Play, ARI
++8.5 Watchlist and Under 39.5 No Play. Held games move 1→0; actionables remain
+18→18 with 0 actionable promotions, 0 actionable demotions and no unrelated
+side/grade changes. A same-capture old/new resolver comparison also changes only
+Seattle's expected quarterback, from Milroe to Lock. The current live-data resolver independently returns Drew
+Lock with matched history and zero blocking health reasons. Publication still
+requires focused normalization/resolver/predecessor/lock tests, the full model
+gate, current-main integration safety, protected PR checks, and postmerge live
+release/QB/board/lock verification. Evidence:
+`docs/model-audits/2026-11-05-nfl-current-game-starter-authority.json`.
+
 ## Owner-directed Daily Edge health and NFL conviction repair — November 5
 
 The owner requested a fresh cross-sport Daily Edge health check and specifically

@@ -1,0 +1,115 @@
+{
+  "auditRelease": "nfl_current_game_starter_authority_audit_2026_11_05_r1",
+  "status": "candidate_verified_not_yet_published",
+  "scope": "future_unlocked_nfl_only",
+  "lockedRecordPolicy": "exact_stored_payload_precedence_unchanged",
+  "defect": {
+    "game": "ARI@SEA",
+    "providerGameId": "1392349",
+    "observedFailure": "Sam Darnold was Out, but stale or ambiguous Drew Lock fields caused Jalen Milroe to be selected and the board to hold for unmatched quarterback history.",
+    "rootCause": [
+      "active_false_was_evaluated_before_current_exact_game_practice_status",
+      "strongest_status_merge_prevented_newer_exact_game_status_from_superseding_older_depth_status"
+    ]
+  },
+  "primarySources": [
+    {
+      "publisher": "Seattle Seahawks",
+      "url": "https://www.seahawks.com/news/seahawks-qb-sam-darnold-out-for-sunday-s-game-vs-arizona-due-to-quad-injury",
+      "fact": "Darnold is out and Drew Lock is expected to start, with Jalen Milroe backing up."
+    },
+    {
+      "publisher": "Seattle Seahawks",
+      "url": "https://www.seahawks.com/news/week-9-injury-report-cardinals-at-seahawks",
+      "fact": "Drew Lock was limited with an elbow issue and expected to start."
+    }
+  ],
+  "providerEvidence": {
+    "capturedAt": "2026-11-05T13:45:54.670Z",
+    "samDarnold": { "gameStatus": "Out", "injury": "Quadriceps" },
+    "drewLock": {
+      "practiceStatus": "Limited",
+      "injury": "Elbow",
+      "gameStatus": null,
+      "active": false
+    },
+    "olderDepthStatus": "O",
+    "resolvedStarterAfterRepair": "Drew Lock"
+  },
+  "quarterbackHistory": {
+    "player": "Drew Lock",
+    "playerId": "60",
+    "team": "SEA",
+    "season": 2026,
+    "weeks": [1, 2],
+    "passingAttempts": 48,
+    "historyMatched": true
+  },
+  "authorityContract": {
+    "normalizationOrder": [
+      "explicit_current_game_status",
+      "latest_non_full_exact_game_practice_status",
+      "did_not_play_fallback",
+      "active_false_fallback",
+      "injury_without_status"
+    ],
+    "depthResolution": "A valid exact-game report at or after the depth capture supersedes the older depth injury flag; otherwise retain the conservative stronger status.",
+    "negativeControls": [
+      "older_limited_report_cannot_clear_newer_depth_out",
+      "current_explicit_out_still_blocks_replacement",
+      "active_false_without_current_status_remains_inactive"
+    ]
+  },
+  "liveDataDryRun": {
+    "readOnly": true,
+    "writes": 0,
+    "resolvedStarter": "Drew Lock",
+    "historySource": "frozen_artifact",
+    "blockingReasons": [],
+    "projectedHomeMargin": 12.026081101389789
+  },
+  "boardImpact": {
+    "readOnly": true,
+    "writes": 0,
+    "games": 15,
+    "markets": 45,
+    "heldGamesBefore": 1,
+    "heldGamesAfter": 0,
+    "actionablesBefore": 18,
+    "actionablesAfter": 18,
+    "actionablePromotions": 0,
+    "actionableDemotions": 0,
+    "sameCaptureAvailabilityResolutionChanges": [
+      { "game": "ARI@SEA", "side": "home", "before": "Jalen Milroe", "after": "Drew Lock" }
+    ],
+    "changedGame": "ARI@SEA",
+    "changedMarkets": [
+      { "market": "moneyline", "before": "Held No Play", "after": "SEA No Play", "probability": 0.6396974688857198 },
+      { "market": "spread", "before": "Held No Play", "after": "ARI +8.5 Watchlist", "probability": 0.5631679626574693 },
+      { "market": "total", "before": "Held No Play", "after": "Under 39.5 No Play", "probability": 0.5006342369456556 }
+    ],
+    "unrelatedSideOrGradeChanges": 0,
+    "currentCaptureDriftDisclosure": "A later live-data rehearsal also produced sub-0.002 probability and sub-0.02 score drift for JAX@BAL with no side or grade change; this is changing upstream current data, not an availability-resolver consequence."
+  },
+  "releaseSet": {
+    "shadowDecision": "nfl_market_led_moneyline_lean_shadow_2026_11_05_r8_current_game_starter_authority",
+    "collector": "nfl_forward_evidence_collector_2026_11_05_r33_current_game_starter_authority",
+    "model": "nfl_v1_daily_edge_model_2026_11_05_r54_current_game_starter_authority",
+    "calibration": "nfl_v1_daily_edge_calibration_2026_11_05_r53_current_game_starter_authority",
+    "decision": "nfl_v1_daily_edge_decision_2026_11_05_r63_current_game_starter_authority",
+    "gradePolicy": "nfl_v1_grade_policy_2026_11_05_r63_current_game_starter_authority",
+    "member": "nfl_v1_member_release_2026_11_05_r60_current_game_starter_authority",
+    "fixture": "nfl_weekly_member_fixture_2026_11_05_r76_current_game_starter_authority",
+    "snapshot": "nfl_forward_member_snapshot_2026_11_05_r68_current_game_starter_authority",
+    "writer": "nfl_forward_evidence_writer_2026_11_05_r111_current_game_starter_authority"
+  },
+  "publication": {
+    "allowed": false,
+    "remaining": [
+      "full_model_change_gate",
+      "latest_main_integration_safety",
+      "protected_pull_request_checks",
+      "postmerge_live_release_board_and_lock_verification"
+    ]
+  }
+}
