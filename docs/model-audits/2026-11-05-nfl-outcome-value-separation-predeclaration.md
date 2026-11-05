@@ -20,6 +20,13 @@ reaction may remain evidence about the game. It is distinct from declaring that
 the currently offered bet is attractive. Current executable price, break-even
 probability, edge and expected value remain downstream grading inputs.
 
+Qualified sharp betting activity is outcome evidence, not merely a value label:
+the side, contract, source clock and the book's subsequent reaction can indicate
+what informed participants expect to happen and may support, resist, adjust or
+flip the unified forecast through the reader. The rule above prohibits choosing
+an outcome because its current payout is attractive; it does not prohibit
+interpreting causal sharp behavior to improve outcome accuracy.
+
 ## Exposed defect
 
 The November 5 JAX@BAL capture has a market-free exact-provider score of JAX by

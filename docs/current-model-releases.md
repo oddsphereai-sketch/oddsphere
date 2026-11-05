@@ -9,6 +9,10 @@ move those outputs; those economics enter only after the forecast and selected
 contract side are frozen and may affect only the play grade. Chronological
 same-book number/juice movement remains eligible game evidence and is not the
 same thing as choosing a pick because its current price looks attractive.
+Qualified sharp betting activity is likewise outcome evidence: its direction,
+contract, timing and the source book's response may support, resist, adjust or
+flip the unified forecast. That interpretation asks what is most likely to
+happen; only the attractiveness of the offered payout is confined to grading.
 
 The candidate also repairs a current-state omission exposed by JAX@BAL. The
 normal exact-provider completed-game state remains authoritative, but it has no
