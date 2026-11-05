@@ -3,6 +3,7 @@ import {buildCbbMeasurementInputs,fitCbbContextualMeasurementForecast,predictCbb
 import {expandCbbMarketBehaviorPathStream,cbbPathBookFamily} from "./marketBehaviorPath";
 import {cbbEvidenceReceiptBounds,cbbAvailabilityUpperBoundMs} from "./marketReceiptTime";
 import {cbbExactMarketCenter} from "./marketReaderResearch";
+import {cbbInterpretationQuoteIdentity} from "./contextualMarketInterpretation";
 import type {CbbContextualFeatureInput} from "./contextualForecastFeatures";
 import type {CbbForecast,CbbQuote} from "./types";
 
@@ -58,13 +59,14 @@ function verification(input:CbbContextualFeatureInput,m:CbbMeasurement,rows:Raw[
    const hasCanonical=Object.hasOwn(raw,"canonicalReceipt"),canon=raw.canonicalReceipt as Raw|undefined;
    if(hasCanonical&&(!canon||typeof canon!=="object")){reject("invalid_explicit_canonical_receipt");continue;}
    if(q.provider&&typeof raw.provider==="string"&&q.provider!==raw.provider){reject("provider_namespace_mismatch");continue;}
-   const idChannels=[raw.sourceEventId,raw.providerEventId,canon?.providerEventId].filter(x=>x!==undefined&&x!==null);
-   if(idChannels.some(x=>typeof x!=="string"||!x.trim())||new Set(idChannels).size>1||q.eventId&&q.provider===raw.provider&&idChannels.some(x=>x!==q.eventId)){reject("known_native_identity_conflict");continue;}
+   const ownIdentity=cbbInterpretationQuoteIdentity(raw as unknown as CbbQuote);
+   if(ownIdentity.invalid||ownIdentity.conflict||q.eventId&&q.provider===raw.provider&&ownIdentity.eventId&&ownIdentity.eventId!==q.eventId){reject("known_native_identity_conflict");continue;}
    let available:string|null=null,lower:string|null=null,http:string|null=null,kind:string;
    if(canon){const bounds=cbbEvidenceReceiptBounds(raw as unknown as CbbQuote);if(!finite(bounds.available)){reject("invalid_canonical_bounds");continue;}available=String(canon.availableBy);kind="db_inserted_upper_bound";}
    else if(raw.availabilityKind==="stored_snapshot_upper_bound"||raw.availabilityKind==="db_inserted_upper_bound"){available=typeof raw.availableBy==="string"?raw.availableBy:null;kind=String(raw.availabilityKind);}
    else if(raw.availabilityKind==="http_response"||!Object.hasOwn(raw,"availabilityKind")&&raw.phase==="current"&&(CBB_OUTCOME_HTTP_PROVIDERS as readonly string[]).includes(String(raw.provider))){http=typeof raw.receivedAt==="string"?raw.receivedAt:typeof raw.fetchedAt==="string"?raw.fetchedAt:null;available=http;kind="actual_provider_response";}
    else{reject("unknown_receipt_kind");continue;}
+   if(raw.availabilityKind==="http_response"&&(preciseClock(raw.availableBy)===null||preciseClock(raw.availableBy)!==preciseClock(http)||preciseClock(raw.availableBy)!==preciseClock(raw.fetchedAt))){reject("http_availability_not_own_completed_receipt");continue;}
    if(["fetchedAt","receivedAt"].some(key=>Object.hasOwn(raw,key)&&(typeof raw[key]!=="string"||!finite(clock(raw[key]))))){reject("invalid_explicit_transport_clock");continue;}
    const upper=available?cbbAvailabilityUpperBoundMs(available):NaN,native=preciseClock(q.nativeAt),arrival=preciseClock(available),requested=raw.requestedAt===undefined?undefined:preciseClock(raw.requestedAt),received=raw.receivedAt===undefined?undefined:preciseClock(raw.receivedAt),fetched=raw.fetchedAt===undefined?undefined:preciseClock(raw.fetchedAt);
    if(!available||!finite(upper)||upper>clock(input.asOf)||native===null||arrival===null||native>arrival||fetched!==undefined&&(fetched===null||fetched>arrival)||received!==undefined&&(received===null||received>arrival||fetched!==undefined&&received<fetched!)){reject("invalid_or_unavailable_native_receipt_clock");continue;}

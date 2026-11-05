@@ -1,4 +1,4 @@
-/** OFFLINE RESEARCH ONLY. No runtime reader, writer, provider or grading hook.
+/** Pure score-distribution mathematics; no writer or provider calls.
  * A latent bivariate Gaussian is transformed to continuous home/away scores,
  * rounded to integers, and conditioned jointly on nonnegative, unequal scores.
  * Every cell, likelihood, moment and market uses that same normalization.

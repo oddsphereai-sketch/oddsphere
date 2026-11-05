@@ -1,0 +1,18 @@
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import {validateCbbReleaseRawRows,cbbReleaseCanonicalSha256,cbbReleaseSourceClosure,type CbbReleaseRawRows} from "./operator/build-cbb-contextual-release";
+const input=(gameId:number,asOf="2026-11-01T12:00:00Z",startsAt="2026-11-02T12:00:00Z")=>({asOf,startsAt,currentQuotes:[],independent:{gameId,asOf,release:"unit_fallible_independent",inputStatus:"complete" as const,margin:3,total:145}});
+const rows:CbbReleaseRawRows={schema:"cbb_contextual_release_raw_rows_v1",trainingCutoff:"2026-11-05T12:41:43.684Z",source:{datasetSha256:"a".repeat(64)},trainingRows:[1,2].map(gameId=>({gameId,decisionAt:"2026-11-01T12:00:00Z",startsAt:"2026-11-02T12:00:00Z",outcomeAvailableBy:"2026-11-03T12:00:00Z",input:input(gameId),actualHome:80,actualAway:70,provenanceSha256:"b".repeat(64)})),predictionRows:[{gameId:3,asOf:"2026-11-05T12:00:00Z",startsAt:"2026-11-06T12:00:00Z",input:input(3,"2026-11-05T12:00:00Z","2026-11-06T12:00:00Z"),rowId:"predict3",provenanceSha256:"c".repeat(64)}],foldPlan:[{foldId:"fold0",trainingGameIds:[2],heldoutGameIds:[1]},{foldId:"fold1",trainingGameIds:[1],heldoutGameIds:[2]}]};
+const pins=(r:CbbReleaseRawRows)=>({trainingGames:2,predictionGames:1,folds:2,trainingCutoff:r.trainingCutoff,datasetSha256:r.source.datasetSha256,trainingRowsSha256:cbbReleaseCanonicalSha256(r.trainingRows),predictionRowsSha256:cbbReleaseCanonicalSha256(r.predictionRows),foldPlanSha256:cbbReleaseCanonicalSha256(r.foldPlan)});
+const before=JSON.stringify(rows);assert.equal(validateCbbReleaseRawRows(rows,pins(rows)),true);assert.equal(JSON.stringify(rows),before);
+assert.equal(cbbReleaseCanonicalSha256({z:1,a:{y:2,b:3}}),cbbReleaseCanonicalSha256({a:{b:3,y:2},z:1}),"Original constructor uses canonical object-order hash, not raw JSON object-order hash");
+const invalid=(change:(r:CbbReleaseRawRows)=>void,pattern:RegExp)=>{const r=structuredClone(rows);change(r);assert.throws(()=>validateCbbReleaseRawRows(r,pins(r)),pattern);};
+invalid(r=>{r.foldPlan[0].trainingGameIds=[1,2];},/own-game-excluded/);
+invalid(r=>{r.foldPlan[1].heldoutGameIds=[1];r.foldPlan[1].trainingGameIds=[2];},/exactly once/);
+invalid(r=>{r.trainingRows[0].outcomeAvailableBy="2026-11-06T12:00:00Z";},/chronology/);
+invalid(r=>{r.trainingRows[0].input.independent.gameId=99;},/identity/);
+invalid(r=>{Object.assign(r.predictionRows[0],{actualHome:80});},/outcome-free/);
+invalid(r=>{r.predictionRows[0].asOf="2026-11-06T13:00:00Z";},/clock/);
+const changed=structuredClone(rows);changed.trainingRows[0].actualHome++;assert.throws(()=>validateCbbReleaseRawRows(changed,pins(rows)),/original R1 cohort/);
+const sources=cbbReleaseSourceClosure();assert.ok(sources.length>8);assert.ok(sources.every(f=>!f.path.includes("contextual-reader-integration")&&!f.path.includes("fit-cbb-contextual-measurement-forecast")),"No research worktree/operator math imported into production build");assert.ok(sources.some(f=>f.path.endsWith("lib/cbb/contextualOutcomeForecast.ts")));assert.ok(sources.some(f=>f.path.endsWith("lib/cbb/contextualMarketInterpretation.ts")));for(const f of sources)assert.ok(readFileSync(f.path).length>0);
+console.log("PASS release build frozen cohort/folds, label chronology, outcome-free predictions, canonical hashes and production-only source closure (zero fits).");

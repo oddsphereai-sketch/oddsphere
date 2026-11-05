@@ -1,4 +1,4 @@
-/** Offline outcome forecast -> calibrated joint score law -> exact-price grades.
+/** Contextual forecast -> calibrated joint score law -> exact-price grades.
  * No second projection adjustment or independent probability writer. */
 import {createHash} from "node:crypto";
 import {predictCbbContextualOutcomeForecast,type CbbOutcomeArtifact} from "./contextualOutcomeForecast";

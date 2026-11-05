@@ -1,4 +1,4 @@
-/** OFFLINE ancillary PROFESSIONAL-source price diagnostics only. Proportional
+/** Ancillary professional-source price diagnostics only. Proportional
  * two-way de-vig supplies a quote-implied conditional reference, not a uniquely
  * identified true book probability, game distribution or sharp bettor identity.
  * Cross-line transport borrows model shape explicitly and NEVER supplies or
