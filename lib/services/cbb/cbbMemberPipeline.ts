@@ -42,7 +42,7 @@ import {forecastCbbFullDivisionOneBatch} from "@/lib/cbb/fullDivisionOneForecast
 import {buildCbbGameForecastBoard,attachCbbGameOutcome} from "@/lib/cbb/gameForecastBoard";
 import type {CbbProvisionalBoard} from "@/lib/cbb/provisionalLifecycle";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_05_r34_full_division_one_forecasts" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_05_r35_complete_forecast_publication" as const;
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
 const expandedFixture=(game:CbbGame)=>computeSlateDate("cbb",game.date)>=CBB_FULL_D1_COVERAGE_START;
 const eligibleFixture=(game:CbbGame)=>expandedFixture(game)?cbbDivisionOneFixture(game).eligible:
@@ -201,7 +201,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     }}catch{/* An unreproducible independent baseline cannot attest a legacy anchor. */}
   }
   const retainedInputCounts={captured:0,preserved_valid:0,preserved_invalid:0,unavailable:0};
-  const boardCandidates=new Map<number,CbbProvisionalBoard>(forecasts.map(row=>{
+  const boardCandidates=new Map<number,CbbProvisionalBoard>(forecasts.filter(row=>row.forecast.inputStatus==="complete").map(row=>{
     const quotes=namedById.get(row.game.id)?.quotes??[],baseline=buildCbbProvisionalBoard(row.forecast,quotes);
     const targets=baseline.rows.flatMap(market=>{const target=quotes.find(q=>q.market===market.market&&q.sportsbook===market.targetBook&&q.providerObservedAt===market.quoteObservedAt&&q.line===market.line);return target?[target]:[];});
     const key=cbbIndependentInputKey(row.game,args.trainingGames,row.coverage??undefined),previous=prior.get(row.game.id)?.snapshot??null;
@@ -250,7 +250,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       unpublishedIncomplete.push(game.id);problems.push(`${game.id}:no_new_forecast_after_cutoff`);return false;
     }
     const forecast=forecastById.get(game.id),candidate=boardCandidates.get(game.id)??previous?.snapshot.board;
-    const evaluated=(forecast?forecast.inputStatus==="complete":!!previous)&&
+    const evaluated=(forecast?.inputStatus==="complete"||!!previous&&candidate===previous.snapshot.board)&&
       (expandedFixture(game)&&!!candidate?.gameForecast||candidate?.rows.some(row=>
       row.grade!=="Held"&&row.price!==null&&Number.isFinite(row.price)&&row.probability!==null&&Number.isFinite(row.probability)));
     if(!evaluated){unpublishedIncomplete.push(game.id);problems.push(`${game.id}:incomplete_evaluation_unpublished`);}
@@ -304,6 +304,10 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     if(!identity.homeTeamLogo||!identity.awayTeamLogo)missingLogos++;
     const afterCutoff=Date.parse(asOf)>=Date.parse(game.date)-60*60_000;
     if(afterCutoff&&!previous){problems.push(`${game.id}:prelock_snapshot_missing`);continue;}
+    if(!afterCutoff&&previous&&!boardCandidates.has(game.id)){
+      problems.push(`${game.id}:incomplete_refresh_preserved_prior_forecast`);
+      memberGames.push(cbbMemberGameForReader(previous,game));continue;
+    }
     let candidate=null,splitEvidence=null;
     if(!afterCutoff&&!previous?.snapshot.lockedAt){
       candidate=boardCandidates.get(game.id)!;

@@ -15,7 +15,7 @@ public records retain exact precedence.
 The owner explicitly directed completion of review and live publication for
 November 5 and future slates, with actual predictions instead of empty cards and
 all November 4 locked public records unchanged. This scoped authorization covers
-the R5 independent /R19 incumbent market /R15 receipt /R34 publisher /R24 adapter
+the R5 independent /R19 incumbent market /R15 receipt /R35 publisher /R24 adapter
 /R22 tracking /R4 training /R8 fixture family and the separately versioned cross
 forecast and frozen-winner R1 contracts listed in the release registry.
 
@@ -46,6 +46,11 @@ safety, protected PR checks and actual live release, complete-card, source,
 normal-writer and unchanged-lock-hash proof. The detailed source review and
 rollback boundary are in
 `model-audits/2026-11-05-cbb-all-division-one-private.md`.
+R35 corrects R34's first-refresh failure: incomplete later-day D1 venue inputs
+must be rejected before forecast-board construction, without blocking complete
+games or replacing a prior coherent member payload. Mixed complete/incomplete
+slate and prior-payload preservation regressions are required. This changes no
+score equation, market consequence, probability, grade, price or stake.
 
 ## Owner-directed Daily Edge health and NFL conviction repair — November 5
 
