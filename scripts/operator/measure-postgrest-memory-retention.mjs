@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, openSync, closeSync } from "node:fs";
 import { once } from "node:events";
 import { pathToFileURL } from "node:url";
+import { gzipSync, gunzipSync } from "node:zlib";
 
 const [binary, pgModule, databaseUrl, outputDirectory, postgresContainer] = process.argv.slice(2);
 assert(binary && pgModule && databaseUrl && outputDirectory, "binary, pg module, disposable URL, output directory required");
@@ -51,13 +52,14 @@ const observations = [];
 const cases = [
   { name: "current_pages", legacy: false, idleGc: false },
   { name: "current_pages_and_large_writes", legacy: false, idleGc: false, writes: true },
+  { name: "current_pages_and_compressed_writes", legacy: false, idleGc: false, writes: true, compressed: true },
   { name: "current_pages_and_large_writes_idle_gc", legacy: false, idleGc: true, writes: true },
   { name: "legacy_then_current_pages", legacy: true, idleGc: false },
   { name: "legacy_then_current_pages_idle_gc", legacy: true, idleGc: true },
 ];
 function memory(pid, container) {
   const proc = (name) => container
-    ? execFileSync("docker", ["exec", container, "cat", `/proc/${pid}/${name}`], { encoding: "utf8" })
+    ? execFileSync("docker", ["exec", "--user", "postgres", container, "cat", `/proc/${pid}/${name}`], { encoding: "utf8" })
     : readFileSync(`/proc/${pid}/${name}`, "utf8");
   const status = proc("status");
   const smaps = proc("smaps_rollup");
@@ -144,7 +146,10 @@ for (const entry of cases) {
       phase = "large_write_burst";
       // Matches the observed ~19.5 MB request class using invented data only.
       requests.push(...await Promise.all(Array.from({ length: 5 }, async (_, id) => {
-        const body = JSON.stringify({ id, payload: { syntheticEvidence: "abcdefgh".repeat(2_443_750) } });
+        const originalPayload = { syntheticEvidence: "abcdefgh".repeat(2_443_750) };
+        const encoded = entry.compressed ? { encoding: "gzip-base64", payload: gzipSync(JSON.stringify(originalPayload)).toString("base64") } : originalPayload;
+        if (entry.compressed) assert.equal(gunzipSync(Buffer.from(encoded.payload, "base64")).toString(), JSON.stringify(originalPayload));
+        const body = JSON.stringify({ id, payload: encoded });
         const response = await fetch(`${base}/rpc/memory_write`, { method: "POST", headers: { "Content-Type": "application/json" }, body, signal: AbortSignal.timeout(30000) });
         assert(response.ok, `write HTTP ${response.status}`);
         await response.arrayBuffer();
