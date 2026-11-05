@@ -14,6 +14,9 @@ export const maxDuration = 300;
 
 export async function GET(request: Request): Promise<Response> {
   return cronHandler(request, "cbb_daily_refresh", async () => {
+    const started=Date.now();
+    const trace=(stage:string)=>console.info(`[cbb-daily-refresh] stage=${stage} elapsed_ms=${Date.now()-started}`);
+    trace("start");
     const apiKey = process.env.BALLDONTLIE_API_KEY;
     if (!apiKey) throw new Error("BALLDONTLIE_API_KEY missing for CBB fixture seed");
     const now = new Date();
@@ -24,12 +27,14 @@ export async function GET(request: Request): Promise<Response> {
     // Refresh yesterday's fixture too: a late ET tip can finish after the
     // prior daily seed, and the rolling forward board no longer includes it.
     const catchupDates = await readCbbSettlementFixtureCatchupDates(supabase,today);
+    trace("settlement_catchup_read");
     const dates = [...new Set([...catchupDates,...(intraday ? [] : cbbFixtureRefreshDates(today))])];
     const seeded = [];
     for (const slateDate of dates) {
       seeded.push(await seedCbbGames({ slateDate, season, apiKey, dryRun: false,
         identityFetcher: fetchCbbTeamIdentities }));
     }
+    trace("fixture_seed_complete");
     if (!CBB_ACTIVATION.predictionWrites) {
       return { records_updated: seeded.reduce((sum, row) => sum + (row.written ? row.games + row.teams : 0), 0),
         api_calls_made: seeded.reduce((sum, row) => sum + row.providerCalls + (row.games ? 2 : 0), 0),
@@ -38,6 +43,7 @@ export async function GET(request: Request): Promise<Response> {
     const owlsKey = process.env.OWLS_INSIGHT_API_KEY;
     if (!owlsKey) throw new Error("OWLS_INSIGHT_API_KEY missing for CBB member writer");
     const training = await refreshCbbCurrentTraining({season,anchorDate:today,apiKey,now:now.toISOString()});
+    trace("training_complete");
     const board = await refreshCbbMemberBoard({anchorDate:today,season,bdlKey:apiKey,owlsKey,
       trainingGames:training.receipt.games,crossTrainingGames:training.receipt.crossDivisionGames,syncFixtures:async games=>{
         // Reuse this leased writer's captured fixtures: no second provider poll.
@@ -48,6 +54,7 @@ export async function GET(request: Request): Promise<Response> {
             identityFetcher:fetchCbbTeamIdentities}));
         }
       }});
+    trace("member_board_complete");
     const graded = [];
     for (const slateDate of Array.from({length:7},(_,i)=>addDaysToSlate(today,i-6))) {
       const result = await gradePredictionsForSlate({sport:"cbb",slateDate,apply:true,supabase,source:"auto_score_ingest"});
