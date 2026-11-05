@@ -8,8 +8,8 @@ import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 import type { CfbV1ExactPriceDecision, CfbV1Forecast, CfbV1Market } from "./cfbV1Decision";
 
 export const CFB_FORWARD_CONTEXT_CAPTURE_RELEASE =
-  "cfb_daily_edge_forward_context_capture_2026_11_04_r5_causal_reader_receipt" as const;
-export const CFB_FORWARD_CONTEXT_CAPTURE_SCHEMA = "cfbfec5" as const;
+  "cfb_daily_edge_forward_context_capture_2026_11_05_r6_professional_pressure_reaction" as const;
+export const CFB_FORWARD_CONTEXT_CAPTURE_SCHEMA = "cfbfec6" as const;
 export const CFB_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET = 8 as const;
 export const CFB_FORWARD_CONTEXT_CAPTURE_MAX_PROVENANCE_RECORDS_PER_MARKET = 2 as const;
 export const CFB_FORWARD_CONTEXT_CAPTURE_MAX_MARKET_BYTES = 8 * 1024;

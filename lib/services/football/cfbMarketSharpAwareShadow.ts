@@ -17,10 +17,12 @@ import {
 import { evaluateCfbHolisticConfidence } from "./cfbHolisticConfidenceCandidate";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_11_04_r40_causal_relative_innovation" as const;
+  "cfb_market_sharp_aware_candidate_2026_11_05_r41_professional_pressure_reaction" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
+  "cfb_market_sharp_aware_production_2026_11_05_r43_professional_pressure_reaction" as const;
+export const CFB_MARKET_SHARP_AWARE_PRESSURE_REACTION_PREVIOUS_PRODUCTION_RELEASE =
   "cfb_market_sharp_aware_production_2026_11_04_r42_causal_relative_innovation" as const;
 export const CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE =
   "cfb_market_sharp_aware_production_2026_10_15_r40_full_product_coordinator_compatibility" as const;
@@ -332,6 +334,8 @@ export function buildCfbMarketEvidenceGradeShadow(args: {
       : holistic.evidenceConfidenceAdjustment < 0
         ? "bounded_market_evidence_resistance"
         : "bounded_market_evidence_neutral",
+    `professional_pressure_reaction_${holistic.professionalPressureReaction}`,
+    ...(holistic.sourceConflict ? ["professional_pressure_reaction_conflict"] : []),
     holistic.executionStatus === "bet" ? "displayed_quote_bet" : "displayed_quote_shop",
   ];
   return {

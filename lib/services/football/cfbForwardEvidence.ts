@@ -29,6 +29,8 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_11_05_r49_professional_pressure_reaction" as const;
+export const CFB_FORWARD_PRESSURE_REACTION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_11_04_r48_causal_reader_receipt" as const;
 export const CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_15_r47_full_product_coordinator_compatibility" as const;
@@ -107,6 +109,8 @@ export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
   "cfb_forward_evidence_collector_2026_10_29_r66_owls_grade_price_ingestion" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_11_05_r66_professional_pressure_reaction" as const;
+export const CFB_FORWARD_PRESSURE_REACTION_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_11_04_r65_causal_reader_receipt" as const;
 export const CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_15_r64_full_product_coordinator_compatibility" as const;

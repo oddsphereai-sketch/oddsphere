@@ -99,6 +99,30 @@ check("Best Angle with mixed source state is capped", mixed.markets.moneyline?.p
 check("Mixed quick read names conflict", mixed.markets.moneyline?.quickRead.toLowerCase().includes("mixed market signals") === true);
 check("Source conflict tracked", mixed.sourceState.sourceConflict === true);
 
+const pressureReactionConflict = buildRecommendationDecision({
+  sport: "cfb",
+  slateDate: "2026-11-05",
+  gameId: "professional-pressure-reaction-conflict",
+  homeTeam: "USM",
+  awayTeam: "JMU",
+  markets: [{
+    ...baseMarket,
+    key: "firstInning",
+    pick: "JMU -13.5",
+    selectedSide: "away",
+    playGrade: "Lean",
+    marketReadV2: read({ consensusMoney: 0.64, consensusBets: 0.55, sharp: "support", move: "resistance" }),
+    lineMovementOverride: "resistance",
+  }],
+});
+check("Professional pressure opposed by price response is mixed",
+  pressureReactionConflict.markets.firstInning?.resolvedMarketRead.status === "mixed");
+check("Professional pressure/response conflict is stored",
+  pressureReactionConflict.markets.firstInning?.sourceConflict === true && pressureReactionConflict.sourceState.sourceConflict === true);
+check("Pressure/response copy preserves both facts",
+  pressureReactionConflict.markets.firstInning?.resolvedMarketRead.copy.includes("pressure supports JMU -13.5") === true &&
+  pressureReactionConflict.markets.firstInning?.resolvedMarketRead.copy.includes("price response resists") === true);
+
 const owlsAligned = applySharpBookSplitSectionToDecision({
   sport: "mlb",
   marketKey: "moneyline",
