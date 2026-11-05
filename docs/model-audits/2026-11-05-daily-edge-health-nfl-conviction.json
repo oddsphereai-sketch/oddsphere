@@ -1,0 +1,70 @@
+{
+  "release": "daily_edge_health_nfl_conviction_2026_11_05_r1",
+  "createdAt": "2026-11-05T12:41:04.000Z",
+  "scope": "Read-only current Daily Edge health review plus future-unlocked NFL grade and soccer trail repairs.",
+  "lockedRecordPolicy": "All stored locked payloads retain exact precedence and are not rewritten or reinterpreted.",
+  "health": {
+    "games": 250,
+    "markets": 778,
+    "criticalIssuesBefore": 11,
+    "warningsBefore": 141,
+    "criticalCause": "Eleven UCL 1X2 trails combined a later DraftKings provider opening with earlier Pinnacle captures.",
+    "warningCause": "Forty-seven future NBA placeholders times three markets; both current NBA games had all six markets priced with split and trail coverage.",
+    "badOddsRejected": 0,
+    "stalePricesRejected": 0,
+    "sourceChainTrailsHidden": 0,
+    "activeSportCoverage": {
+      "epl": { "games": 10, "pricedMarkets": 30, "markets": 30, "actionable": 6 },
+      "ucl": { "games": 18, "pricedMarkets": 54, "markets": 54, "criticalTrailRows": 11 },
+      "cbb": { "games": 44, "pricedMarkets": 132, "markets": 132, "publicSplitMarkets": 129, "professionalSplitMarkets": 104, "actionable": 69 },
+      "nfl": { "games": 15, "pricedMarkets": 42, "markets": 45, "heldMarkets": 3, "actionable": 18 },
+      "nhl": { "games": 11, "pricedMarkets": 33, "markets": 33, "publicSplitMarkets": 33, "professionalSplitMarkets": 33, "actionable": 18 },
+      "nbaCurrent": { "games": 2, "pricedMarkets": 6, "markets": 6, "publicSplitMarkets": 6, "professionalSplitMarkets": 6 },
+      "cfbAllDivisionOne": { "games": 103, "pricedMarkets": 173, "markets": 309, "heldOrUnavailableMarkets": 136, "note": "Broad all-Division-I scope includes FCS and unavailable exact offers; no quote was fabricated." }
+    },
+    "intentionalInactive": ["mlb", "wnba"]
+  },
+  "nfl": {
+    "statisticalState": { "season": 2026, "completeThroughWeek": 8, "updatedAt": "2026-11-03T05:06:09.462Z" },
+    "baltimore": {
+      "gameId": "1392337",
+      "matchup": "JAX@BAL",
+      "independentMargin": -1.8925258294993554,
+      "finalMargin": -2.590089661731291,
+      "spread": "BAL +10",
+      "probability": 0.6991223568142086,
+      "marketFairProbability": 0.5010932496705107,
+      "expectedValue": 0.3379057589781767,
+      "latestGrade": "Lean",
+      "verdict": "The independent and reconciled laws support Baltimore covering, but current professional resistance does not justify Best Angle. Preserve the pick and cap the tier at Lean."
+    },
+    "sameInputBoard": {
+      "games": 15,
+      "markets": 45,
+      "actionableBefore": 18,
+      "actionableAfter": 18,
+      "actionablePromotions": 0,
+      "actionableDemotions": 0,
+      "bestToLean": 2,
+      "changedRows": ["GB@NE moneyline: NE Best Angle to Lean", "DEN@CAR moneyline: DEN Best Angle to Lean"],
+      "sideChanges": 0,
+      "scoreChanges": 0,
+      "probabilityChanges": 0,
+      "priceChanges": 0,
+      "stakeChanges": 0
+    }
+  },
+  "soccerRepair": {
+    "rule": "Provider opening must match the current sportsbook and have a valid timestamp no later than the earliest same-book capture.",
+    "numericBoardImpact": { "priceChanges": 0, "predictionChanges": 0, "probabilityChanges": 0, "gradeChanges": 0, "stakeChanges": 0 },
+    "expectedCriticalTrailRowsAfterUnlockedRefresh": 0
+  },
+  "tests": [
+    "scripts/test-nfl-market-innovation-posture.ts",
+    "scripts/test-nfl-market-grade-promotions.ts",
+    "scripts/test-football-member-evidence.ts",
+    "scripts/test-epl-shadow-model.ts",
+    "scripts/test-ucl-production.ts",
+    "scripts/test-daily-edge-odds-contract.ts"
+  ]
+}

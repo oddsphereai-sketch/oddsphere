@@ -33,6 +33,43 @@ are documented in
 43-game /129-market comparison has 0 promotions, 0 demotions, 0 side changes
 and 0 score changes; 22 new cross forecasts add no unqualified wager grades.
 
+## Daily Edge health and NFL conviction-risk grade cap — November 5
+
+The active NFL publication set is now:
+
+- `nfl_v1_daily_edge_model_2026_11_04_r53_per_market_source_qualification`
+- `nfl_v1_daily_edge_calibration_2026_11_04_r52_per_market_source_qualification`
+- `nfl_v1_daily_edge_decision_2026_11_05_r62_conviction_risk_grade_cap`
+- `nfl_v1_grade_policy_2026_11_05_r62_conviction_risk_grade_cap`
+- `nfl_v1_member_release_2026_11_05_r59_conviction_risk_grade_cap`
+- `nfl_market_innovation_posture_2026_11_05_r7_conviction_risk_grade_cap`
+- `nfl_weekly_member_fixture_2026_11_05_r75_conviction_risk_grade_cap`
+- `nfl_forward_member_snapshot_2026_11_05_r67_conviction_risk_grade_cap`
+- `nfl_forward_evidence_writer_2026_11_05_r110_conviction_risk_grade_cap`
+
+For future-unlocked decisions, a current qualified professional-price conviction
+risk caps Best Angle at Lean after the causal market consequence is applied. It
+is not a second forecast adjustment and does not suppress the pick: the exact
+same-input 15-game / 45-market board changes NE Moneyline versus GB and DEN
+Moneyline versus CAR from Best to Lean, with 18 actionables before and after,
+zero actionable promotions/demotions, and zero side, score, probability, price,
+EV or stake changes. Existing qualified Watch→Lean and Lean→Best rules remain.
+Every stored lock retains exact precedence. Baltimore +10 is Lean on the latest
+live capture; its independent margin and unified reader still support the cover,
+while current professional resistance prevents the strongest endorsement.
+
+NFL member evidence labels the completed-2025 artifact as independent prior
+context rather than the current decision state and separately exposes the exact
+provider score state's current-season completion week (Week 8 in the audited
+capture). No input or forecast changes. EPL member lifecycle advances to
+`epl_member_snapshot_lifecycle_2026_11_05_r9_same_book_opening_chronology` and
+UCL to `ucl_member_snapshot_lifecycle_2026_11_05_r27_same_book_opening_chronology`.
+Future-unlocked soccer trails admit a provider opening only for the exact current
+book and only when its source timestamp precedes the first same-book capture.
+This removes 11 current UCL cross-book/time-inverted trail defects without
+changing a price, prediction, probability, grade or stake. Evidence and rollback:
+`docs/model-audits/2026-11-05-daily-edge-health-nfl-conviction.json`.
+
 ## Pro reader posture presentation and audit transport — November 4
 
 NBA model R36, market-marriage R38, grade R28 and locked-member snapshot R8

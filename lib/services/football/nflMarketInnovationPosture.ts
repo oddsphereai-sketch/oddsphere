@@ -5,7 +5,7 @@ import { assessNflMarketGradeConfirmation, type NflMarketGradeConfirmation,
   type NflMarketGradePromotionContext } from "./nflMarketGradeConfirmation";
 
 export const NFL_MARKET_INNOVATION_POSTURE_RELEASE =
-  "nfl_market_innovation_posture_2026_11_04_r6_per_market_source_qualification" as const;
+  "nfl_market_innovation_posture_2026_11_05_r7_conviction_risk_grade_cap" as const;
 
 export type NflMarketInnovationPostureReceipt = {
   release: typeof NFL_MARKET_INNOVATION_POSTURE_RELEASE;
@@ -25,9 +25,10 @@ export type NflMarketInnovationPostureReceipt = {
 
 /**
  * Unresolved named-price disagreements temper only the strongest endorsement.
- * An adverse episode already incorporated into the final law is adjudicated,
- * and cannot independently cap the surviving statistical edge. Static market
- * favorites, public counts and unknown information overlap grant no veto.
+ * An adverse episode already incorporated into the final law is not applied a
+ * second time to scores or probabilities, but its current conviction risk still
+ * caps a Best Angle at Lean. Static market favorites, public counts and unknown
+ * information overlap grant no veto.
  */
 export function applyNflMarketInnovationPosture(args: {
   production: NflV1ActionableGradeBundle;
@@ -86,9 +87,14 @@ export function applyNflMarketInnovationPosture(args: {
       (decision.stage === "t60_locked" || decision.lockedAt !== null));
     const confirmation = assessNflMarketGradeConfirmation({ decision, innovation: args.innovation,
       homeTeam: args.homeTeam, context: locked ? undefined : args.promotionContext });
-    if (!locked && args.promotionContext && confirmation.heldResistanceSources.length) {
-      for (const source of confirmation.heldResistanceSources) if (!opposingSources.includes(source)) opposingSources.push(source);
-      unresolvedReason ??= "named_quote_held_against_picked_side_pressure";
+    if (!locked && confirmation.convictionRiskSources.length) {
+      for (const risk of confirmation.convictionRiskSources) {
+        const source = risk.split(":", 1)[0]!;
+        if (!opposingSources.includes(source)) opposingSources.push(source);
+      }
+      unresolvedReason ??= confirmation.heldResistanceSources.length
+        ? "named_quote_held_against_picked_side_pressure"
+        : "current_market_conviction_risk";
     }
     const demote = !locked && decision.grade === "Best Angle" && opposingSources.length > 0;
     const promoteLean = !locked && !opposingSources.length && decision.grade === "Watchlist" && confirmation.leanEligible;

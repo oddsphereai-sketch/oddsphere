@@ -18,11 +18,11 @@ export const NFL_V1_PRODUCTION_MODEL_RELEASE =
 export const NFL_V1_PRODUCTION_CALIBRATION_RELEASE =
   "nfl_v1_daily_edge_calibration_2026_11_04_r52_per_market_source_qualification" as const;
 export const NFL_V1_PRODUCTION_DECISION_RELEASE =
-  "nfl_v1_daily_edge_decision_2026_11_04_r61_per_market_source_qualification" as const;
+  "nfl_v1_daily_edge_decision_2026_11_05_r62_conviction_risk_grade_cap" as const;
 export const NFL_V1_GRADE_POLICY_RELEASE =
-  "nfl_v1_grade_policy_2026_11_04_r61_per_market_source_qualification" as const;
+  "nfl_v1_grade_policy_2026_11_05_r62_conviction_risk_grade_cap" as const;
 export const NFL_V1_MEMBER_RELEASE =
-  "nfl_v1_member_release_2026_11_04_r58_per_market_source_qualification" as const;
+  "nfl_v1_member_release_2026_11_05_r59_conviction_risk_grade_cap" as const;
 
 /** Product tier semantics shared by ML, Spread and Total; not an empirically calibrated win-rate claim. */
 export const NFL_V1_BEST_ANGLE_MINIMUM_MODELED_WIN_PROBABILITY = 0.59 as const;

@@ -47,6 +47,37 @@ normal-writer and unchanged-lock-hash proof. The detailed source review and
 rollback boundary are in
 `model-audits/2026-11-05-cbb-all-division-one-private.md`.
 
+## Owner-directed Daily Edge health and NFL conviction repair — November 5
+
+The owner requested a fresh cross-sport Daily Edge health check and specifically
+challenged Baltimore +10 as an NFL Best Angle. The scoped future-unlocked NFL
+repair advances posture R7, decision/grade R62, member R59, fixture R75,
+snapshot R67 and writer R110. A current qualified professional-price conviction
+risk may not be numerically applied twice, but it now caps an otherwise earned
+Best Angle at Lean. It does not change the forecast, selected side, probability,
+price, EV, stake or actionability. Static favorites, public percentages, missing
+evidence and unqualified source counts retain zero grade authority. The existing
+causal Watchlist→Lean and Lean→Best rules remain the paired positive controls.
+
+The exact current-board replay covers 15 games / 45 markets and changes only NE
+Moneyline versus GB and DEN Moneyline versus CAR from Best Angle to Lean. It has
+zero actionable promotions, zero actionable demotions, zero side/score/
+probability/price changes and 18 actionables before and after. Baltimore +10 and
+Over 39.5 were already Lean in the latest live capture after held resistance
+arrived; an earlier capture proves the gap because both remained Best while the
+stored receipt already contained current professional conviction risk. Existing
+locks remain byte-authoritative.
+
+NFL member evidence now distinguishes the completed-2025 frozen baseline as
+independent prior context and separately displays the authoritative current-
+season completion week carried by the exact provider score state. This changes
+no model input or number; the audited November 5 state is complete through Week
+8. Soccer movement presentation rejects cross-book provider openings and any
+opening timestamp later than the first same-book capture. EPL lifecycle R9 and
+UCL lifecycle R27 version that unlocked presentation repair; stored locked cards
+remain exact. Evidence:
+`docs/model-audits/2026-11-05-daily-edge-health-nfl-conviction.json`.
+
 ## Owner-directed CFB causal market-reader repair — November 4
 
 The owner directed removal of CFB weighting/blending and requested one sharp,
