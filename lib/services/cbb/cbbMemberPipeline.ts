@@ -42,7 +42,7 @@ import {forecastCbbFullDivisionOneBatch} from "@/lib/cbb/fullDivisionOneForecast
 import {buildCbbGameForecastBoard,attachCbbGameOutcome} from "@/lib/cbb/gameForecastBoard";
 import type {CbbProvisionalBoard} from "@/lib/cbb/provisionalLifecycle";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_05_r36_split_matcher_memory" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_05_r37_complete_source_admission" as const;
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
 const expandedFixture=(game:CbbGame)=>computeSlateDate("cbb",game.date)>=CBB_FULL_D1_COVERAGE_START;
 const eligibleFixture=(game:CbbGame)=>expandedFixture(game)?cbbDivisionOneFixture(game).eligible:
@@ -60,7 +60,9 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   const db=args.db??(await import("@/lib/db/supabase")).supabase;
   const provider=args.provider??new CbbBallDontLieClient(args.bdlKey,{maxRequests:160});
   const owls=args.owls??new OwlsInsightClient(args.owlsKey,{timeoutMs:8_000});
-  const dates=dateWindow(args.anchorDate),providerDates=[addDaysToSlate(args.anchorDate,-1),...dates];
+  // Provider date filters use UTC. Include the following UTC day so late ET
+  // tips on the seventh slate are captured before the exact ET filter below.
+  const dates=dateWindow(args.anchorDate),providerDates=[addDaysToSlate(args.anchorDate,-1),...dates,addDaysToSlate(dates.at(-1)!,1)];
   const nowClock=args.nowClock??(()=>args.now??new Date().toISOString());
   const oddsRequestedAt=nowClock();
   const [a,b,initialSchedule,oddsReceipt,splitsReceipt]=await Promise.all([

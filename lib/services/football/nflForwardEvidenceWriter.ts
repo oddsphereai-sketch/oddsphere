@@ -162,7 +162,59 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_05_r111_current_game_starter_authority" as const;
+  "nfl_forward_evidence_writer_2026_11_05_r112_source_reaction_health" as const;
+
+const NFL_REGULAR_MARKETS = ["moneyline", "spread", "total"] as const;
+const NFL_OWLS_COVERAGE_DIAGNOSTICS = new Set([
+  "owls_splits_model_partial_contract_coverage",
+  "owls_splits_model_unqualified",
+  "named_book_splits_unavailable",
+]);
+
+type NflOwlsReactionHealthContext = Partial<Record<(typeof NFL_REGULAR_MARKETS)[number], {
+  flows?: Array<{
+    authority?: string;
+    book?: string;
+    pairedQuoteObservedAt?: string;
+    reactionBaselineObservedAt?: string;
+  }>;
+}>>;
+
+/**
+ * An Owls split on a different spread/total cannot masquerade as direct
+ * evidence for the evaluated contract. It is nevertheless complete market
+ * evidence when the innovation reader bound that pressure to the source
+ * book's own pre-flow quote and subsequent economic path. Keep the direct
+ * qualification list auditable, but do not report a data-health defect after
+ * every missing direct market has a verified named source-reaction path.
+ */
+export function resolveNflOwlsCoverageHealth(args: {
+  initialHolds: readonly string[];
+  modelSplitCoverage: boolean;
+  owlsCoverage: boolean;
+  finalQualifiedMarkets: readonly (typeof NFL_REGULAR_MARKETS)[number][];
+  reactionContext: NflOwlsReactionHealthContext | null | undefined;
+}): string[] {
+  const retained = args.initialHolds.filter((reason) => !NFL_OWLS_COVERAGE_DIAGNOSTICS.has(reason));
+  if (args.modelSplitCoverage) return [...new Set(retained)].sort();
+  if (!args.owlsCoverage) {
+    return [...new Set([...retained, "named_book_splits_unavailable"])].sort();
+  }
+  const directlyQualified = new Set(args.finalQualifiedMarkets);
+  const reactionQualified = new Set(NFL_REGULAR_MARKETS.filter((market) =>
+    (args.reactionContext?.[market]?.flows ?? []).some((flow) =>
+      flow.authority === "source_contract_reaction_context_only" &&
+      (flow.book === "circa" || flow.book === "pinnacle") &&
+      typeof flow.pairedQuoteObservedAt === "string" &&
+      typeof flow.reactionBaselineObservedAt === "string")));
+  if (NFL_REGULAR_MARKETS.every((market) => directlyQualified.has(market) || reactionQualified.has(market))) {
+    return [...new Set(retained)].sort();
+  }
+  const reason = directlyQualified.size > 0 || reactionQualified.size > 0
+    ? "owls_splits_model_partial_contract_coverage"
+    : "owls_splits_model_unqualified";
+  return [...new Set([...retained, reason])].sort();
+}
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -1101,6 +1153,13 @@ export async function runNflForwardEvidenceWriter(args: {
       currentHomeSpread: finalContract.spread?.homeLine ?? null,
       currentTotal: finalContract.total?.line ?? null,
     });
+    const resolvedCoverageHolds = resolveNflOwlsCoverageHealth({
+      initialHolds: holds,
+      modelSplitCoverage,
+      owlsCoverage,
+      finalQualifiedMarkets: finalQualifiedOwls.qualifiedMarkets,
+      reactionContext: semantic.innovation?.reactionContext,
+    });
     if (args.auditSemanticImpact && !existingLockedRecord) {
       const decisions = (rows: typeof production.evaluatedBets) => rows.map((bet) => ({
         market: bet.market, side: bet.side, grade: bet.grade,
@@ -1216,7 +1275,7 @@ export async function runNflForwardEvidenceWriter(args: {
       slateGameCount: slate.games.length,
       stage: failedT60Attempt ? "unlocked" : plan.stage,
       ...(failedT60Attempt ? { captureAttempt: { requestedStage: "t60" as const, status: "failed" as const,
-        reason: holds.join(",") || "incomplete_t60_evaluation", cutoffAt: plan.cutoffAt! } } : {}),
+        reason: resolvedCoverageHolds.join(",") || "incomplete_t60_evaluation", cutoffAt: plan.cutoffAt! } } : {}),
       captureTiming,
       capturedAt,
       cutoffAt: plan.cutoffAt,
@@ -1274,7 +1333,7 @@ export async function runNflForwardEvidenceWriter(args: {
         injuries: injuries !== null, playbookSplits: playbookCoverage,
         sharpApiSplits: Boolean(sharpApiCoverage), owlsSplits: owlsCoverage,
         owlsModelQualifiedMarkets: finalQualifiedOwls.qualifiedMarkets,
-        weather: weatherCoverage, healthHolds: holds,
+        weather: weatherCoverage, healthHolds: resolvedCoverageHolds,
         quarterbackHistory: shadowMoneyline.quarterbackContext,
         forecastTargetExclusion: outcome.targetExclusion ?? resolved.targetExclusion,
         paidProjectionShadow: Boolean(paidProjectionShadow),

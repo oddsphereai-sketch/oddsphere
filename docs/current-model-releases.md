@@ -1,6 +1,37 @@
 # Current production model releases and qualified research candidates
 
-## NFL current-game starter authority — November 5 candidate
+## NFL source-reaction health semantics — November 5 candidate
+
+The owner clarified that a professional split on an older or different native
+spread/total remains useful evidence when interpreted with the source book's own
+line and price response. The active NFL reader already performs that causal
+source-reaction analysis and can transmit a verified response into the unified
+score law. The candidate corrects only the downstream health classification:
+an exact-contract mismatch is not reported as partial coverage when every
+non-direct market has a fresh, exact-game, same-source pre-flow quote and a
+verified subsequent economic path. `owlsModelQualifiedMarkets` continues to
+disclose direct exact-contract authority; contextual reaction evidence never
+masquerades as the evaluated contract's probability.
+
+Numerical model, calibration, decision and grade releases remain active and
+unchanged at R54/R53/R63/R63. Candidate publication identifiers are:
+
+- `nfl_forward_evidence_collector_2026_11_05_r34_source_reaction_health`
+- `nfl_v1_member_release_2026_11_05_r61_source_reaction_health`
+- `nfl_weekly_member_fixture_2026_11_05_r77_source_reaction_health`
+- `nfl_forward_member_snapshot_2026_11_05_r69_source_reaction_health`
+- `nfl_forward_evidence_writer_2026_11_05_r112_source_reaction_health`
+
+The current SELECT-only Week 9 audit covers 15 games / 45 markets. Eleven
+payloads carry the old partial note; three already have all three final direct
+contracts and the remaining eight contain ten non-direct axes, all ten with
+verified named source-reaction paths. Candidate health moves the false partial
+count 11→0 while retaining 18 actionables (2 Best Angle / 16 Lean), with zero
+score, probability, side, price, grade, promotion or demotion changes. R68/R60/
+R76/R63 remains exact predecessor authority for stored locks. Evidence and
+rollback: `docs/model-audits/2026-11-05-nfl-source-reaction-health.json`.
+
+## NFL current-game starter authority — November 5 production predecessor
 
 The owner-directed future-unlocked repair corrects the authority ordering that
 held ARI@SEA after Seattle ruled Sam Darnold out and named Drew Lock the expected
@@ -10,7 +41,7 @@ while ambiguous `active:false` and `did_not_play` fields are fallbacks only when
 current game/practice status is absent. Older reports and explicit current Out or
 Doubtful designations remain fail-closed. Stored locks are never reinterpreted.
 
-Candidate identifiers:
+Production identifiers from commit `ac13d4e11d3386819c5a4621db5161474497971c`:
 
 - `nfl_market_led_moneyline_lean_shadow_2026_11_05_r8_current_game_starter_authority`
 - `nfl_forward_evidence_collector_2026_11_05_r33_current_game_starter_authority`
@@ -23,14 +54,14 @@ Candidate identifiers:
 - `nfl_forward_member_snapshot_2026_11_05_r68_current_game_starter_authority`
 - `nfl_forward_evidence_writer_2026_11_05_r111_current_game_starter_authority`
 
-The no-write 15-game /45-market rehearsal removes the sole false held game. Its
+The no-write 15-game /45-market rehearsal removed the sole false held game. Its
 only hold, side or grade change is ARI@SEA: held No Plays become SEA Moneyline No Play, ARI +8.5
 Watchlist and Under 39.5 No Play. Actionables remain 18, with zero actionable
 promotions/demotions and no unrelated side or grade change. The same-capture
 old/new depth resolver changes only Seattle's expected quarterback. The independent
-score law, market reader, prices, thresholds and stakes are unchanged. Production
-activation is not complete until the protected PR merges and the normal writer
-publishes and verifies the R60/R63/R76/R68/R111 chain. Evidence and rollback:
+score law, market reader, prices, thresholds and stakes are unchanged. The protected
+PR merged and the normal writer published and verified the R60/R63/R76/R68/R111
+chain with 45/45 priced markets and zero holds. Evidence and rollback:
 `docs/model-audits/2026-11-05-nfl-current-game-starter-authority.json`.
 
 ## Owner-approved CBB all-Division-I coverage — November 5
@@ -45,15 +76,15 @@ activation requires protected PR publication and live verification.
 
 Publication identifiers: independent
 `cbb_candidate_2026_11_05_r5_complete_d1_program_priors`, incumbent market model
-`cbb_candidate_2026_11_05_r19_complete_d1_program_priors`, receipt
-`cbb_market_behavior_2026_11_05_r15_complete_d1_program_priors`, cross score
+`cbb_candidate_2026_11_05_r20_complete_source_admission`, receipt
+`cbb_market_behavior_2026_11_05_r16_complete_source_admission`, cross score
 `cbb_cross_division_score_2026_11_05_r1_posterior_score_law`, forecast board
 `cbb_game_forecast_board_2026_11_05_r1_unpriced_outcomes`, forecast-only grade
 `cbb_game_forecast_grade_2026_11_05_r1_no_unquoted_wagers`, frozen outcome
 `cbb_game_outcome_2026_11_05_r1_frozen_winner`, publisher
-`cbb_member_pipeline_2026_11_05_r36_split_matcher_memory`, adapter
+`cbb_member_pipeline_2026_11_05_r37_complete_source_admission`, adapter
 `cbb_member_adapter_2026_11_05_r24_unpriced_game_forecast`, tracking
-`cbb_tracking_writer_2026_11_05_r22_frozen_unpriced_winners`, training
+`cbb_tracking_writer_2026_11_05_r23_source_admission_lineage`, training
 `cbb_current_training_2026_11_05_r4_separate_cross_division_receipts`, and fixture
 seed `cbb_fixture_seed_2026_11_05_r8_verified_complete_d1_identities`.
 
@@ -65,6 +96,19 @@ are documented in
 `docs/model-audits/2026-11-05-cbb-all-division-one-private.md`. The current-input
 43-game /129-market comparison has 0 promotions, 0 demotions, 0 side changes
 and 0 score changes; 22 new cross forecasts add no unqualified wager grades.
+R37/R20/R16 restore exact current-source aliases for Jacksonville State,
+Northern Illinois, Pennsylvania and Cal Poly, preserving Penn State/Jackson
+State/Illinois State/California as distinct schools. The same aliases are shared
+by canonical collection, quote qualification, splits and reader identity.
+The publisher's existing two fixture batches include the following UTC day,
+then apply the unchanged exact seven-ET-day filter; late final-day games must
+not disappear. Previous R19/R15 anchors remain compatible; legacy locks retain
+exact precedence. No score equation, grade policy or freshness bound changes.
+Functional evidence: 4 actual fixtures, 90 exact source quote contracts and 32
+named split rows, source price/line/time parity, reversed/ambiguous negatives,
+and actual late-UTC fixture publication. See
+`model-audits/2026-11-05-cbb-complete-source-admission.md`.
+
 R36 preserves the R35 forecast/grade/quote/lock semantics and reuses one immutable
 ET month/day formatter in the CBB split matcher. The prior full-slate matcher
 created ICU formatters per source/fixture comparison and reproduced a 2.7 GB

@@ -22,7 +22,7 @@ export const NFL_V1_PRODUCTION_DECISION_RELEASE =
 export const NFL_V1_GRADE_POLICY_RELEASE =
   "nfl_v1_grade_policy_2026_11_05_r63_current_game_starter_authority" as const;
 export const NFL_V1_MEMBER_RELEASE =
-  "nfl_v1_member_release_2026_11_05_r60_current_game_starter_authority" as const;
+  "nfl_v1_member_release_2026_11_05_r61_source_reaction_health" as const;
 
 /** Product tier semantics shared by ML, Spread and Total; not an empirically calibrated win-rate claim. */
 export const NFL_V1_BEST_ANGLE_MINIMUM_MODELED_WIN_PROBABILITY = 0.59 as const;

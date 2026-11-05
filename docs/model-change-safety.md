@@ -10,13 +10,42 @@ cannot count as blind evidence. These are review obligations, not runtime
 activation gates, quotas, source weights or forecasting rules. Stored locked
 public records retain exact precedence.
 
+## Owner-directed NFL source-reaction health correction — November 5
+
+The owner clarified that a professional split on a different native contract is
+not meaningless: it must be interpreted chronologically with the source book's
+own quote before the pressure and its later line/price response. NFL already
+stores and consumes those exact-game, source-clocked reaction flows. A mismatched
+spread or total cannot become direct probability evidence for the evaluated
+line, but a verified own-contract response can confirm, resist or reverse the
+pressure and affect the unified score law.
+
+The scoped future-unlocked repair changes health classification only. Direct
+authority remains explicit in `owlsModelQualifiedMarkets`. The writer may clear
+`owls_splits_model_partial_contract_coverage` only when every non-direct market
+has a Circa/Pinnacle `source_contract_reaction_context_only` receipt with both
+the paired pre-flow quote clock and the actual economic baseline clock. Retail
+context, an unattested flow, stale history or an unavailable current Owls feed
+cannot clear the finding. Existing locked payloads retain exact R68/R60/R76/R63
+precedence.
+
+The numerical model/calibration/decision/grade releases remain R54/R53/R63/R63.
+Collector/member/fixture/snapshot/writer advance to R34/R61/R77/R69/R112. The
+current SELECT-only 15-game /45-market comparison removes eleven false partial
+findings, covers all ten non-direct axes with verified named reaction paths and
+changes zero scores, probabilities, sides, prices or grades. Actionables remain
+18 with zero promotions and zero demotions. Publication still requires focused
+direct/context/fail-closed tests, the full model-change gate, current-main
+integration safety, protected PR checks and postmerge normal-writer verification.
+Evidence: `model-audits/2026-11-05-nfl-source-reaction-health.json`.
+
 ## Owner-approved CBB complete Division I forecast coverage — November 5
 
 The owner explicitly directed completion of review and live publication for
 November 5 and future slates, with actual predictions instead of empty cards and
 all November 4 locked public records unchanged. This scoped authorization covers
-the R5 independent /R19 incumbent market /R15 receipt /R36 publisher /R24 adapter
-/R22 tracking /R4 training /R8 fixture family and the separately versioned cross
+the R5 independent /R20 incumbent market /R16 receipt /R37 publisher /R24 adapter
+/R23 tracking /R4 training /R8 fixture family and the separately versioned cross
 forecast and frozen-winner R1 contracts listed in the release registry.
 
 The NCAA census owns current D1 membership. Actual cross-game boxes and paired
@@ -95,6 +124,17 @@ requires focused normalization/resolver/predecessor/lock tests, the full model
 gate, current-main integration safety, protected PR checks, and postmerge live
 release/QB/board/lock verification. Evidence:
 `docs/model-audits/2026-11-05-nfl-current-game-starter-authority.json`.
+
+The owner's subsequent November 5 whole-board audit request authorizes the
+R37/R20/R16 source-admission repair: exact recorded provider aliases and complete
+UTC capture of the seventh Eastern slate day. All 365 verified D1 programs and
+their opponents remain in scope. Existing guards, dates, prices, model equations,
+market-reader consequences, grade policy, sole writer/lease and prior locks are
+preserved. Old R19/R15 anchors remain compatible. No missing line or market may
+be invented; a source-present rejection must be distinguished from a provider's
+absent market and from sparse statistical inputs. The cross-domain data/tail
+limitations remain unresolved by this operational repair and must not be reported
+as complete full-model coverage.
 
 ## Owner-directed Daily Edge health and NFL conviction repair — November 5
 
