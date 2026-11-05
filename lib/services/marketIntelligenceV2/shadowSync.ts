@@ -84,7 +84,7 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_capture_2026_11_03_r27_cbb_retail_price_journal";
+  "market_intelligence_v2_capture_2026_11_05_r28_cbb_albany_source_identity";
 
 type CbbSourceMatch = { game: GameRef; reversed: boolean };
 const cbbSide = (side: MarketIntelligenceSelectionSide, reversed: boolean): MarketIntelligenceSelectionSide =>

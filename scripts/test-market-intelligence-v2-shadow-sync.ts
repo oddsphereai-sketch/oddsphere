@@ -32,9 +32,9 @@ let fail = 0;
 const failures: string[] = [];
 
 check(
-  "Market Intelligence V2 exposes the versioned NBA per-book forward capture release",
+  "Market Intelligence V2 exposes the versioned exact CBB source capture release",
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE ===
-    "market_intelligence_v2_capture_2026_11_03_r27_cbb_retail_price_journal",
+    "market_intelligence_v2_capture_2026_11_05_r28_cbb_albany_source_identity",
 );
 
 {

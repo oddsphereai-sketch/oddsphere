@@ -44,7 +44,7 @@ import {forecastCbbFullDivisionOneBatch} from "@/lib/cbb/fullDivisionOneForecast
 import {buildCbbGameForecastBoard,attachCbbGameOutcome} from "@/lib/cbb/gameForecastBoard";
 import type {CbbProvisionalBoard} from "@/lib/cbb/provisionalLifecycle";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_05_r39_fixture_clock_epoch" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_05_r41_albany_source_identity" as const;
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
 const expandedFixture=(game:CbbGame)=>computeSlateDate("cbb",game.date)>=CBB_FULL_D1_COVERAGE_START;
 const eligibleFixture=(game:CbbGame)=>expandedFixture(game)?cbbDivisionOneFixture(game).eligible:

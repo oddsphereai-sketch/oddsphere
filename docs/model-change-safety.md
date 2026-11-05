@@ -39,6 +39,24 @@ direct/context/fail-closed tests, the full model-change gate, current-main
 integration safety, protected PR checks and postmerge normal-writer verification.
 Evidence: `model-audits/2026-11-05-nfl-source-reaction-health.json`.
 
+## Owner-directed CBB exact Albany source identity — November 5
+
+The owner requires available prices and splits to be recovered from genuine
+matching errors rather than described as absent. One exact actual source name,
+Albany Great Danes, was rejected against UAlbany Great Danes despite the same
+Manhattan opponent and00:00Z start. Incumbent model R23 /receipt R19 /publisher
+R41 /tracking R27 and canonical capture R28 admit that exact full-name alias
+through the common collector/quote/split identity path. No generic fuzziness,
+clock widening, quota increase or grading/model formula change is authorized.
+Existing R22/R18 and older locks retain exact authority and original attribution.
+The 22 unsupported cross priors remain unpublished; reader R1's cached-clock
+handoff remains unchanged. Functional positive/reversed/mixed-school/day/ambiguity
+controls, actual saved R22 writer-reader-tracker continuity, unchanged-input
+board counts, the full gate and protected/live source verification are required.
+Available new evidence may affect an unlocked forecast only through the existing
+versioned reader. No manual actionable demotion/promotion or accuracy claim is
+introduced by this source repair.
+
 ## Owner-directed CBB fixture-clock and unsupported-card repair — November 5
 
 The owner requested that the refresh failure be fixed and explicitly preferred
