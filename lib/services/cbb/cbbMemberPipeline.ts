@@ -340,6 +340,10 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   trace("member_evidence_prepared");
   let written=0,locked=0,held=0,missingLogos=0,trackingInserted=0;
   for(const game of publishableGames){
+    // Computation may cross T-60. Keep the data/forecast cutoff exact, but
+    // eligibility and freezing must use the actual clock at this game's write.
+    const writeNow=nowClock(),writeAt=Date.parse(writeNow),dataAt=Date.parse(asOf);
+    if(!Number.isFinite(writeAt)||!Number.isFinite(dataAt)||writeAt<dataAt)throw Error("CBB write clock invalid or before data cutoff");
     const identity=scheduled.get(game.id);
     const previous=prior.get(game.id)??null;
     if(previous?.snapshot.lockedAt&&Date.parse(previous.snapshot.startsAt)!==Date.parse(game.date)){
@@ -358,7 +362,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       problems.push(`${game.id}:seed_identity_missing_or_changed`);continue;
     }
     if(!identity.homeTeamLogo||!identity.awayTeamLogo)missingLogos++;
-    const afterCutoff=Date.parse(asOf)>=Date.parse(game.date)-60*60_000;
+    const afterCutoff=writeAt>=Date.parse(game.date)-60*60_000;
     if(afterCutoff&&!previous){problems.push(`${game.id}:prelock_snapshot_missing`);continue;}
     if(!afterCutoff&&previous&&!boardCandidates.has(game.id)){
       problems.push(`${game.id}:incomplete_refresh_preserved_prior_forecast`);
@@ -373,7 +377,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     }
     let result;
     try{result=await writeCbbMemberGame({game,candidate,homeLogo:identity.homeTeamLogo,
-      awayLogo:identity.awayTeamLogo,now:asOf,splitEvidence,marketQuotes:namedById.get(game.id)?.quotes??[],bookHistory,
+      awayLogo:identity.awayTeamLogo,now:writeNow,splitEvidence,marketQuotes:namedById.get(game.id)?.quotes??[],bookHistory,
       capturedNamedSections:preparedSections.get(game.id),capturedPublicSections:preparedPublic.get(game.id)},db);
     }catch(error){
       if(!(error instanceof CbbFixtureClockError)||!previous)throw error;
