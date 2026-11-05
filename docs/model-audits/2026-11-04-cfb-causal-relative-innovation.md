@@ -35,25 +35,57 @@ future-unlocked payloads, 176 evaluated markets, 136 held markets; grades were
 Playbook lines/splits returned HTTP 401 in the local credential context; retained
 context remained available but was not given forecast or grade authority.
 
-The exact starting-base replay used the same external providers but selected a
-different lifecycle cohort: 103 payloads / 173 markets, with 21 / 58 / 77 / 17
-and 136 held. Because the cohort and capture stage differed, these numbers are not
-represented as a same-input promotion/demotion comparison. Candidate and base had
-81 and 79 actionables respectively, but that apparent delta is not qualification
-evidence.
+The earlier separate starting-base replay selected a different lifecycle cohort
+and therefore was not qualification evidence. The release blocker was closed by
+`scripts/operator/audit-cfb-causal-reader-same-input.ts`. One writer capture was
+structured-cloned, recursively frozen and SHA-256 stamped per game. The exact
+R41/R7 implementation was loaded only by the operator from a clean detached
+worktree at predecessor commit `4fcc4129`; the candidate was replayed from the
+same frozen objects and was required to be byte-identical to the authoritative
+writer result.
+
+The exact comparison covered 103 games /309 market axes, including all 173
+evaluated markets and 136 explicitly held markets. Incumbent grades were
+21 Best Angle /60 Lean /75 Watchlist /17 No Play; candidate grades were
+27 /53 /72 /21. Actionables moved 81 to 80 through eight promotions and nine
+demotions, not a quota or hidden flattening. There were zero market additions,
+zero removals and held markets remained 136 to 136. The candidate changed 15
+sides (two Moneylines and 13 Spreads), 21 game-score distributions, 61 market
+probabilities and 33 grades. All 15 side changes crossed favorite/underdog
+disposition; no Total direction changed.
+
+Promotions were ARK-AUB Spread, Texas A&M-South Carolina Spread, Penn State-
+Washington Moneyline, UCF-Kansas Moneyline, Louisiana Tech-Troy Total, Michigan
+State-Michigan Spread, Liberty-New Mexico State Spread and Fresno State-Utah
+State Spread. Demotions were Iowa State-Baylor Spread, Old Dominion-Coastal
+Carolina Moneyline, Cincinnati-Houston Moneyline, Penn State-Washington Spread,
+UL Monroe-Arkansas State Total, Northern Illinois-San Jose State Total,
+South Alabama-Louisiana Spread, Louisville-Georgia Tech Moneyline and Fresno
+State-Utah State Moneyline. The operator emits every game/market's exact side,
+score, probability, grade, favorite/underdog or Over/Under disposition, held
+reason and change classification; the reproduced audit artifact is
+`/private/tmp/cfb-causal-same-input-report.json`.
+
+The run had zero writes, zero inserts and zero paid Odds API calls. Local
+Playbook line/split requests returned HTTP 401, so retained stored Playbook
+context was identical in both lanes and remained non-authoritative. Owls and the
+named price capture completed without a capture failure. This credential warning
+does not invalidate the identical-input comparison, but it is disclosed rather
+than described as live Playbook health.
 
 ## Tests and locked safety
 
 Focused tests cover public-split PMF/grade neutrality, strict Owls admission,
 wrong-game/stale/retail rejection, target exclusion, source conflict, reversal,
 one innovation per axis, final-PMF score coherence, paired grade promotion and
-demotion, writer immutability and locked reader precedence. Existing locked rows
-retain their exact stored releases and payloads; new semantics apply only to
-future-unlocked rows.
+demotion, audit-only dependency rejection on writing jobs, authoritative-writer
+candidate parity, writer immutability and locked reader precedence. Existing
+locked rows retain their exact stored releases and payloads; new semantics apply
+only to future-unlocked rows.
 
 ## Publication status
 
-Not published. Focused checks and `npm run verify:model-change` pass. A valid
-same-input board-impact comparison remains the release blocker. Rollback is the
-complete R59/R41/R7 family; never rewrite a row already locked under either
-release.
+Not published. The valid same-input board-impact comparison is complete. Focused
+checks, `npm run verify:model-change` and integration safety must be rerun on the
+rebased commit before handoff. Rollback is the complete R59/R41/R7 family; never
+rewrite a row already locked under either release.

@@ -81,14 +81,17 @@ The stored receipt records the target exclusions, chronological dispositions and
 actual PMF consequence. Prior locked rows remain byte-for-byte authoritative and
 are never migrated to these semantics.
 
-The zero-write current replay proposed 104 games /176 priced markets with
-27 Best Angles,54 Leans,72 Watchlists,23 No Plays and136 held markets. A separate
-exact-base replay was not a valid same-input comparison because the old release
-selected a different lifecycle cohort (103 games/173 markets); its counts are
-disclosed, not presented as causal promotion/demotion proof. Deterministic focused
-tests cover paired promotion and demotion, Owls admission/rejection, public
-neutrality, one-innovation ownership, conflict/reversal fallback, locked writer
-immutability and reader precedence. Evidence:
+The exact zero-write frozen-input comparison covers 103 games / 309 market axes:
+173 evaluated and 136 held under both readers. Incumbent grades are 21 Best /
+60 Lean / 75 Watchlist / 17 No Play; candidate grades are 27 / 53 / 72 / 21.
+Actionables move 81→80 through 8 promotions and 9 demotions, with 0 additions,
+0 removals, 15 side changes, 21 score changes and 0 Total-direction changes. Every
+game input was cloned, frozen and hash-stamped before both implementations ran;
+the candidate replay also had to equal the authoritative writer byte-for-byte.
+The Odds API was disabled and writes were zero. Deterministic focused tests cover
+paired promotion and demotion, Owls admission/rejection, public neutrality,
+one-innovation ownership, conflict/reversal fallback, audit-only predecessor
+isolation, locked writer immutability and reader precedence. Evidence:
 `docs/model-audits/2026-11-04-cfb-causal-relative-innovation.md`.
 
 ## NBA composed named-book opposition — November 4
