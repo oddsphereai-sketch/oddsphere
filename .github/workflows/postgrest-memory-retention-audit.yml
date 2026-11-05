@@ -45,6 +45,7 @@ jobs:
           "$RUNNER_TEMP/memory-client/node_modules/pg/lib/index.js"
           'postgresql://postgres:memory-test@127.0.0.1:5432/memory_retention_fixture'
           "$RUNNER_TEMP/memory-results"
+          "$(docker ps --filter ancestor=postgres:17.6 --format '{{.ID}}')"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

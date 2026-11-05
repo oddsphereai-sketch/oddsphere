@@ -7,7 +7,7 @@ import { readFileSync, writeFileSync, mkdirSync, openSync, closeSync } from "nod
 import { once } from "node:events";
 import { pathToFileURL } from "node:url";
 
-const [binary, pgModule, databaseUrl, outputDirectory] = process.argv.slice(2);
+const [binary, pgModule, databaseUrl, outputDirectory, postgresContainer] = process.argv.slice(2);
 assert(binary && pgModule && databaseUrl && outputDirectory, "binary, pg module, disposable URL, output directory required");
 assert.equal(process.platform, "linux", "Linux /proc accounting required");
 const uri = new URL(databaseUrl);
@@ -55,9 +55,12 @@ const cases = [
   { name: "legacy_then_current_pages", legacy: true, idleGc: false },
   { name: "legacy_then_current_pages_idle_gc", legacy: true, idleGc: true },
 ];
-function memory(pid) {
-  const status = readFileSync(`/proc/${pid}/status`, "utf8");
-  const smaps = readFileSync(`/proc/${pid}/smaps_rollup`, "utf8");
+function memory(pid, container) {
+  const proc = (name) => container
+    ? execFileSync("docker", ["exec", container, "cat", `/proc/${pid}/${name}`], { encoding: "utf8" })
+    : readFileSync(`/proc/${pid}/${name}`, "utf8");
+  const status = proc("status");
+  const smaps = proc("smaps_rollup");
   const values = {};
   for (const text of [status, smaps]) {
     for (const match of text.matchAll(/^(VmRSS|VmSize|VmData|VmSwap|Rss|Pss|Private_Clean|Private_Dirty|Anonymous|Swap|SwapPss|LazyFree):\s+(\d+) kB/gm)) {
@@ -67,10 +70,16 @@ function memory(pid) {
   // Linux marks VM_ACCOUNT regions with "ac". This mapping total is a
   // reservation diagnostic, not a replacement for host Committed_AS: shared
   // mappings and touched private file mappings require separate accounting.
-  const maps = readFileSync(`/proc/${pid}/smaps`, "utf8");
+  const maps = proc("smaps");
   values.accountableMappingBytes = [...maps.matchAll(/^Size:\s+(\d+) kB[\s\S]*?^VmFlags:([^\n]*)/gm)]
     .filter((match) => /\bac\b/.test(match[2]))
     .reduce((sum, match) => sum + Number(match[1]) * 1024, 0);
+  // Exclude shared mappings so the same PostgreSQL shared-buffer reservation
+  // is not charged repeatedly to every backend.
+  values.privateMappingResidentBytes = maps.split(/(?=^[0-9a-f]+-[0-9a-f]+\s)/m)
+    .filter((region) => /^[0-9a-f]+-[0-9a-f]+\s+\S{3}p\s/.test(region))
+    .reduce((sum, region) => sum + [...region.matchAll(/^Rss:\s+(\d+) kB/gm)]
+      .reduce((n, match) => n + Number(match[1]) * 1024, 0), 0);
   return values;
 }
 const childEnvironment = { PATH: process.env.PATH, LANG: "C.UTF-8" };
@@ -102,7 +111,10 @@ for (const entry of cases) {
     // Capture allocations before the diagnostic request can recycle the pool.
     const measured = memory(child.pid);
     const backends = includeProbe ? await probe() : [];
-    const row = { name, ...measured, backends };
+    const row = { name, ...measured, backends: backends.map((backend) => ({
+      ...backend,
+      ...(postgresContainer ? { processMemory: memory(backend.pid, postgresContainer) } : {}),
+    })) };
     console.log(JSON.stringify({ case: entry.name, ...row }));
     return row;
   }
