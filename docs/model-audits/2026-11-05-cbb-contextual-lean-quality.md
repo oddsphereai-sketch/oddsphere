@@ -12,13 +12,14 @@ recommendation-quality problem; nominal arithmetic was consistent.
 
 ## Declared recommendation policy
 
-The initial full-standard-error assessment for every actionable tier was
-rejected before deployment: it would remove all captured actionable moneylines
-and spreads, applying a strong robustness requirement to the lower-conviction
-Lean label. The revised ordinal policy below was then frozen before its next
-impact audit: moderate sensitivity for Lean, stronger sensitivity for Best.
-This is disclosed product iteration following an observed defect in tier
-meaning, not blind validation or a search for a desired number of plays.
+Full- and half-standard-error worst-case assessments for Lean were rejected
+before deployment. Both would remove all captured actionable moneylines and
+spreads, applying a worst-case requirement to the lower-conviction Lean label.
+The final policy below changes the decision principle, rather than searching
+for a smaller radius or a desired count: Lean accounts continuously for the
+expected downside of a working value-sensitivity model; Best additionally
+requires stronger scenario stability. This is disclosed product iteration,
+not blind validation or a statistical qualification claim.
 
 R8 decision / R7 grade / R43 publisher / R27 adapter / R30 tracking retain the
 exact fitted model R1, covariance R1, selected side, final score, probabilities,
@@ -30,25 +31,39 @@ grade-only recommendation-risk assessment for positive-value candidates.
    existing covariance calibration's axis scales. Remaining-game noise is
    excluded from these location radii.
 2. Evaluate the selected contract and side under eight coordinate/corner
-   location sensitivity scenarios, at half a marginal fitted location standard
-   error for a cautious Lean, and a full standard error for Best Angle. These
-   are explicit grade-risk preferences. Reuse the game's exact conditioned integer-score law
+   location sensitivity scenarios, at one marginal fitted location standard
+   error. Reuse the game's exact conditioned integer-score law
    calculations at each shifted location across all three markets. Keep the
    released predictive scales and correlation unchanged; these stress cases
    are conservative sensitivity scenarios, not a posterior confidence interval,
    a joint one-sigma ellipsoid or a certified continuous worst-case bound.
    The released predictive law already includes location uncertainty; this
    extra recommendation caution does not add another convolution or alter p.
-3. Apply a declared one-additional-adverse-resolved-case stress using N unique
+3. Derive axis value sensitivities from the exact EV difference at positive and
+   negative axis scenarios divided by two. Their absolute sum is the scale of
+   a declared linearized working Normal EV-sensitivity model with unidentified
+   cross-axis dependence. It is an upper standard-deviation bound within that
+   linearized working model, not a conservative bound for actual nonlinear EV.
+   Store eight-scenario linearization residuals separately. For nominal value
+   mu and working scale s, the expected negative excursion is
+   `D = s*phi(mu/s) - mu*Phi(-mu/s)`, with its analytical zero-scale limit.
+   Lean's value assessment is `mu-D`. This declared unit downside penalty is
+   continuous and does not require every adverse scenario to remain profitable.
+   It is neither the variance of a single bet's return nor a calibrated EV
+   posterior or confidence guarantee. Stable-tail arithmetic is shared with
+   the existing score-law mathematics; the public score law remains unchanged.
+4. Apply a declared one-additional-adverse-resolved-case stress using N unique
    model-bound, own-game-excluded calibration games: stressed unconditional
-   value is `(N * scenarioEV - (pWin + pLose)) / (N + 1)`. Push mass remains
+   value is `(N * assessedEV - (pWin + pLose)) / (N + 1)`. For Lean, assessedEV
+   is mu-D; for Best it is the minimum exact value across nominal and the eight
+   scenarios. Push mass remains
    refunded. The current exact model binding has N=137. This is a product risk
    preference, not an estimated rare-loss rate or an effective-independent
    sample count. It implies a data-sized conditional reserve of 1/N before
    location sensitivity; it must not be described as threshold-free.
-4. A candidate whose offered advantage survives the moderate sensitivities
+5. A candidate whose downside-adjusted value supports the declared risk
    remains Lean-eligible. A nominal Best candidate must additionally survive
-   the stronger assessment; if only moderate support survives it is Lean.
+   the stronger scenario assessment; if only Lean support survives it is Lean.
    Existing outcome-confidence and Best-price boundaries still apply. Positive nominal value
    that does not survive is Watchlist, retaining the same forecast. If even a
    certain win cannot supply sufficient return under the declared adverse-case
@@ -64,7 +79,7 @@ are computational sensitivity scenarios, not eight market-signal requirements.
 
 The general use of explicit ambiguity sets in betting decisions is described by
 [Sun and Boyd, Distributional Robust Kelly Gambling](https://web.stanford.edu/~boyd/papers/robust_kelly).
-   That work does not select or validate this product's half/full-standard-error or
+That work does not select or validate this product's downside penalty or
 one-adverse-case preferences. This release does not introduce Kelly stakes.
 
 ## Release and verification contract
@@ -95,3 +110,26 @@ snapshot, coverage, grade reasons and unchanged locked-record hashes. Bounded
 independent market reviews compare raw evidence before candidate grade exposure,
 with prior exposure disclosed. Numerical consistency does not certify forecast
 accuracy or complete knowledge of all market scenarios.
+
+## Same-input effect and resource proof
+
+The final expected-downside audit uses the already saved 22:02 source-epoch
+packet, not later live-board counts and not settled outcomes. For 42 new-model
+games /126 priced markets, the preceding ladder's 63 Leans and four Best become
+29 Leans and four Best: moneyline8→2, spread23→9, total32→18. Thirty-four
+actionables demote, zero promote; final counts are64 Watch,29 No Play,29 Lean
+and4 Best. Scores, selections, pWin/pLose/pPush, offered prices and nominal EV
+remain exact. This is an openly reported quality correction, not a concealed
+board-count change or evidence that prediction accuracy improved.
+
+Within the captured39 unlocked games,59 Leans become27, with three Best retained.
+The three captured new-model locks retain their original grades and payloads.
+Actual lock state at deployment may be later; these counterfactual counts must
+not be presented as a promised live slate. The full82 priced-game comparison
+changes103→59 Leans and retains six Best. All311 legacyR6 codec/JSONB/mapper
+roundtrips remain exact. Risk-only computation adds3.905 seconds locally for
+the82 games, with zero GP evaluations, fits, provider calls or writes.
+Independent Python expected-downside arithmetic agrees within6.20e-17.
+Private audit SHA256:
+`6bfdd5b065574df04a24b8ee847678609c1869889bacb5d2bb1763263ff2b948`.
+The actual production job's elapsed time and completed lifecycle remain required.

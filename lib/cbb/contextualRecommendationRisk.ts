@@ -1,12 +1,14 @@
 /** Grade-only sensitivity of the released forecast, never a replacement forecast.
  * These are explicit product risk preferences, not confidence intervals. */
-import {createCbbContextualScoreLaw,type CbbContextualLatentGaussian,type CbbScoreLawNumerics} from "./contextualScoreLawResearch";
+import {createCbbContextualScoreLaw,cbbWorkingNormalExpectedDownside,type CbbContextualLatentGaussian,type CbbScoreLawNumerics} from "./contextualScoreLawResearch";
 import type {CbbMarket} from "./types";
 
-export const CBB_CONTEXTUAL_RECOMMENDATION_RISK_RELEASE="cbb_recommendation_risk_2026_11_05_r1_location_and_adverse_case" as const;
+export const CBB_CONTEXTUAL_RECOMMENDATION_RISK_RELEASE="cbb_recommendation_risk_2026_11_05_r1_expected_downside" as const;
 export const CBB_CONTEXTUAL_RECOMMENDATION_RISK_POLICY=Object.freeze({
  release:CBB_CONTEXTUAL_RECOMMENDATION_RISK_RELEASE,
- locationRadiiMarginalStandardErrors:{lean:.5,best:1},
+ locationRadiiMarginalStandardErrors:{lean:1,best:1},
+ leanRiskMeaning:"nominal_EV_minus_expected_negative_excursion_of_a_declared_linearized_working_Normal_EV_sensitivity;no_worst_case_scenario_veto",
+ sensitivityMeaning:"exact_price_EV_axis_differences_at_plus_minus_one_fitted_location_SE;L1_scale_for_unknown_cross_axis_dependence_of_the_linearized_working_model;not_a_bound_for_actual_nonlinear_EV",
  adverseCalibrationCases:1,
  locationMeaning:"eight_coordinate_and_corner_sensitivity_scenarios_of_the_released_predictive_law;not_a_posterior_quantile_or_continuous_worst_case_bound",
  scaleMeaning:"calibrated_source_location_plus_GP_function_variance_only;no_remaining_game_noise_in_the_location_radius;released_predictive_scales_unchanged",
@@ -55,10 +57,24 @@ export function createCbbRecommendationRiskEvaluator(args:{latent:CbbContextualL
    minimumLocalValue=Math.min(minimumLocalValue,value.expectedValue);maximumError=Math.max(maximumError,value.errorEstimate);
    return {marginShift:s.marginShift,totalShift:s.totalShift,...value};
   });
-  const supported=minimumStressedValue>maximumError;
+  const axis=(coordinate:"margin"|"total",sign:1|-1)=>observations.find(s=>coordinate==="margin"?
+   Math.sign(s.marginShift)===sign&&s.totalShift===0:Math.sign(s.totalShift)===sign&&s.marginShift===0)?.expectedValue??target.expectedValue;
+  const marginValueSensitivity=(axis("margin",1)-axis("margin",-1))/2,totalValueSensitivity=(axis("total",1)-axis("total",-1))/2;
+  const workingValueSensitivityScale=Math.abs(marginValueSensitivity)+Math.abs(totalValueSensitivity);
+  const linearizationResiduals=observations.map(s=>({marginShift:s.marginShift,totalShift:s.totalShift,
+   residual:s.expectedValue-target.expectedValue-Math.sign(s.marginShift)*marginValueSensitivity-Math.sign(s.totalShift)*totalValueSensitivity}));
+  const expectedDownsidePenalty=cbbWorkingNormalExpectedDownside(target.expectedValue,workingValueSensitivityScale);
+  const riskAdjustedExpectedValue=target.expectedValue-expectedDownsidePenalty;
+  const decisionRiskExpectedValue=assessmentTier==="lean"?(c.calibrationGames*riskAdjustedExpectedValue-target.resolvedMass)/(c.calibrationGames+1):minimumStressedValue;
+  // The working downside transform is Lipschitz in its mean and scale. Keep
+  // arithmetic resolution separate from the explicit recommendation policy.
+  const decisionNumericalErrorEstimate=5*maximumError;
+  const supported=decisionRiskExpectedValue>decisionNumericalErrorEstimate;
   return {release:CBB_CONTEXTUAL_RECOMMENDATION_RISK_RELEASE,policy:CBB_CONTEXTUAL_RECOMMENDATION_RISK_POLICY,context:{...c},assessmentTier,radiusMarginalStandardErrors:radius,
    nominalExpectedValue:target.expectedValue,minimumLocalExpectedValue:minimumLocalValue,minimumStressedExpectedValue:minimumStressedValue,
-   numericalErrorEstimate:maximumError,supported,priceCanSupportRecommendation,maximumPossibleStressedValue,scenarios:observations,
-   reason:!priceCanSupportRecommendation?"price_return_cannot_support_declared_model_risk_even_at_certain_win":supported?"price_advantage_survives_declared_model_sensitivity":minimumLocalValue<=maximumError?"price_advantage_sensitive_to_fitted_location_uncertainty":"price_advantage_too_thin_for_adverse_case_stress"};
+   marginValueSensitivity,totalValueSensitivity,workingValueSensitivityScale,expectedDownsidePenalty,riskAdjustedExpectedValue,decisionRiskExpectedValue,
+   linearizationDiagnostics:{maximumAbsoluteResidual:Math.max(0,...linearizationResiduals.map(s=>Math.abs(s.residual))),residuals:linearizationResiduals},
+   numericalErrorEstimate:decisionNumericalErrorEstimate,supported,priceCanSupportRecommendation,maximumPossibleStressedValue,scenarios:observations,
+   reason:!priceCanSupportRecommendation?"price_return_cannot_support_declared_model_risk_even_at_certain_win":supported?"price_advantage_survives_declared_model_sensitivity":riskAdjustedExpectedValue<=decisionNumericalErrorEstimate?"price_advantage_sensitive_to_fitted_location_uncertainty":"price_advantage_too_thin_for_adverse_case_stress"};
  };
 }

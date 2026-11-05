@@ -52,9 +52,11 @@ export function buildCbbContextualOutcomeBoard(args:{decision:CbbOutcomeDecision
   if(row.grade==="Held"&&(row.selection!==null||row.probability!==null||row.pushProbability!==null||row.loseProbability!==null||row.price!==null||row.expectedValue!==null))
    throw Error("CBB outcome board Held decision has wager economics");
   if(decision.release===CBB_OUTCOME_DECISION_RELEASE&&(row.grade==="Lean"||row.grade==="Best Angle"||row.gradingNumerics?.valueSignResolvedPositive)&&
-   (!row.recommendationRisk||row.recommendationRisk.release!==CBB_CONTEXTUAL_RECOMMENDATION_RISK_RELEASE||
+   (!row.recommendationRisk||row.recommendationRisk.release!==CBB_CONTEXTUAL_RECOMMENDATION_RISK_RELEASE||row.recommendationRisk.assessmentTier!=="lean"||
+    row.recommendationRisk.nominalExpectedValue!==row.expectedValue||
     ((row.grade==="Lean"||row.grade==="Best Angle")&&!row.recommendationRisk.supported)||
-    row.grade==="Best Angle"&&!row.recommendationRisk.bestAngleAssessment?.supported))
+    row.grade==="Best Angle"&&(!row.recommendationRisk.bestAngleAssessment?.supported||row.recommendationRisk.bestAngleAssessment.assessmentTier!=="best"||
+     row.recommendationRisk.bestAngleAssessment.release!==CBB_CONTEXTUAL_RECOMMENDATION_RISK_RELEASE)))
    throw Error("CBB outcome board recommendation lacks its declared risk assessment");
   const selected=row.selection!==null,target=selected?row.target:null,informationalNonActionablePrice=row.grade==="Watchlist"||row.grade==="No Play";
   return {...row,targetBook:row.target?.sportsbook??null,line:target?.line??null,

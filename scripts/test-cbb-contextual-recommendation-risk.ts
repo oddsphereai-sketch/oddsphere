@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {createCbbRecommendationRiskEvaluator} from "../lib/cbb/contextualRecommendationRisk";
-import {createCbbContextualScoreLaw,type CbbContextualLatentGaussian} from "../lib/cbb/contextualScoreLawResearch";
+import {createCbbContextualScoreLaw,cbbWorkingNormalExpectedDownside,type CbbContextualLatentGaussian} from "../lib/cbb/contextualScoreLawResearch";
 import {buildCbbInterpretedDecision} from "../lib/cbb/contextualInterpretedDecision";
 import {buildCbbContextualMarketInterpretation} from "../lib/cbb/contextualMarketInterpretation";
 import type {CbbMarket} from "../lib/cbb/types";
@@ -11,7 +11,10 @@ function assess(latent=base,locationSd=.001,price=-120,market:CbbMarket="moneyli
  const value=createCbbRecommendationRiskEvaluator({latent,context:{marginLocationSd:locationSd,totalLocationSd:locationSd,calibrationGames:137}})({market,line,selection,price,expectedValue,resolvedMass:win+loss,numericalValueErrorEstimate:1e-10,probabilityErrorEstimate:1e-11});
  return {...value,original:{win,loss,push:p.push,expectedValue}};
 }
-const low=assess(),fragile=assess(base,.5),largerFragile=assess({...base,marginMean:4.8},8);
+const low=assess(),fragile=assess(base,.5),largerFragile=assess({...base,marginMean:4.8},40);
+assert.ok(Math.abs(cbbWorkingNormalExpectedDownside(0,1)-1/Math.sqrt(2*Math.PI))<1e-15);
+assert.ok(Math.abs(cbbWorkingNormalExpectedDownside(1,1)-.0833154705876863)<1e-14);
+assert.equal(cbbWorkingNormalExpectedDownside(1,0),0);assert.equal(cbbWorkingNormalExpectedDownside(-1,0),1);
 assert.ok(low.original.expectedValue<.01&&low.supported,"A small but stable advantage can qualify; this is not a blanket 1% or 3% floor");
 assert.equal(fragile.supported,false,"Same price/forecast becomes informational when fitted location uncertainty consumes its advantage");
 assert.ok(largerFragile.original.expectedValue>low.original.expectedValue&&!largerFragile.supported,"A larger fragile edge can fail while a smaller stable edge passes");
