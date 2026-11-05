@@ -1,5 +1,35 @@
 # Current production model releases and qualified research candidates
 
+## Pro reader posture presentation and audit transport — November 4
+
+NBA model R36, market-marriage R38, grade R28 and locked-member snapshot R8
+remain numerically unchanged. Future-unlocked prediction snapshots now tag
+`nba_snapshot_evidence_metadata_2026_11_04_r1_authoritative_member_capture`:
+their duplicate split and price-trail audit fields are derived from the exact
+embedded member DTO, so they cannot claim splits are unavailable or movement is
+untracked when that same captured card contains the evidence. NBA member posture
+copy uses `nba_member_posture_presentation_2026_11_04_r1_authoritative_stored_posture`
+and exposes the stored named-book support, resistance, held resistance or conflict
+instead of substituting an independent value-gap heuristic.
+
+NHL model/calibration/decision R30 and receipt R3 remain unchanged. The member
+reader advances to
+`nhl_daily_edge_reader_2026_11_04_r23_authoritative_posture_presentation`, with
+presentation contract
+`nhl_member_posture_presentation_2026_11_04_r1_authoritative_stored_receipt`.
+Future-unlocked cards prefer the identity-validated stored receipt's exact market
+episode state and explanation; existing locked cards retain their exact stored
+presentation and are never reinterpreted.
+
+The read-only all-sport audit operator now consumes authorized HTTP 409 diagnostic
+payloads when they include both boards and the upstream audit result. It prints
+the full diagnostics and still exits nonzero for upstream or locally reproduced
+critical issues. Authentication failures, other HTTP failures, missing boards and
+malformed 409 payloads still fail immediately. These changes alter zero scores,
+probabilities, picks, grades, prices, stakes or actionability: board impact is
+0 promotions / 0 demotions / 0 removals. Evidence:
+`docs/model-audits/2026-11-04-pro-reader-auditability.json`.
+
 ## NBA composed named-book opposition — November 4
 
 The authoritative NBA grade policy advances to

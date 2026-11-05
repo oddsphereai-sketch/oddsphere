@@ -1256,7 +1256,7 @@ assert.match(reader, /writerVerdictsByGame/, "reader carries the price-aware wri
 assert.match(reader, /nhlVerdictFromStoredDecision/, "reader maps the writer's immutable storage token instead of recomputing the grade");
 assert.match(reader, /const displayModel: NhlModelOutput = storedPayload \? model : \{/, "stored writer and locked verdicts take precedence over the unlocked no-writer price-aware fallback");
 assert.match(reader, /NHL_REGULAR_TRANSITION_MODEL_RELEASES/, "reader preserves an already-locked prior-release tuple during deployment");
-assert.match(reader, /nhl_daily_edge_reader_2026_11_04_r22_positive_value_actionability/, "reader release records exact-price actionability binding");
+assert.match(reader, /nhl_daily_edge_reader_2026_11_04_r23_authoritative_posture_presentation/, "reader release records authoritative stored-posture presentation");
 assert.match(writer, /select\("external_id"\)/, "writer verifies exact settled-game replay identities instead of count parity");
 assert.match(reader, /select\("external_id"\)/, "reader verifies the same exact settled-game replay identities");
 assert.match(reader, /r\.model_version === NHL_REGULAR_MODEL_RELEASE \|\| r\.locked_at !== null/, "reader preserves a locked transition predecessor without consulting fresh replay state");

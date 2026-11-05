@@ -1,0 +1,50 @@
+{
+  "auditDate": "2026-11-04",
+  "scope": [
+    "nba_future_unlocked_snapshot_evidence_metadata",
+    "nba_member_authoritative_posture_presentation",
+    "nhl_member_authoritative_receipt_presentation",
+    "daily_edge_audit_http_409_diagnostics"
+  ],
+  "releases": {
+    "nbaModel": "nba_professional_unified_2026_11_04_r36_paid_consumer_book_coverage",
+    "nbaMarketMarriage": "nba_market_marriage_2026_11_04_r38_paid_consumer_book_coverage",
+    "nbaGrade": "nba_grade_policy_2026_11_04_r28_composed_named_book_opposition",
+    "nbaSnapshotMetadata": "nba_snapshot_evidence_metadata_2026_11_04_r1_authoritative_member_capture",
+    "nbaMemberPosturePresentation": "nba_member_posture_presentation_2026_11_04_r1_authoritative_stored_posture",
+    "nhlModel": "nhl_regular_2026_r30_positive_value_actionability",
+    "nhlReader": "nhl_daily_edge_reader_2026_11_04_r23_authoritative_posture_presentation",
+    "nhlReaderReceipt": "nhl_reader_receipt_2026_11_04_r3_exact_price_professional_best",
+    "nhlMemberPosturePresentation": "nhl_member_posture_presentation_2026_11_04_r1_authoritative_stored_receipt"
+  },
+  "behavior": {
+    "numericalForecastChanged": false,
+    "probabilityChanged": false,
+    "pickChanged": false,
+    "gradeChanged": false,
+    "stakeChanged": false,
+    "priceChanged": false,
+    "lockedRecordChanged": false,
+    "operator409DiagnosticsConsumed": true,
+    "operatorCriticalExitPreserved": true
+  },
+  "boardImpact": {
+    "promotions": 0,
+    "demotions": 0,
+    "removals": 0
+  },
+  "immutability": {
+    "nba": "Existing exact locked member DTO precedence remains unchanged; metadata repair applies on future unlocked snapshot construction only.",
+    "nhl": "Stored receipt posture presentation is accepted only when lockedAt is null; locked cards keep their exact legacy presentation."
+  },
+  "tests": [
+    "npx tsx --env-file=/Users/danielmengel/Projects/oddsphere/.env.local scripts/test-pro-reader-auditability.ts",
+    "npx tsx --env-file=/Users/danielmengel/Projects/oddsphere/.env.local scripts/test-nba-market-signal-consequences.ts",
+    "npx tsx --env-file=/Users/danielmengel/Projects/oddsphere/.env.local scripts/test-nba-locked-member-snapshot.ts",
+    "npx tsx --env-file=/Users/danielmengel/Projects/oddsphere/.env.local scripts/test-nhl-reader-receipt.ts",
+    "npm run test:nhl-regular-model",
+    "npx tsc --noEmit --pretty false",
+    "npm run verify:model-change",
+    "node scripts/verify-integration-safety.mjs --base-ref=origin/main"
+  ]
+}

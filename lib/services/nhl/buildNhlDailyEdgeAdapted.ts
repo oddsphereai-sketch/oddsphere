@@ -70,7 +70,7 @@ import {
 import { selectNhlProfessionalSplitPressure } from "./nhlProfessionalSplitPressure";
 
 export const NHL_DAILY_EDGE_READER_RELEASE =
-  "nhl_daily_edge_reader_2026_11_04_r22_positive_value_actionability" as const;
+  "nhl_daily_edge_reader_2026_11_04_r23_authoritative_posture_presentation" as const;
 
 type NhlStoredSnapshot = {
   model_output?: NhlModelOutput;
@@ -1085,6 +1085,26 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         },
       };
 
+      let unlockedReaderReceipt: NhlReaderReceipt | null = null;
+      if (storedPayload && storedPayload.lockedAt === null) {
+        const decoded = decodeNhlReaderReceipt(storedPayload.storedSnapshot.nhl_reader_receipt_v2, {
+          gameId: g.id,
+          externalId: g.external_id,
+          slateDate: date,
+          gameStartAt: g.game_date,
+          awayAbbr,
+          homeAbbr,
+          lockBoundaryAt: g.game_date,
+          modelVersion: storedPayload.model.model_version,
+          calibrationVersion: storedPayload.model.calibration_version,
+          decisionVersion: storedPayload.model.decision_version,
+        });
+        if (decoded.status === "valid") unlockedReaderReceipt = decoded.receipt;
+        else if (decoded.status === "invalid") {
+          console.warn(`nhl daily-edge: unlocked reader receipt invalid for game ${g.id}: ${decoded.reason}; using the stored model-layer read`);
+        }
+      }
+
       const input: NhlAdapterGameInput = {
         gameId: g.id,
         externalId: g.external_id,
@@ -1104,6 +1124,7 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         splits: splitsEvent,
         lockedAt: storedPayload?.lockedAt ?? lockedByGame.get(g.id) ?? null,
         writerVerdicts: writerVerdictsByGame.get(g.id),
+        readerReceipt: unlockedReaderReceipt,
       };
       dtos.push(adaptNhlGameToDto(input));
     } catch (e) {

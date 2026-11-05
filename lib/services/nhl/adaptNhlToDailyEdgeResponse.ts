@@ -43,6 +43,10 @@ import type {
 } from "../../automodel/nhlRegularModelV1";
 import { americanToImplied } from "../../utils/odds";
 import type { ResolvedNhlSplitsEvent } from "./nhlResolvedSplits";
+import type { NhlReaderMarketReceipt, NhlReaderReceipt } from "./nhlReaderReceipt";
+
+export const NHL_MEMBER_POSTURE_PRESENTATION_RELEASE =
+  "nhl_member_posture_presentation_2026_11_04_r1_authoritative_stored_receipt" as const;
 
 /**
  * Per-market best-of-book bundle the pipeline assembles and the adapter
@@ -306,6 +310,46 @@ function marketSignalFromRead(
   return read === "discovery" ? "steam_alert" : "market_confirmed";
 }
 
+export function buildNhlMarketPosturePresentation(args: {
+  receipt: NhlReaderMarketReceipt | null | undefined;
+  fallbackRead: NhlCategoricalRead;
+  fallbackSide: NhlCategoricalSide;
+  finalSide: Exclude<NhlCategoricalSide, null>;
+}): {
+  release: typeof NHL_MEMBER_POSTURE_PRESENTATION_RELEASE;
+  marketSignal: MarketSignal;
+  explanation: string | null;
+} {
+  const fallback = marketSignalFromRead(args.fallbackRead, args.fallbackSide, args.finalSide);
+  const read = args.receipt?.interpretation;
+  if (!read) return { release: NHL_MEMBER_POSTURE_PRESENTATION_RELEASE, marketSignal: fallback, explanation: null };
+  const source = read.authoritySource === "market_episode" ? "stored market episode" : "stored independent reader";
+  if (read.state === "unavailable") return { release: NHL_MEMBER_POSTURE_PRESENTATION_RELEASE,
+    marketSignal: "market_neutral", explanation: "The stored reader receipt contains no qualified market episode for this market." };
+  if (read.state === "unresolved" || read.state === "disagreement") return {
+    release: NHL_MEMBER_POSTURE_PRESENTATION_RELEASE,
+    marketSignal: "market_neutral",
+    explanation: `The ${source} records ${read.state === "disagreement" ? "conflicting named-book paths" : "an unresolved market episode"}; no directional confirmation is claimed.`,
+  };
+  if (read.side === null) return { release: NHL_MEMBER_POSTURE_PRESENTATION_RELEASE,
+    marketSignal: "market_neutral", explanation: `The ${source} has no qualified direction for this market.` };
+  if (read.state === "resistance" && read.side === args.finalSide) return {
+    release: NHL_MEMBER_POSTURE_PRESENTATION_RELEASE,
+    marketSignal: "market_neutral",
+    explanation: `The ${source} held on the selected side against opposing pressure; the pick is retained without claiming a directional move.`,
+  };
+  if (read.side !== args.finalSide) return {
+    release: NHL_MEMBER_POSTURE_PRESENTATION_RELEASE,
+    marketSignal: "market_resistance",
+    explanation: `The ${source} points against the displayed pick (${read.state}).`,
+  };
+  return {
+    release: NHL_MEMBER_POSTURE_PRESENTATION_RELEASE,
+    marketSignal: read.state === "discovery" ? "steam_alert" : "market_confirmed",
+    explanation: `The ${source} ${read.state === "confirmation" ? "confirms" : "supports"} the displayed pick.`,
+  };
+}
+
 function signalTypeFromMarketSignal(signal: MarketSignal): SignalType {
   return signal === "market_neutral" ? "model_only" : "balanced";
 }
@@ -391,8 +435,9 @@ function buildMarketEdge(opts: {
   keyStats: KeyStatRow[];
   writerVerdict?: NhlVerdictKey;
   marketSignal: MarketSignal;
+  marketExplanation: string | null;
 }): MarketEdgeDto {
-  const { market, slot, modelTotal, marketLine, bundle, publicSplits, keyStats, writerVerdict, marketSignal } = opts;
+  const { market, slot, modelTotal, marketLine, bundle, publicSplits, keyStats, writerVerdict, marketSignal, marketExplanation } = opts;
   const priceComplete = bundle.priceAmerican !== null && (slot === "ml" || marketLine !== null);
   const effectiveVerdict: NhlVerdictKey = priceComplete ? (writerVerdict ?? market.verdict) : "pass";
   const verdict = verdictKeyMap(effectiveVerdict);
@@ -414,7 +459,8 @@ function buildMarketEdge(opts: {
         : null;
   const marketImpliedDecimal =
     bundle.priceAmerican !== null ? americanToImplied(bundle.priceAmerican) : null;
-  const whyLine = market.notes.join(" ") || (held ? "The model is passing this market." : `The NHL projection favors ${market.pick}.`);
+  const modelWhyLine = market.notes.join(" ") || (held ? "The model is passing this market." : `The NHL projection favors ${market.pick}.`);
+  const whyLine = marketExplanation ? `${marketExplanation} ${modelWhyLine}` : modelWhyLine;
   const riskLine = priceComplete
     ? "The Bet Grade is tied to this exact line and price; a materially worse number can remove the edge."
     : "A complete current sportsbook quote is required before this market can become actionable.";
@@ -517,6 +563,8 @@ export type NhlAdapterGameInput = {
   lockedAt: string | null;
   /** Price-aware writer decisions for the exact persisted model release. */
   writerVerdicts?: NhlWriterVerdicts;
+  /** Current stored reader receipt. Accepted only for unlocked presentation. */
+  readerReceipt?: NhlReaderReceipt | null;
 };
 
 export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto {
@@ -537,22 +585,17 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
   const mlPickIsHome = model.moneyline.pick.startsWith(input.homeAbbr);
   const totalPickIsOver = model.total.pick.startsWith("OVER");
   const plPickIsHome = model.puck_line.pick.startsWith(input.homeAbbr);
-  const marketSignals = {
-    moneyline: marketSignalFromRead(
-      model.layers.moneyline_market_read,
-      model.layers.moneyline_market_side,
-      mlPickIsHome ? "home" : "away",
-    ),
-    total: marketSignalFromRead(
-      model.layers.total_market_read,
-      model.layers.total_market_side,
-      totalPickIsOver ? "over" : "under",
-    ),
-    puckline: marketSignalFromRead(
-      model.layers.puck_line_market_read,
-      model.layers.puck_line_market_side,
-      plPickIsHome ? "home" : "away",
-    ),
+  const storedMarkets = input.lockedAt === null ? input.readerReceipt?.markets : undefined;
+  const marketPresentations = {
+    moneyline: buildNhlMarketPosturePresentation({ receipt: storedMarkets?.moneyline,
+      fallbackRead: model.layers.moneyline_market_read, fallbackSide: model.layers.moneyline_market_side,
+      finalSide: mlPickIsHome ? "home" : "away" }),
+    total: buildNhlMarketPosturePresentation({ receipt: storedMarkets?.total,
+      fallbackRead: model.layers.total_market_read, fallbackSide: model.layers.total_market_side,
+      finalSide: totalPickIsOver ? "over" : "under" }),
+    puckline: buildNhlMarketPosturePresentation({ receipt: storedMarkets?.spread,
+      fallbackRead: model.layers.puck_line_market_read, fallbackSide: model.layers.puck_line_market_side,
+      finalSide: plPickIsHome ? "home" : "away" }),
   } as const;
 
   return {
@@ -575,10 +618,10 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
     homeStarter: null,
     awayStarter: null,
     predictions: {
-      ml: buildPredictionDto(model.moneyline, input.mlBundle.priceAmerican !== null, input.writerVerdicts?.moneyline, marketSignals.moneyline),
-      total: buildTotalDto(model.total, input.marketTotalLine, input.totalBundle.priceAmerican !== null, input.writerVerdicts?.total, marketSignals.total),
+      ml: buildPredictionDto(model.moneyline, input.mlBundle.priceAmerican !== null, input.writerVerdicts?.moneyline, marketPresentations.moneyline.marketSignal),
+      total: buildTotalDto(model.total, input.marketTotalLine, input.totalBundle.priceAmerican !== null, input.writerVerdicts?.total, marketPresentations.total.marketSignal),
       // Puck-line read piggybacks the shared third-market prediction slot.
-      nrfi: buildPredictionDto(model.puck_line, input.puckLineBundle.priceAmerican !== null && input.puckLineMarketLine !== null, input.writerVerdicts?.puckline, marketSignals.puckline),
+      nrfi: buildPredictionDto(model.puck_line, input.puckLineBundle.priceAmerican !== null && input.puckLineMarketLine !== null, input.writerVerdicts?.puckline, marketPresentations.puckline.marketSignal),
     },
     markets: (() => {
       return {
@@ -591,7 +634,8 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
           publicSplits: buildPublicSplits("ml", mlPickIsHome, false, input.splits, input.homeAbbr, input.awayAbbr),
           keyStats: buildKeyStats("ml", input.snapshot, model),
           writerVerdict: input.writerVerdicts?.moneyline,
-          marketSignal: marketSignals.moneyline,
+          marketSignal: marketPresentations.moneyline.marketSignal,
+          marketExplanation: marketPresentations.moneyline.explanation,
         }),
         total: buildMarketEdge({
           market: model.total,
@@ -602,7 +646,8 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
           publicSplits: buildPublicSplits("total", false, totalPickIsOver, input.splits, input.homeAbbr, input.awayAbbr),
           keyStats: buildKeyStats("total", input.snapshot, model),
           writerVerdict: input.writerVerdicts?.total,
-          marketSignal: marketSignals.total,
+          marketSignal: marketPresentations.total.marketSignal,
+          marketExplanation: marketPresentations.total.explanation,
         }),
         // first_inning slot carries the official puck-line read for NHL.
         first_inning: buildMarketEdge({
@@ -614,7 +659,8 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
           publicSplits: buildPublicSplits("puckline", plPickIsHome, false, input.splits, input.homeAbbr, input.awayAbbr),
           keyStats: buildKeyStats("puckline", input.snapshot, model),
           writerVerdict: input.writerVerdicts?.puckline,
-          marketSignal: marketSignals.puckline,
+          marketSignal: marketPresentations.puckline.marketSignal,
+          marketExplanation: marketPresentations.puckline.explanation,
         }),
       };
     })(),

@@ -143,9 +143,14 @@ function buildPickLabel(intel: MarketIntelligence): string | null {
   return intel.pick_label;
 }
 
-// MarketSignal union: market_confirmed | market_neutral | market_resistance |
-// public_smoke | steam_alert
-export function buildMarketSignal(intel: MarketIntelligence): MarketSignal {
+export const NBA_MEMBER_POSTURE_PRESENTATION_RELEASE =
+  "nba_member_posture_presentation_2026_11_04_r1_authoritative_stored_posture" as const;
+
+export function buildNbaMarketPosturePresentation(intel: MarketIntelligence): {
+  release: typeof NBA_MEMBER_POSTURE_PRESENTATION_RELEASE;
+  marketSignal: MarketSignal;
+  explanation: string | null;
+} {
   // A positive model/price gap is model value, not proof of sharp agreement.
   // New reader snapshots carry actual observed source posture. An empty or
   // conflicting posture cannot fall through into legacy value-as-confirmation.
@@ -153,24 +158,42 @@ export function buildMarketSignal(intel: MarketIntelligence): MarketSignal {
   // adapter is called and are never relabeled by the new contract.
   const posture = intel.named_book_posture;
   if (posture) {
-    if (posture.market !== intel.market || posture.pickedSide !== intel.pick_side) return "market_neutral";
-    if (posture.opposingSources.length || posture.staticOpposingSources?.length) return "market_resistance";
-    if (posture.conflictingSources.length) return "market_neutral";
-    if (posture.convictionRiskSources?.length) return "market_neutral";
-    return posture.supportingSources.length ? "market_confirmed" : "market_neutral";
+    if (posture.market !== intel.market || posture.pickedSide !== intel.pick_side) {
+      return { release: NBA_MEMBER_POSTURE_PRESENTATION_RELEASE, marketSignal: "market_neutral",
+        explanation: "The stored named-book posture does not match this displayed selection, so it is not claimed as support or resistance." };
+    }
+    if (posture.conflictingSources.length) return { release: NBA_MEMBER_POSTURE_PRESENTATION_RELEASE, marketSignal: "market_neutral",
+      explanation: `Stored named-book evidence conflicts across ${posture.conflictingSources.join(", ")}; no directional confirmation is claimed.` };
+    const opposing = [...posture.opposingSources, ...(posture.staticOpposingSources ?? [])];
+    if (opposing.length) return { release: NBA_MEMBER_POSTURE_PRESENTATION_RELEASE, marketSignal: "market_resistance",
+      explanation: `Stored named-book posture resists this pick (${[...new Set(opposing)].join(", ")}).` };
+    if (posture.convictionRiskSources?.length) return { release: NBA_MEMBER_POSTURE_PRESENTATION_RELEASE, marketSignal: "market_neutral",
+      explanation: "Stored named-book posture is mixed or recently tempered, so the reader does not claim clean confirmation." };
+    if (posture.heldResistanceSupportingSources?.length) return { release: NBA_MEMBER_POSTURE_PRESENTATION_RELEASE, marketSignal: "market_neutral",
+      explanation: `The stored reader saw ${posture.heldResistanceSupportingSources.join(", ")} hold against opposing pressure; that supports retaining the pick without inventing a directional move.` };
+    if (posture.supportingSources.length) return { release: NBA_MEMBER_POSTURE_PRESENTATION_RELEASE, marketSignal: "market_confirmed",
+      explanation: `Stored named-book posture supports this pick (${posture.supportingSources.join(", ")}).` };
+    return { release: NBA_MEMBER_POSTURE_PRESENTATION_RELEASE, marketSignal: "market_neutral", explanation: null };
   }
   if (intel.market === "moneyline" && intel.qualified_market_direction !== undefined) {
-    if (intel.qualified_market_direction.state === "confirmed") return "market_confirmed";
-    if (intel.qualified_market_direction.state === "resistance") return "market_resistance";
-    return "market_neutral";
+    if (intel.qualified_market_direction.state === "confirmed") return { release: NBA_MEMBER_POSTURE_PRESENTATION_RELEASE,
+      marketSignal: "market_confirmed", explanation: "The stored qualified market direction confirms this pick." };
+    if (intel.qualified_market_direction.state === "resistance") return { release: NBA_MEMBER_POSTURE_PRESENTATION_RELEASE,
+      marketSignal: "market_resistance", explanation: "The stored qualified market direction resists this pick." };
+    return { release: NBA_MEMBER_POSTURE_PRESENTATION_RELEASE, marketSignal: "market_neutral", explanation: null };
   }
-  switch (intel.conflict_band) {
-    case "support":             return "market_confirmed";
-    case "neutral":             return "market_neutral";
-    case "mild_conflict":       return "market_resistance";
-    case "strong_conflict":     return "market_resistance";
-    case "market_unavailable":  return "market_neutral";
-  }
+  const marketSignal: MarketSignal = intel.conflict_band === "support"
+    ? "market_confirmed"
+    : intel.conflict_band === "mild_conflict" || intel.conflict_band === "strong_conflict"
+      ? "market_resistance"
+      : "market_neutral";
+  return { release: NBA_MEMBER_POSTURE_PRESENTATION_RELEASE, marketSignal, explanation: null };
+}
+
+// MarketSignal union: market_confirmed | market_neutral | market_resistance |
+// public_smoke | steam_alert
+export function buildMarketSignal(intel: MarketIntelligence): MarketSignal {
+  return buildNbaMarketPosturePresentation(intel).marketSignal;
 }
 
 // SignalType union: model_dominant | market_dominant | balanced | model_only |
@@ -324,9 +347,13 @@ function buildMarketEdgeDto(opts: {
   const guidedWatchOut = intel.rationale.length > 0
     ? intel.rationale[0]!
     : "Tracking opens on tonight's first observed line — line history fills in as the day moves.";
-  const whyLine = intel.rationale.length > 1
+  const baseWhyLine = intel.rationale.length > 1
     ? intel.rationale.slice(1).join(" ")
     : guidedWatchOut;
+  const posturePresentation = buildNbaMarketPosturePresentation(intel);
+  const whyLine = posturePresentation.explanation
+    ? `${posturePresentation.explanation} ${baseWhyLine}`
+    : baseWhyLine;
   // Same line-tracking caveat — strip the internal-y "opener / first observed"
   // wording from the per-game movement_note string before it hits members.
   const riskLine = "Line tracking begins at tonight's first observed price.";
@@ -336,7 +363,7 @@ function buildMarketEdgeDto(opts: {
     confidence: pickConfidenceFraction(intel),
     grade: held ? null : gradeToMlbGrade(intel.grade),
     signalType: buildSignalType(intel),
-    marketSignal: buildMarketSignal(intel),
+    marketSignal: posturePresentation.marketSignal,
     sharpStatus: buildNbaSharpStatus(intel),
     held,
     verdict,
