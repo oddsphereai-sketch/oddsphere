@@ -82,6 +82,29 @@ async function main(){
   const visible=applyCbbScheduleCoverage(tbdSchedule,finalResponse.cbbScheduleCoverage);
   assert.equal(excludeAnalyzedCbbScheduleGames(visible,finalResponse.games.map(g=>g.external_id)).games.length,0,
     "unconfirmed future fixtures stay internal instead of publishing empty placeholder cards");
+  const future=source.games.find(g=>computeSlateDate("cbb",g.date)>day&&!cbbDivisionOneFixture(g).crossDivision)!;
+  assert.ok(future);
+  const futureTeams=[future.home_team,future.visitor_team].map(t=>({id:t.id,abbreviation:t.abbreviation,display_name:t.full_name,logo_url:null}));
+  const futureSchedule=buildCbbRollingSchedule({anchorDate:day,teams:[...new Map([...teams.values(),...futureTeams].map(t=>[t.id,t])).values()],games:[
+    ...games.map(g=>({external_id:g.id,slate_date:day,game_date:g.date,status:"STATUS_SCHEDULED",away_team_id:g.visitor_team.id,home_team_id:g.home_team.id,venue:null})),
+    {external_id:future.id,slate_date:computeSlateDate("cbb",future.date),game_date:future.date,status:"STATUS_SCHEDULED",away_team_id:future.visitor_team.id,home_team_id:future.home_team.id,venue:null}]});
+  const partialArgs={anchorDate:day,season:2026,now,bdlKey:"offline",owlsKey:"offline",
+    provider:{...provider,gamesForDates:async()=>[...games,future]} as unknown as CbbBallDontLieClient,owls,
+    trainingGames:[],db,fetcher,loadSchedule:async()=>futureSchedule,saveSnapshot,canonicalHistoryReader,fallbackOdds:[]};
+  const partial=await refreshCbbMemberBoard(partialArgs);
+  assert.equal(partial.published,65,"an incomplete future D1 venue cannot abort today's complete slate");
+  assert.ok(partial.unpublishedIncomplete.includes(future.id));
+  const validFuture=forecastCbbFullDivisionOneBatch([future],now,[],new Map(source.officialDays.map(d=>[d.day,d])))[0];
+  assert.equal(validFuture.forecast.inputStatus,"complete");
+  const priorBoard=buildCbbGameForecastBoard(validFuture.forecast,null);
+  const priorSnapshot=advanceCbbProvisionalSnapshot({existing:null,candidate:priorBoard,startsAt:future.date,now});
+  const priorMember=adaptCbbProvisionalGame({game:future,snapshot:priorSnapshot,now,homeLogo:null,awayLogo:null});
+  const priorRecord={release:recordRelease(),snapshot:priorSnapshot,memberGame:priorMember};
+  function recordRelease(){return (stored.get(`cbb::member-game::${games[0].id}`) as CbbStoredMemberGame).release;}
+  stored.set(`cbb::member-game::${future.id}`,priorRecord);
+  const priorBytes=JSON.stringify(priorRecord),fallback=await refreshCbbMemberBoard(partialArgs);
+  assert.equal(fallback.published,66,"a prior coherent future forecast remains available during a source gap");
+  assert.equal(JSON.stringify(stored.get(`cbb::member-game::${future.id}`)),priorBytes,"incomplete refresh cannot replace the prior member payload");
   const game=games.find(g=>cbbDivisionOneFixture(g).crossDivision)!;
   const record=stored.get(`cbb::member-game::${game.id}`) as CbbStoredMemberGame;
   assert.ok(record.snapshot.board.gameForecast);assert.equal(record.snapshot.board.marketContext.verifiedMarketRead,null,
