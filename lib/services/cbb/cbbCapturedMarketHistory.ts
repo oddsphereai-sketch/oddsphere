@@ -2,8 +2,9 @@ import { gunzipSync } from "node:zlib";
 import type { supabase } from "@/lib/db/supabase";
 import { BOOK_DISPLAY_HISTORY_RELEASE, isBookDisplayFeed, type BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
 import type { CbbCapturedNamedSplitFeed } from "./cbbReaderMarketEvidence";
+import { hydrateCurrentSplitHistory } from "@/lib/providers/real_api/sharpApiCurrentSplits";
 
-export async function readCbbCapturedNamedSplits(db:typeof supabase):Promise<CbbCapturedNamedSplitFeed|null>{
+export async function readCbbCapturedNamedSplits(db:typeof supabase,eventDates?:readonly string[]):Promise<CbbCapturedNamedSplitFeed|null>{
   const release="owls_current_splits_2026_10_27_r1_complete_named_book";
   const {data,error}=await db.from("lab_response_snapshots").select("payload")
     .eq("snapshot_key",`daily-edge::named-book-current-splits::cbb::${release}`).maybeSingle();
@@ -14,8 +15,8 @@ export async function readCbbCapturedNamedSplits(db:typeof supabase):Promise<Cbb
   if(payload.release!==release||payload.source!=="owls_current_splits"||payload.sport!=="cbb"||
     !Array.isArray(payload.rows)||!payload.rows.every((row:unknown)=>row!==null&&typeof row==="object"&&!Array.isArray(row))||
     !Number.isFinite(Date.parse(payload.fetchedAt)))throw new Error("CBB captured named split receipt is invalid");
-  if(payload.rows.length===0)return null;
-  return payload as CbbCapturedNamedSplitFeed;
+  if(payload.rows.length===0&&!payload.observationArchive)return null;
+  return hydrateCurrentSplitHistory(payload as CbbCapturedNamedSplitFeed,eventDates,db);
 }
 
 /** Read the existing collector's tape. No provider call or additional writer. */

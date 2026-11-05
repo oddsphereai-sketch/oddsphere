@@ -9,6 +9,9 @@ import type { MarketSplitDisplaySection } from "@/lib/types/domain/Recommendatio
 import type { Sport } from "@/lib/types/domain/Sport";
 import { revalidateTag, unstable_cache } from "next/cache";
 import { decodeCurrentSplitFeedTransport, encodeCurrentSplitFeedTransport } from "./currentSplitFeedTransport";
+import { CURRENT_SPLIT_ARCHIVE_PROTOCOL, iterateCurrentSplitObservations,
+  prepareArchivedCurrentSplitFeed, splitArchiveState } from "./currentSplitObservationArchive";
+import type { supabase as SupabaseClient } from "@/lib/db/supabase";
 
 const OWLS_CURRENT_SPLITS_RELEASE = "owls_current_splits_2026_10_27_r1_complete_named_book" as const;
 const CURRENT_SPLITS_RELEASE = "sharpapi_current_splits_2026_10_12_r2_cfb_central_team_identity" as const;
@@ -119,21 +122,21 @@ function supportedSport(sport: Sport): sport is SupportedSport {
 }
 
 const readCachedCurrentSplits = unstable_cache(
-  async (sport: SupportedSport) => readDurableCurrentSplits(sport),
-  ["owls-current-splits-durable-overlay-v3-single-axis-display"],
+  async (sport: SupportedSport, eventDates?: readonly string[]) => readDurableCurrentSplits(sport, { eventDates }),
+  ["owls-current-splits-durable-overlay-v4-archived-history"],
   { revalidate: 5 * 60, tags: ["owls-current-splits"] },
 );
 
 async function readDurableCurrentSplits(
   sport: SupportedSport,
-  options: { forceProviderFetch?: boolean; requireProviderSuccess?: boolean } = {},
+  options: { forceProviderFetch?: boolean; requireProviderSuccess?: boolean; eventDates?: readonly string[] } = {},
 ): Promise<SharpApiCurrentSplitFeed | null> {
   const { readLabResponseSnapshot, readLatestLabResponseSnapshot, upsertLabResponseSnapshot } = await import("@/lib/services/labResponseSnapshots");
   const key = snapshotKey(sport);
   if (!options.forceProviderFetch) {
     const fresh = await readLabResponseSnapshot<Record<string, unknown>>(key, "fresh");
     const validatedFresh = validateSharpApiCurrentSplitFeed(fresh?.payload, sport);
-    if (validatedFresh) return validatedFresh;
+    if (validatedFresh) return hydrateCurrentSplitHistory(validatedFresh, options.eventDates);
   }
   const stored = await readLatestLabResponseSnapshot<Record<string, unknown>>(key);
   const previousStored = stored;
@@ -151,7 +154,9 @@ async function readDurableCurrentSplits(
           fetchedAt: owls.fetchedAt,
           rows: owls.rows,
         };
-        const feed = mergeCurrentSplitFeeds(validatedStored, current);
+        const { supabase } = await import("@/lib/db/supabase");
+        const feed = await prepareArchivedCurrentSplitFeed({ client: supabase, previous: validatedStored, current,
+          merged: mergeCurrentSplitFeeds(validatedStored, current) });
         await upsertLabResponseSnapshot({
           snapshotKey: key,
           kind: "daily_edge",
@@ -173,7 +178,7 @@ async function readDurableCurrentSplits(
             if (process.env.VERCEL === "1" || process.env.NEXT_RUNTIME) throw error;
           }
         }
-        return feed;
+        return options.forceProviderFetch ? feed : hydrateCurrentSplitHistory(feed, options.eventDates);
       }
     } catch (error) {
       console.warn(`Owls current split overlay fetch failed for ${sport}: ${error instanceof Error ? error.message : String(error)}`);
@@ -183,16 +188,43 @@ async function readDurableCurrentSplits(
     throw new Error("OWLS_INSIGHT_API_KEY is not configured");
   }
 
-  return validatedStored;
+  return validatedStored && (options.forceProviderFetch ? validatedStored : hydrateCurrentSplitHistory(validatedStored, options.eventDates));
 }
 
 export async function readStoredSharpApiCurrentSplits(
   sport: Sport,
+  eventDates?: readonly string[],
 ): Promise<SharpApiCurrentSplitFeed | null> {
   if (!supportedSport(sport)) return null;
   const { readLatestLabResponseSnapshot } = await import("@/lib/services/labResponseSnapshots");
   const stored = await readLatestLabResponseSnapshot<Record<string, unknown>>(snapshotKey(sport));
-  return validateSharpApiCurrentSplitFeed(stored?.payload, sport);
+  const feed = validateSharpApiCurrentSplitFeed(stored?.payload, sport);
+  return feed && hydrateCurrentSplitHistory(feed, eventDates);
+}
+
+/** No date scope retains the historical API contract. Site callers pass exact
+ * game dates; research exports can stream every version from the archive. */
+export async function hydrateCurrentSplitHistory(feed: SharpApiCurrentSplitFeed, eventDates?: readonly string[],
+  client?: typeof SupabaseClient): Promise<SharpApiCurrentSplitFeed> {
+  const state = splitArchiveState(feed);
+  if (!state) return feed;
+  const coldDates = eventDates?.filter((date) => date < state.hotFromDate);
+  if (coldDates?.length === 0) return feed;
+  const db = client ?? (await import("@/lib/db/supabase")).supabase;
+  const history: Json[] = [];
+  for await (const row of iterateCurrentSplitObservations(db, feed, coldDates)) {
+    history.push(row.payload);
+  }
+  const historical = { ...feed, rows: history };
+  return mergeCurrentSplitFeeds(historical, feed);
+}
+
+export function currentSplitReadDates(slateDate: string, starts: readonly (string | null | undefined)[]): string[] {
+  return [...new Set(starts.flatMap((start) => [...acceptedDates(start, slateDate)]))].sort();
+}
+
+export function currentSplitResponseDates(response: Pick<DailyEdgeResponse, "date" | "games">): string[] {
+  return currentSplitReadDates(response.date, response.games.map((game) => game.gameStartAt));
 }
 
 /** Exact-game, exact-book NHL split extraction for the prediction writer.
@@ -269,7 +301,7 @@ export async function restoreStoredCompleteSharpApiCurrentSplitDisplay(
   sport: Sport,
 ): Promise<number> {
   if (!supportedSport(sport)) return 0;
-  const feed = await readStoredSharpApiCurrentSplits(sport);
+  const feed = await readStoredSharpApiCurrentSplits(sport, currentSplitResponseDates(response));
   return restoreCompleteSharpApiCurrentSplitDisplay(response, feed);
 }
 
@@ -284,7 +316,7 @@ export async function refreshOwlsCurrentSplitFallback(sport: Sport): Promise<num
 
 export async function refreshCachedOwlsCurrentSplitFallback(sport: Sport): Promise<number> {
   if (!supportedSport(sport)) return 0;
-  const feed = await readCachedCurrentSplits(sport);
+  const feed = await readCachedCurrentSplits(sport, []);
   return feed?.rows.length ?? 0;
 }
 
@@ -313,7 +345,7 @@ function validateRawCurrentSplitFeed(value: unknown, sport: SupportedSport): Sha
     value.sport !== sport ||
     fetchedAt === null ||
     !Array.isArray(value.rows) ||
-    value.rows.length === 0 ||
+    (value.rows.length === 0 && (!isRecord(value.observationArchive) || value.observationArchive.protocol !== CURRENT_SPLIT_ARCHIVE_PROTOCOL)) ||
     !value.rows.every(isRecord)
   ) return null;
   return value as SharpApiCurrentSplitFeed;
@@ -326,7 +358,7 @@ export async function populateDailyEdgeSharpApiCurrentSplits(
 ): Promise<SharpApiCurrentSplitOverlayResult> {
   if (!supportedSport(sport)) return { matchedGames: 0, populatedMarkets: 0 };
   try {
-    return applySharpApiCurrentSplitOverlay(response, await readCachedCurrentSplits(sport), Date.now(), options);
+    return applySharpApiCurrentSplitOverlay(response, await readCachedCurrentSplits(sport, currentSplitResponseDates(response)), Date.now(), options);
   } catch (error) {
     console.warn(`SharpAPI current split overlay skipped for ${sport}: ${error instanceof Error ? error.message : String(error)}`);
     return { matchedGames: 0, populatedMarkets: 0 };

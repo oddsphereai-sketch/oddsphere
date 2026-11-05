@@ -65,6 +65,7 @@ import type { MarketSplitDisplaySection } from "../../types/domain/Recommendatio
 import {
   identifiedNhlProfessionalSplits,
   readStoredSharpApiCurrentSplits,
+  currentSplitReadDates,
   type SharpApiCurrentSplitFeed,
 } from "../../providers/real_api/sharpApiCurrentSplits";
 import { selectNhlProfessionalSplitPressure } from "./nhlProfessionalSplitPressure";
@@ -537,7 +538,7 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
   );
   if (hasUnlockedGame) {
     try {
-      professionalSplitFeed = await readStoredSharpApiCurrentSplits("nhl");
+      professionalSplitFeed = await readStoredSharpApiCurrentSplits("nhl", currentSplitReadDates(date, games.map((game) => game.game_date)));
     } catch (error) {
       console.warn(`nhl daily-edge: identified professional splits unavailable: ${(error as Error).message}`);
     }

@@ -72,6 +72,7 @@ import type { PredictionRecordRow } from "../../types/domain/Tracking";
 import {
   identifiedNhlProfessionalSplits,
   readStoredSharpApiCurrentSplits,
+  currentSplitReadDates,
   type NhlIdentifiedProfessionalSplit,
 } from "../../providers/real_api/sharpApiCurrentSplits";
 import {
@@ -668,7 +669,7 @@ export async function writeNhlPredictionRecords(
   } catch (error) {
     errors.push(`resolved NHL splits: ${(error as Error).message}`);
   }
-  const professionalSplitFeed = await readStoredSharpApiCurrentSplits("nhl").catch((error) => {
+  const professionalSplitFeed = await readStoredSharpApiCurrentSplits("nhl", currentSplitReadDates(opts.slateDate, games.map((game) => game.game_date))).catch((error) => {
     errors.push(`identified NHL professional splits: ${(error as Error).message}`);
     return null;
   });
