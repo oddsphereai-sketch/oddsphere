@@ -40,12 +40,16 @@ export function normalizeCbbTheOddsApiCurrent(games:CbbGame[],body:unknown,reque
 // is not retained by refreshLogger; these receipts make ordinary cycles
 // verifiable without another paid read or manual refresh.
 function observed(receipt:CbbTheOddsApiReceipt):CbbTheOddsApiReceipt{
- const rejectionReasons:Record<string,number>={};
- for(const row of receipt.rejections)rejectionReasons[row.reason]=(rejectionReasons[row.reason]??0)+1;
+ const rejectionReasons:Record<string,number>={},rejectedGameIds:Record<string,number[]>={};
+ for(const row of receipt.rejections){
+  rejectionReasons[row.reason]=(rejectionReasons[row.reason]??0)+1;
+  const ids=rejectedGameIds[row.reason]??=[];if(!ids.includes(row.gameId))ids.push(row.gameId);
+ }
  console.info(`[cbb-source-receipt] ${JSON.stringify({release:receipt.release,provider:"the_odds_api",status:receipt.status,
    requestedAt:receipt.requestedAt,availableAt:receipt.availableAt,requests:receipt.requests,paidRequests:receipt.paidRequests,
    creditsUsed:receipt.creditsUsed,creditsRemaining:receipt.creditsRemaining,eventsReturned:receipt.eventsReturned,
-   matchedGames:new Set(receipt.quotes.map(q=>q.gameId)).size,quotes:receipt.quotes.length,rejectionReasons})}`);
+   matchedGames:new Set(receipt.quotes.map(q=>q.gameId)).size,quoteGameIds:[...new Set(receipt.quotes.map(q=>q.gameId))],
+   quotes:receipt.quotes.length,rejectionReasons,rejectedGameIds})}`);
  return receipt;
 }
 function failed(stage:"quota"|"current",status:number|null,requests:number,creditsUsed:number|null,creditsRemaining:number|null){
