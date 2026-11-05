@@ -1,5 +1,6 @@
 -- Additive service-only evidence archive. Existing caches and locked records
 -- are not modified by this migration. The existing collector is the sole writer.
+BEGIN;
 CREATE TABLE IF NOT EXISTS public.current_split_capture_archive (
   id bigint GENERATED ALWAYS AS IDENTITY UNIQUE,
   capture_sha256 text NOT NULL CHECK(capture_sha256 ~ '^[a-f0-9]{64}$'),
@@ -195,3 +196,4 @@ GRANT EXECUTE ON FUNCTION public.read_current_split_group_history(text,text,date
 COMMENT ON TABLE public.current_split_group_history IS
   'Rebuildable event/book retained-history index produced by the sole existing collector and unchanged JS display trim. It may advance with new source receipts; all original observation versions remain immutable in current_split_observation_archive. No locked public records are stored or modified here.';
 NOTIFY pgrst,'reload schema';
+COMMIT;
