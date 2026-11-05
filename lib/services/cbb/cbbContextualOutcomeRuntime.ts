@@ -3,7 +3,7 @@
  * fallback model, provider collection or persistence is introduced here. */
 import releaseManifest from "../../cbb/artifacts/contextual-outcome-r1-manifest.json";
 import {forecastCbbOutcomeDecision} from "../../cbb/contextualOutcomeDecision";
-import {buildCbbContextualOutcomeBoard,CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,type CbbOutcomeDecision} from "../../cbb/contextualOutcomeBoard";
+import {buildCbbContextualOutcomeBoard,CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,type CbbOutcomeDecision} from "../../cbb/contextualOutcomeBoard";
 import {freezeCbbContextualForecastArtifact,cbbContextualForecastObjectSha256,assertCbbContextualForecastCalibrationBinding} from "../../cbb/contextualForecastCalibrationBinding";
 import {validateCbbOutcomeArtifact} from "../../cbb/contextualOutcomeForecast";
 import {createCbbPrivateOutcomeArtifactLoader,type decodeCbbPrivateOutcomeArtifact,type CbbPrivateOutcomeManifest} from "./cbbOutcomeArtifactEnvelope";
@@ -71,11 +71,12 @@ type StoredBoard={modelRelease?:string;gradeRelease?:string;gameId:number;asOf:s
  * reconstructed. New receipts must match their stored exact law and grades. */
 export function readCbbContextualOutcomeEvidence(board:StoredBoard){
  if(board.modelRelease!==CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE)return null;
- if(board.gradeRelease!==CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE)throw Error("CBB contextual evidence grade release differs");
+ const storedGrade=board.gradeRelease;
+ if(!storedGrade||![CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE].includes(storedGrade as typeof CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE))throw Error("CBB contextual evidence grade release differs");
  const context=board.marketContext as {originalIndependent?:unknown;contextualOutcomeEvidence?:unknown};
  const original=context.originalIndependent as CbbForecast|undefined;
  if(!original)throw Error("CBB contextual evidence lacks original independent identity");
- const identity:CbbContextualEvidenceIdentity={gameId:board.gameId,asOf:board.asOf,modelRelease:CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE,gradeRelease:board.gradeRelease,
+ const identity:CbbContextualEvidenceIdentity={gameId:board.gameId,asOf:board.asOf,modelRelease:CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE,gradeRelease:storedGrade,
   independentRelease:original.release,artifactObjectSha256:CBB_CONTEXTUAL_OUTCOME_MANIFEST.modelObjectSha256};
  const decoded=decodeCbbContextualEvidence(context.contextualOutcomeEvidence,identity).evidence,trace=decoded.trace as StoredTrace;
  if(trace.release!==CBB_CONTEXTUAL_OUTCOME_EVIDENCE_RELEASE||!same(trace.independent,original)||!same(decoded.finalScore,board.score))throw Error("CBB contextual stored evidence differs from the public score or original input");
@@ -84,6 +85,6 @@ export function readCbbContextualOutcomeEvidence(board:StoredBoard){
   decision.artifact.methodSha256!==CBB_CONTEXTUAL_OUTCOME_MANIFEST.methodSha256||decision.calibration.forecastArtifactObjectSha256!==identity.artifactObjectSha256||
   decision.calibration.calibrationMethodSha256!==CBB_CONTEXTUAL_OUTCOME_MANIFEST.calibrationMethodSha256)throw Error("CBB contextual stored artifact or calibration differs from the release manifest");
  const mapped=buildCbbContextualOutcomeBoard({decision,independent:original});
- if(!same(board.rows,mapped.rows)||!same(board.gameForecast,mapped.gameForecast))throw Error("CBB contextual stored market or game outcome differs from its exact decision");
+ if(board.gradeRelease!==mapped.gradeRelease||!same(board.rows,mapped.rows)||!same(board.gameForecast,mapped.gameForecast))throw Error("CBB contextual stored market or game outcome differs from its exact decision");
  return {input:decoded.input as CbbContextualAssembledInput,decision,independent:trace.independent,coverage:trace.coverage};
 }

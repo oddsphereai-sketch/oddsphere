@@ -1,5 +1,26 @@
 # Model change safety protocol
 
+## Owner-directed CBB Lean recommendation quality — November 5
+
+The owner explicitly requested repair of overly permissive Leans using market
+context, uncertainty and actual prices, then live publication and spot checks.
+Decision R8 /grade R7 /publisher R43 /adapter R27 /tracking R30 implement the
+declared sensitivity policy in
+`model-audits/2026-11-05-cbb-contextual-lean-quality.md`. The fitted model,
+covariance and public forecast/price/nominal-EV law remain unchanged. Do not
+misstate a marginal positive estimate as a robust actionable recommendation.
+Do not disguise the policy's one-adverse-case reserve as a learned error rate
+or claim threshold-free grading. No new source-count gate, forecast blend or
+automatic opposing-book veto is authorized.
+
+Report actual demotions and board contraction; do not invent compensating plays.
+Pair demotion controls with tested re-promotion at an improved real price or
+reduced fitted uncertainty and a small-stable/larger-fragile control. Preserve
+exact R7/R6 and earlier locked member/tracking values and source attribution.
+Full model verification, focused risk/conservation/lock tests, same-input count
+and runtime audit, current-main protected PR checks and actual live writer,
+reader, grade-reason, coverage and unchanged-lock proof remain required.
+
 ## Owner-directed CBB unified contextual inference — production activation
 
 The R1 contextual release was deployed in `a8d5008476b838cf5eb902a0cee8179e1ef0a346`

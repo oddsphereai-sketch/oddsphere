@@ -8,18 +8,20 @@ import {cbbPathBookFamily} from "./marketBehaviorPath";
 import type {CbbContextualFeatureInput,CbbContextualConsumerQuote} from "./contextualForecastFeatures";
 import {CBB_CONTEXTUAL_MARKET_INTERPRETATION_RELEASE,buildCbbContextualMarketInterpretation,type CbbContextualMarketInterpretation} from "./contextualMarketInterpretation";
 import type {CbbQuote} from "./types";
+import {createCbbRecommendationRiskEvaluator,CBB_CONTEXTUAL_RECOMMENDATION_RISK_POLICY,type CbbRecommendationRiskContext} from "./contextualRecommendationRisk";
 
-export const CBB_INTERPRETED_DECISION_RELEASE="cbb_interpreted_decision_2026_11_05_r7_noplay_price_lanes" as const;
+export const CBB_INTERPRETED_DECISION_RELEASE="cbb_interpreted_decision_2026_11_05_r8_contextual_recommendation_risk" as const;
 /** Product label boundaries, not learned accuracy claims or signal activation
  * gates. The forecast has already interpreted the full qualified market.
  * Confidence is the same unconditional win probability stored in the decision;
  * pushes are refunded in EV, never counted as wins toward the confidence bar. */
 export const CBB_INTERPRETED_GRADE_POLICY=Object.freeze({bestMinimumWinProbability:.62,bestMinimumAmericanPrice:-200,
- leanMeaning:"positive_exact_price_value_on_the_final_forecast_side;expensive_favorites_remain_eligible",
+ leanMeaning:"positive_exact_price_value_with_declared_fitted_location_and_adverse_case_stress_support;expensive_favorites_may_qualify",
  watchMeaning:"unresolved_break_even_or_forecast_premium_consumed_by_the_actual_pair_margin",
  noPlayMeaning:"negative_offered_value_without_a_resolved_advantage_over_the_paired_fair_price",
  bestMeaning:"strong_final_outcome_confidence_with_positive_value_at_a_suitable_straight_bet_price",
- basis:"owner_confidence_accuracy_and_price_tiers;NBA_confidence_bar_and_NFL_favorite_price_boundary;no_EV_reserve_or_required_book_confirmation",
+ basis:"owner_confidence_accuracy_price_and_recommendation_uncertainty;no_hand_set_EV_percentage_or_odds_floor_no_required_book_confirmation",
+ recommendationRisk:CBB_CONTEXTUAL_RECOMMENDATION_RISK_POLICY,
  sharpMeaning:"qualified_market_evidence_informs_final_forecast;book_context_does_not_identify_bettors_or_guarantee_correctness"});
 export function gradeCbbContextualForecastSide(args:{winProbability:number;loseProbability:number;price:number;opposingPrice:number;probabilityErrorEstimate?:number}){
  const {winProbability:p,loseProbability:loss,price,opposingPrice}=args,probabilityErrorEstimate=args.probabilityErrorEstimate??0;
@@ -78,11 +80,13 @@ function executionProof(q:Quote,input:CbbContextualFeatureInput,receipt:CbbConte
  return {problem:null,columnProof};
 }
 export function buildCbbInterpretedDecision(args:{input:CbbContextualFeatureInput;interpretation:CbbContextualMarketInterpretation;
- latent:CbbContextualLatentGaussian;targets:readonly Quote[];numerics?:CbbScoreLawNumerics}){
+ latent:CbbContextualLatentGaussian;targets:readonly Quote[];numerics?:CbbScoreLawNumerics;recommendationRisk?:CbbRecommendationRiskContext}){
  const {input,interpretation:receipt}=args,at=Date.parse(input.asOf);
  if(receipt.release!==CBB_CONTEXTUAL_MARKET_INTERPRETATION_RELEASE||receipt.gameId!==input.independent.gameId||receipt.asOf!==input.asOf)throw Error("CBB decision interpretation/forecast identity mismatch");
  if(new Set(args.targets.map(q=>q.market)).size!==args.targets.length)throw Error("CBB decision requires one execution target per market");
  const law=createCbbContextualScoreLaw(args.latent,args.numerics),summary=law.summary(),references=createCbbJointSourceReferencePricer({gameId:receipt.gameId,asOf:input.asOf,finalLatent:args.latent,finalLaw:law,lawNumerics:args.numerics});
+ const riskEvaluator=args.recommendationRisk?createCbbRecommendationRiskEvaluator({latent:args.latent,context:args.recommendationRisk,numerics:args.numerics,assessmentTier:"lean"}):null;
+ const bestRiskEvaluator=args.recommendationRisk?createCbbRecommendationRiskEvaluator({latent:args.latent,context:args.recommendationRisk,numerics:args.numerics,assessmentTier:"best"}):null;
  const markets=(["moneyline","spread","total"] as const).map(market=>{
   const target=args.targets.find(q=>q.market===market),proof=target?executionProof(target,input,receipt):{problem:"missing_execution_pair"};
   if(!target||proof.problem)return {market,target:target??null,grade:"Held" as const,reason:proof.problem,selection:null,probability:null,loseProbability:null,pushProbability:null,price:null,expectedValue:null,stake:0};
@@ -90,7 +94,18 @@ export function buildCbbInterpretedDecision(args:{input:CbbContextualFeatureInpu
   const selection:"first"|"second"=p.first>=p.second?"first":"second",direction=selection==="first"?1:-1;
   const probability=selection==="first"?p.first:p.second,loseProbability=selection==="first"?p.second:p.first,price=selection==="first"?target.firstPrice:target.secondPrice;
   const grading=gradeCbbContextualForecastSide({winProbability:probability,loseProbability,price,opposingPrice:selection==="first"?target.secondPrice:target.firstPrice,probabilityErrorEstimate:p.omittedMassUpperBound+p.quadratureErrorEstimate+p.normalizerErrorEstimate+p.summationRoundoffUpperBound});
-  const {grade,reason,expectedValue}=grading;
+  const {expectedValue}=grading;
+  const riskTarget={market,line:target.line,selection,price,expectedValue,resolvedMass:probability+loseProbability,
+   numericalValueErrorEstimate:grading.numericalValueErrorEstimate,probabilityErrorEstimate:grading.probabilityErrorEstimate};
+  const leanRisk=riskEvaluator&&grading.valueSignResolvedPositive?riskEvaluator(riskTarget):null;
+  const bestAngleAssessment=leanRisk?.supported&&grading.grade==="Best Angle"&&bestRiskEvaluator?bestRiskEvaluator(riskTarget):null;
+  const recommendationRisk=leanRisk?{...leanRisk,bestAngleAssessment}:null;
+  // A fragile positive estimate is an informational Watch, never a changed
+  // prediction or an invented negative nominal EV. No market-count veto.
+  const riskWatch=recommendationRisk&&!recommendationRisk.supported;
+  const bestToLean=bestAngleAssessment&&!bestAngleAssessment.supported;
+  const grade=riskWatch?(recommendationRisk.priceCanSupportRecommendation?"Watchlist" as const:"No Play" as const):bestToLean?"Lean" as const:grading.grade;
+  const reason=riskWatch?recommendationRisk.reason:bestToLean?"positive_value_with_moderate_risk_support_below_best_stability":grading.reason;
   const sourceEconomics=receipt.streams.filter(s=>s.role==="professional"&&s.market===market&&family(s.book)!==family(target.sportsbook)&&s.currentQuote).flatMap(s=>{
    const raw=s.currentQuote!.rawQuote;if(!("phase" in raw)||!raw.fetchedAt||at-Date.parse(raw.providerObservedAt)>3_600_000)return [];
    return [{book:s.book,source:raw,reference:references.evaluate({source:raw as Quote,target,selection,integerPushAssumption:"borrow_final_joint_push",targetOrientationProof:proof.columnProof})}];
@@ -109,7 +124,7 @@ export function buildCbbInterpretedDecision(args:{input:CbbContextualFeatureInpu
    opposingCompositions:receipt.streams.filter(s=>(market==="total"?s.market==="total":s.market!=="total")&&s.pressures.at(-1)?.moneyBalance!==null&&Math.sign(s.pressures.at(-1)?.moneyBalance??0)===-direction).map(s=>({book:s.book,market:s.market,role:s.role,pressure:s.pressures.at(-1),meaning:"cumulative composition; wagering-price and new-money volume unknown"})),
    opposingPaths:receipt.streams.filter(s=>(market==="total"?s.market==="total":s.market!=="total")&&(s.net?.direction===-direction||s.latest?.direction===-direction)).map(s=>({book:s.book,market:s.market,role:s.role,net:s.net,latest:s.latest,pathResolution:s.pathResolution,unknowns:s.unknowns}))};
   return {market,target,selection,probability,loseProbability,pushProbability:p.push,price,expectedValue,grade,stake:0,
-   reason,gradingNumerics:{probabilityErrorEstimate:grading.probabilityErrorEstimate,valueErrorEstimate:grading.numericalValueErrorEstimate,valueSignResolvedPositive:grading.valueSignResolvedPositive,fairPremium:grading.fairPremium,fairPremiumErrorEstimate:grading.fairPremiumErrorEstimate,fairPremiumResolvedPositive:grading.fairPremiumResolvedPositive},
+   reason,recommendationRisk,gradingNumerics:{probabilityErrorEstimate:grading.probabilityErrorEstimate,valueErrorEstimate:grading.numericalValueErrorEstimate,valueSignResolvedPositive:grading.valueSignResolvedPositive,fairPremium:grading.fairPremium,fairPremiumErrorEstimate:grading.fairPremiumErrorEstimate,fairPremiumResolvedPositive:grading.fairPremiumResolvedPositive},
    marketFairProbability:implied(price)/(implied(target.firstPrice)+implied(target.secondPrice)),sourceEconomics,positiveProfessionalValue,observedProfessionalBookPriceConfirmation,bookPriceActions,counterevidence,
    evidenceDisposition:"Full factual receipt informs the final forecast; grades use its exact probability and offered price. Opposing facts remain visible; ancillary references and observed actions are attribution, never mandatory promotion gates.",probabilityNumerics:p};
  });

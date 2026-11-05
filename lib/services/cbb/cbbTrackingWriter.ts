@@ -1,5 +1,5 @@
 import {CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE,CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE,readCbbContextualOutcomeEvidence,type CbbReleasedOutcomeBoard} from "./cbbContextualOutcomeRuntime";
-import {CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE} from "@/lib/cbb/contextualOutcomeBoard";
+import {CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE} from "@/lib/cbb/contextualOutcomeBoard";
 import {CBB_NATIVE_COUNTERPRESSURE_MODEL_RELEASE,CBB_NATIVE_COUNTERPRESSURE_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import {CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_MONEYLINE_VALUE_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import { createHash } from "node:crypto";
@@ -21,7 +21,7 @@ import {CBB_CROSS_DIVISION_SCORE_RELEASE,CBB_FULL_D1_COVERAGE_START} from "@/lib
 import {CBB_GAME_FORECAST_GRADE_RELEASE,CBB_GAME_OUTCOME_RELEASE} from "@/lib/cbb/gameForecastBoard";
 import {normalCdf} from "@/lib/cbb/model";
 
-export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_05_r29_contextual_noplay_price_lanes" as const;
+export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_05_r30_contextual_recommendation_risk" as const;
 /** Hash stored JSON independently of PostgreSQL jsonb object-key ordering. */
 export function cbbTrackingEvidenceSha256(record:CbbStoredMemberGame):string {
   const sorted=(value:unknown):unknown=>Array.isArray(value)?value.map(sorted)
@@ -44,7 +44,7 @@ export function cbbLockedModelRelease(board:{release:string;modelRelease?:string
 
 /** Resolve the release that actually owns the frozen public decision. */
 export function cbbLockedGradeRelease(board: { release: string; gradeRelease?: string }): string {
-  if(board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE)return board.gradeRelease;
+  if(board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE||board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE)return board.gradeRelease;
   if(board.gradeRelease===CBB_GAME_FORECAST_GRADE_RELEASE)return board.gradeRelease;
   if (board.gradeRelease === CBB_PROVISIONAL_GRADE_RELEASE || board.gradeRelease === CBB_LEGACY_PROVISIONAL_GRADE_RELEASE || receivedMarketGradeReleases.includes(board.gradeRelease??"")) return board.gradeRelease!;
   if (board.gradeRelease !== undefined) throw new Error("CBB locked grade release is unknown");

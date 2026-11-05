@@ -12,7 +12,8 @@ const independent:CbbForecast={release:"synthetic_original_independent",gameId:7
 const q=(market:CbbMarket,prices:[number,number]=[-110,-110],book="draftkings"):CbbContextualQuote=>({provider:"owls",gameId:7,sportsbook:book,market,line:market==="moneyline"?null:market==="spread"?-3:146,firstPrice:prices[0],secondPrice:prices[1],providerObservedAt:native,fetchedAt:fetched,phase:"current",orientationVerified:true,sourceEventId:"event7"});
 const targets=[q("moneyline",[100,-110]),q("spread"),q("total")],latent={marginMean:8,totalMean:150,marginSd:11,totalSd:15,correlation:.1};
 function make(ts=targets,all=ts,l=latent):CbbOutcomeDecision{
- const input:CbbContextualFeatureInput={independent,asOf:at,startsAt:"2026-11-05T23:00:00Z",currentQuotes:all},d=buildCbbInterpretedDecision({input,interpretation:buildCbbContextualMarketInterpretation(input),targets:ts,latent:l});
+ const input:CbbContextualFeatureInput={independent,asOf:at,startsAt:"2026-11-05T23:00:00Z",currentQuotes:all},d=buildCbbInterpretedDecision({input,interpretation:buildCbbContextualMarketInterpretation(input),targets:ts,latent:l,
+  recommendationRisk:{marginLocationSd:0,totalLocationSd:0,calibrationGames:137}});
  // The numbers and receipt below come from the actual pure joint-law decision.
  // Synthetic artifact/calibration metadata does not claim any fitted model.
  return {release:CBB_OUTCOME_DECISION_RELEASE,authority:"offline_research_only",mode:"retrospective_development",gameId:7,asOf:at,fixtureIdentity:{homeId:71,awayId:72},
@@ -23,6 +24,18 @@ function make(ts=targets,all=ts,l=latent):CbbOutcomeDecision{
   interpretationMeaning:"Synthetic mapping test; no trained-artifact claim",limits:"Pure mapper fixture",workingForecast:{},calibration:{}} as unknown as CbbOutcomeDecision;
 }
 const decision=make(),before=JSON.stringify({decision,independent}),board=buildCbbContextualOutcomeBoard({decision,independent});
+const missingRisk=structuredClone(decision);
+delete (missingRisk.marketDecisions[0] as {recommendationRisk?:unknown}).recommendationRisk;
+delete (missingRisk.marketDecisions[0] as {gradingNumerics?:unknown}).gradingNumerics;
+assert.throws(()=>buildCbbContextualOutcomeBoard({decision:missingRisk,independent}),/risk assessment/,"An actionable current decision cannot bypass risk validation by omitting optional numerical metadata");
+const falseNumericFlag=structuredClone(missingRisk);
+(falseNumericFlag.marketDecisions[0] as {gradingNumerics?:unknown}).gradingNumerics={valueSignResolvedPositive:false};
+assert.throws(()=>buildCbbContextualOutcomeBoard({decision:falseNumericFlag,independent}),/risk assessment/);
+const missingBestRisk=structuredClone(decision);
+const bestRiskRow=missingBestRisk.marketDecisions.find(row=>row.grade==="Best Angle");
+assert(bestRiskRow?.recommendationRisk?.bestAngleAssessment);
+bestRiskRow.recommendationRisk.bestAngleAssessment=null;
+assert.throws(()=>buildCbbContextualOutcomeBoard({decision:missingBestRisk,independent}),/risk assessment/,"A current Best requires both moderate and stronger risk support");
 assert.equal(board.release,CBB_CONTEXTUAL_OUTCOME_BOARD_RELEASE);assert.equal(board.gradeRelease,CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE);assert.equal(board.modelRelease,decision.artifact.release);
 assert.deepEqual(board.score,decision.finalScore);assert.deepEqual(board.gameForecast.uncertainty,decision.finalUncertainty);assert.equal(board.gameForecast.release,CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE);assert.equal(board.gameForecast.homeId,71);assert.equal(board.gameForecast.awayId,72);assert.equal(board.gameForecast.selection,decision.gameOutcome.selection);assert.equal(board.gameForecast.probability,decision.gameOutcome.probability);
 for(const row of board.rows){const original=decision.marketDecisions.find(r=>r.market===row.market)!;for(const key of ["selection","probability","loseProbability","pushProbability","price","expectedValue","grade","reason","stake"] as const)assert.deepEqual(row[key],original[key],`Copy-only ${row.market}.${key}`);assert.equal(row.line,original.target!.line);assert.deepEqual(row.observedQuote,{firstPrice:original.target!.firstPrice,secondPrice:original.target!.secondPrice,line:original.target!.line});}
