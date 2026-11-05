@@ -14,9 +14,12 @@ const nfl = nflFootballEvidenceStats({
   awayQuarterback: { name: "Drake Maye", status: "projected" },
   homeQuarterback: { name: "Sam Darnold", status: "projected" },
   weather: { venueName: "Lumen Field", roofType: "outdoor", status: "outside_forecast_window", forecast: null },
+  independentCompleteThroughWeek: 8,
 });
-assert(nfl.some((row) => row.label === "Decision-model input · Offensive plays per game"));
-assert(nfl.some((row) => row.label === "Decision-model input · Explosive-play rate"));
+assert(nfl.some((row) => row.label === "Independent model prior · Offensive plays per game"));
+assert(nfl.some((row) => row.label === "Independent model prior · Explosive-play rate"));
+assert(nfl.some((row) => row.label === "Independent model state · Current-season completion" && row.awayValue === "Through Week 8"));
+assert(!nfl.some((row) => row.label.startsWith("Decision-model input ·")), "the frozen 2025 baseline cannot be mislabeled as the current decision state");
 assert(nfl.some((row) => row.label === "Current context · Expected quarterback" && row.awayValue?.includes("Drake Maye")));
 assert(nfl.some((row) => row.label === "Current context · Venue and weather" && row.homeValue?.includes("Lumen Field")));
 assert(nfl.every((row) => row.source === "feature_snapshot"));
@@ -53,7 +56,7 @@ const cachedFixture = {
 };
 const enriched = enrichCachedNflFootballEvidence(cachedFixture);
 for (const market of Object.values(enriched.snapshot.games[0]!.markets)) {
-  assert(market.keyStats.some((row) => row.label.startsWith("Decision-model input ·")));
+  assert(market.keyStats.some((row) => row.label.startsWith("Independent model prior ·")));
   assert(market.keyStats.some((row) => row.label === "Current context · Expected quarterback"));
   assert(market.keyStats.some((row) => row.label === "Current context · Provider-listed injuries"));
   assert(!market.keyStats.some((row) => row.label === "Current two-sided moneyline"), "market odds stay in Market & Price instead of the evidence card stack");

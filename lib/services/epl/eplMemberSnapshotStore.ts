@@ -8,7 +8,7 @@ const SNAPSHOT_TTL_MS = 20 * 60 * 1000;
 const SNAPSHOT_STALE_MS = 24 * 60 * 60 * 1000;
 
 export const EPL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE =
-  "epl_member_snapshot_lifecycle_2026_10_31_r8_exact_locked_payload_precedence" as const;
+  "epl_member_snapshot_lifecycle_2026_11_05_r9_same_book_opening_chronology" as const;
 
 /**
  * EPL member reads use one prebuilt weekly snapshot. They never invoke paid

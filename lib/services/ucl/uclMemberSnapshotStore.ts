@@ -4,7 +4,7 @@ import { preserveLockedEplGames } from "@/lib/services/epl/eplLockedSnapshot";
 import { eplEmergencySnapshotIsUsable } from "@/lib/services/epl/eplMemberSnapshotContinuity";
 
 export const UCL_MEMBER_SNAPSHOT_KEY = "soccer::uefa_champions_league::current-week" as const;
-export const UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE = "ucl_member_snapshot_lifecycle_2026_11_04_r26_evidence_role_provenance" as const;
+export const UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE = "ucl_member_snapshot_lifecycle_2026_11_05_r27_same_book_opening_chronology" as const;
 const TTL_MS = 20 * 60_000;
 const STALE_MS = 24 * 60 * 60_000;
 

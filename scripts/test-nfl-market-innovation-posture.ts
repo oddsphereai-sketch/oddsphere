@@ -71,15 +71,21 @@ assert.equal(appliedAdverse.receipt.selectedSources.moneyline, "circa");
 assert.ok(appliedAdverse.outcome.expectedHomeScore > appliedAdverse.outcome.expectedAwayScore);
 const adjudicated = applyNflMarketInnovationPosture({ production: original,
   innovation: appliedAdverse.receipt, homeTeam: "JAX" });
-assert.equal(adjudicated.production, original,
-  "an applied adverse episode is adjudicated and cannot automatically cap a retained independent edge");
-assert.equal(adjudicated.posture.boardImpact.bestAngleToLean, 0);
+assert.equal(adjudicated.production.evaluatedBets.find(b => b.market === "moneyline")!.grade, "Lean",
+  "an applied adverse episode changes the law only once but still caps the strongest endorsement");
+assert.equal(adjudicated.production.evaluatedBets.find(b => b.market === "total")!.grade, "Lean");
+assert.equal(adjudicated.posture.boardImpact.bestAngleToLean, 2);
+for (const before of original.evaluatedBets) {
+  const after = adjudicated.production.evaluatedBets.find(b => b.market === before.market)!;
+  assert.deepEqual({ ...after, grade: before.grade }, before,
+    "conviction-risk capping cannot apply a second score, probability, price or side update");
+}
 
 const staticOnly = read([q("circa", openingAt, 100, -120, 45), q("circa", currentAt, 100, -120, 45)]);
 assert.equal(applyNflMarketInnovationPosture({ production: original, innovation: staticOnly.receipt,
   homeTeam: "JAX" }).production, original,
   "a static favorite opposed to the final pick is not an adverse price episode");
-const noAdverse = { ...conflict.receipt, episodes: conflict.receipt.episodes.filter(e => e.direction === 1) };
+const noAdverse = { ...conflict.receipt, paths: [], episodes: conflict.receipt.episodes.filter(e => e.direction === 1) };
 const onlySupport = applyNflMarketInnovationPosture({ production: original, innovation: noAdverse, homeTeam: "JAX" });
 assert.equal(onlySupport.production.evaluatedBets.find(b => b.market === "moneyline")!.grade, "Best Angle",
   "an unresolved flag without actual adverse same-market economic evidence is insufficient");

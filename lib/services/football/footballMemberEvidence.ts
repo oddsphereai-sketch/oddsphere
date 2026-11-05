@@ -44,9 +44,14 @@ export function nflFootballEvidenceStats(args: {
     status: string;
     forecast: { temperature_f: number | null; wind_speed_mph: number | null; conditions: string | null } | null;
   };
+  independentCompleteThroughWeek?: number | null;
 }): MarketEdgeDto["keyStats"] {
   return [
     ...nflFootballModelEvidenceStats(args),
+    ...(Number.isInteger(args.independentCompleteThroughWeek) && args.independentCompleteThroughWeek! >= 0
+      ? [row("Independent model state · Current-season completion",
+          `Through Week ${args.independentCompleteThroughWeek}`, `Through Week ${args.independentCompleteThroughWeek}`)]
+      : []),
     ...currentNflContext(args),
   ];
 }
@@ -61,27 +66,27 @@ export function nflFootballModelEvidenceStats(args: {
   if (!away || !home) return [];
   const modelRows = args.market === "total"
     ? [
-        row("Decision-model input · Offensive plays per game", fixed(away.offAdjusted.plays, 1), fixed(home.offAdjusted.plays, 1)),
-        row("Decision-model input · Explosive-play rate", percent(away.offAdjusted.explosive_rate), percent(home.offAdjusted.explosive_rate)),
-        row("Decision-model input · Red-zone touchdown rate", percent(away.offAdjusted.redzone_td_rate), percent(home.offAdjusted.redzone_td_rate)),
-        row("Decision-model input · Prior scoring profile", `${fixed(away.offAdjusted.points, 1)} scored`, `${fixed(home.offAdjusted.points, 1)} scored`),
+        row("Independent model prior · Offensive plays per game", fixed(away.offAdjusted.plays, 1), fixed(home.offAdjusted.plays, 1)),
+        row("Independent model prior · Explosive-play rate", percent(away.offAdjusted.explosive_rate), percent(home.offAdjusted.explosive_rate)),
+        row("Independent model prior · Red-zone touchdown rate", percent(away.offAdjusted.redzone_td_rate), percent(home.offAdjusted.redzone_td_rate)),
+        row("Independent model prior · Scoring profile", `${fixed(away.offAdjusted.points, 1)} scored`, `${fixed(home.offAdjusted.points, 1)} scored`),
       ]
     : args.market === "spread"
       ? [
-          row("Decision-model input · Opponent-adjusted offense EPA/play", signed(away.offAdjusted.epa, 3), signed(home.offAdjusted.epa, 3)),
-          row("Decision-model input · Opponent-adjusted defense EPA/play allowed", signed(away.defAdjusted.epa, 3), signed(home.defAdjusted.epa, 3)),
-          row("Decision-model input · Sack rate allowed", percent(away.offAdjusted.sack_rate), percent(home.offAdjusted.sack_rate)),
-          row("Decision-model input · Team strength rating", fixed(away.elo, 0), fixed(home.elo, 0)),
+          row("Independent model prior · Opponent-adjusted offense EPA/play", signed(away.offAdjusted.epa, 3), signed(home.offAdjusted.epa, 3)),
+          row("Independent model prior · Opponent-adjusted defense EPA/play allowed", signed(away.defAdjusted.epa, 3), signed(home.defAdjusted.epa, 3)),
+          row("Independent model prior · Sack rate allowed", percent(away.offAdjusted.sack_rate), percent(home.offAdjusted.sack_rate)),
+          row("Independent model prior · Team strength rating", fixed(away.elo, 0), fixed(home.elo, 0)),
         ]
       : [
-          row("Decision-model input · Opponent-adjusted offense EPA/play", signed(away.offAdjusted.epa, 3), signed(home.offAdjusted.epa, 3)),
-          row("Decision-model input · Opponent-adjusted success rate", percent(away.offAdjusted.success), percent(home.offAdjusted.success)),
-          row("Decision-model input · Early-down pass efficiency", signed(away.offAdjusted.early_down_pass_epa, 3), signed(home.offAdjusted.early_down_pass_epa, 3)),
-          row("Decision-model input · Team strength rating", fixed(away.elo, 0), fixed(home.elo, 0)),
+          row("Independent model prior · Opponent-adjusted offense EPA/play", signed(away.offAdjusted.epa, 3), signed(home.offAdjusted.epa, 3)),
+          row("Independent model prior · Opponent-adjusted success rate", percent(away.offAdjusted.success), percent(home.offAdjusted.success)),
+          row("Independent model prior · Early-down pass efficiency", signed(away.offAdjusted.early_down_pass_epa, 3), signed(home.offAdjusted.early_down_pass_epa, 3)),
+          row("Independent model prior · Team strength rating", fixed(away.elo, 0), fixed(home.elo, 0)),
         ];
   return [
     ...modelRows,
-    row("Decision-model input · Frozen sample", nflSampleLabel(), nflSampleLabel()),
+    row("Independent model prior · Frozen baseline", nflSampleLabel(), nflSampleLabel()),
   ];
 }
 
@@ -100,7 +105,7 @@ export function enrichCachedNflFootballEvidence<T extends {
 }>(fixture: T): T {
   if (fixture.snapshot.games.every((game) =>
     Object.values(game.markets).every((market) =>
-      market.keyStats.some((stat) => stat.label.startsWith("Decision-model input ·"))))) {
+      market.keyStats.some((stat) => stat.label.startsWith("Independent model prior ·"))))) {
     return fixture;
   }
   return {
@@ -169,7 +174,7 @@ function enrichCachedNflMarket(
   market: FootballEvidenceMarket,
   value: MarketEdgeDto,
 ): MarketEdgeDto {
-  if (value.keyStats.some((stat) => stat.label.startsWith("Decision-model input ·"))) return value;
+  if (value.keyStats.some((stat) => stat.label.startsWith("Independent model prior ·"))) return value;
   return {
     ...value,
     keyStats: [
