@@ -5,6 +5,7 @@ import {
   buildPublicTrackingCategoryWindows,
   type PublicTrackingFoundationSnapshot,
 } from "../lib/services/tracking/publicTrackingCategoryWindows";
+import { buildLifetimeRecords } from "../app/lab/tracking/TrackingClient";
 import type {
   AlternateLineCategory,
   AlternateLineMetrics,
@@ -164,3 +165,60 @@ assert.match(summary, /categorySnapshot\.cacheState === "DB_SNAPSHOT"/);
 assert.match(summary, /hasCompleteAlternateLinePerformance/);
 
 console.log("homepage/member tracking parity: passed");
+
+// Every model shares the main-category policy too, including a release rollover
+// with zero current UCL rows, legacy aliases, pending results, pushes and voids.
+const models = ["mlb", "nba", "cbb", "wnba", "nfl", "cfb", "nhl", "epl", "soccer", "ucl"];
+const bucket = (sport: string, market: string, wins: number, losses: number) => ({
+  sport, market,
+  metrics: { ...aggregateMetrics(wins, losses, 2), picks: wins + losses + 6, pending: 3, voids: 1 },
+  bestAngles: aggregateMetrics(1, 1), leans: aggregateMetrics(2, 1),
+});
+const mainSnapshot = {
+  bySportMarket: models.filter(sport => sport !== "ucl").map(sport => bucket(sport, "total", 12, 8)),
+  baselines: models.map(sport => ({ sport, market: sport === "ucl" ? "moneyline" : "total",
+    lifetime_wins: 100, lifetime_total: 174, lifetime_pct: 57.5 })),
+  actionableHistory: { bySportMarket: [
+    ...models.filter(sport => sport !== "ucl").map(sport => bucket(sport, "total", 12, 8)),
+    ...["match_result", "total", "double_chance", "btts"].map(market => bucket("ucl", market, 51, 16)),
+  ] },
+  thisWeek: { from: "2026-10-30", to: "2026-11-05", bySportMarket: models.map(sport => bucket(sport, "total", 2, 1)) },
+  thisMonth: { from: "2026-10-07", to: "2026-11-05", bySportMarket: models.map(sport => bucket(sport, "total", 10, 5)) },
+};
+const beforeMain = structuredClone(mainSnapshot);
+for (const currentUcl of [[], [bucket("ucl", "total", 9, 0)]]) {
+  const fixture = { ...mainSnapshot, bySportMarket: [...mainSnapshot.bySportMarket, ...currentUcl] };
+  const mainWindows = buildPublicTrackingCategoryWindows(fixture);
+  const memberLifetime = buildLifetimeRecords(fixture.bySportMarket, fixture.baselines, fixture.actionableHistory.bySportMarket);
+  for (const [index, source] of [fixture.thisWeek.bySportMarket, fixture.thisMonth.bySportMarket].entries()) {
+    for (const row of mainWindows[index].rows) {
+      const exact = source.find(b => b.sport === row.sport && b.market === row.market)!;
+      const { win_pct, ...counts } = exact.metrics;
+      assert.deepEqual(row.metrics, { ...counts, winPct: win_pct }, `${row.sport} calendar window remains exact`);
+    }
+  }
+  const publicLifetime = mainWindows[2].rows;
+  assert.equal(new Set(publicLifetime.map(r => `${r.sport}:${r.market}`)).size, publicLifetime.length, "no duplicate lifetime categories");
+  assert.equal(publicLifetime.length, memberLifetime.length);
+  for (const member of memberLifetime) {
+    const row = publicLifetime.find(r => r.sport === member.sport && r.market === member.market)!;
+    const { win_pct, ...counts } = member.metrics;
+    assert.deepEqual(row.metrics, { ...counts, winPct: win_pct }, `${member.sport}:${member.market} public/member exact main parity`);
+    if (member.sport !== "ucl") {
+      assert.equal(row.metrics.wins, 112, "existing non-UCL baseline merge stays exact");
+      assert.equal(row.metrics.losses, 82);
+    } else {
+      assert.equal(row.metrics.wins, 51, "all locked releases survive a new current release");
+      assert.equal(row.metrics.losses, 16);
+      assert.equal(row.metrics.pending, 3);
+      assert.match(row.detail!, /Locked lifetime · all released locks/);
+      assert.equal(row.metrics.pushes, 2);
+      assert.equal(row.metrics.voids, 1);
+    }
+  }
+  const matchResult = publicLifetime.find(r => r.sport === "ucl" && r.market === "match_result")!;
+  assert.match(matchResult.detail!, /earlier archive 100\/174/);
+  assert.equal(publicLifetime.some(r => r.sport === "ucl" && r.market === "moneyline"), false);
+}
+assert.deepEqual(mainSnapshot, beforeMain, "readers cannot change a frozen source, grade cut, baseline or stored result");
+console.log("all ten models: main window parity, rollover continuity, legacy archive separation and immutable inputs passed");

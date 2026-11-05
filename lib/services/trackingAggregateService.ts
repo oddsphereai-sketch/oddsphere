@@ -89,7 +89,7 @@ export type DimensionRow<K extends string = string> = {
 export type TrackingDisplaySport = TrackedSport | "epl";
 
 export const TRACKING_AGGREGATE_CONTRACT_VERSION =
-  "tracking_aggregate_v20_ucl_alt_locked_lifetime_2026_11_05" as const;
+  "tracking_aggregate_v21_locked_grade_precedence_2026_11_05" as const;
 
 /**
  * Sport+market joint split with the Best Angle / Lean cuts most members
@@ -599,15 +599,16 @@ export function dedupePredictionRecordsForTracking(records: PredictionRecordRow[
 
 /**
  * Tracking must match the official locked/display grade, not a second grading
- * pass. Explicit tracking display corrections are the repair path; otherwise
- * the member-facing lock wins. Same-day guardrail / actionability logic belongs
+ * pass. The original member-facing lock always wins over a later display
+ * override. An override is a fallback only when no locked grade was stored.
+ * Same-day guardrail / actionability logic belongs
  * upstream, before the card locks.
  */
 export function effectiveTrackingPlayGrade(record: PredictionRecordRow): string {
-  const override = displayGradeOverride(record);
-  if (override !== null) return override;
   const memberFacingAtLock = memberFacingGradeAtLock(record);
   if (memberFacingAtLock !== null) return memberFacingAtLock;
+  const override = displayGradeOverride(record);
+  if (override !== null) return override;
   const grade = storedGrade(record);
   // NHL's immutable writer rows use the shared Daily Edge presentation tokens
   // for the same model verdicts that the Tracking surface calls play grades.

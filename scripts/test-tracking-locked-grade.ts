@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 import { effectiveTrackingPlayGrade } from "../lib/services/trackingAggregateService";
 
 let pass = 0;
@@ -13,14 +15,14 @@ function check(name: string, cond: boolean, msg?: string): void {
   }
 }
 
-function record(overrides: Record<string, unknown> = {}): any {
+function record(overrides: Record<string, unknown> = {}): PredictionRecordRow {
   return {
     play_grade: null,
     best_angle: false,
     no_bet: false,
     snapshot_json: null,
     ...overrides,
-  };
+  } as PredictionRecordRow;
 }
 
 console.log("\n━━━ tracking locked grade tests ━━━\n");
@@ -87,13 +89,22 @@ check(
 );
 
 check(
-  "stored null grade with no_bet=false tracks as watchlist",
+  "stored null grade stays unknown rather than inventing a Watchlist verdict",
   effectiveTrackingPlayGrade(record({
     play_grade: null,
     best_angle: false,
     no_bet: false,
-  })) === "watchlist",
+  })) === "",
 );
+
+const frozen = record({
+  locked_at: "2026-07-09T16:00:00Z", play_grade: "lean", best_angle: false,
+  member_facing_grade: "best_angle", tracking_display_grade_override: "lean",
+  snapshot_json: { member_facing_at_lock: { grade: "best_angle" }, tracking_display_grade_override: "lean" },
+});
+const before = structuredClone(frozen);
+assert.equal(effectiveTrackingPlayGrade(frozen), "best_angle", "bounded projected and full locked grades beat later display overrides");
+assert.deepEqual(frozen, before, "grade reads leave all writer, lock and evidence fields exact");
 
 console.log(`\n  result: ${pass}/${pass + fail} pass`);
 if (fail > 0) process.exit(1);
