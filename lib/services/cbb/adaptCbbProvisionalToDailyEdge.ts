@@ -137,9 +137,12 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
       outcome.selection!==(outcome.homeWinProbability>=.5?"first":"second")||
       Math.abs(outcome.probability-(outcome.selection==="first"?outcome.homeWinProbability:1-outcome.homeWinProbability))>1e-10)
       throw Error("Stored CBB game forecast differs from its score law");
-    if(ml.priceAmerican===null)ml.marketPrediction={status:"available",label:`${outcome.selection==="first"?game.home_team.abbreviation:game.visitor_team.abbreviation} ML`,
-      line:null,probability:outcome.probability,source:"model_outcome",sportsbook:null,observedAt:snapshot.capturedAt,
-      freshnessCheckedAt:null,reason:null};
+    if(ml.priceAmerican===null){
+      ml.modelProb=outcome.probability;
+      ml.marketPrediction={status:"available",label:`${outcome.selection==="first"?game.home_team.abbreviation:game.visitor_team.abbreviation} ML`,
+        line:null,probability:outcome.probability,source:"model_outcome",sportsbook:null,observedAt:snapshot.capturedAt,
+        freshnessCheckedAt:null,reason:null};
+    }
     if(total.line===null)total.marketPrediction={status:"available",label:`Projected total ${snapshot.board.score.total.toFixed(1)}`,
       line:null,probability:null,source:"model_outcome",sportsbook:null,observedAt:snapshot.capturedAt,freshnessCheckedAt:null,reason:null};
     if(spread.line===null)spread.marketPrediction={status:"available",label:`${snapshot.board.score.margin>=0?game.home_team.abbreviation:game.visitor_team.abbreviation} by ${Math.abs(snapshot.board.score.margin).toFixed(1)}`,

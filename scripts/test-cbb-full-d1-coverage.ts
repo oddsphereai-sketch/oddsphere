@@ -112,6 +112,8 @@ for(let i=0;i<rows.length;i++){
   const board=buildCbbGameForecastBoard(f,r.coverage),initial=advanceCbbProvisionalSnapshot({existing:null,candidate:board,startsAt:g.date,now:asOf});
   const dto=adaptCbbProvisionalGame({game:g,snapshot:initial,now:asOf,homeLogo:null,awayLogo:null});
   assert.equal(dto.markets.moneyline.marketPrediction?.source,"model_outcome");
+  assert.equal(dto.markets.moneyline.modelProb,board.gameForecast!.probability,"the ordinary card displays the real frozen winner probability");
+  assert.equal(dto.markets.moneyline.recommendationConfidence,null,"a displayed outcome probability cannot promote an unqualified wager");
   assert.equal(dto.markets.moneyline.marketPrediction?.label,`${f.homeWinProbability>=.5?g.home_team.abbreviation:g.visitor_team.abbreviation} ML`);
   for(const m of Object.values(dto.markets)){
     if(!m)continue;assert.equal(m.priceAmerican,null);assert.equal(m.line,null);assert.equal(m.verdict.key,"no_play");
