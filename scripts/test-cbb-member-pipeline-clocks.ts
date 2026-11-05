@@ -67,7 +67,7 @@ async function main(){
   const episode=receipt.episodes.find(e=>e.book==="circa"&&e.market==="spread")!;
   assert.ok(episode,"the previous genuine pair remains the source anchor");
   assert.equal(episode.current.fetchedAt,"2026-10-29T21:59:02Z");
-  assert.equal(episode.flow,undefined,"overlapping in-flight requests cannot invent a later response to received pressure");
+  assert.equal(episode.flow,null,"overlapping in-flight requests cannot invent a later response to received pressure");
   const nativeStream=receipt.pathTape.streams.find(stream=>stream.book==="circa"&&stream.market==="spread")!;
   assert.equal(expandCbbMarketBehaviorPathStream(receipt.pathTape,nativeStream).flows[0].fetchedAt,"2026-10-29T21:59:01Z",
     "the original split response is still retained exactly for interpretation at the decision");
