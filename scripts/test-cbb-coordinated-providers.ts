@@ -5,7 +5,7 @@ import {normalizeCbbTheOddsApiCurrent,fetchCbbTheOddsApiCurrent} from '../lib/se
 import {mergeCbbCurrentSourceQuotes} from '../lib/cbb/currentSourceQuotes';
 async function main(){
  const f=JSON.parse(gunzipSync(fs.readFileSync(new URL('./fixtures/cbb-source-admission-20261105.json.gz',import.meta.url))).toString()) as {capturedAt:string;games:CbbGame[];events:RawOwlsOddsEvent[]};
- const game=f.games[0],event=f.events.find((e)=>e.away_team==='Jax State');assert.ok(event);
+ const game=f.games[0],event=f.events.find((e)=>e.away_team==='Jax State'&&e.bookmakers?.some(b=>b.key==='pinnacle'||b.key==='draftkings'||b.key==='bovada'));assert.ok(event);
  // Contract-format test based on an actual captured fixture/quote. This is not
  // an actual The Odds API capture or evidence of additional live coverage.
  const source={...event,id:'contract-event',sport_key:'basketball_ncaab'};
@@ -16,6 +16,12 @@ async function main(){
  assert.equal(normalizeCbbTheOddsApiCurrent([game],[{...source,commence_time:'2026-12-05T23:00:00Z'}],f.capturedAt,f.capturedAt).quotes.length,0);
  const q=result.quotes[0],duplicates=mergeCbbCurrentSourceQuotes([q,{...q,provider:'owls'}],game.id,f.capturedAt);
  assert.equal(duplicates.quotes.length,1);assert.equal(duplicates.duplicates,1);
+ const owls={...q,provider:'owls' as const},bdl={...q,provider:'balldontlie' as const,firstPrice:q.firstPrice-10};
+ const allThree=mergeCbbCurrentSourceQuotes([owls,bdl,q],game.id,f.capturedAt);
+ assert.equal(allThree.quotes.length,0,"third transport cannot resurrect a conflicting native frontier");
+ assert.equal(allThree.quarantined.length,1);
+ const newer={...q,providerObservedAt:new Date(Date.parse(q.providerObservedAt)+1000).toISOString()};
+ assert.deepEqual(mergeCbbCurrentSourceQuotes([owls,bdl,newer],game.id,f.capturedAt).quotes,[newer],"a genuinely later coherent native state can resolve an older conflict");
  assert.equal(mergeCbbCurrentSourceQuotes([q,{...q,firstPrice:q.firstPrice-10}],game.id,f.capturedAt).quotes.length,0);
  const stale={...q,providerObservedAt:new Date(Date.parse(q.providerObservedAt)-3600001).toISOString()};
  assert.deepEqual(mergeCbbCurrentSourceQuotes([stale,q],game.id,f.capturedAt).quotes,[q]);

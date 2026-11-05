@@ -261,7 +261,7 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
     Math.abs(base.homeWinProbability-independentWinner)>1e-8))throw new Error("CBB independent forecast coherence mismatch");
   const excludedFamilies=[...new Set(args.targets.map(q=>cbbBookFamily(q.sportsbook)))].sort(),excluded=new Set(excludedFamilies);
   const previousPath=args.previousPath;
-  if(previousPath&&(![CBB_MARKET_BEHAVIOR_PATH_RELEASE,"cbb_market_behavior_path_2026_11_03_r4_identical_preflow_state","cbb_market_behavior_path_2026_11_02_r3_compact_native_frontier","cbb_market_behavior_path_2026_11_02_r2_availability_bounds"].includes(previousPath.release)||
+  if(previousPath&&(![CBB_MARKET_BEHAVIOR_PATH_RELEASE,"cbb_market_behavior_path_2026_11_04_r5_retained_response_frontier","cbb_market_behavior_path_2026_11_03_r4_identical_preflow_state","cbb_market_behavior_path_2026_11_02_r3_compact_native_frontier","cbb_market_behavior_path_2026_11_02_r2_availability_bounds"].includes(previousPath.release)||
     previousPath.gameId!==base.gameId||previousPath.startsAt!==args.startsAt||
     !Number.isFinite(Date.parse(previousPath.capturedAt))||Date.parse(previousPath.capturedAt)>at))
     throw new Error("CBB path prior identity/cutoff mismatch");

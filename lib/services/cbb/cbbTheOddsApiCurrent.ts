@@ -14,7 +14,7 @@ export type CbbTheOddsApiReceipt={release:typeof CBB_THE_ODDS_API_CURRENT_RELEAS
 export function normalizeCbbTheOddsApiCurrent(games:CbbGame[],body:unknown,requestedAt:string,availableAt:string):Pick<CbbTheOddsApiReceipt,"eventsReturned"|"quotes"|"rejections">{
  if(!Array.isArray(body))throw Error("CBB The Odds API response must be an event array");
  const events=body.filter((e):e is RawOwlsOddsEvent&{id:string;sport_key:string}=>!!e&&typeof e==="object"&&
-   e.sport_key==="basketball_ncaab"&&typeof e.id==="string"&&!!e.id);
+   e.sport_key==="basketball_ncaab"&&typeof e.id==="string"&&!!e.id&&e.id.length<=256);
  const quotes:CbbQuote[]=[],rejections:Array<CbbCurrentOddsRejection&{gameId:number}>=[];
  const used=new Set<string>();
  for(const game of games){
@@ -25,7 +25,7 @@ export function normalizeCbbTheOddsApiCurrent(games:CbbGame[],body:unknown,reque
    rejections.push({gameId:game.id,book:null,reason:matches.length===0?participants.length?"matching_schools_wrong_start":"exact_event_absent":"exact_event_ambiguous_or_reused"});continue;
   }
   const source=matches[0];used.add(source.id);
-  const event={...source,sport:"ncaab",bookmakers:source.bookmakers?.map(book=>({...book,key:aliases[book.key??""]??book.key}))};
+  const event={...source,sport:"ncaab",bookmakers:source.bookmakers?.filter(book=>BOOKS.includes(book.key??"")).map(book=>({...book,key:aliases[book.key??""]??book.key}))};
   const result=normalizeCbbOwlsCurrent(game,{success:true,data:[event]},availableAt,availableAt);
   // Same named-book validation, with actual transport origin retained. Never
   // relabel a The Odds API row as Owls merely because their JSON schemas agree.
