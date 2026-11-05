@@ -5,14 +5,13 @@ import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import { CbbBallDontLieClient } from "@/lib/cbb/ballDontLie";
 import { cbbCanonicalStatus } from "@/lib/cbb/canonicalFixture";
 import { matchCbbProviderVenue as matchCbbVenue } from "@/lib/cbb/providerVenueIdentity";
-import {readCbbMarketBehavior} from "@/lib/cbb/marketBehaviorCandidate";
-import {cbbContextAtFixtureClock,cbbIndependentInputKey,cbbOriginalMarketAnchors,cbbBehaviorFlows,cbbHistoryAtDecision} from "./cbbMarketBehaviorInputs";
-import {CBB_CURRENT_SCORE_RELEASE} from "@/lib/cbb/currentScoreRuntime";
-import type {CbbForecast} from "@/lib/cbb/types";
+import {cbbBehaviorFlows,cbbContextAtFixtureClock} from "./cbbMarketBehaviorInputs";
+import {assembleCbbContextualReaderInput} from "./cbbContextualReaderInput";
+import {loadCbbContextualOutcomeRuntime,readCbbContextualOutcomeEvidence,type CbbContextualOutcomeRuntime} from "./cbbContextualOutcomeRuntime";
 import { forecastCbbCurrentBatch } from "@/lib/cbb/currentScoreRuntime";
 import { normalizeCbbOwlsCurrent } from "@/lib/cbb/owlsMarketEvidence";
 import { cbbCurrentSplitEvidence } from "@/lib/cbb/owlsSplitEvidence";
-import { buildCbbProvisionalBoard, chooseCbbSupportedTargetBook } from "@/lib/cbb/provisionalBoard";
+import { chooseCbbSupportedTargetBook } from "@/lib/cbb/provisionalBoard";
 import {cbbCurrentProviderQuotes} from "@/lib/cbb/currentProviderQuotes";
 import type { CbbGame, CbbTrainingGame, CbbOdds, CbbQuote } from "@/lib/cbb/types";
 import { OwlsInsightClient } from "@/lib/providers/owls/owlsInsightClient";
@@ -33,18 +32,24 @@ import { advanceCbbProvisionalSnapshot,CbbFixtureClockError } from "@/lib/cbb/pr
 import { isOwnerApprovedCbbMemberExclusion } from "@/lib/cbb/memberBoardScope";
 import {readCbbCanonicalReaderHistory} from "./cbbCanonicalReaderHistory";
 import {pairCbbCanonicalMarketEvidence} from "./cbbCanonicalMarketEvidence";
-import {cbbCanonicalBehaviorInputs} from "./cbbCanonicalBehaviorInputs";
-import {retainCbbLevelInput,cbbRetainedNormalizationQuarantine} from "@/lib/cbb/retainedLevelInput";
 import {cbbDecisionSplitContext} from "@/lib/cbb/decisionSplitContext";
 import {CBB_FULL_D1_COVERAGE_START} from "@/lib/cbb/crossDivisionPrior";
 import type {CrossDivisionGame} from "@/lib/cbb/crossDivisionPrior";
 import {cbbDivisionOneFixture} from "@/lib/cbb/divisionOneMembership";
 import {cbbCrossDivisionContext} from "@/lib/cbb/crossDivisionIdentity";
 import {forecastCbbFullDivisionOneBatch} from "@/lib/cbb/fullDivisionOneForecast";
-import {buildCbbGameForecastBoard,attachCbbGameOutcome} from "@/lib/cbb/gameForecastBoard";
+import {buildCbbGameForecastBoard} from "@/lib/cbb/gameForecastBoard";
 import type {CbbProvisionalBoard} from "@/lib/cbb/provisionalLifecycle";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_05_r41_albany_source_identity" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_05_r42_contextual_outcome" as const;
+/** Book/contract choice only. No prior projection, probability or grade runs. */
+export function selectCbbContextualPipelineTargets(quotes:CbbQuote[]):CbbQuote[]{
+  const boardBook=chooseCbbSupportedTargetBook(quotes);
+  return (["moneyline","spread","total"] as const).flatMap(market=>{
+    const book=quotes.some(q=>q.sportsbook===boardBook&&q.market===market)?boardBook:chooseCbbSupportedTargetBook(quotes.filter(q=>q.market===market));
+    const target=quotes.find(q=>q.sportsbook===book&&q.market===market);return target?[target]:[];
+  });
+}
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
 const expandedFixture=(game:CbbGame)=>computeSlateDate("cbb",game.date)>=CBB_FULL_D1_COVERAGE_START;
 const eligibleFixture=(game:CbbGame)=>expandedFixture(game)?cbbDivisionOneFixture(game).eligible:
@@ -54,6 +59,7 @@ const eligibleFixture=(game:CbbGame)=>expandedFixture(game)?cbbDivisionOneFixtur
  * member page reads. No request-time model or market recomputation. */
 export async function refreshCbbMemberBoard(args:{anchorDate:string;season:number;now?:string;bdlKey:string;owlsKey:string;theOddsApiKey?:string;
   theOddsApiReader?:typeof fetchCbbTheOddsApiCurrent;
+  loadContextualRuntime?:()=>Promise<Pick<CbbContextualOutcomeRuntime,"evaluate">>;
   trainingGames:CbbTrainingGame[];crossTrainingGames?:CrossDivisionGame[];nowClock?:()=>string;db?:typeof supabase;provider?:CbbBallDontLieClient;owls?:OwlsInsightClient;
   fetcher?:typeof fetch;loadSchedule?:typeof loadCbbRollingSchedule;canonicalHistoryReader?:typeof readCbbCanonicalReaderHistory;
   fallbackOdds?:CbbOdds[];saveSnapshot?:typeof upsertLabResponseSnapshot;syncFixtures?:(games:CbbGame[])=>Promise<unknown>}){
@@ -215,11 +221,10 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   const priceById=new Map<number,typeof canonicalHistory.priceRows>();
   const splitById=new Map<number,typeof canonicalHistory.splitRows>();
   if(canonicalHistory.price.complete)for(const item of canonicalHistory.priceRows){const id=Number(item.canonical_event_id);const rows=priceById.get(id)??[];rows.push(item);priceById.set(id,rows);}
-  for(const item of canonicalHistory.retailPriceRows??[]){const id=Number(item.canonical_event_id);const rows=priceById.get(id)??[];rows.push(item);priceById.set(id,rows);}
+  for(const item of canonicalHistory.retailObservedRows??canonicalHistory.retailPriceRows??[]){const id=Number(item.canonical_event_id);const rows=priceById.get(id)??[];rows.push(item);priceById.set(id,rows);}
   if(canonicalHistory.split.complete)for(const item of canonicalHistory.splitRows){const id=Number(item.canonical_event_id);const rows=splitById.get(id)??[];rows.push(item);splitById.set(id,rows);}
   const canonicalEvidenceById=new Map(forecastGames.map(game=>[game.id,pairCbbCanonicalMarketEvidence({game,decisionAt:asOf,
-    priceRows:priceById.get(game.id),splitRows:splitById.get(game.id)})]));
-  const canonicalById=new Map(forecastGames.map(game=>[game.id,cbbCanonicalBehaviorInputs(canonicalEvidenceById.get(game.id)!)]));
+    priceRows:priceById.get(game.id),splitRows:splitById.get(game.id),consumerPriceContext:true})]));
   const legacyGames=forecastGames.filter(game=>!expandedFixture(game));
   const forecasts:Array<ReturnType<typeof forecastCbbCurrentBatch>[number]&{
     coverage?:ReturnType<typeof forecastCbbFullDivisionOneBatch>[number]["coverage"]}>=forecastCbbCurrentBatch(legacyGames.map(game=>{
@@ -244,67 +249,46 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   const decisionSplitsById=new Map(forecastGames.map(game=>[game.id,cbbDecisionSplitContext({game,allGames:candidateGames,asOf,
     direct:splitEvidenceById.get(game.id)!,canonical:canonicalEvidenceById.get(game.id)!.splitPairs,
     publicRows,draftKings:draftKingsFeed})]));
-  // Original r3 quote receipts may seed an anchor only when today's frozen
-  // independent runtime exactly reproduces that earlier published baseline.
-  // Batch by its real decision clock; no per-game/provider/DB refresh is added.
-  const earlierGroups=new Map<string,typeof forecasts>();
-  for(const row of forecasts){const previous=prior.get(row.game.id)?.snapshot;
-    if(previous&&!previous.lockedAt&&previous.board.modelRelease===CBB_CURRENT_SCORE_RELEASE){
-      const clock=previous.board.asOf;earlierGroups.set(clock,[...(earlierGroups.get(clock)??[]),row]);
-    }}
-  const earlierIndependent=new Map<number,CbbForecast>();
-  const earlierInputKeys=new Map<number,string>();
-  for(const [clock,rows] of earlierGroups){
-    const history=cbbHistoryAtDecision(args.trainingGames,clock);
-    try{for(const row of forecastCbbCurrentBatch(rows.map(row=>row.game),clock,history)){
-      earlierIndependent.set(row.game.id,row.forecast);
-      earlierInputKeys.set(row.game.id,cbbIndependentInputKey(row.game,history));
-    }}catch{/* An unreproducible independent baseline cannot attest a legacy anchor. */}
-  }
   trace("decision_split_context_complete");
-  const retainedInputCounts={captured:0,preserved_valid:0,preserved_invalid:0,unavailable:0};
+  // R38's source-outage LKG policy remains authoritative. It does not stamp
+  // an old score as the new release or silently invoke an alternate reader.
   const preservedQuoteOutages=forecasts.filter(row=>oddsUnavailable&&!(namedById.get(row.game.id)?.quotes.length)&&
     prior.get(row.game.id)?.snapshot.board.rows.some(market=>market.price!==null)).map(row=>row.game.id);
   if(preservedQuoteOutages.length)providerWarnings.push(`CBB source outage preserved prior priced forecasts (${preservedQuoteOutages.join(",")})`);
-  const boardCandidates=new Map<number,CbbProvisionalBoard>(forecasts.filter(row=>row.forecast.inputStatus==="complete"&&
-    !preservedQuoteOutages.includes(row.game.id)).map(row=>{
-    const quotes=namedById.get(row.game.id)?.quotes??[],baseline=buildCbbProvisionalBoard(row.forecast,quotes);
-    const targets=baseline.rows.flatMap(market=>{const target=quotes.find(q=>q.market===market.market&&q.sportsbook===market.targetBook&&q.providerObservedAt===market.quoteObservedAt&&q.line===market.line);return target?[target]:[];});
-    const key=cbbIndependentInputKey(row.game,args.trainingGames,row.coverage??undefined),previous=cbbContextAtFixtureClock(prior.get(row.game.id)?.snapshot??null,row.game.date);
-    const native=canonicalById.get(row.game.id)!;
-    // Cross-division game forecasts own their observed-opponent score law. A
-    // D1-trained numerical market consequence is not qualified for this domain.
-    // Actual quotes/splits remain available to the existing evidence panels.
-    if(row.coverage?.kind==="cross_division")return [row.game.id,
-      buildCbbGameForecastBoard(row.forecast,row.coverage,quotes)] as const;
-    const storedRead=previous?.board.marketContext.verifiedMarketRead;
-    const anchors=!storedRead&&native.historyQuotes.length?null:
-      cbbOriginalMarketAnchors(previous,earlierInputKeys.get(row.game.id)??key,earlierIndependent.get(row.game.id)??null);
-    const read=readCbbMarketBehavior({independent:row.forecast,independentInputKey:key,startsAt:row.game.date,targets,currentQuotes:quotes,anchors,
-      flows:cbbBehaviorFlows(splitEvidenceById.get(row.game.id)!),historyQuotes:native.historyQuotes,historyFlows:native.historyFlows,
-      splitContext:decisionSplitsById.get(row.game.id),
-      contextQuotes:native.contextQuotes,
+  const completeForecasts=forecasts.filter(row=>row.forecast.inputStatus==="complete"&&!preservedQuoteOutages.includes(row.game.id));
+  const contextualRows=completeForecasts.filter(row=>row.coverage?.kind!=="cross_division"&&row.coverage?.kind!=="d1_newcomer");
+  // One checked private artifact per eligible batch, never a per-game provider
+  // or database request. Load/evaluation failure precedes every member write.
+  const contextualRuntime=contextualRows.length?await(args.loadContextualRuntime??loadCbbContextualOutcomeRuntime)():null;
+  trace("contextual_runtime_ready");
+  const contextualInputCounts={evaluated:0,continued:0,migrated:0,unpriced:0,noWagerDomain:0};
+  const boardCandidates=new Map<number,CbbProvisionalBoard>(completeForecasts.map(row=>{
+    const quotes=namedById.get(row.game.id)?.quotes??[],previous=cbbContextAtFixtureClock(prior.get(row.game.id)?.snapshot??null,row.game.date);
+    // These original score domains remain forecast-only. Empty targets avoid
+    // even discarded old price/probability/grade calculations; raw observations
+    // still reach the existing member evidence publication below.
+    if(row.coverage?.kind==="cross_division"||row.coverage?.kind==="d1_newcomer"){
+      contextualInputCounts.noWagerDomain++;
+      return[row.game.id,buildCbbGameForecastBoard(row.forecast,row.coverage,[])] as const;
+    }
+    if(!contextualRuntime)throw Error("CBB contextual runtime missing for complete incumbent");
+    const retained=previous?readCbbContextualOutcomeEvidence(previous.board):null;
+    const legacy=previous?.board.marketContext.verifiedMarketRead;
+    const anchors=legacy?.anchors;
+    if(anchors&&(anchors.gameId!==row.game.id||!Number.isFinite(Date.parse(anchors.startsAt))||Date.parse(anchors.startsAt)!==Date.parse(row.game.date)))throw Error("CBB legacy price anchor fixture mismatch");
+    const assembled=assembleCbbContextualReaderInput({independent:row.forecast,startsAt:row.game.date,currentQuotes:quotes,
+      canonical:canonicalEvidenceById.get(row.game.id)!,splitContext:decisionSplitsById.get(row.game.id)??[],
       currentSourceProblems:(namedById.get(row.game.id)?.rejected??[]).flatMap(problem=>problem.book&&problem.market?
         [{book:problem.book,market:problem.market,reason:problem.reason,sourceAt:problem.sourceAt}]:[]),
-      previousPath:storedRead?.pathTape,quarantinedSources:native.quarantinedSources,
-      historyCompleteness:{price:canonicalHistory.price.complete,split:canonicalHistory.split.complete}});
-    const expanded=computeSlateDate("cbb",row.game.date)>=CBB_FULL_D1_COVERAGE_START;
-    const programInputs=row.coverage??{release:row.forecast.release};
-    const board:CbbProvisionalBoard=expanded&&(row.coverage?.kind==="d1_newcomer"||!quotes.length)
-      ?buildCbbGameForecastBoard(read.forecast,programInputs,quotes,read.receipt)
-      :expanded?attachCbbGameOutcome(buildCbbProvisionalBoard(read.forecast,quotes,{marketBehavior:read.receipt}),read.forecast,programInputs)
-      :buildCbbProvisionalBoard(read.forecast,quotes,{marketBehavior:read.receipt});
-    const checkpoint=retainCbbLevelInput({existing:previous?.board.marketContext.retainedLevelInput,
-      independent:row.forecast,independentInputKey:key,startsAt:row.game.date,asOf,
-      // Qualification must see pre-filter native/current frames as well as
-      // retained states: an invalid newest frame cannot revive an older price.
-      sourceQuotes:[...quotes,...native.historyQuotes,...read.receipt.currentProfessionalQuotes],targets,
-      quarantinedSources:[...cbbRetainedNormalizationQuarantine(namedById.get(row.game.id)?.rejected??[]),...native.quarantinedSources,...read.receipt.anchors.quarantinedKeys?.map(source=>{
-        const [book,market]=source.split(":");return {book,market:market as "moneyline"|"spread"|"total",reason:"retained_source_quarantine"};
-      })??[]],historyCompleteness:read.receipt.historyCompleteness});
-    board.marketContext.retainedLevelInput=checkpoint.checkpoint;
-    retainedInputCounts[checkpoint.disposition]++;
-    return [row.game.id,board] as const;
+      flows:cbbBehaviorFlows(splitEvidenceById.get(row.game.id)!),previousInput:retained?.input??null,
+      previousPath:retained?.input.pathTape??legacy?.pathTape,
+      legacyAnchorQuotes:anchors?.quotes.map(q=>({...q,anchorCapturedAt:q.anchorCapturedAt??anchors.capturedAt})),
+      historyComplete:{price:canonicalHistory.price.complete,split:canonicalHistory.split.complete,consumer:canonicalHistory.retailPrice?.complete??false}});
+    const targets=selectCbbContextualPipelineTargets(quotes);
+    const board=contextualRuntime.evaluate({input:assembled.input,independent:row.forecast,targets,coverage:assembled.coverage});
+    contextualInputCounts.evaluated++;if(retained)contextualInputCounts.continued++;else if(legacy)contextualInputCounts.migrated++;
+    if(!targets.length)contextualInputCounts.unpriced++;
+    return[row.game.id,board] as const;
   }));
   const publishableGames=sourceGames.filter(game=>{
     const previous=prior.get(game.id);
@@ -356,6 +340,10 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   trace("member_evidence_prepared");
   let written=0,locked=0,held=0,missingLogos=0,trackingInserted=0;
   for(const game of publishableGames){
+    // Computation may cross T-60. Keep the data/forecast cutoff exact, but
+    // eligibility and freezing must use the actual clock at this game's write.
+    const writeNow=nowClock(),writeAt=Date.parse(writeNow),dataAt=Date.parse(asOf);
+    if(!Number.isFinite(writeAt)||!Number.isFinite(dataAt)||writeAt<dataAt)throw Error("CBB write clock invalid or before data cutoff");
     const identity=scheduled.get(game.id);
     const previous=prior.get(game.id)??null;
     if(previous?.snapshot.lockedAt&&Date.parse(previous.snapshot.startsAt)!==Date.parse(game.date)){
@@ -374,7 +362,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       problems.push(`${game.id}:seed_identity_missing_or_changed`);continue;
     }
     if(!identity.homeTeamLogo||!identity.awayTeamLogo)missingLogos++;
-    const afterCutoff=Date.parse(asOf)>=Date.parse(game.date)-60*60_000;
+    const afterCutoff=writeAt>=Date.parse(game.date)-60*60_000;
     if(afterCutoff&&!previous){problems.push(`${game.id}:prelock_snapshot_missing`);continue;}
     if(!afterCutoff&&previous&&!boardCandidates.has(game.id)){
       problems.push(`${game.id}:incomplete_refresh_preserved_prior_forecast`);
@@ -389,7 +377,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     }
     let result;
     try{result=await writeCbbMemberGame({game,candidate,homeLogo:identity.homeTeamLogo,
-      awayLogo:identity.awayTeamLogo,now:asOf,splitEvidence,marketQuotes:namedById.get(game.id)?.quotes??[],bookHistory,
+      awayLogo:identity.awayTeamLogo,now:writeNow,splitEvidence,marketQuotes:namedById.get(game.id)?.quotes??[],bookHistory,
       capturedNamedSections:preparedSections.get(game.id),capturedPublicSections:preparedPublic.get(game.id)},db);
     }catch(error){
       if(!(error instanceof CbbFixtureClockError)||!previous)throw error;
@@ -420,6 +408,6 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     scheduleOnly:candidateGames.length-memberGames.length,missingIdentity,missingLogosOnSchedule,
     written,locked,held,missingLogos,trackingInserted,problems,unpublishedIncomplete,ownerApprovedExclusions,providerWarnings,
     canonicalHistory:{release:canonicalHistory.release,complete:canonicalHistory.complete,price:canonicalHistory.price,split:canonicalHistory.split,elapsedMs:canonicalHistory.elapsedMs},
-    retainedInputCounts,
+    contextualInputCounts,
     providerCalls:provider.calls,owlsCalls:2};
 }

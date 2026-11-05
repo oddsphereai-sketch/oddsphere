@@ -1,5 +1,52 @@
 # Model change safety protocol
 
+## Owner-directed CBB unified contextual inference — prepared integration
+
+The owner's subsequent tier clarification is recorded in
+`daily-edge-grade-intent.md`: top outcome confidence and worthwhile price, with
+expensive positive-value favorites still Lean-eligible. Candidate interpreted
+R7 /decision R7 /grade R6 removes fixed 3%/8% EV reserves and mandatory source
+confirmation. Best additionally requires 62% unconditional win probability and
+price -200 or better. These are explicit product boundaries, not learned accuracy
+claims or market-input activation gates. Pushes remain separate; only numerically
+resolved positive offered value is actionable. Preserve actual sharp-source
+attribution separately from grade, consistent encoded/explicit verdicts and all
+locked records. Watch is reserved for unresolved break-even value or a
+push-adjusted paired-fair premium consumed by actual vig; clear negative offered
+value without that premium is a complete priced No Play, distinct from Held.
+No new extreme-price floor is introduced. No Plays retain accuracy and raw
+p/price/EV but imply no wager units. Broader uniformity requires sport-by-sport active-path review;
+this CBB release must not silently regrade other sports.
+
+The owner requested one contextual market interpretation and forecast with the
+independent model as a data point, no preset model/book blends and no arbitrary
+score offsets. The prepared model R1 /covariance R1 /publisher R42 /adapter R26 and
+tracking R29 family above is not yet deployed. Keep current R38/R39/R41 source, Albany identity and
+fixture-clock repairs, including transport-native IDs, request starts, response
+completion, unknown observation bounds and locked-record compatibility.
+
+A valid current quote remains price evidence when its observation-start lower
+bound is unknown; it cannot establish an ordered book reaction. Compositions
+are source-clocked shares, never inferred new dollars or bettor identities.
+Original-to-current endpoints survive bounded history separately from recent
+legs; no omitted middle is fabricated. Same-provider native identity conflicts
+remain conflicts, while unrelated provider namespaces remain fixture-bound.
+
+Before publication, bind the final private artifact and whole-model excluded-game
+covariance calibration to the exact source, cohort and availability clocks.
+The copy-only board, adapter and tracking paths must preserve the resulting
+score, probability, push, exact offered price, EV and grade. Store compressed
+per-game evidence once, never training vectors in the public repository, and
+reuse one private model load in the existing prediction-pipeline lease. No
+independent prediction writer, schedule, shadow production record or provider
+request is authorized by this documentation.
+
+Report actual promotions/demotions, side changes, missing prices and directional
+concentration. A grade-count increase is not accuracy proof. Run focused
+identity/clock/codec/forecast/grade/SQL-precision/reader-writer lock tests, the
+full model-change gate, current-main integration safety, protected PR checks
+and the production release/data/cron/coherence/reader/unchanged-lock proof.
+
 Before asserting market-reader correctness, read and apply
 [`market-reader-spotcheck-standard.json`](market-reader-spotcheck-standard.json).
 Review raw native evidence before seeing final outputs, then trace the inference

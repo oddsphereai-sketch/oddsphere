@@ -1,0 +1,35 @@
+import assert from "node:assert/strict";
+import {createHash} from "node:crypto";
+import {validateAdminAuth} from "../lib/auth/admin";
+import {createCbbContextualReadinessHandler,cbbReadinessDatabaseOriginSha256,type CbbReadinessDependencies} from "../lib/services/cbb/cbbContextualReadiness";
+const saved={ADMIN_TOKEN:process.env.ADMIN_TOKEN,ADMIN_EMAIL_ALLOWLIST:process.env.ADMIN_EMAIL_ALLOWLIST};
+const metadata={model:"test_model",calibration:"test_covariance",engine:"test_engine",objectSha256:"a".repeat(64),availableBy:"2026-11-05T18:00:00Z"};
+const request=(headers:HeadersInit={})=>new Request("https://app.example/api/admin/cbb/contextual-readiness",{headers});
+async function main(){
+ const events:string[]=[];let secret:string|undefined="existing-machine-secret",fail=false,wrongIdentity=false,reads=0,predictorCalls=0,providerCalls=0;
+ const deps:CbbReadinessDependencies={adminAuth:r=>{events.push("auth");return validateAdminAuth(r);},machineSecret:()=>secret,
+  environment:()=>({NEXT_PUBLIC_SUPABASE_URL:"https://url-user:url-password@DB.EXAMPLE:443/path?service_key=never-return",VERCEL_ENV:"preview",VERCEL_GIT_COMMIT_SHA:"b".repeat(40)}),
+  loadModule:async()=>{events.push("module");reads++;return{metadata,load:async()=>{events.push("bundle");if(fail)throw Error("private-service-key https://user:password@db.example/storage?token=secret training-vector=[1,2]");return{release:wrongIdentity?"wrong_model":metadata.model,artifactObjectSha256:metadata.objectSha256,availableBy:metadata.availableBy,
+   evaluate:()=>{predictorCalls++;providerCalls++;throw Error("must never evaluate");},trainingVectors:["must-not-return"]};}};}};
+ const handler=createCbbContextualReadinessHandler(deps);
+ try{
+  delete process.env.ADMIN_TOKEN;delete process.env.ADMIN_EMAIL_ALLOWLIST;
+  for(const headers of [{},{authorization:"Bearer wrong"},{authorization:"Basic existing-machine-secret"},{authorization:"Bearer existing-machine-secret extra"}] as HeadersInit[]){events.length=0;const response=await handler(request(headers));assert.equal(response.status,401);const body=await response.json();assert.equal(body.ready,false);assert.equal(body.databaseOriginSha256,undefined);assert.deepEqual(events,["auth"],"Unauthorized requests do not import or download the artifact");assert(response.headers.get("cache-control")?.includes("no-store"));}
+  assert.equal(reads,0);
+  const previousFetch=globalThis.fetch;let unauthorizedNetwork=0;globalThis.fetch=async()=>{unauthorizedNetwork++;throw Error("Unauthorized route attempted asset IO");};
+  try{const route=await import("../app/api/admin/cbb/contextual-readiness/route");const denied=await route.GET(request());assert.equal(denied.status,401);assert.equal(unauthorizedNetwork,0,"Real route wiring keeps the lazy artifact import/load behind authentication");}finally{globalThis.fetch=previousFetch;}
+  secret=undefined;assert.equal((await handler(request({authorization:"Bearer existing-machine-secret"}))).status,401);assert.equal(reads,0,"Missing configured machine/admin secrets fail closed");
+  secret="existing-machine-secret";events.length=0;const machine=await handler(request({authorization:"Bearer existing-machine-secret"}));assert.equal(machine.status,200);const body=await machine.json();assert.equal(body.ready,true);assert.deepEqual(events,["auth","module","bundle"]);assert.equal(body.databaseOriginSha256,createHash("sha256").update("https://db.example").digest("hex"));assert.deepEqual(body.deployment,{environment:"preview",commit:"b".repeat(40)});assert.equal(body.model,metadata.model);assert.equal(body.engine,metadata.engine);assert.equal(body.objectSha256,metadata.objectSha256);assert.equal(body.availableBy,metadata.availableBy);assert(JSON.stringify(body).length<1000);for(const forbidden of ["url-user","url-password","service_key","trainingVectors","existing-machine-secret","db.example"])assert(!JSON.stringify(body).includes(forbidden));
+  // Existing admin credentials work without a machine secret. Neither path
+  // reads cron enable/disable flags: preview readiness performs no cron job.
+  process.env.ADMIN_TOKEN="existing-admin-secret";process.env.ADMIN_EMAIL_ALLOWLIST="owner@example.test";secret=undefined;events.length=0;const admin=await handler(request({"x-admin-token":"existing-admin-secret","x-admin-email":"owner@example.test"}));assert.equal(admin.status,200);assert.deepEqual(events,["auth","module","bundle"]);
+  const before=reads;assert.equal((await handler(request({"x-admin-token":"existing-admin-secret","x-admin-email":"other@example.test"}))).status,403);assert.equal(reads,before);
+  fail=true;events.length=0;const failed=await handler(request({"x-admin-token":"existing-admin-secret","x-admin-email":"owner@example.test"}));assert.equal(failed.status,503);const failedBody=await failed.json();assert.equal(failedBody.ready,false);assert.equal(failedBody.model,metadata.model);assert.equal(failedBody.databaseOriginSha256,body.databaseOriginSha256);for(const forbidden of ["private-service-key","password","token=","training-vector","user:"])assert(!JSON.stringify(failedBody).includes(forbidden));assert(failed.headers.get("cache-control")?.includes("no-store"));
+  const importFailure=createCbbContextualReadinessHandler({...deps,loadModule:async()=>{throw Error("signed-url-token private-import-error");}});const failedImport=await importFailure(request({"x-admin-token":"existing-admin-secret","x-admin-email":"owner@example.test"}));assert.equal(failedImport.status,503);assert(!JSON.stringify(await failedImport.json()).includes("private-import-error"));
+  fail=false;wrongIdentity=true;assert.equal((await handler(request({"x-admin-token":"existing-admin-secret","x-admin-email":"owner@example.test"}))).status,503,"A loaded runtime must match pinned public metadata");
+  const badDB=createCbbContextualReadinessHandler({...deps,environment:()=>({NEXT_PUBLIC_SUPABASE_URL:"file:///private/secret",VERCEL_ENV:"production",GIT_COMMIT_SHA:"not-a-commit secret"})});const beforeInvalidDB=reads;const invalid=await badDB(request({"x-admin-token":"existing-admin-secret","x-admin-email":"owner@example.test"}));assert.equal(invalid.status,503);assert.equal(reads,beforeInvalidDB);assert.equal((await invalid.json()).databaseOriginSha256,null);
+  assert.equal(cbbReadinessDatabaseOriginSha256("https://user:pass@DB.EXAMPLE:443/a?b=secret"),cbbReadinessDatabaseOriginSha256("https://db.example/other"));assert.equal(cbbReadinessDatabaseOriginSha256(undefined),null);assert.equal(predictorCalls,0);assert.equal(providerCalls,0);
+ }finally{for(const key of ["ADMIN_TOKEN","ADMIN_EMAIL_ALLOWLIST"] as const){if(saved[key]===undefined)delete process.env[key];else process.env[key]=saved[key];}}
+ console.log("PASS authenticated CBB readiness: admin/machine auth before lazy asset read, absent/bad secrets no download, pinned identity, hashed DB origin, tiny no-store responses, error redaction, no prediction/provider/DB writer");
+}
+void main().catch(e=>{console.error(e);process.exitCode=1;});

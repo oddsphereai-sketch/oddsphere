@@ -1,3 +1,4 @@
+import {testCbbContextualOutcomeLocks} from "./test-cbb-contextual-outcome-locks";
 import {CBB_NATIVE_COUNTERPRESSURE_MODEL_RELEASE,CBB_NATIVE_COUNTERPRESSURE_GRADE_RELEASE,CBB_NATIVE_COUNTERPRESSURE_RECEIPT_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
 import {CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_MONEYLINE_VALUE_GRADE_RELEASE,CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_RECEIPT_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
 import {CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_RECEIPT_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
@@ -17,7 +18,7 @@ import {adaptCbbProvisionalGame} from "../lib/services/cbb/adaptCbbProvisionalTo
 import {buildCbbProvisionalBoard} from "../lib/cbb/provisionalBoard";
 import {writeCbbMemberGame,cbbMemberGameForReader,type CbbStoredMemberGame} from "../lib/services/cbb/cbbMemberGameStore";
 import {writeLockedCbbTracking,cbbLockedGradeRelease,cbbLockedModelRelease,CBB_TRACKING_WRITER_RELEASE} from "../lib/services/cbb/cbbTrackingWriter";
-import {readCbbProvisionalSnapshot} from "../lib/cbb/provisionalLifecycle";
+import {readCbbProvisionalSnapshot,type CbbLegacyProvisionalBoard} from "../lib/cbb/provisionalLifecycle";
 import {cbbCurrentSplitEvidence} from "../lib/cbb/owlsSplitEvidence";
 import {cbbBehaviorFlows,cbbHistoryAtDecision} from "../lib/services/cbb/cbbMarketBehaviorInputs";
 import type {CbbForecast,CbbGame,CbbQuote} from "../lib/cbb/types";
@@ -401,7 +402,7 @@ async function main(){
  legacyHandoffBoard(moneylineValueBoard);
  const moneylineValueDto=adaptCbbProvisionalGame({game,snapshot:{...initial.record.snapshot,board:moneylineValueBoard},homeLogo:null,awayLogo:null,now:at});
  assert.equal(moneylineValueDto.markets.moneyline.verdict.key,"lean");
- const moneylineValueWatchDto=adaptCbbProvisionalGame({game,snapshot:{...initial.record.snapshot,board:{...informationalPublic.snapshot.board,gradeRelease:CBB_MONEYLINE_VALUE_GRADE_RELEASE}},homeLogo:null,awayLogo:null,now:at});
+ const moneylineValueWatchDto=adaptCbbProvisionalGame({game,snapshot:{...initial.record.snapshot,board:{...(informationalPublic.snapshot.board as CbbLegacyProvisionalBoard),gradeRelease:CBB_MONEYLINE_VALUE_GRADE_RELEASE}},homeLogo:null,awayLogo:null,now:at});
  assert.equal(moneylineValueWatchDto.markets.first_inning.recommendationConfidence,null);
  assert.ok(moneylineValueWatchDto.markets.first_inning.reviewFlags.includes("informational_non_actionable_price"));
  stored=null;
@@ -462,7 +463,7 @@ async function main(){
  assert.equal(writes,nativeWrites);
  assert.equal(readCbbProvisionalSnapshot({locked:nativePublic.snapshot,unlocked:initial.record.snapshot}),nativePublic.snapshot);
  assert.deepEqual(cbbMemberGameForReader(nativePublic,game),nativePublic.memberGame,"stored R17 DTO wins over R18 current-source restoration");
- const nativeLegacyDto=adaptCbbProvisionalGame({game,snapshot:{...initial.record.snapshot,board:{...informationalPublic.snapshot.board,gradeRelease:CBB_NATIVE_COUNTERPRESSURE_GRADE_RELEASE}},homeLogo:null,awayLogo:null,now:at});
+ const nativeLegacyDto=adaptCbbProvisionalGame({game,snapshot:{...initial.record.snapshot,board:{...(informationalPublic.snapshot.board as CbbLegacyProvisionalBoard),gradeRelease:CBB_NATIVE_COUNTERPRESSURE_GRADE_RELEASE}},homeLogo:null,awayLogo:null,now:at});
  assert.equal(nativeLegacyDto.markets.first_inning.recommendationConfidence,null);
  assert.ok(nativeLegacyDto.markets.first_inning.reviewFlags.includes("informational_non_actionable_price"));
  priorTracked.length=0;assert.equal(await writeLockedCbbTracking(nativePublic,priorTrackingDb),3);
@@ -524,6 +525,7 @@ async function main(){
  assert.notEqual(priceDto.markets.first_inning.sharpStatus,"confirm","price-only promotion cannot imply identified sharp flow");
  const history=[{date:"2026-11-02T09:29:59Z"},{date:"2026-11-02T09:30:00Z"},{date:"2026-11-02T09:30:01Z"}] as Parameters<typeof cbbHistoryAtDecision>[0];
  assert.deepEqual(cbbHistoryAtDecision(history,at),history.slice(0,2),"old independent replay uses its own six-hour availability cutoff");
+ await testCbbContextualOutcomeLocks();
  console.log("PASS CBB joint market lock path: coherent current-source winner correction, exact grade/DTO, T-60 freezing, legacy R5/R10/R11/R12/R15/R16-R20-R12/R17-R21-R13 writer-reader-tracking immutability and genuine native movement labels.");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

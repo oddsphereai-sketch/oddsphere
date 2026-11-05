@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readCbbCanonicalReaderHistory } from "../lib/services/cbb/cbbCanonicalReaderHistory";
+import {CBB_CANONICAL_CONSUMER_CONTEXT_BOOKS} from "../lib/services/cbb/cbbCanonicalMarketEvidence";
 
 type DataRow={id:number;canonical_event_id:string;fetched_at:string;inserted_at:string};
 const at="2026-11-02T20:00:00Z";
@@ -17,10 +18,10 @@ function mock(rows:DataRow[],fault=false,watermark?:number,missingFunction=false
    let descending=false,single=false;
    const query={eq:(k:string,v:unknown)=>{c.filters.push(["eq",k,v]);return query;},in:(k:string,v:unknown)=>{c.filters.push(["in",k,v]);return query;},
      gte:(k:string,v:unknown)=>{c.filters.push(["gte",k,v]);return query;},lte:(k:string,v:unknown)=>{c.filters.push(["lte",k,v]);return query;},
-     gt:(k:string,v:unknown)=>{c.filters.push(["gt",k,v]);return query;},order:(_k:string,v:{ascending:boolean})=>{descending=!v.ascending;return query;},
+     gt:(k:string,v:unknown)=>{c.filters.push(["gt",k,v]);return query;},lt:(k:string,v:unknown)=>{c.filters.push(["lt",k,v]);return query;},order:(_k:string,v:{ascending:boolean})=>{descending=!v.ascending;return query;},
      limit:(n:number)=>{c.limit=n;return query;},maybeSingle:()=>{single=true;return query;},abortSignal:(signal:AbortSignal)=>{assert.ok(signal instanceof AbortSignal);return query;},
      then:(resolve:(r:unknown)=>unknown)=>{
-       let selected=rows.filter(row=>c.filters.every(([op,k,v])=>k==="id"?op==="gt"?row.id>Number(v):row.id<=Number(v):true));
+       let selected=rows.filter(row=>c.filters.every(([op,k,v])=>k==="id"?op==="gt"?row.id>Number(v):op==="lt"?row.id<Number(v):row.id<=Number(v):true));
        if(descending)selected=[...selected].reverse();selected=selected.slice(0,c.limit);
        return resolve(fault?{data:null,error:{message:"bounded source unavailable"}}:{data:single?selected[0]??null:selected,error:null});
      }};
@@ -34,8 +35,8 @@ async function main(){
  assert.equal(result.price.queries,3);assert.equal(result.split.queries,3);
  assert.ok(good.calls.every(c=>c.filters.some(f=>f[1]==="league"&&f[2]==="cbb")&&c.filters.some(f=>f[1]==="canonical_event_id")&&c.filters.some(f=>f[1]==="inserted_at"&&f[2]===at)),"all pages retain exact as-of and fixture scope");
  const books=good.calls.filter(c=>c.table==="market_price_observations_v2").map(c=>c.filters.find(f=>f[0]==="in"&&f[1]==="sportsbook")?.[2]);
- assert.ok(books.every(list=>JSON.stringify(list)===JSON.stringify(["circa","pinnacle","ps3838","bookmaker"])||JSON.stringify(list)===JSON.stringify(["draftkings","betmgm"])));
- assert.ok(books.some(list=>JSON.stringify(list)===JSON.stringify(["draftkings","betmgm"])),"retail history is a separate bounded context family, never a professional expert");
+ assert.ok(books.every(list=>JSON.stringify(list)===JSON.stringify(["circa","pinnacle","ps3838","bookmaker"])||JSON.stringify(list)===JSON.stringify(CBB_CANONICAL_CONSUMER_CONTEXT_BOOKS)));
+ assert.ok(books.some(list=>JSON.stringify(list)===JSON.stringify(CBB_CANONICAL_CONSUMER_CONTEXT_BOOKS)),"all supported consumer books share a bounded context family, never a professional expert");
  assert.equal(good.watermarks.length,1,"retail and professional reads reuse one indexed watermark");
  assert.deepEqual(good.watermarks[0],{p_league:"cbb",p_event_ids:["777"]});
  const broader=await readCbbCanonicalReaderHistory({db:mock(data.slice(0,1000),false,9999).db,gameIds:[777],asOf:at,maxRowsPerFamily:1000});
@@ -49,6 +50,9 @@ async function main(){
  assert.equal(result.retailPrice.complete,true);assert.equal(result.retailPriceRows.length,1002);
  const capped=await readCbbCanonicalReaderHistory({db:mock(data).db,gameIds:[777],asOf:at,maxRowsPerFamily:1000});
  assert.equal(capped.complete,false);assert.equal(capped.price.reason,"row_budget_exceeded");assert.equal(capped.priceRows.length,1000,"partial history remains explicitly partial");
+ assert.equal(capped.retailPrice.complete,false);assert.equal(capped.retailPriceRows.length,0,"legacy complete-only retail field stays empty on partial history");
+ assert.deepEqual(capped.retailObservedRows.map(r=>r.id),data.slice(-1000).map(r=>r.id).reverse(),"partial consumer history retains the newest suffix with its coverage receipt");
+ assert.equal(capped.retailPrice.highWaterId,1002);assert.equal(capped.retailPrice.lastId,3);assert.match(capped.retailHistoryOrder,/older_prefix/);
  const exact=await readCbbCanonicalReaderHistory({db:mock(data.slice(0,1000)).db,gameIds:[777],asOf:at,maxRowsPerFamily:1000});
  assert.equal(exact.complete,true,"exact cap can prove completion by its fixed high-water ID");
  const bytes=await readCbbCanonicalReaderHistory({db:mock(data).db,gameIds:[777],asOf:at,maxBytesPerFamily:10});

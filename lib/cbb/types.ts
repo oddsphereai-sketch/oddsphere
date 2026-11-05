@@ -94,6 +94,9 @@ export type CbbCanonicalReceipt = {
   ingestionRunId: string;
   observationIds: [number, number];
   rawPayloadHashes: [string, string];
+  /** Actual producer collection-start lower bound, distinct from retail HTTP
+   * completion in fetchedAt. Never synthesized as a request-start timestamp. */
+  collectionStartedAt?: string;
 };
 export type CbbQuote = {
   provider?: "owls" | "balldontlie" | "sharpapi" | "the_odds_api";
@@ -104,5 +107,7 @@ export type CbbQuote = {
   /** Actual request-start clock, when recorded. Response completion alone
    * cannot prove a target was requested after another source became available. */
   requestedAt?: string;
+  /** Quote-owned native identity. Provider namespaces are not interchangeable. */
+  sourceEventId?: string;
   canonicalReceipt?: CbbCanonicalReceipt;
 };
