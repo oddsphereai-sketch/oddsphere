@@ -9,10 +9,30 @@ import type {CbbContextualFeatureInput,CbbContextualConsumerQuote} from "./conte
 import {CBB_CONTEXTUAL_MARKET_INTERPRETATION_RELEASE,buildCbbContextualMarketInterpretation,type CbbContextualMarketInterpretation} from "./contextualMarketInterpretation";
 import type {CbbQuote} from "./types";
 
-export const CBB_INTERPRETED_DECISION_RELEASE="cbb_interpreted_decision_2026_11_05_r5_provider_receipt_identity" as const;
-export const CBB_INTERPRETED_GRADE_POLICY=Object.freeze({leanValueReserve:.03,bestValueReserve:.08,professionalValueReserve:.08,
- basis:"same_final_law_exact_price_economics; same_interpretation_for_native_action; source_opposition_is_retained_not_unanimity_veto",
- sharpMeaning:"observed_professional_book_context; bettor_identity_and_future_correctness_unknown"});
+export const CBB_INTERPRETED_DECISION_RELEASE="cbb_interpreted_decision_2026_11_05_r6_confidence_price_tiers" as const;
+/** Product label boundaries, not learned accuracy claims or signal activation
+ * gates. The forecast has already interpreted the full qualified market.
+ * Confidence is the same unconditional win probability stored in the decision;
+ * pushes are refunded in EV, never counted as wins toward the confidence bar. */
+export const CBB_INTERPRETED_GRADE_POLICY=Object.freeze({bestMinimumWinProbability:.62,bestMinimumAmericanPrice:-200,
+ leanMeaning:"positive_exact_price_value_on_the_final_forecast_side;expensive_favorites_remain_eligible",
+ bestMeaning:"strong_final_outcome_confidence_with_positive_value_at_a_suitable_straight_bet_price",
+ basis:"owner_confidence_accuracy_and_price_tiers;NBA_confidence_bar_and_NFL_favorite_price_boundary;no_EV_reserve_or_required_book_confirmation",
+ sharpMeaning:"qualified_market_evidence_informs_final_forecast;book_context_does_not_identify_bettors_or_guarantee_correctness"});
+export function gradeCbbContextualForecastSide(args:{winProbability:number;loseProbability:number;price:number;probabilityErrorEstimate?:number}){
+ const {winProbability:p,loseProbability:loss,price}=args,probabilityErrorEstimate=args.probabilityErrorEstimate??0;
+ if(![p,loss,price,probabilityErrorEstimate].every(Number.isFinite)||p<0||loss<0||probabilityErrorEstimate<0||p+loss>1+1e-10||p+loss<=0||Math.abs(price)<100)throw Error("CBB contextual grade requires a valid final-law probability and offered price");
+ const expectedValue=p*profit(price)-loss;
+ // This is arithmetic resolution, not a business edge reserve. Do not promote
+ // a mathematically break-even offer because floating-point EV is +1e-17.
+ const numericalValueErrorEstimate=(profit(price)+1)*probabilityErrorEstimate+8*Number.EPSILON*(Math.abs(p*profit(price))+Math.abs(loss)+1);
+ const valueSignResolvedPositive=expectedValue>numericalValueErrorEstimate;
+ const best=valueSignResolvedPositive&&p-probabilityErrorEstimate>=CBB_INTERPRETED_GRADE_POLICY.bestMinimumWinProbability&&price>=CBB_INTERPRETED_GRADE_POLICY.bestMinimumAmericanPrice;
+ const grade=!valueSignResolvedPositive?"Watchlist" as const:best?"Best Angle" as const:"Lean" as const;
+ const reason=grade==="Watchlist"?(expectedValue>0?"priced_value_sign_unresolved_at_numerical_precision":"forecast_available_price_not_actionable"):best?"joint_forecast_confidence_and_positive_price_value":
+  price<CBB_INTERPRETED_GRADE_POLICY.bestMinimumAmericanPrice?"positive_value_price_outside_best_angle_range":"positive_value_below_best_angle_confidence";
+ return {grade,reason,expectedValue,numericalValueErrorEstimate,probabilityErrorEstimate,valueSignResolvedPositive};
+}
 type Quote=CbbQuote&{orientationVerified?:boolean};
 const implied=(p:number)=>p>0?100/(100+p):-p/(100-p);
 const profit=(p:number)=>p>0?p/100:100/-p;
@@ -53,14 +73,16 @@ export function buildCbbInterpretedDecision(args:{input:CbbContextualFeatureInpu
  const markets=(["moneyline","spread","total"] as const).map(market=>{
   const target=args.targets.find(q=>q.market===market),proof=target?executionProof(target,input,receipt):{problem:"missing_execution_pair"};
   if(!target||proof.problem)return {market,target:target??null,grade:"Held" as const,reason:proof.problem,selection:null,probability:null,loseProbability:null,pushProbability:null,price:null,expectedValue:null,stake:0};
-  const p=law.probabilitiesFast(market,target.line),firstEV=p.first*profit(target.firstPrice)-p.second,secondEV=p.second*profit(target.secondPrice)-p.first;
-  const selection:"first"|"second"=Math.abs(p.first-p.second)<=1e-12?(firstEV>=secondEV?"first":"second"):p.first>p.second?"first":"second",direction=selection==="first"?1:-1;
-  const probability=selection==="first"?p.first:p.second,loseProbability=selection==="first"?p.second:p.first,price=selection==="first"?target.firstPrice:target.secondPrice,expectedValue=probability*profit(price)-loseProbability;
+  const p=law.probabilitiesFast(market,target.line);
+  const selection:"first"|"second"=p.first>=p.second?"first":"second",direction=selection==="first"?1:-1;
+  const probability=selection==="first"?p.first:p.second,loseProbability=selection==="first"?p.second:p.first,price=selection==="first"?target.firstPrice:target.secondPrice;
+  const grading=gradeCbbContextualForecastSide({winProbability:probability,loseProbability,price,probabilityErrorEstimate:p.omittedMassUpperBound+p.quadratureErrorEstimate+p.normalizerErrorEstimate+p.summationRoundoffUpperBound});
+  const {grade,reason,expectedValue}=grading;
   const sourceEconomics=receipt.streams.filter(s=>s.role==="professional"&&s.market===market&&family(s.book)!==family(target.sportsbook)&&s.currentQuote).flatMap(s=>{
    const raw=s.currentQuote!.rawQuote;if(!("phase" in raw)||!raw.fetchedAt||at-Date.parse(raw.providerObservedAt)>3_600_000)return [];
    return [{book:s.book,source:raw,reference:references.evaluate({source:raw as Quote,target,selection,integerPushAssumption:"borrow_final_joint_push",targetOrientationProof:proof.columnProof})}];
   });
-  const premiumProfessional=sourceEconomics.some(x=>x.reference.targetExpectedValue!==null&&x.reference.targetExpectedValue>=CBB_INTERPRETED_GRADE_POLICY.professionalValueReserve);
+  const positiveProfessionalValue=sourceEconomics.some(x=>x.reference.targetExpectedValue!==null&&x.reference.targetExpectedValue>0);
   // All evidence is available by the decision cutoff. A source response need
   // not predate another book's HTTP request: these are contemporaneous observed
   // offers, not a claim that an execution occurred after the source moved.
@@ -69,15 +91,14 @@ export function buildCbbInterpretedDecision(args:{input:CbbContextualFeatureInpu
   // as current categorical action evidence. A held quote alone proves no side.
   const bookPriceActions=receipt.streams.filter(s=>s.role==="professional"&&family(s.book)!==family(target.sportsbook)&&(market==="total"?s.market==="total":s.market!=="total")).flatMap(s=>s.pressureResponses.filter(r=>r.activeCurrent&&r.hadActualMove&&r.continuity!=="conflict"&&r.net?.direction===direction&&r.latest?.direction===direction&&r.pressure.moneyBalance!==null&&r.pressure.moneyBalance!==0&&r.response&&
    cbbAvailabilityUpperBoundMs(r.response.availableBy)<=at&&cbbAvailabilityUpperBoundMs(r.pressure.availableBy)<=at&&at-Date.parse(r.response.nativeAt)<=3_600_000).map(r=>({book:s.book,market:s.market,continuity:r.continuity,relation:r.relation,pressure:r.pressure,response:r.response})));
-  const observedProfessionalBookPriceConfirmation=bookPriceActions.length>0,best=expectedValue>=CBB_INTERPRETED_GRADE_POLICY.bestValueReserve&&(premiumProfessional||observedProfessionalBookPriceConfirmation);
-  const grade=best?"Best Angle" as const:expectedValue>=CBB_INTERPRETED_GRADE_POLICY.leanValueReserve?"Lean" as const:"Watchlist" as const;
+  const observedProfessionalBookPriceConfirmation=bookPriceActions.length>0;
   const counterevidence={professionalNegativeReference:sourceEconomics.filter(x=>x.reference.targetExpectedValue!==null&&x.reference.targetExpectedValue<0),
    opposingCompositions:receipt.streams.filter(s=>(market==="total"?s.market==="total":s.market!=="total")&&s.pressures.at(-1)?.moneyBalance!==null&&Math.sign(s.pressures.at(-1)?.moneyBalance??0)===-direction).map(s=>({book:s.book,market:s.market,role:s.role,pressure:s.pressures.at(-1),meaning:"cumulative composition; wagering-price and new-money volume unknown"})),
    opposingPaths:receipt.streams.filter(s=>(market==="total"?s.market==="total":s.market!=="total")&&(s.net?.direction===-direction||s.latest?.direction===-direction)).map(s=>({book:s.book,market:s.market,role:s.role,net:s.net,latest:s.latest,pathResolution:s.pathResolution,unknowns:s.unknowns}))};
   return {market,target,selection,probability,loseProbability,pushProbability:p.push,price,expectedValue,grade,stake:0,
-   reason:best?(premiumProfessional?"joint_value_with_professional_price_support":"joint_value_with_observed_professional_book_price_action"):grade==="Lean"?"joint_forecast_exact_price_value":expectedValue<0?"forecast_available_price_not_actionable":"edge_below_actionable_reserve",
-   marketFairProbability:implied(price)/(implied(target.firstPrice)+implied(target.secondPrice)),sourceEconomics,premiumProfessional,observedProfessionalBookPriceConfirmation,bookPriceActions,counterevidence,
-   evidenceDisposition:"Same factual receipt feeds forecast and grade; opposing facts retained. Ancillary source references never alter final probabilities.",probabilityNumerics:p};
+   reason,gradingNumerics:{probabilityErrorEstimate:grading.probabilityErrorEstimate,valueErrorEstimate:grading.numericalValueErrorEstimate,valueSignResolvedPositive:grading.valueSignResolvedPositive},
+   marketFairProbability:implied(price)/(implied(target.firstPrice)+implied(target.secondPrice)),sourceEconomics,positiveProfessionalValue,observedProfessionalBookPriceConfirmation,bookPriceActions,counterevidence,
+   evidenceDisposition:"Full factual receipt informs the final forecast; grades use its exact probability and offered price. Opposing facts remain visible; ancillary references and observed actions are attribution, never mandatory promotion gates.",probabilityNumerics:p};
  });
  return {release:CBB_INTERPRETED_DECISION_RELEASE,authority:"offline_research_only" as const,gameId:receipt.gameId,asOf:input.asOf,interpretation:receipt,
   latentDistribution:{...args.latent},finalScore:{home:summary.homeMean,away:summary.awayMean,margin:summary.marginMean,total:summary.totalMean,homeWinProbability:summary.homeWinProbability},

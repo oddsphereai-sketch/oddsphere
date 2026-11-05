@@ -16,12 +16,13 @@ import { buildDailyEdgeMemberPresentation } from "@/app/lab/lib/dailyEdgeRespons
 import { CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INFORMATIONAL_WATCHLIST_GRADE_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE } from "@/lib/cbb/marketBehaviorCandidate";
 import {CBB_CONTINUITY_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_JOINT_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_ALIGNED_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 
-export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_05_r26_contextual_outcome" as const;
+export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_05_r26_contextual_outcome_confidence_price_r1" as const;
 type GradeLabel="Best Angle"|"Lean"|"Watchlist"|"No Play"|"Held";
 type BoardRow=CbbProvisionalSnapshot["board"]["rows"][number];
 type SplitEvidence=ReturnType<typeof cbbCurrentSplitEvidence>;
 const verdict=(grade:GradeLabel):Verdict=>grade==="Best Angle"?"best_angle":grade==="Lean"?"lean":grade==="Watchlist"?"watchlist":"no_play";
-const gradeCode=(grade:GradeLabel,reference:BoardRow["referenceState"],action:boolean|undefined):Grade|null=>
+const gradeCode=(grade:GradeLabel,reference:BoardRow["referenceState"],action:boolean|undefined,contextualPolicy=false):Grade|null=>
+  contextualPolicy?(grade==="Best Angle"?"best_signal":grade==="Lean"?"model_only":grade==="Watchlist"?"market_watch":null):
   action===undefined?(grade==="Best Angle"?"best_signal":grade==="Lean"?reference==="agrees"?"sharp_confirmed":"model_only":grade==="Watchlist"?"market_watch":null):
   grade==="Best Angle"?action?"best_signal":"model_only":grade==="Lean"?action?"sharp_confirmed":"model_only":grade==="Watchlist"?"market_watch":null;
 const etTimeFormatter=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"});
@@ -39,14 +40,14 @@ const selectionLabel=(game:CbbGame,row:BoardRow):string|null=>{
   const line=row.selection==="first"?row.line:row.line===null?null:-row.line;
   return line===null?null:`${code} ${line>0?"+":""}${line}`;
 };
-function marketEdge(game:CbbGame,row:BoardRow,projectedTotal:number,homeWinProbability:number,preciseReason=false,informationalWatchlist=false):MarketEdgeDto{
-  const held=row.grade==="Held",label=selectionLabel(game,row),code=gradeCode(row.grade,row.referenceState,(row as {actualActionConfirmation?:boolean}).actualActionConfirmation);
+function marketEdge(game:CbbGame,row:BoardRow,projectedTotal:number,homeWinProbability:number,preciseReason=false,informationalWatchlist=false,contextualPolicy=false):MarketEdgeDto{
+  const held=row.grade==="Held",label=selectionLabel(game,row),code=gradeCode(row.grade,row.referenceState,(row as {actualActionConfirmation?:boolean}).actualActionConfirmation,contextualPolicy);
   const selectedLine=row.market==="moneyline"?null:row.market==="spread"&&row.selection==="second"&&row.line!==null?-row.line:row.line;
   const v=verdict(row.grade),probability=row.probability,price=row.price;
   // Outcome probability is not confidence in a wager at this price. New
   // informational watches retain that probability but supply no actionable
   // recommendation confidence to the shared Top Available Angles fallback.
-  const priceOnlyWatch=informationalWatchlist&&row.grade==="Watchlist"&&row.expectedValue!==null&&row.expectedValue<0;
+  const priceOnlyWatch=informationalWatchlist&&row.grade==="Watchlist"&&(contextualPolicy||row.expectedValue!==null&&row.expectedValue<0);
   const priceImplied=price===null?null:cbbImpliedProbability(price);
   const fair=row.marketFairProbability;
   const behavior=row as {actualActionConfirmation?:boolean;pathResistance?:boolean};
@@ -136,9 +137,9 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
     snapshot.board.gradeRelease===CBB_NATIVE_COUNTERPRESSURE_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_MONEYLINE_VALUE_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_INFORMATIONAL_WATCHLIST_GRADE_RELEASE;
-  const ml=marketEdge(game,rows.get("moneyline")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability,preciseReason,informationalWatchlist),
-    spread=marketEdge(game,rows.get("spread")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability,preciseReason,informationalWatchlist),
-    total=marketEdge(game,rows.get("total")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability,preciseReason,informationalWatchlist);
+  const ml=marketEdge(game,rows.get("moneyline")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability,preciseReason,informationalWatchlist,!!contextual),
+    spread=marketEdge(game,rows.get("spread")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability,preciseReason,informationalWatchlist,!!contextual),
+    total=marketEdge(game,rows.get("total")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability,preciseReason,informationalWatchlist,!!contextual);
   if((snapshot.board.gameForecast?.release===CBB_GAME_OUTCOME_RELEASE||snapshot.board.gameForecast?.release===CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE)){
     const outcome=snapshot.board.gameForecast;
     if(!Number.isFinite(outcome.probability)||outcome.probability<0||outcome.probability>1||
@@ -168,7 +169,7 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
     const boardRow=rows.get(kind)!;
     if(contextual){
       const stored=contextual.decision.marketDecisions.find(row=>row.market===kind)!;
-      const informational=stored.grade==="Watchlist"&&stored.expectedValue!==null&&stored.expectedValue<0;
+      const informational=stored.grade==="Watchlist";
       // The output probability is the stored law result, not recommendation
       // confidence in a price. No reference or displayed split can regrade it.
       market.recommendationConfidence=stored.grade==="Held"||informational?null:stored.probability===null?null:stored.probability*100;

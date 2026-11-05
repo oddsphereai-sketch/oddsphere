@@ -5,7 +5,7 @@ import {CBB_OUTCOME_DECISION_RELEASE,cbbOutcomeIndependentInputSha256,type forec
 import type {CbbForecast,CbbMarket} from "./types";
 
 export const CBB_CONTEXTUAL_OUTCOME_BOARD_RELEASE="cbb_contextual_outcome_board_2026_11_05_r1_copy_only" as const;
-export const CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE="cbb_contextual_outcome_grade_2026_11_05_r4_provider_receipt_identity" as const;
+export const CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE="cbb_contextual_outcome_grade_2026_11_05_r5_confidence_price_tiers" as const;
 export const CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE="cbb_contextual_game_outcome_2026_11_05_r1_stored_joint_law" as const;
 export type CbbOutcomeDecision=ReturnType<typeof forecastCbbOutcomeDecision>;
 const MARKETS:readonly CbbMarket[]=["moneyline","spread","total"];
@@ -48,13 +48,13 @@ export function buildCbbContextualOutcomeBoard(args:{decision:CbbOutcomeDecision
    throw Error("CBB outcome board selected market lacks stored economics");
   if(row.grade==="Held"&&(row.selection!==null||row.probability!==null||row.pushProbability!==null||row.loseProbability!==null||row.price!==null||row.expectedValue!==null))
    throw Error("CBB outcome board Held decision has wager economics");
-  const selected=row.selection!==null,target=selected?row.target:null,informationalNonActionablePrice=row.grade==="Watchlist"&&row.expectedValue!==null&&row.expectedValue<0;
+  const selected=row.selection!==null,target=selected?row.target:null,informationalNonActionablePrice=row.grade==="Watchlist";
   return {...row,targetBook:row.target?.sportsbook??null,line:target?.line??null,
    observedQuote:target?{firstPrice:target.firstPrice,secondPrice:target.secondPrice,line:target.line}:null,
    quoteObservedAt:target?.providerObservedAt??null,quoteProvider:target?.provider??null,
    marketFairProbability:row.marketFairProbability??null,modelExpectedValue:row.expectedValue,
    professionalReferences:row.sourceEconomics?.length??0,professionalReferenceQuotes:(row.sourceEconomics??[]).map(r=>r.source),
-   referenceState:referenceState(row),economicCorroboration:row.premiumProfessional??false,
+   referenceState:referenceState(row),economicCorroboration:row.positiveProfessionalValue??false,
    actualActionConfirmation:row.observedProfessionalBookPriceConfirmation??false,
    pathResistance:(row.counterevidence?.opposingPaths.length??0)>0,
    gradeBasis:"stored_contextual_joint_law_decision" as const,

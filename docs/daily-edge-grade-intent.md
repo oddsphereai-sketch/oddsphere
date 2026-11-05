@@ -1,0 +1,51 @@
+# Daily Edge play-grade intent
+
+Owner clarification: November 5, 2026. This defines shared product meaning;
+it is not authorization to copy one sport's numerical calibration into another.
+
+The contextual forecast interprets the independent forecast and qualified market
+evidence to produce one coherent score distribution and selected outcome. Grades
+then assess that selected prediction at its actual offered price. Attractive
+odds cannot choose a different predicted winner. A grade cannot create another
+forecast, count pushes as wins, or silently change the forecast probability.
+
+| Label | Shared meaning |
+| --- | --- |
+| Best Angle | A top-conviction outcome prediction with positive estimated value at a worthwhile straight-bet price. An expensive favorite is not automatically a top play because it is likely to win. |
+| Lean | A positive-value prediction below the top tier. A confident, expensive favorite can qualify; the label alone makes no statement about a combined parlay's probability or value. |
+| Watchlist | A completed, readable prediction whose current price or conviction does not justify an actionable grade. Its outcome probability remains informational. |
+| Held / operational exception | Required forecast or execution evidence is incomplete or invalid. Do not disguise a failed evaluation as an ordinary lack of edge. |
+
+Professional-book evidence can confirm, resist, strengthen or change the final
+forecast and thus its probability and grade. It is not a mandatory count of
+signals, proof of bettor identity, an automatic Best Angle, or a reason to ignore
+contradictory evidence. Keep actual source/action attribution separate from the
+grade encoding. An encoded grade, explicit verdict, shared presentation and
+tracking record must agree.
+
+Numerical tier boundaries must be explicit product policies. They are not
+scientifically learned accuracy guarantees and must not be called threshold-free.
+Numerical integration error is separate from a business edge reserve: floating
+point dust at break-even cannot promote a pick. Do not use the number of desired
+plays to choose a policy or tune scores to fill grade categories.
+
+## Applying the intent sport by sport
+
+Before changing an existing model, identify its authoritative forecast, grade,
+adapter and tracking paths and current release identifiers. Separate genuine
+calibration or contract differences from obsolete restrictions and contradictory
+consumer encodings. Report promotions, demotions, market mix, selected-side
+changes and price coverage on the same inputs. Preserve exact stored locks and
+complete the repository's release and live-verification protocol.
+
+The CBB candidate applies positive exact-price EV eligibility, at least 62%
+unconditional selected-win probability for Best Angle, and a Best Angle price of
+-200 or better. Positive-value expensive favorites remain eligible for Lean.
+The 62% boundary reuses the existing NBA product confidence bar; the -200 price
+boundary follows the NFL approach and the owner's expensive-favorite preference.
+There is no fixed 3%/8% EV reserve or mandatory professional-action confirmation.
+This is a CBB candidate policy, not an already deployed all-sport standard.
+
+NFL, NBA, CFB, NHL, MLB, WNBA and soccer require their own active-path review
+before any corresponding production change. Their present policies must not be
+described as uniform merely because they use the same member labels.

@@ -2,6 +2,18 @@
 
 ## Owner-directed CBB unified contextual inference — prepared integration
 
+The owner's subsequent tier clarification is recorded in
+`daily-edge-grade-intent.md`: top outcome confidence and worthwhile price, with
+expensive positive-value favorites still Lean-eligible. Candidate interpreted
+R6 /decision R6 /grade R5 removes fixed 3%/8% EV reserves and mandatory source
+confirmation. Best additionally requires 62% unconditional win probability and
+price -200 or better. These are explicit product boundaries, not learned accuracy
+claims or market-input activation gates. Pushes remain separate; only numerically
+resolved positive offered value is actionable. Preserve actual sharp-source
+attribution separately from grade, consistent encoded/explicit verdicts and all
+locked records. Broader uniformity requires sport-by-sport active-path review;
+this CBB release must not silently regrade other sports.
+
 The owner requested one contextual market interpretation and forecast with the
 independent model as a data point, no preset model/book blends and no arbitrary
 score offsets. The prepared model R1 /covariance R1 /publisher R40 /adapter and

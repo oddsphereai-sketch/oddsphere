@@ -84,10 +84,11 @@ export function assertCbbContextualLockedRecord(record:CbbStoredMemberGame){
   const p=decision.probabilityNumerics,target=decision.target,win=row.selection==="first"?p?.first:p?.second,lose=row.selection==="first"?p?.second:p?.first;
   const price=row.selection==="first"?target?.firstPrice:target?.secondPrice,line=row.market==="spread"&&row.selection==="second"&&row.line!==null?-row.line:row.line;
   const grade=row.grade==="Best Angle"?"best_angle":row.grade==="Lean"?"lean":row.grade==="Watchlist"?"watchlist":"no_play";
+  const informational=row.grade==="Watchlist";
   if(!p||!target||win===undefined||lose===undefined||price===undefined||row.price!==price||!near(row.probability!,win)||!near(row.loseProbability!,lose)||
    !near(row.pushProbability!,p.push)||!near(win+lose+p.push,1)||!near(row.expectedValue!,win*(price>0?price/100:100/-price)-lose)||
    dto.modelProb!==row.probability||dto.confidence!==row.probability||dto.priceAmerican!==row.price||dto.line!==line||dto.verdict.key!==grade||
-   row.informationalNonActionablePrice&&(dto.recommendationConfidence!==null||!dto.reviewFlags?.includes("informational_non_actionable_price")))
+   row.informationalNonActionablePrice!==informational||informational&&(dto.recommendationConfidence!==null||!dto.reviewFlags?.includes("informational_non_actionable_price")))
    throw Error(`CBB contextual frozen ${row.market} differs from its exact stored law/price/DTO`);
  }
  return stored;

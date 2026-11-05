@@ -58,7 +58,28 @@ is still necessary to map continuous evidence to distinct ordinal labels; its
 boundaries cannot honestly be described as scientifically learned from the
 existing fit or as literal threshold-free judgment.
 
-Do not activate the present grade layer as a completed interpretive-grade
-repair. Before publication, record the actual replacement policy and release,
-same-input per-market promotions/demotions, concentration and all lock-sensitive
-reader/writer checks. Forward outcomes remain separate evidence.
+## Owner clarification and replacement
+
+The owner subsequently clarified that top confidence means confidence in the
+selected outcome winning, alongside a worthwhile price, rather than posterior
+confidence that EV is positive. A new posterior-risk forecaster is unnecessary
+for that product definition. The previous uncertainty discussion identifies
+limits; it is not a new runtime requirement.
+
+Interpreted decision R6 /decision R6 /grade R5 replaces the former reserves and
+confirmation gate with positive exact-price value eligibility. Best additionally
+requires at least 62% unconditional selected-win probability and price -200 or
+better; otherwise positive-value picks may Lean. This is a transparent product
+policy, not a learned CBB accuracy guarantee. Expensive positive-value favorites
+remain eligible for Lean. Existing score-law error estimates and floating-point
+roundoff must resolve positive value; arithmetic dust does not qualify.
+
+Raw probabilities, pushes, prices and forecast sides remain authoritative. A
+price-only change cannot choose a different winner, even at a model tie. Actual
+professional action and opposing evidence remain attributed independently of
+labels. Contextual grade codes now encode Best and Lean consistently with their
+explicit verdicts; Watch remains informational, including break-even and
+numerically unresolved prices. Legacy locked DTOs remain unchanged.
+
+Before publication, record the final same-input per-market promotions/demotions,
+concentration and all lock-sensitive reader/writer checks. Forward outcomes remain separate evidence.

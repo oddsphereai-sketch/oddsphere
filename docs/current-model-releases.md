@@ -7,8 +7,8 @@ Reserved release identifiers for the owner-directed unified contextual reader:
 - Model: `cbb_contextual_outcome_2026_11_05_r1`.
 - Covariance calibration: `cbb_contextual_covariance_2026_11_05_r1`.
 - Engine: `cbb_contextual_outcome_forecast_2026_11_05_v5_provider_receipt_contract`.
-- Decision: `cbb_outcome_decision_2026_11_05_r5_provider_receipt_contract`.
-- Grade: `cbb_contextual_outcome_grade_2026_11_05_r4_provider_receipt_identity`.
+- Decision: `cbb_outcome_decision_2026_11_05_r6_confidence_price_tiers`.
+- Grade: `cbb_contextual_outcome_grade_2026_11_05_r5_confidence_price_tiers`.
 - Board: `cbb_contextual_outcome_board_2026_11_05_r1_copy_only`.
 - Publisher: `cbb_member_pipeline_2026_11_05_r40_contextual_outcome`.
 - Adapter/tracking: R26 contextual-outcome identifiers exported by their runtime modules.
@@ -27,6 +27,18 @@ The preceding V4 frozen current-input comparison covered 43 incumbent games /
 repair. All 29 Total Leans were Under. These are procedural board effects, not
 accuracy evidence. Applying the new value policy to the old forecasts alone
 would give 34 actionables; do not attribute the entire increase to inference.
+The owner clarified confidence/accuracy and price tier intent. The current
+candidate removes the 3%/8% EV reserves and mandatory professional-action gate:
+positive exact offered value may Lean; Best Angle additionally requires at least
+62% unconditional selected-win probability and a price of -200 or better.
+Expensive positive-value favorites remain Lean-eligible. Pushes are refunded in
+EV and never counted as wins. Numerical sign resolution is an arithmetic check,
+not an additional economic reserve. The CBB adapter R26 identifier now ends in
+`contextual_outcome_confidence_price_r1`; encoded grade and supplied verdict
+agree without inventing professional confirmation. See
+`daily-edge-grade-intent.md` for shared intent and the sport-by-sport review
+boundary. No other sport's grade policy changes in this CBB release.
+
 V5 incorporates the subsequent R38 provider-ID and request/completion contract.
 Its final source-bound build, current-input comparison, protected PR release and
 postdeployment checks remain required. Preserve the separate R38/R39 source and
