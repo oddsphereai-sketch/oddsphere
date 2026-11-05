@@ -45,15 +45,15 @@ activation requires protected PR publication and live verification.
 
 Publication identifiers: independent
 `cbb_candidate_2026_11_05_r5_complete_d1_program_priors`, incumbent market model
-`cbb_candidate_2026_11_05_r19_complete_d1_program_priors`, receipt
-`cbb_market_behavior_2026_11_05_r15_complete_d1_program_priors`, cross score
+`cbb_candidate_2026_11_05_r20_complete_source_admission`, receipt
+`cbb_market_behavior_2026_11_05_r16_complete_source_admission`, cross score
 `cbb_cross_division_score_2026_11_05_r1_posterior_score_law`, forecast board
 `cbb_game_forecast_board_2026_11_05_r1_unpriced_outcomes`, forecast-only grade
 `cbb_game_forecast_grade_2026_11_05_r1_no_unquoted_wagers`, frozen outcome
 `cbb_game_outcome_2026_11_05_r1_frozen_winner`, publisher
-`cbb_member_pipeline_2026_11_05_r36_split_matcher_memory`, adapter
+`cbb_member_pipeline_2026_11_05_r37_complete_source_admission`, adapter
 `cbb_member_adapter_2026_11_05_r24_unpriced_game_forecast`, tracking
-`cbb_tracking_writer_2026_11_05_r22_frozen_unpriced_winners`, training
+`cbb_tracking_writer_2026_11_05_r23_source_admission_lineage`, training
 `cbb_current_training_2026_11_05_r4_separate_cross_division_receipts`, and fixture
 seed `cbb_fixture_seed_2026_11_05_r8_verified_complete_d1_identities`.
 
@@ -65,6 +65,19 @@ are documented in
 `docs/model-audits/2026-11-05-cbb-all-division-one-private.md`. The current-input
 43-game /129-market comparison has 0 promotions, 0 demotions, 0 side changes
 and 0 score changes; 22 new cross forecasts add no unqualified wager grades.
+R37/R20/R16 restore exact current-source aliases for Jacksonville State,
+Northern Illinois, Pennsylvania and Cal Poly, preserving Penn State/Jackson
+State/Illinois State/California as distinct schools. The same aliases are shared
+by canonical collection, quote qualification, splits and reader identity.
+The publisher's existing two fixture batches include the following UTC day,
+then apply the unchanged exact seven-ET-day filter; late final-day games must
+not disappear. Previous R19/R15 anchors remain compatible; legacy locks retain
+exact precedence. No score equation, grade policy or freshness bound changes.
+Functional evidence: 4 actual fixtures, 90 exact source quote contracts and 32
+named split rows, source price/line/time parity, reversed/ambiguous negatives,
+and actual late-UTC fixture publication. See
+`model-audits/2026-11-05-cbb-complete-source-admission.md`.
+
 R36 preserves the R35 forecast/grade/quote/lock semantics and reuses one immutable
 ET month/day formatter in the CBB split matcher. The prior full-slate matcher
 created ICU formatters per source/fixture comparison and reproduced a 2.7 GB

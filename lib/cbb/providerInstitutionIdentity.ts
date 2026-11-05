@@ -1,6 +1,6 @@
 import { canonicalCbbTeamName } from "./dataset";
 
-export const CBB_PROVIDER_IDENTITY_RELEASE = "cbb_provider_identity_2026_11_04_r5_current_board_source_aliases" as const;
+export const CBB_PROVIDER_IDENTITY_RELEASE = "cbb_provider_identity_2026_11_05_r6_complete_current_source_aliases" as const;
 
 // Provider spellings of named institutions, never mascot or substring guesses.
 // Keep State and Saint distinct and preserve ambiguous schools (USC, Miami).
@@ -18,6 +18,9 @@ const stateInstitutions = [
 ];
 const aliases = new Map<string,string>(stateInstitutions.map(name => [canonicalCbbTeamName(name.replace(/State$/, "St")), canonicalCbbTeamName(name)]));
 for (const [source, institution] of [
+  // Exact participant names in the 2026-11-05 current Owls receipt.
+  ["Jax State", "Jacksonville State"], ["N Illinois", "Northern Illinois"],
+  ["Penn", "Pennsylvania"],
   // Exact institution labels in the stored 2026-11-03 Owls discovery receipt.
   // IPFW/Purdue FW both identify Purdue Fort Wayne; State stays distinct.
   ["IPFW", "Purdue Fort Wayne"], ["Purdue FW", "Purdue Fort Wayne"],
