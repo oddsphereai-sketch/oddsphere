@@ -246,6 +246,50 @@ async function main(): Promise<void> {
   assert.equal(oneSidedClearReport[0]?.verifiedClear, false,
     "a one-team provider omission cannot verify the entire matchup clear");
 
+  const currentPracticeOverridesAmbiguousActive = __BALLDONTLIE_NFL_AVAILABILITY_TEST__.normalizeNflDesignationGames([
+    designationRow({
+      gameId: 1392280,
+      team: "TB",
+      teamName: "Tampa Bay Buccaneers",
+      firstName: "Expected",
+      lastName: "Starter",
+      injury: "Elbow",
+      practiceStatus: "limited",
+      active: false,
+      updatedAt: "2026-10-15T21:30:05.381Z",
+    }),
+  ], [matchup]);
+  assert.equal(currentPracticeOverridesAmbiguousActive[0]?.teams[0]?.players[0]?.status, "Limited",
+    "a current exact-game practice designation must not be replaced by the provider's ambiguous active=false field");
+  const explicitGameStatusWins = __BALLDONTLIE_NFL_AVAILABILITY_TEST__.normalizeNflDesignationGames([
+    designationRow({
+      gameId: 1392280,
+      team: "TB",
+      teamName: "Tampa Bay Buccaneers",
+      firstName: "Unavailable",
+      lastName: "Starter",
+      injury: "Elbow",
+      gameStatus: "out",
+      practiceStatus: "limited",
+      active: false,
+      updatedAt: "2026-10-15T21:30:05.381Z",
+    }),
+  ], [matchup]);
+  assert.equal(explicitGameStatusWins[0]?.teams[0]?.players[0]?.status, "Out");
+  const activeFallback = __BALLDONTLIE_NFL_AVAILABILITY_TEST__.normalizeNflDesignationGames([
+    designationRow({
+      gameId: 1392280,
+      team: "TB",
+      teamName: "Tampa Bay Buccaneers",
+      firstName: "Inactive",
+      lastName: "Fallback",
+      active: false,
+      updatedAt: "2026-10-15T21:30:05.381Z",
+    }),
+  ], [matchup]);
+  assert.equal(activeFallback[0]?.teams[0]?.players[0]?.status, "Inactive",
+    "active=false remains a conservative fallback when no current game or practice status exists");
+
   const normalized = __BALLDONTLIE_NFL_AVAILABILITY_TEST__.normalizeNflInjuryTeams([
     {
       player: { first_name: "Alex", last_name: "Example", team: { abbreviation: "TB" } },
@@ -325,6 +369,8 @@ function designationRow(args: {
   injury?: string;
   gameStatus?: string;
   practiceStatus?: string;
+  active?: boolean;
+  didNotPlay?: boolean;
   updatedAt: string;
 }): Record<string, unknown> {
   return {
@@ -334,8 +380,8 @@ function designationRow(args: {
     practice_reports: args.practiceStatus ? [{ date: "2026-10-07", status: args.practiceStatus }] : [],
     injury: args.injury ?? null,
     game_status: args.gameStatus ?? null,
-    active: null,
-    did_not_play: null,
+    active: args.active ?? null,
+    did_not_play: args.didNotPlay ?? null,
     updated_at: args.updatedAt,
   };
 }

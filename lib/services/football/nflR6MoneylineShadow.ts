@@ -21,7 +21,7 @@ export const NFL_R6_MONEYLINE_MODEL_RELEASE =
 export const NFL_R6_MONEYLINE_CALIBRATION_RELEASE =
   "nfl_market_led_price_calibration_shadow_2026_08_22_r6" as const;
 export const NFL_R6_MONEYLINE_DECISION_RELEASE =
-  "nfl_market_led_moneyline_lean_shadow_2026_10_15_r7_current_season_qb_identity" as const;
+  "nfl_market_led_moneyline_lean_shadow_2026_11_05_r8_current_game_starter_authority" as const;
 export const NFL_R6_ARTIFACT_DECISION_RELEASE =
   "nfl_market_led_moneyline_lean_shadow_2026_08_22_r6" as const;
 export const NFL_R6_SOURCE_POINT_MODEL_RELEASE =
@@ -400,11 +400,16 @@ export function resolveNflAvailabilityAdjustedQuarterbackDepth(
   const team = injuries?.teams.find((entry) => normalizeTeam(entry.abbreviation) === normalizeTeam(depth.team));
   const reportStatuses = new Map((team?.players ?? []).map((player) => [
     playerKey(player.name),
-    injuryStatus(player.status),
+    {
+      status: injuryStatus(player.status),
+      reportedAt: player.reportedAt,
+      hasCurrentDesignation: player.status.trim().toLowerCase() !== "status unavailable",
+    },
   ]));
-  const starterStatus = strongestInjuryStatus(
+  const starterStatus = currentExactGameInjuryStatus(
     injuryStatus(depth.expectedStartingQuarterback?.injuryStatus),
-    reportStatuses.get(playerKey(starter)) ?? "",
+    reportStatuses.get(playerKey(starter)),
+    depth.capturedAt,
   );
   if (starterStatus !== "out" && starterStatus !== "doubtful") return depth;
   const unavailable = new Set((team?.players ?? [])
@@ -417,9 +422,10 @@ export function resolveNflAvailabilityAdjustedQuarterbackDepth(
     .filter((player) => playerKey(player.name) !== playerKey(starter))
     .filter((player) => !unavailable.has(playerKey(player.name)))
     .filter((player) => {
-      const status = strongestInjuryStatus(
+      const status = currentExactGameInjuryStatus(
         injuryStatus(player.injuryStatus),
-        reportStatuses.get(playerKey(player.name)) ?? "",
+        reportStatuses.get(playerKey(player.name)),
+        depth.capturedAt,
       );
       return status !== "out" && status !== "doubtful";
     })
@@ -429,6 +435,20 @@ export function resolveNflAvailabilityAdjustedQuarterbackDepth(
     expectedStartingQuarterback: replacement,
     starterStatus: replacement ? "projected" : "unknown",
   };
+}
+
+function currentExactGameInjuryStatus(
+  depthStatus: string,
+  report: { status: string; reportedAt: string | null; hasCurrentDesignation: boolean } | undefined,
+  depthCapturedAt: string,
+): string {
+  if (!report) return depthStatus;
+  const reportTime = report.reportedAt ? Date.parse(report.reportedAt) : Number.NaN;
+  const depthTime = Date.parse(depthCapturedAt);
+  if (report.hasCurrentDesignation && Number.isFinite(reportTime) && Number.isFinite(depthTime) && reportTime >= depthTime) {
+    return report.status;
+  }
+  return strongestInjuryStatus(depthStatus, report.status);
 }
 
 function baseDecision(

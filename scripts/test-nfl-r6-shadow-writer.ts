@@ -147,6 +147,78 @@ assert.strictEqual(
   rawInjuredDepth,
 );
 
+const staleBackupOutDepth: NflForwardTeamDepthSnapshot = {
+  ...rawInjuredDepth,
+  capturedAt: "2026-09-01T12:00:00.000Z",
+  quarterbackDepth: [player("Josh Allen", "BUF", 1), player("Mitchell Trubisky", "BUF", 2, "O")],
+  roster: [player("Josh Allen", "BUF", 1), player("Mitchell Trubisky", "BUF", 2, "O")],
+};
+const newerLimitedBackupReport: DailyEdgeGameAvailability = {
+  ...exactGameInjuryReport,
+  reportUpdatedAt: "2026-09-02T12:00:00.000Z",
+  teams: [{
+    abbreviation: "BUF",
+    teamName: "Buffalo Bills",
+    players: [
+      { name: "Josh Allen", status: "Out", detail: null, position: "QB", reportedAt: "2026-09-02T12:00:00.000Z" },
+      { name: "Mitchell Trubisky", status: "Limited", detail: "Elbow", position: "QB", reportedAt: "2026-09-02T12:00:00.000Z" },
+    ],
+  }, availability.teams[1]!],
+};
+assert.equal(
+  resolveNflAvailabilityAdjustedQuarterbackDepth(staleBackupOutDepth, newerLimitedBackupReport)
+    .expectedStartingQuarterback?.name,
+  "Mitchell Trubisky",
+  "a newer exact-game limited report supersedes an older depth-chart Out flag",
+);
+const olderLimitedBackupReport: DailyEdgeGameAvailability = {
+  ...newerLimitedBackupReport,
+  reportUpdatedAt: "2026-08-31T12:00:00.000Z",
+  teams: [{
+    ...newerLimitedBackupReport.teams[0]!,
+    players: newerLimitedBackupReport.teams[0]!.players.map((entry) => ({
+      ...entry,
+      reportedAt: "2026-08-31T12:00:00.000Z",
+    })),
+  }, availability.teams[1]!],
+};
+assert.equal(
+  resolveNflAvailabilityAdjustedQuarterbackDepth(staleBackupOutDepth, olderLimitedBackupReport)
+    .expectedStartingQuarterback,
+  null,
+  "an older limited report cannot clear a newer depth-chart Out flag",
+);
+const newerOutBackupReport: DailyEdgeGameAvailability = {
+  ...newerLimitedBackupReport,
+  teams: [{
+    ...newerLimitedBackupReport.teams[0]!,
+    players: newerLimitedBackupReport.teams[0]!.players.map((entry) => entry.name === "Mitchell Trubisky"
+      ? { ...entry, status: "Out" }
+      : entry),
+  }, availability.teams[1]!],
+};
+assert.equal(
+  resolveNflAvailabilityAdjustedQuarterbackDepth(staleBackupOutDepth, newerOutBackupReport)
+    .expectedStartingQuarterback,
+  null,
+  "a current exact-game Out status remains authoritative",
+);
+const newerUnknownBackupReport: DailyEdgeGameAvailability = {
+  ...newerLimitedBackupReport,
+  teams: [{
+    ...newerLimitedBackupReport.teams[0]!,
+    players: newerLimitedBackupReport.teams[0]!.players.map((entry) => entry.name === "Mitchell Trubisky"
+      ? { ...entry, status: "Status unavailable" }
+      : entry),
+  }, availability.teams[1]!],
+};
+assert.equal(
+  resolveNflAvailabilityAdjustedQuarterbackDepth(staleBackupOutDepth, newerUnknownBackupReport)
+    .expectedStartingQuarterback,
+  null,
+  "a newer injury row without a current designation cannot clear a depth-chart Out flag",
+);
+
 const unlocked = buildNflR6ShadowMoneylineDecision({
   game,
   opening,
@@ -414,7 +486,7 @@ assert.equal(falsifiedLagT60.lockedAt, null);
 assert.ok(falsifiedLagT60.health.blockingReasons.includes("t60_capture_late"));
 
 const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
-assert.match(writer, /nfl_forward_evidence_writer_2026_11_05_r110_conviction_risk_grade_cap/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_11_05_r111_current_game_starter_authority/);
 assert.match(writer, /availabilityArbitrationShadow/);
 assert.match(writer, /\.\.\.shadowMoneyline\.health\.blockingReasons/);
 assert.equal((writer.match(/readNflPlayerPropsCurrentSeasonState\(/g) ?? []).length, 1);

@@ -1,5 +1,38 @@
 # Current production model releases and qualified research candidates
 
+## NFL current-game starter authority — November 5 candidate
+
+The owner-directed future-unlocked repair corrects the authority ordering that
+held ARI@SEA after Seattle ruled Sam Darnold out and named Drew Lock the expected
+starter. Current exact-game `game_status` remains authoritative; a newer
+exact-game practice designation can supersede an older depth-chart injury flag,
+while ambiguous `active:false` and `did_not_play` fields are fallbacks only when
+current game/practice status is absent. Older reports and explicit current Out or
+Doubtful designations remain fail-closed. Stored locks are never reinterpreted.
+
+Candidate identifiers:
+
+- `nfl_market_led_moneyline_lean_shadow_2026_11_05_r8_current_game_starter_authority`
+- `nfl_forward_evidence_collector_2026_11_05_r33_current_game_starter_authority`
+- `nfl_v1_daily_edge_model_2026_11_05_r54_current_game_starter_authority`
+- `nfl_v1_daily_edge_calibration_2026_11_05_r53_current_game_starter_authority`
+- `nfl_v1_daily_edge_decision_2026_11_05_r63_current_game_starter_authority`
+- `nfl_v1_grade_policy_2026_11_05_r63_current_game_starter_authority`
+- `nfl_v1_member_release_2026_11_05_r60_current_game_starter_authority`
+- `nfl_weekly_member_fixture_2026_11_05_r76_current_game_starter_authority`
+- `nfl_forward_member_snapshot_2026_11_05_r68_current_game_starter_authority`
+- `nfl_forward_evidence_writer_2026_11_05_r111_current_game_starter_authority`
+
+The no-write 15-game /45-market rehearsal removes the sole false held game. Its
+only hold, side or grade change is ARI@SEA: held No Plays become SEA Moneyline No Play, ARI +8.5
+Watchlist and Under 39.5 No Play. Actionables remain 18, with zero actionable
+promotions/demotions and no unrelated side or grade change. The same-capture
+old/new depth resolver changes only Seattle's expected quarterback. The independent
+score law, market reader, prices, thresholds and stakes are unchanged. Production
+activation is not complete until the protected PR merges and the normal writer
+publishes and verifies the R60/R63/R76/R68/R111 chain. Evidence and rollback:
+`docs/model-audits/2026-11-05-nfl-current-game-starter-authority.json`.
+
 ## Owner-approved CBB all-Division-I coverage — November 5
 
 The owner explicitly stopped changes to the November 4 board and subsequently
