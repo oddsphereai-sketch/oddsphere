@@ -103,5 +103,7 @@ export type CbbQuote = {
   /** Actual request-start clock, when recorded. Response completion alone
    * cannot prove a target was requested after another source became available. */
   requestedAt?: string;
+  /** Quote-owned native identity. Provider namespaces are not interchangeable. */
+  sourceEventId?: string;
   canonicalReceipt?: CbbCanonicalReceipt;
 };
