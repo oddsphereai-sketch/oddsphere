@@ -45,7 +45,7 @@ export function normalizeCbbOwlsCurrent(game: CbbGame, response: RawOwlsOddsResp
         if (!validPair(priceA, priceB) || (kind !== "moneyline" && (pointA === null || pointB === null || !Number.isInteger(pointA * 2) ||
           (kind === "spread" ? pointA !== -pointB : pointA !== pointB || pointA <= 0)))) { rejected.push({ reason: "incoherent_quote", book: key,market:kind,sourceAt:update }); continue; }
         quotes.push({ gameId: game.id, sportsbook: key, market: kind, line: kind === "moneyline" ? null : pointA,
-          firstPrice: priceA, secondPrice: priceB, providerObservedAt: update, fetchedAt, phase: "current", provider: "owls", orientationVerified: true });
+          firstPrice: priceA, secondPrice: priceB, providerObservedAt: update, fetchedAt, phase: "current", provider: "owls", ...(typeof event.eventId==="string"&&event.eventId.length<=256?{providerEventId:event.eventId}:{}), orientationVerified: true });
       }
     }
   }

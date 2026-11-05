@@ -1,6 +1,6 @@
 import type { CbbCanonicalReceipt } from "./types";
 
-type Receipt = { fetchedAt: string; canonicalReceipt?: CbbCanonicalReceipt };
+type Receipt = { fetchedAt: string; requestedAt?:string; canonicalReceipt?: CbbCanonicalReceipt };
 
 /** PostgreSQL clocks may retain microseconds. Date.parse truncates those;
  * an availability upper bound must round outward, never become earlier. */
@@ -12,11 +12,15 @@ export function cbbAvailabilityUpperBoundMs(value:string){
 
 /** Do not silently turn a collector-start clock into response completion. */
 export function cbbEvidenceReceiptBounds(value: Receipt) {
-  const earliest = Date.parse(value.fetchedAt), source = value.canonicalReceipt;
-  if (!source) return { earliest, available: earliest, kind: "response_completed" as const };
+  const completed=Date.parse(value.fetchedAt), requested=value.requestedAt===undefined?completed:Date.parse(value.requestedAt),source=value.canonicalReceipt;
+  // An invalid request start removes causal ordering authority; it does not
+  // erase a real quote whose response availability is known.
+  const earliest=Number.isFinite(requested)&&requested<=completed?requested:NaN;
+  if(!Number.isFinite(completed))return {earliest:NaN,available:NaN,kind:"response_completed" as const};
+  if (!source) return { earliest, available: completed, kind: "response_completed" as const };
   const available = typeof source.availableBy==="string"?cbbAvailabilityUpperBoundMs(source.availableBy):NaN;
-  if (typeof source !== "object" || source.kind !== "db_inserted_upper_bound" || !Number.isFinite(earliest) ||
-    !Number.isFinite(available) || available < earliest || typeof source.providerEventId !== "string" || !source.providerEventId || source.providerEventId.length > 256 ||
+  if (typeof source !== "object" || source.kind !== "db_inserted_upper_bound" || !Number.isFinite(completed) ||
+    !Number.isFinite(available) || available < completed || typeof source.providerEventId !== "string" || !source.providerEventId || source.providerEventId.length > 256 ||
     typeof source.ingestionRunId !== "string" || !source.ingestionRunId || source.ingestionRunId.length > 160 || !Array.isArray(source.observationIds) || source.observationIds.length !== 2 ||
     !source.observationIds.every(id => Number.isSafeInteger(id) && id > 0) ||
     source.observationIds[0] === source.observationIds[1] || !Array.isArray(source.rawPayloadHashes) || source.rawPayloadHashes.length !== 2 ||

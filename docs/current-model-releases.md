@@ -76,15 +76,15 @@ activation requires protected PR publication and live verification.
 
 Publication identifiers: independent
 `cbb_candidate_2026_11_05_r5_complete_d1_program_priors`, incumbent market model
-`cbb_candidate_2026_11_05_r20_complete_source_admission`, receipt
-`cbb_market_behavior_2026_11_05_r16_complete_source_admission`, cross score
+`cbb_candidate_2026_11_05_r21_coordinated_provider_capture`, receipt
+`cbb_market_behavior_2026_11_05_r17_coordinated_provider_capture`, cross score
 `cbb_cross_division_score_2026_11_05_r1_posterior_score_law`, forecast board
 `cbb_game_forecast_board_2026_11_05_r1_unpriced_outcomes`, forecast-only grade
 `cbb_game_forecast_grade_2026_11_05_r1_no_unquoted_wagers`, frozen outcome
 `cbb_game_outcome_2026_11_05_r1_frozen_winner`, publisher
-`cbb_member_pipeline_2026_11_05_r37_complete_source_admission`, adapter
+`cbb_member_pipeline_2026_11_05_r38_coordinated_provider_capture`, adapter
 `cbb_member_adapter_2026_11_05_r24_unpriced_game_forecast`, tracking
-`cbb_tracking_writer_2026_11_05_r23_source_admission_lineage`, training
+`cbb_tracking_writer_2026_11_05_r24_coordinated_source_lineage`, training
 `cbb_current_training_2026_11_05_r4_separate_cross_division_receipts`, and fixture
 seed `cbb_fixture_seed_2026_11_05_r8_verified_complete_d1_identities`.
 
@@ -96,6 +96,23 @@ are documented in
 `docs/model-audits/2026-11-05-cbb-all-division-one-private.md`. The current-input
 43-game /129-market comparison has 0 promotions, 0 demotions, 0 side changes
 and 0 score changes; 22 new cross forecasts add no unqualified wager grades.
+R38/R21/R17 add the owner-directed coordinated current-source path: complete
+Owls and BDL native-book pairs are resolved together with a bounded The Odds API
+current board when coverage still has gaps. Playbook public context continues
+through its existing collector and exact-game reader; it is not relabeled as a
+named sportsbook quote. BDL is checked for professional gaps even when retail
+already covers each market. One final native-book/time resolver retains the
+latest state, deduplicates transports and quarantines same-clock contradictions.
+The existing prediction_pipeline:cbb lease and sole writer remain authoritative.
+Path R6 preserves transport origin, event identity and actual request-start clock;
+R5 tapes and R20/R16/R19/R15 locks remain compatible and byte-authoritative.
+The independent score law and grading thresholds do not change. On 43 fixed
+canonical inputs/129 markets the scores, sides and grades remain exact (68 Leans,
+61 Watchlists; zero promotions or demotions). Newly available sources may change
+future forecasts, target prices and grades through the existing reader; no win
+rate improvement is claimed. Source/count/budget/lock proof is in
+`model-audits/2026-11-05-cbb-coordinated-provider-capture.md`.
+
 R37/R20/R16 restore exact current-source aliases for Jacksonville State,
 Northern Illinois, Pennsylvania and Cal Poly, preserving Penn State/Jackson
 State/Illinois State/California as distinct schools. The same aliases are shared

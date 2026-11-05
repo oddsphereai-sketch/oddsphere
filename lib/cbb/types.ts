@@ -96,7 +96,8 @@ export type CbbCanonicalReceipt = {
   rawPayloadHashes: [string, string];
 };
 export type CbbQuote = {
-  provider?: "owls" | "balldontlie" | "sharpapi";
+  provider?: "owls" | "balldontlie" | "sharpapi" | "the_odds_api";
+  providerEventId?: string;
   gameId: number; sportsbook: string; market: CbbMarket; line: number | null;
   firstPrice: number; secondPrice: number; providerObservedAt: string;
   fetchedAt: string; phase: "opening" | "current";

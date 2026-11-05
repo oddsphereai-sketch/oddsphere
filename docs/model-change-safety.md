@@ -39,6 +39,44 @@ direct/context/fail-closed tests, the full model-change gate, current-main
 integration safety, protected PR checks and postmerge normal-writer verification.
 Evidence: `model-audits/2026-11-05-nfl-source-reaction-health.json`.
 
+## Owner-directed CBB coordinated provider capture — November 5
+
+The owner explicitly requested that Owls, Playbook and The Odds API work together,
+then extended source coordination and rate handling to all Daily Edge models and
+props. This CBB increment advances publisher R38, incumbent input/model R21,
+receipt R17, path R6 and tracking R24. It adds only current source capture and
+correct source/availability transmission to the existing sole leased writer;
+there is no independent refresh or shadow prediction. All existing locks and
+R20/R16/R19/R15 identifiers retain exact authority.
+
+A complete paired quote belongs to its native book, market, line and time.
+Multiple transports cannot count as independent sharp books. Resolve all raw
+qualified pairs in one pass; do not erase a conflict then revive it from a third
+transport. Preserve source origin, event ID, request start, response availability
+and native observation clock through path serialization. A request already in
+flight when evidence arrives cannot be called a subsequent response. BDL checks
+both market and professional-source gaps before a paid source is attempted.
+
+Use at most one quota-free The Odds API check plus one current NCAAB board read
+per normal writer, with eight named books and three markets (documented request
+cost three credits), and a 1000-credit reserve. Actual live headers must be
+reported separately from that documented cost. No history calls, per-game API
+polls, member-request fetches, source-count voting, fixed score penalty, grade cap
+or invented quote is authorized. Playbook's existing public consensus role stays
+distinct. A provider outage must not bypass qualified alternatives or silently
+replace a previously priced forecast with an empty wager state.
+
+Required checks include exact names/orientation/date/time, native paired-price and
+line validation, source-clock overlap negatives, same-book three-provider conflict
+controls, serialization round trip, missing-key/reserve/error bounds, full writer
+handoff to both graph sides in all three markets, unchanged locked payloads and
+source-on/source-off behavior. The fixed 43-game/129-market comparison has 68
+Leans and 61 Watchlists before/after, with zero score/side/grade changes. This
+functional/input repair is not an outcome-accuracy claim or a resolution of the
+separate lower-opponent statistical prior and extreme-tail limitations. Full gate,
+independent review, latest-main integration, protected PR and live normal-cycle
+coverage/clock/release/lock verification remain mandatory.
+
 ## Owner-approved CBB complete Division I forecast coverage — November 5
 
 The owner explicitly directed completion of review and live publication for
