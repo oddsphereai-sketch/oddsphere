@@ -83,3 +83,32 @@ numerically unresolved prices. Legacy locked DTOs remain unchanged.
 
 Before publication, record the final same-input per-market promotions/demotions,
 concentration and all lock-sensitive reader/writer checks. Forward outcomes remain separate evidence.
+
+## Final frozen-input runtime and consumer audit
+
+The final actual runtime audit evaluated all 43 games /129 exact offers once:
+zero Held/errors, exact compressed-evidence/JSONB-reordered/copy-only-board
+round trips, 98 source hashes unchanged, and original snapshots, all execution
+pairs and the 22 excluded cross-game snapshots unchanged. Runtime: 39.34 seconds;
+no fitting, network, provider, database or upload operations.
+
+Final grades are 71 Watchlists, 54 Leans and 4 Best Angles. Against the immediately
+preceding V5 policy this is 23 Watch-to-Lean promotions plus 4 Lean-to-Best
+promotions and no actionable demotions. Against the controlled same-input R20
+engine (not today's subsequently deployed R39 engine), actionables are 19 to 58,
+with 47 promotions and 8 demotions. Moneyline has 9, Spread 15 and Total 34
+final actionables. There are 32 side changes against R20: 0 ML, 17 Spread and
+15 Total. These are procedural comparisons, not an accuracy experiment or a
+claim about the current production board.
+
+All 34 actionable totals are Under (30 Lean, 4 Best); the four other selected
+totals are Over Watchlists. The four Best totals retain actual opposing or mixed
+source context. They do not acquire a fabricated professional-confirmation flag.
+No policy quota, alternate-side value selection or forced forecast change was
+used to create these counts.
+
+Private audit SHA256:
+`85ed97da30b1d62d6e2738cbe49ec8fc3b64cc1b7b374d74b7c8648a5328f469`.
+The shared member presentation, adapter and tracker focused tests also prove
+consistent Best/Lean codes, nonactionable Watch confidence (including numerical
+zero), exact raw probabilities/EV, stored locks and legacy locked precedence.

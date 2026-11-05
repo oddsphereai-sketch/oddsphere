@@ -40,7 +40,20 @@ agree without inventing professional confirmation. See
 boundary. No other sport's grade policy changes in this CBB release.
 
 V5 incorporates the subsequent R38 provider-ID and request/completion contract.
-Its final source-bound build, current-input comparison, protected PR release and
+The final V5 build converged once with five whole-model excluded-game folds;
+its private compressed bundle is 591,889 bytes, SHA256
+`8b4be6bbe5ea9616bcff002e6a851d3eb86f7da0b6b6e1a5f2166f6a4b816e84`.
+The final frozen 43-game /129-market R6 runtime audit has 0 Held/errors, exact
+private-codec and JSONB round trips and unchanged evidence/source hashes.
+Against the controlled R20 same-input engine (not the subsequently deployed R39
+board), actionables rise 19→58: 47 promotions, 8 demotions; final grades are
+71 Watchlists, 54 Leans and 4 Best Angles. ML has 9 actionables, Spread 15,
+Total 34. All 34 actionable totals are Under; opposing source context remains
+visible. Against the immediately preceding V5 candidate grade policy, the change
+is 23 Watch→Lean and 4 Lean→Best, with no actionable demotions. This does not
+prove future accuracy or establish current live-board counts. The final audit
+SHA256 is `85ed97da30b1d62d6e2738cbe49ec8fc3b64cc1b7b374d74b7c8648a5328f469`.
+Protected PR publication, explicit private-asset upload approval and
 postdeployment checks remain required. Preserve the separate R38/R39 source and
 fixture-clock release declarations when integrating this candidate.
 
