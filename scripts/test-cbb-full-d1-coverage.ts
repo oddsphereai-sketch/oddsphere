@@ -18,7 +18,7 @@ import {buildCbbProvisionalBoard} from "../lib/cbb/provisionalBoard";
 import membership from "../lib/cbb/artifacts/division-one-membership-2026-r1.json";
 import frozenPrior from "../lib/cbb/artifacts/cross-division-prior-r1.json";
 import source from "../lib/cbb/artifacts/newcomer-strength-2026-r1.json";
-import {readFullD1Fixture,rebuildCrossDivisionInputs,sourceSha256,type ForwardSource} from "./lib/cbbFullD1OfflineInputs";
+import {readFullD1Fixture,rebuildCrossDivisionInputs,sourceSha256,assertCbbNumericReconstruction,type ForwardSource} from "./lib/cbbFullD1OfflineInputs";
 
 const folder="scripts/fixtures/cbb-cross-division-20261105";
 const manifest=JSON.parse(fs.readFileSync(`${folder}/manifest.json`,"utf8"));
@@ -45,7 +45,8 @@ for(const row of source.rows){const raw=programRows.find(p=>p[1]===row.sourceNam
 const rebuilt=rebuildCrossDivisionInputs();
 assert.equal(rebuilt.historical.games.length,237);assert.equal(rebuilt.historical.boxes.length,474);
 assert.equal(rebuilt.games.length,229);assert.equal(Object.keys(rebuilt.prior.teams).length,59);
-assert.deepEqual(rebuilt.prior,frozenPrior,"fitted prior is reproducible from actual receipts and season-matched D1 states");
+assertCbbNumericReconstruction(rebuilt.prior,frozenPrior,"fitted prior is reproducible from actual receipts and season-matched D1 states");
+assert.throws(()=>assertCbbNumericReconstruction({value:1+1e-9},{value:1}),/differs/);
 assert.equal(rebuilt.games.every(g=>g.homeId===g.divisionOneId&&!g.neutral&&g.homeScore>g.awayScore),true,
   "document sample support honestly; this is not a calibrated cross-domain upset evaluation");
 
@@ -89,8 +90,10 @@ let pricedAxes=0;
 for(const bundle of publication.bundles){
   const bytes=JSON.stringify(bundle),f=pubForecasts.find(r=>r.game.id===bundle.game.id)!;
   assert.equal(cbbIndependentInputKey(bundle.game,publication.history),bundle.independentInputKey);
-  assert.deepEqual({...f.forecast,release:bundle.independent.release},bundle.independent);
-  const a=readCbbMarketBehavior(bundle),b=readCbbMarketBehavior({...bundle,independent:f.forecast});
+  const oldRuntime=forecastCbbCurrentBatch([bundle.game],publication.asOf,publication.history)[0].forecast;
+  assertCbbNumericReconstruction(oldRuntime,bundle.independent,"saved independent forecast reconstructs on this runtime");
+  assert.deepEqual({...f.forecast,release:oldRuntime.release},oldRuntime);
+  const a=readCbbMarketBehavior({...bundle,independent:oldRuntime}),b=readCbbMarketBehavior({...bundle,independent:f.forecast});
   const qa=buildCbbProvisionalBoard(a.forecast,bundle.currentQuotes,{marketBehavior:a.receipt});
   const qb=buildCbbProvisionalBoard(b.forecast,bundle.currentQuotes,{marketBehavior:b.receipt});
   assert.deepEqual(qb.score,qa.score);assert.deepEqual(qb.rows,qa.rows);pricedAxes+=qa.rows.length;

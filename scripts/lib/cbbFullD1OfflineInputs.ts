@@ -13,6 +13,25 @@ import prior from "../../lib/cbb/artifacts/cross-division-prior-r1.json";
 const root=path.resolve(import.meta.dirname,"../..");
 const folder=path.join(root,"scripts/fixtures/cbb-cross-division-20261105");
 export const sourceSha256=(value:string)=>createHash("sha256").update(value).digest("hex");
+/** V8/libm can differ by a few ULPs across Node/CPU versions. Identity, keys,
+ * strings and source hashes stay exact; only finite arithmetic gets a tightly
+ * bounded machine-precision comparison. Runtime artifacts are never rounded. */
+export function assertCbbNumericReconstruction(actual:unknown,expected:unknown,label="reconstruction"):void{
+  if(typeof actual==="number"&&typeof expected==="number"){
+    assert.ok(Number.isFinite(actual)&&Number.isFinite(expected)&&
+      Math.abs(actual-expected)<=32*Number.EPSILON*Math.max(1,Math.abs(actual),Math.abs(expected)),
+      `${label}: ${actual} differs from ${expected}`);return;
+  }
+  if(Array.isArray(actual)&&Array.isArray(expected)){
+    assert.equal(actual.length,expected.length,label);actual.forEach((x,i)=>assertCbbNumericReconstruction(x,expected[i],`${label}[${i}]`));return;
+  }
+  if(actual!==null&&expected!==null&&typeof actual==="object"&&typeof expected==="object"){
+    const a=actual as Record<string,unknown>,b=expected as Record<string,unknown>;
+    assert.deepEqual(Object.keys(a).sort(),Object.keys(b).sort(),label);
+    for(const key of Object.keys(a))assertCbbNumericReconstruction(a[key],b[key],`${label}.${key}`);return;
+  }
+  assert.deepEqual(actual,expected,label);
+}
 export function readFullD1Fixture<T>(name:string):T{
   return JSON.parse(gunzipSync(fs.readFileSync(path.join(folder,`${name}.json.gz`))).toString());
 }
@@ -45,8 +64,10 @@ export function rebuildCrossDivisionInputs(){
   }
   const reproduced={...previous!,release:artifact.prior.release,
     teams:Object.fromEntries(Object.entries(previous!.teams).map(([id,t])=>[id,{...t,factors:null,opponentFactors:null}]))};
-  assert.deepEqual(reproduced,artifact.prior,"existing R4 prior must reproduce exactly before fitting a new domain");
-  const sourceHash=sourceSha256(JSON.stringify({games,states}));
-  const fitted=fitCbbCrossDivisionPrior({games,states,fitThroughSeason:2025,availableAt:prior.availableAt,sourceHash});
-  return {historical,games,states,prior:fitted,rejected:normalized.rejected};
+  assertCbbNumericReconstruction(reproduced,artifact.prior,"existing R4 prior must reproduce before fitting a new domain");
+  const frozenStates=readFullD1Fixture<Record<number,CbbRatingState>>("d1-endseason-states");
+  assertCbbNumericReconstruction(states,frozenStates,"both season-specific anchor states reproduce from source receipts");
+  const sourceHash=sourceSha256(JSON.stringify({games,states:frozenStates}));
+  const fitted=fitCbbCrossDivisionPrior({games,states:frozenStates,fitThroughSeason:2025,availableAt:prior.availableAt,sourceHash});
+  return {historical,games,states:frozenStates,prior:fitted,rejected:normalized.rejected};
 }
