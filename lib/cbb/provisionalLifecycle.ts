@@ -1,13 +1,18 @@
 import { settleCbbMarket } from "./model";
 import type { buildCbbProvisionalBoard } from "./provisionalBoard";
+import type {CbbReleasedOutcomeBoard} from "../services/cbb/cbbContextualOutcomeRuntime";
 
 export const CBB_PROVISIONAL_LIFECYCLE_RELEASE = "cbb_candidate_2026_10_29_r1_locked_board_contract" as const;
 type CurrentBoard=ReturnType<typeof buildCbbProvisionalBoard>;
-export type CbbProvisionalBoard = Omit<CurrentBoard,"release"|"modelRelease"|"gradeRelease"|"marketContext"> & {release:string;modelRelease?:string;gradeRelease?:string;
+export type CbbLegacyProvisionalBoard = Omit<CurrentBoard,"release"|"modelRelease"|"gradeRelease"|"marketContext"> & {release:string;modelRelease?:string;gradeRelease?:string;
   gameForecast?:{release:string;homeId:number;awayId:number;homeWinProbability:number;selection:"first"|"second";
     probability:number;uncertainty:import("./types").CbbUncertainty;inputs:unknown};
   marketContext:Omit<CurrentBoard["marketContext"],"verifiedMarketRead"|"retainedLevelInput">&{
-    verifiedMarketRead?:CurrentBoard["marketContext"]["verifiedMarketRead"];retainedLevelInput?:unknown}};
+    verifiedMarketRead?:CurrentBoard["marketContext"]["verifiedMarketRead"];retainedLevelInput?:unknown;
+    originalIndependent?:unknown;contextualOutcomeEvidence?:unknown;contextualOutcomeSummary?:unknown}};
+/** A stored contextual board is already evaluated; legacy payloads keep their
+ * exact shape and never acquire this newer evidence contract. */
+export type CbbProvisionalBoard=CbbLegacyProvisionalBoard|CbbReleasedOutcomeBoard;
 export type CbbProvisionalSnapshot = {
   release: typeof CBB_PROVISIONAL_LIFECYCLE_RELEASE;
   gameId: number;

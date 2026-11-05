@@ -1,5 +1,36 @@
 # Model change safety protocol
 
+## Owner-directed CBB unified contextual inference — prepared integration
+
+The owner requested one contextual market interpretation and forecast with the
+independent model as a data point, no preset model/book blends and no arbitrary
+score offsets. The prepared model R1 /covariance R1 /publisher R40 /adapter and
+tracking R26 family above is not yet deployed. Keep current R38/R39 source and
+fixture-clock repairs, including transport-native IDs, request starts, response
+completion, unknown observation bounds and locked-record compatibility.
+
+A valid current quote remains price evidence when its observation-start lower
+bound is unknown; it cannot establish an ordered book reaction. Compositions
+are source-clocked shares, never inferred new dollars or bettor identities.
+Original-to-current endpoints survive bounded history separately from recent
+legs; no omitted middle is fabricated. Same-provider native identity conflicts
+remain conflicts, while unrelated provider namespaces remain fixture-bound.
+
+Before publication, bind the final private artifact and whole-model excluded-game
+covariance calibration to the exact source, cohort and availability clocks.
+The copy-only board, adapter and tracking paths must preserve the resulting
+score, probability, push, exact offered price, EV and grade. Store compressed
+per-game evidence once, never training vectors in the public repository, and
+reuse one private model load in the existing prediction-pipeline lease. No
+independent prediction writer, schedule, shadow production record or provider
+request is authorized by this documentation.
+
+Report actual promotions/demotions, side changes, missing prices and directional
+concentration. A grade-count increase is not accuracy proof. Run focused
+identity/clock/codec/forecast/grade/SQL-precision/reader-writer lock tests, the
+full model-change gate, current-main integration safety, protected PR checks
+and the production release/data/cron/coherence/reader/unchanged-lock proof.
+
 Before asserting market-reader correctness, read and apply
 [`market-reader-spotcheck-standard.json`](market-reader-spotcheck-standard.json).
 Review raw native evidence before seeing final outputs, then trace the inference

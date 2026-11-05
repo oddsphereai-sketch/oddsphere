@@ -223,6 +223,9 @@ console.log("PASS CBB observed paired path: buyback/resumption/holds, native flo
 const transported={...quote(20,-115,-105,-3.5,"pinnacle"),provider:"the_odds_api" as const,providerEventId:"exact-toa-event",requestedAt:time(14)};
 const transportedRead=run([transported],{seedQuotes:[{...q0,sportsbook:"pinnacle"}],flows:[{...flow(),sourceBook:"pinnacle"}]});
 const transportedStream=transportedRead.tape.streams.find(s=>s.book==="pinnacle"&&s.market==="spread")!;
+for(const row of transportedStream.quotes)assert.equal(Object.keys(row).length,row.length,"In-memory transport tuples contain explicit JSON slots rather than sparse holes");
+const rawTransport=transportedStream.quotes.find(row=>row[8]?.providerEventId===transported.providerEventId)!;assert.equal(rawTransport[7],null);
+const priorSparse=[...rawTransport];delete priorSparse[7];assert.equal(JSON.stringify(priorSparse),JSON.stringify(rawTransport),"Explicit null padding preserves the existing R6 stored wire exactly");
 const expandedTransport=expandCbbMarketBehaviorPathStream(JSON.parse(JSON.stringify(transportedRead.tape)),JSON.parse(JSON.stringify(transportedStream)));
 const restoredTransport=expandedTransport.quotes.find(q=>q.providerObservedAt===transported.providerObservedAt)!;
 assert.equal(restoredTransport.provider,"the_odds_api");assert.equal(restoredTransport.providerEventId,transported.providerEventId);

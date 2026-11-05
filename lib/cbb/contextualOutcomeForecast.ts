@@ -6,7 +6,7 @@ import {cbbExactMarketCenter} from "./marketReaderResearch";
 import type {CbbContextualFeatureInput} from "./contextualForecastFeatures";
 import type {CbbForecast,CbbQuote} from "./types";
 
-export const CBB_CONTEXTUAL_OUTCOME_RELEASE="cbb_contextual_outcome_forecast_2026_11_05_v4_natural_clock_noise_units" as const;
+export const CBB_CONTEXTUAL_OUTCOME_RELEASE="cbb_contextual_outcome_forecast_2026_11_05_v5_provider_receipt_contract" as const;
 type Axis="margin"|"total";
 export const CBB_OUTCOME_BLOCKS=["level","path","pressure"] as const;
 type Block=typeof CBB_OUTCOME_BLOCKS[number];
@@ -21,8 +21,10 @@ export const CBB_OUTCOME_NOISE_FEATURES=["independent_log_working_sd","identifie
  * whose responses differ by seconds must not turn an old quote into thousands
  * of noise-design units. This specifies the slope prior, not a variance cap. */
 export const CBB_OUTCOME_NOISE_UNITS=["training_sd","training_sd","training_sd","natural_log1p_hours","natural_log1p_hours"] as const;
+export const CBB_OUTCOME_HTTP_PROVIDERS=["owls","balldontlie","sharpapi","the_odds_api"] as const;
 export const CBB_OUTCOME_METHOD={release:CBB_CONTEXTUAL_OUTCOME_RELEASE,
  target:"one_actual_game_outcome_minus_fallible_measurement_reference_per_game;zero_GP_prior_mean_no_residual_mean_offset",
+ verification:{httpProviders:CBB_OUTCOME_HTTP_PROVIDERS,identity:"all_own_quote_native_ID_channels;provider_namespace_bound",clock:"response_availability_separate_from_request_or_collection_lower;unknown_or_invalid_request_does_not_erase_valid_price_or_completion"},
  kernel:"sum_three_fixed_semantic_squared_exponential_kernels;LEVEL_RBF;PATH_and_PRESSURE_context_RBF_times_conditioned_economic_innovation_RBF;raw_qualified_latest_cumulative_compositions_by_role_and_ML_SP_contract_not_causal_response_gated;endpoint_net_not_fabricated_trajectory;ages_context_or_noise_only;condition_before_odd_margin_even_total_parity;clock_dimensions_never_multiply_all_terms",
  units:"fixed_row_independent_working_SD_and_natural_log1p_hours;no_rare_feature_RMS_point_scaling;ALL_mean_kernel_masks_audit_only;unknown_optional_is_no_admitted_innovation_not_asserted_flat_or_fresh;LEVEL_global_bias_remains_learnable",
  noise:"source_location_variance+exp(log_remaining_game_variance+gamma*training_normalized_shape_and_last_verification_ages);old_factor_game_variance_REPLACED_not_added",
@@ -55,17 +57,20 @@ function verification(input:CbbContextualFeatureInput,m:CbbMeasurement,rows:Raw[
    if(!orientation){reject("orientation_not_attested");continue;}
    const hasCanonical=Object.hasOwn(raw,"canonicalReceipt"),canon=raw.canonicalReceipt as Raw|undefined;
    if(hasCanonical&&(!canon||typeof canon!=="object")){reject("invalid_explicit_canonical_receipt");continue;}
-   const directId=typeof raw.sourceEventId==="string"&&raw.sourceEventId?raw.sourceEventId:null,canonicalId=typeof canon?.providerEventId==="string"?canon.providerEventId:null;
-   if(directId&&canonicalId&&directId!==canonicalId||q.eventId&&(directId&&q.eventId!==directId||canonicalId&&q.eventId!==canonicalId)){reject("known_native_identity_conflict");continue;}
    if(q.provider&&typeof raw.provider==="string"&&q.provider!==raw.provider){reject("provider_namespace_mismatch");continue;}
+   const idChannels=[raw.sourceEventId,raw.providerEventId,canon?.providerEventId].filter(x=>x!==undefined&&x!==null);
+   if(idChannels.some(x=>typeof x!=="string"||!x.trim())||new Set(idChannels).size>1||q.eventId&&q.provider===raw.provider&&idChannels.some(x=>x!==q.eventId)){reject("known_native_identity_conflict");continue;}
    let available:string|null=null,lower:string|null=null,http:string|null=null,kind:string;
-   if(canon){const bounds=cbbEvidenceReceiptBounds(raw as unknown as CbbQuote);if(!finite(bounds.available)){reject("invalid_canonical_bounds");continue;}available=String(canon.availableBy);lower=typeof raw.fetchedAt==="string"?raw.fetchedAt:null;kind="db_inserted_upper_bound";}
-   else if(raw.availabilityKind==="stored_snapshot_upper_bound"||raw.availabilityKind==="db_inserted_upper_bound"){available=typeof raw.availableBy==="string"?raw.availableBy:null;lower=typeof raw.fetchedAt==="string"?raw.fetchedAt:null;kind=String(raw.availabilityKind);}
-   else if(raw.availabilityKind==="http_response"||!Object.hasOwn(raw,"availabilityKind")&&raw.phase==="current"&&["owls","balldontlie","sharpapi"].includes(String(raw.provider))){http=typeof raw.receivedAt==="string"?raw.receivedAt:typeof raw.fetchedAt==="string"?raw.fetchedAt:null;available=http;lower=http;kind="actual_provider_response";}
+   if(canon){const bounds=cbbEvidenceReceiptBounds(raw as unknown as CbbQuote);if(!finite(bounds.available)){reject("invalid_canonical_bounds");continue;}available=String(canon.availableBy);kind="db_inserted_upper_bound";}
+   else if(raw.availabilityKind==="stored_snapshot_upper_bound"||raw.availabilityKind==="db_inserted_upper_bound"){available=typeof raw.availableBy==="string"?raw.availableBy:null;kind=String(raw.availabilityKind);}
+   else if(raw.availabilityKind==="http_response"||!Object.hasOwn(raw,"availabilityKind")&&raw.phase==="current"&&(CBB_OUTCOME_HTTP_PROVIDERS as readonly string[]).includes(String(raw.provider))){http=typeof raw.receivedAt==="string"?raw.receivedAt:typeof raw.fetchedAt==="string"?raw.fetchedAt:null;available=http;kind="actual_provider_response";}
    else{reject("unknown_receipt_kind");continue;}
-   if(["fetchedAt","receivedAt","requestedAt"].some(key=>Object.hasOwn(raw,key)&&(typeof raw[key]!=="string"||!finite(clock(raw[key]))))){reject("invalid_explicit_transport_clock");continue;}
-   const upper=available?cbbAvailabilityUpperBoundMs(available):NaN,native=preciseClock(q.nativeAt),arrival=preciseClock(available),lowerNs=preciseClock(lower??available),requested=raw.requestedAt===undefined?undefined:preciseClock(raw.requestedAt),received=raw.receivedAt===undefined?undefined:preciseClock(raw.receivedAt),fetched=raw.fetchedAt===undefined?undefined:preciseClock(raw.fetchedAt);
-   if(!available||!finite(upper)||upper>clock(input.asOf)||native===null||arrival===null||native>arrival||lowerNs===null||lowerNs>arrival||requested!==undefined&&(requested===null||requested>lowerNs)||received!==undefined&&(received===null||received>arrival||fetched!==undefined&&(fetched===null||received<fetched))){reject("invalid_or_unavailable_native_request_receipt_clock");continue;}
+   if(["fetchedAt","receivedAt"].some(key=>Object.hasOwn(raw,key)&&(typeof raw[key]!=="string"||!finite(clock(raw[key]))))){reject("invalid_explicit_transport_clock");continue;}
+   const upper=available?cbbAvailabilityUpperBoundMs(available):NaN,native=preciseClock(q.nativeAt),arrival=preciseClock(available),requested=raw.requestedAt===undefined?undefined:preciseClock(raw.requestedAt),received=raw.receivedAt===undefined?undefined:preciseClock(raw.receivedAt),fetched=raw.fetchedAt===undefined?undefined:preciseClock(raw.fetchedAt);
+   if(!available||!finite(upper)||upper>clock(input.asOf)||native===null||arrival===null||native>arrival||fetched!==undefined&&(fetched===null||fetched>arrival)||received!==undefined&&(received===null||received>arrival||fetched!==undefined&&received<fetched!)){reject("invalid_or_unavailable_native_receipt_clock");continue;}
+   if(requested!==undefined){if(requested!==null&&fetched!==undefined&&fetched!==null&&requested<=fetched)lower=String(raw.requestedAt);else reject("request_lower_unknown_price_availability_preserved");}
+   else if(typeof canon?.collectionStartedAt==="string"){const start=preciseClock(canon.collectionStartedAt);if(start!==null&&fetched!==undefined&&fetched!==null&&start<=fetched)lower=canon.collectionStartedAt;else reject("collection_lower_unknown_price_availability_preserved");}
+   else if(canon&&m.role==="professional"&&raw.provider==="owls")lower=typeof raw.fetchedAt==="string"?raw.fetchedAt:null;
    if(!latestAvailable||arrival>preciseClock(latestAvailable)!){latestAvailable=available;latestLower=lower;}if(http&&(!latestHttp||preciseClock(http)!>preciseClock(latestHttp)!))latestHttp=http;receipts.push({kind,lower,available,http,nativeAt:raw.providerObservedAt,requestedAt:raw.requestedAt??null,fetchedAt:raw.fetchedAt??null,receivedAt:raw.receivedAt??null});
   }
   return{book:m.book,market:q.rawQuote.market,nativeAt:q.nativeAt,lastKnownAvailability:latestAvailable,lastGenuineProviderResponse:latestHttp,availabilityLower:latestLower,nativeAgeHours:age(input.asOf,q.nativeAt),availableAgeHours:age(input.asOf,latestAvailable),genuineHttpAgeHours:age(input.asOf,latestHttp),receipts,rejected,meaning:"fresh_transport_reread_is_distinct_from_new_native_move;stored_DTO_capture_is_never_synthesized_as_HTTP_completion"};});

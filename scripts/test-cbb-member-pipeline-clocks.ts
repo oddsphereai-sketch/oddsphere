@@ -1,9 +1,10 @@
-import {expandCbbMarketBehaviorPathStream} from "../lib/cbb/marketBehaviorPath";
 import assert from "node:assert/strict";
 import type { CbbGame } from "../lib/cbb/types";
 import type { CbbBallDontLieClient } from "../lib/cbb/ballDontLie";
 import type { OwlsInsightClient } from "../lib/providers/owls/owlsInsightClient";
 import { buildCbbRollingSchedule } from "../lib/services/cbb/cbbRollingSchedule";
+import {makeCbbPipelineTestRuntime} from "./fixtures/cbb-contextual-pipeline-runtime";
+import {readCbbContextualOutcomeEvidence} from "../lib/services/cbb/cbbContextualOutcomeRuntime";
 import { refreshCbbMemberBoard } from "../lib/services/cbb/cbbMemberPipeline";
 
 const asOf="2026-10-29T22:00:00Z",start="2026-11-01T14:30:00Z";
@@ -39,6 +40,7 @@ const db={from:(table:string)=>{
 const saveSnapshot=(async()=>{
   return {ok:true,snapshotKey:"test",expiresAt:asOf,staleUntil:asOf};}) as NonNullable<Parameters<typeof refreshCbbMemberBoard>[0]["saveSnapshot"]>;
 
+const runtime=makeCbbPipelineTestRuntime();const loadContextualRuntime=async()=>runtime.runtime;
 async function main(){
   let priceCalls=0,splitCalls=0;
   const prices=(timestamp:string,first:number,second:number,complete:boolean)=>{
@@ -50,7 +52,7 @@ async function main(){
   };
   const earlier={odds:async()=>{priceCalls++;return {body:prices("2026-10-29T21:50:00Z",-150,130,true)};},
     splits:async()=>{splitCalls++;return {body:splits};}} as unknown as OwlsInsightClient;
-  await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:"2026-10-29T21:56:00Z",bdlKey:"test",owlsKey:"test",
+  await refreshCbbMemberBoard({loadContextualRuntime,anchorDate:"2026-10-29",season:2026,now:"2026-10-29T21:56:00Z",bdlKey:"test",owlsKey:"test",
     trainingGames:[],provider,owls:earlier,db,fetcher,loadSchedule:async()=>schedule,saveSnapshot});
   const clocks=["2026-10-29T21:58:30Z","2026-10-29T21:59:01Z","2026-10-29T21:59:02Z","2026-10-29T22:00:00Z","2026-10-29T22:00:30Z"];
   let clockCalls=0;
@@ -60,19 +62,15 @@ async function main(){
       home_bets_pct:60,away_bets_pct:40,home_handle_pct:10,away_handle_pct:90}}]}],meta:{status:"ok"}};
   const source={odds:async()=>{priceCalls++;await Promise.resolve();await Promise.resolve();return {body:prices("2026-10-29T21:58:00Z",-115,-105,false)};},
     splits:async()=>{splitCalls++;return {body:realSplits};}} as unknown as OwlsInsightClient;
-  const result=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,nowClock,bdlKey:"test",owlsKey:"test",
+  const result=await refreshCbbMemberBoard({loadContextualRuntime,anchorDate:"2026-10-29",season:2026,nowClock,bdlKey:"test",owlsKey:"test",
     trainingGames:[],provider,owls:source,db,fetcher,fallbackOdds:[],loadSchedule:async()=>schedule,saveSnapshot});
   const record=stored.get(`cbb::member-game::${game.id}`) as import("../lib/services/cbb/cbbMemberGameStore").CbbStoredMemberGame;
-  const receipt=record.snapshot.board.marketContext.verifiedMarketRead!;
-  const episode=receipt.episodes.find(e=>e.book==="circa"&&e.market==="spread")!;
-  assert.ok(episode,"the previous genuine pair remains the source anchor");
-  assert.equal(episode.current.fetchedAt,"2026-10-29T21:59:02Z");
-  assert.equal(episode.flow,null,"overlapping in-flight requests cannot invent a later response to received pressure");
-  const nativeStream=receipt.pathTape.streams.find(stream=>stream.book==="circa"&&stream.market==="spread")!;
-  assert.equal(expandCbbMarketBehaviorPathStream(receipt.pathTape,nativeStream).flows[0].fetchedAt,"2026-10-29T21:59:01Z",
-    "the original split response is still retained exactly for interpretation at the decision");
-  assert.equal(receipt.evaluatedAt,"2026-10-29T22:00:30Z","the decision can advance independently after fallback");
-  assert.ok(receipt.evaluatedTargets.every(q=>q.requestedAt==="2026-10-29T21:58:30Z"));
+  const evidence=readCbbContextualOutcomeEvidence(record.snapshot.board)!;
+  assert.equal(evidence.input.currentQuotes.find(q=>q.sportsbook==="circa"&&q.market==="spread")?.fetchedAt,"2026-10-29T21:59:02Z");
+  assert.ok(evidence.input.splitContext?.some(r=>r.sourceBook==="circa"&&r.availableBy==="2026-10-29T21:59:01Z"),"Split keeps its own completion before odds and fallback");
+  assert.equal(evidence.decision.asOf,"2026-10-29T22:00:30Z","Decision cutoff can advance after fallback without restamping a source");
+  assert.ok(evidence.decision.marketDecisions.filter(m=>m.target).every(m=>m.target?.requestedAt==="2026-10-29T21:58:30Z"));
+  assert.equal(evidence.decision.marketDecisions.find(m=>m.market==="total")?.grade,"Held","Missing current total cannot inherit an earlier executable target");
   assert.equal(clockCalls,5);assert.equal(priceCalls,2);assert.equal(splitCalls,2);assert.equal(result.owlsCalls,2);
   console.log("PASS CBB pipeline response clocks: original odds/splits receipts survive a later board-wide fallback with one call per existing endpoint.");
 }

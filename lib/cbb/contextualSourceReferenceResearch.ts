@@ -9,6 +9,8 @@ import type {CbbQuote} from "./types";
 import type {CbbContextualConsumerQuote} from "./contextualForecastFeatures";
 
 type Quote=CbbQuote&{orientationVerified?:boolean};
+const instant=(v:string|undefined)=>{if(typeof v!=="string"||!Number.isFinite(Date.parse(v)))return null;const f=v.match(/\.(\d+)(?:Z|[+-]\d{2}:?\d{2})$/i)?.[1]??"";return f.length>9&&/[1-9]/.test(f.slice(9))?null:BigInt(Date.parse(v))*BigInt(1000000)+BigInt(f.slice(3,9).padEnd(6,"0"));};
+const sameInstant=(a:string|undefined,b:string|undefined)=>instant(a)!==null&&instant(a)===instant(b);
 type Law=ReturnType<typeof createCbbContextualScoreLaw>;
 type Probabilities=ReturnType<Law["probabilitiesFast"]>;
 type NumericalBounds=Pick<Probabilities,"omittedMassUpperBound"|"quadratureErrorEstimate"|"normalizerErrorEstimate"|"summationRoundoffUpperBound"|"errorInterpretation">;
@@ -56,14 +58,15 @@ export function createCbbJointSourceReferencePricer(args:{gameId:number;asOf:str
  if((["marginMean","totalMean","marginSd","totalSd","correlation"] as const).some(k=>finalLaw.latent[k]!==latent[k]))
   throw Error("reference context does not match the final latent law");
  const quoteKey=(q:Quote)=>JSON.stringify([q.gameId,family(q.sportsbook),q.market,q.phase,q.provider??null,q.line,q.firstPrice,q.secondPrice,
+  q.sourceEventId??null,q.providerEventId??null,
   q.providerObservedAt,q.fetchedAt,["requestedAt" in q,q.requestedAt??null],
   ["canonicalReceipt" in q,q.canonicalReceipt??null],q.orientationVerified??null]);
  const validate=(q:Quote,executable:boolean,proof?:CbbContextualConsumerQuote):string|null=>{
   const columnProof=executable&&q.provider==="balldontlie"&&q.orientationVerified===undefined&&proof?.orientationProof==="native_home_away_fields"&&
    proof.availabilityKind==="http_response"&&proof.gameId===q.gameId&&family(proof.sportsbook)===family(q.sportsbook)&&proof.market===q.market&&
-   proof.line===q.line&&proof.firstPrice===q.firstPrice&&proof.secondPrice===q.secondPrice&&proof.providerObservedAt===q.providerObservedAt&&
-   proof.fetchedAt===q.fetchedAt&&Number.isFinite(Date.parse(proof.availableBy))&&Date.parse(proof.providerObservedAt)<=Date.parse(proof.fetchedAt??"")&&
-   Date.parse(proof.fetchedAt??"")<=Date.parse(proof.availableBy)&&Date.parse(proof.availableBy)<=at;
+   proof.line===q.line&&proof.firstPrice===q.firstPrice&&proof.secondPrice===q.secondPrice&&sameInstant(proof.providerObservedAt,q.providerObservedAt)&&
+   sameInstant(proof.fetchedAt,q.fetchedAt)&&sameInstant(proof.availableBy,proof.fetchedAt)&&instant(proof.providerObservedAt)!<=instant(proof.fetchedAt)!&&Date.parse(proof.availableBy)<=at&&
+   (!(q.sourceEventId??q.providerEventId)||!(proof.sourceEventId??proof.providerEventId)||(q.sourceEventId??q.providerEventId)===(proof.sourceEventId??proof.providerEventId));
   if(q.gameId!==gameId||q.phase!=="current"||!(q.orientationVerified===true||columnProof)||!q.sportsbook?.trim())return "unattested_quote_identity_or_orientation";
   if(!["moneyline","spread","total"].includes(q.market))return "unknown_native_market";
   if(![q.firstPrice,q.secondPrice].every(p=>Number.isFinite(p)&&Math.abs(p)>=100)||
@@ -73,9 +76,10 @@ export function createCbbJointSourceReferencePricer(args:{gameId:number;asOf:str
   if("canonicalReceipt" in q&&(!q.canonicalReceipt||typeof q.canonicalReceipt!=="object"||Array.isArray(q.canonicalReceipt)))
    return "invalid_identifiable_canonical_receipt";
   if(executable&&"canonicalReceipt" in q)return "target_is_not_an_executable_receipt";
+  const ids=[q.sourceEventId,q.providerEventId,q.canonicalReceipt?.providerEventId].filter(x=>x!==undefined);if(ids.some(x=>typeof x!=="string"||!x.trim())||new Set(ids).size>1)return "known_native_quote_identity_conflict";
   try{const b=cbbEvidenceReceiptBounds(q),observed=Date.parse(q.providerObservedAt);
-   if(![observed,b.earliest,b.available].every(Number.isFinite)||observed>b.available||b.available>at)return "future_or_unavailable_quote";
-   if(q.requestedAt!==undefined&&(!Number.isFinite(Date.parse(q.requestedAt))||Date.parse(q.requestedAt)>b.earliest))return "invalid_request_response_clock";
+   const native=instant(q.providerObservedAt),completion=instant(q.fetchedAt),available=instant(q.canonicalReceipt?.availableBy??q.fetchedAt),cutoff=instant(args.asOf);
+   if(![observed,b.available].every(Number.isFinite)||native===null||completion===null||available===null||cutoff===null||native>available||completion>available||available>cutoff||observed>b.available||b.available>at)return "future_or_unavailable_quote";
   }catch{return "invalid_quote_receipt";}
   return null;
  };

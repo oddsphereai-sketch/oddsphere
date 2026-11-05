@@ -9,7 +9,7 @@ import type {CbbContextualFeatureInput,CbbContextualConsumerQuote} from "./conte
 import {CBB_CONTEXTUAL_MARKET_INTERPRETATION_RELEASE,buildCbbContextualMarketInterpretation,type CbbContextualMarketInterpretation} from "./contextualMarketInterpretation";
 import type {CbbQuote} from "./types";
 
-export const CBB_INTERPRETED_DECISION_RELEASE="cbb_interpreted_decision_2026_11_05_r4_execution_namespace_identity" as const;
+export const CBB_INTERPRETED_DECISION_RELEASE="cbb_interpreted_decision_2026_11_05_r5_provider_receipt_identity" as const;
 export const CBB_INTERPRETED_GRADE_POLICY=Object.freeze({leanValueReserve:.03,bestValueReserve:.08,professionalValueReserve:.08,
  basis:"same_final_law_exact_price_economics; same_interpretation_for_native_action; source_opposition_is_retained_not_unanimity_veto",
  sharpMeaning:"observed_professional_book_context; bettor_identity_and_future_correctness_unknown"});
@@ -17,29 +17,30 @@ type Quote=CbbQuote&{orientationVerified?:boolean};
 const implied=(p:number)=>p>0?100/(100+p):-p/(100-p);
 const profit=(p:number)=>p>0?p/100:100/-p;
 const family=(book:string)=>cbbPathBookFamily(book.trim().toLowerCase());
+const ownNativeId=(q:{sourceEventId?:string;providerEventId?:string})=>q.sourceEventId??q.providerEventId;
 const precise=(value:string)=>{const ms=Date.parse(value),fraction=value.match(/\.(\d+)(?:Z|[+-]\d{2}:?\d{2})$/i)?.[1]??"";return !Number.isFinite(ms)||fraction.length>9&&/[1-9]/.test(fraction.slice(9))?null:BigInt(ms)*BigInt(1000000)+BigInt(fraction.slice(3,9).padEnd(6,"0"));};
 const sameQuote=(a:Pick<Quote,"gameId"|"sportsbook"|"market"|"line"|"firstPrice"|"secondPrice"|"providerObservedAt">,b:typeof a)=>
  a.gameId===b.gameId&&family(a.sportsbook)===family(b.sportsbook)&&a.market===b.market&&a.line===b.line&&a.firstPrice===b.firstPrice&&a.secondPrice===b.secondPrice&&precise(a.providerObservedAt)!==null&&precise(a.providerObservedAt)===precise(b.providerObservedAt);
 function executionProof(q:Quote,input:CbbContextualFeatureInput,receipt:CbbContextualMarketInterpretation):{problem:string|null;columnProof?:CbbContextualConsumerQuote}{
  const at=Date.parse(input.asOf),stream=receipt.streams.find(s=>family(s.book)===family(q.sportsbook)&&s.market===q.market&&(s.role==="consumer"||s.role==="professional")),current=stream?.currentQuote;
  if(!current||!sameQuote(q,current.rawQuote))return {problem:"execution_pair_not_current_unambiguous_interpreted_quote"};
- if(q.sourceEventId&&current.eventId&&q.provider&&q.provider===current.provider&&q.sourceEventId!==current.eventId)return {problem:"execution_same_provider_native_identity_conflict"};
+ if(q.sourceEventId&&q.providerEventId&&q.sourceEventId!==q.providerEventId||ownNativeId(q)&&current.eventId&&q.provider&&q.provider===current.provider&&ownNativeId(q)!==current.eventId)return {problem:"execution_same_provider_native_identity_conflict"};
  if(q.gameId!==input.independent.gameId||q.phase!=="current"||"canonicalReceipt" in q)return {problem:"execution_identity_phase_or_receipt_invalid"};
  // Last-known-state selection may retain another whole observation of the
  // same native pair. The execution receipt must still own its actual column
  // attestation; a later DB receipt cannot lend that proof or fabricate it.
  const columnProof=q.provider==="balldontlie"&&q.orientationVerified===undefined?[...(input.consumerCurrentQuotes??[]),...(input.consumerHistoryQuotes??[])].find(p=>{
-  if(!sameQuote(q,p)||precise(p.fetchedAt??"")===null||precise(p.fetchedAt??"")!==precise(q.fetchedAt)||p.provider!=="balldontlie"||p.orientationProof!=="native_home_away_fields"||"orientationVerified"in p&&p.orientationVerified===false||p.availabilityKind!=="http_response"||p.canonicalReceipt!==undefined||q.sourceEventId&&p.sourceEventId&&q.sourceEventId!==p.sourceEventId)return false;
-  const completion=precise(p.fetchedAt??""),available=precise(p.availableBy),native=precise(p.providerObservedAt),cutoff=precise(input.asOf),requested=p.requestedAt===undefined?null:precise(p.requestedAt);
-  if(completion===null||available!==completion||native===null||cutoff===null||native>completion||completion>cutoff||p.requestedAt!==undefined&&(requested===null||requested>completion))return false;
+  if(!sameQuote(q,p)||precise(p.fetchedAt??"")===null||precise(p.fetchedAt??"")!==precise(q.fetchedAt)||p.provider!=="balldontlie"||p.orientationProof!=="native_home_away_fields"||"orientationVerified"in p&&p.orientationVerified===false||p.availabilityKind!=="http_response"||p.canonicalReceipt!==undefined||ownNativeId(q)&&ownNativeId(p)&&ownNativeId(q)!==ownNativeId(p))return false;
+  const completion=precise(p.fetchedAt??""),available=precise(p.availableBy),native=precise(p.providerObservedAt),cutoff=precise(input.asOf);
+  if(completion===null||available!==completion||native===null||cutoff===null||native>completion||completion>cutoff)return false;
   return buildCbbContextualMarketInterpretation({...input,currentQuotes:[],historyQuotes:[],consumerCurrentQuotes:[p],consumerHistoryQuotes:[],pathTape:null,splitContext:[],pressureDecisions:[],consumerQuarantinedSources:[],consumerTruncatedSources:[]}).streams.some(s=>s.currentQuote&&sameQuote(s.currentQuote.rawQuote,p));
  }):undefined;
  if(q.orientationVerified!==true&&!columnProof)return {problem:"execution_orientation_unattested"};
  if(![q.firstPrice,q.secondPrice].every(p=>Number.isFinite(p)&&Math.abs(p)>=100)||(q.market==="moneyline"?q.line!==null:q.line===null||!Number.isFinite(q.line)||!Number.isInteger(q.line*2))||q.market==="total"&&q.line!<=0)return {problem:"execution_contract_invalid"};
  const hold=implied(q.firstPrice)+implied(q.secondPrice);if(hold<.98||hold>1.3)return {problem:"execution_pair_hold_invalid"};
- try{const b=cbbEvidenceReceiptBounds(q),native=Date.parse(q.providerObservedAt),request=q.requestedAt===undefined?null:Date.parse(q.requestedAt);
-  const pn=precise(q.providerObservedAt),pc=precise(q.fetchedAt),pa=precise(input.asOf),pr=q.requestedAt===undefined?null:precise(q.requestedAt);
-  if(pn===null||pc===null||pa===null||pn>pc||pc>pa||q.requestedAt!==undefined&&(pr===null||pr>pc)||![b.available,b.earliest,native].every(Number.isFinite)||native>b.earliest||b.earliest>b.available||b.available>at||request!==null&&(!Number.isFinite(request)||request>b.earliest)||at-native>3_600_000)return {problem:"execution_clock_unavailable_or_stale"};
+ try{const b=cbbEvidenceReceiptBounds(q),native=Date.parse(q.providerObservedAt);
+  const pn=precise(q.providerObservedAt),pc=precise(q.fetchedAt),pa=precise(input.asOf);
+  if(pn===null||pc===null||pa===null||pn>pc||pc>pa||![b.available,native].every(Number.isFinite)||native>b.available||b.available>at||at-native>3_600_000)return {problem:"execution_clock_unavailable_or_stale"};
  }catch{return {problem:"execution_receipt_invalid"};}
  return {problem:null,columnProof};
 }

@@ -5,7 +5,7 @@ import {invertCbbJointMarginLaw} from "./jointMarketLaw";
 import type {CbbContextualFeatureInput} from "./contextualForecastFeatures";
 import type {CbbForecast,CbbQuote} from "./types";
 
-export const CBB_CONTEXTUAL_MEASUREMENT_RELEASE="cbb_contextual_measurement_forecast_2026_11_05_v2_source_identity_scope" as const;
+export const CBB_CONTEXTUAL_MEASUREMENT_RELEASE="cbb_contextual_measurement_forecast_2026_11_05_v3_provider_receipt_contract" as const;
 type Axis="margin"|"total";
 export type CbbMeasurementRole="independent"|"professional"|"consumer";
 export const CBB_MEASUREMENT_CONTEXT_NAMES=["absolute_independent_disagreement","retained_net_gap_alignment","latest_gap_alignment","net_latest_opposition_strength","own_actual_response_money_alignment","own_actual_response_tickets_alignment","latest_proved_hold_money_gap_alignment","latest_proved_hold_tickets_gap_alignment","public_money_same_market_latest_alignment","public_tickets_same_market_latest_alignment","pressure_native_to_first_actual_response_hours","pressure_available_to_first_response_lower_hours","first_actual_response_native_age_hours","current_native_age_hours","current_availability_bound_delay_hours","borrowed_shape_ml_sp_discrepancy","retained_total_variation","retained_reversal_strength","retained_native_span_hours","other_professional_center_RMS_disagreement","other_consumer_center_RMS_disagreement","retained_actual_update_relative_timing_hours"] as const;

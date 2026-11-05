@@ -66,17 +66,18 @@ export function loadCbbContextualOutcomeRuntime(){
 }
 
 type StoredBoard={modelRelease?:string;gradeRelease?:string;gameId:number;asOf:string;score:unknown;gameForecast?:unknown;rows:readonly unknown[];
- marketContext:{originalIndependent?:unknown;contextualOutcomeEvidence?:unknown;contextualOutcomeSummary?:unknown}};
+ marketContext:object};
 /** Call only after locked DTO precedence. Legacy models are never decoded or
  * reconstructed. New receipts must match their stored exact law and grades. */
 export function readCbbContextualOutcomeEvidence(board:StoredBoard){
  if(board.modelRelease!==CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE)return null;
  if(board.gradeRelease!==CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE)throw Error("CBB contextual evidence grade release differs");
- const original=board.marketContext.originalIndependent as CbbForecast|undefined;
+ const context=board.marketContext as {originalIndependent?:unknown;contextualOutcomeEvidence?:unknown};
+ const original=context.originalIndependent as CbbForecast|undefined;
  if(!original)throw Error("CBB contextual evidence lacks original independent identity");
  const identity:CbbContextualEvidenceIdentity={gameId:board.gameId,asOf:board.asOf,modelRelease:CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE,gradeRelease:board.gradeRelease,
   independentRelease:original.release,artifactObjectSha256:CBB_CONTEXTUAL_OUTCOME_MANIFEST.modelObjectSha256};
- const decoded=decodeCbbContextualEvidence(board.marketContext.contextualOutcomeEvidence,identity).evidence,trace=decoded.trace as StoredTrace;
+ const decoded=decodeCbbContextualEvidence(context.contextualOutcomeEvidence,identity).evidence,trace=decoded.trace as StoredTrace;
  if(trace.release!==CBB_CONTEXTUAL_OUTCOME_EVIDENCE_RELEASE||!same(trace.independent,original)||!same(decoded.finalScore,board.score))throw Error("CBB contextual stored evidence differs from the public score or original input");
  const decision={...trace.decision,interpretation:decoded.interpretation,finalScore:decoded.finalScore,marketDecisions:decoded.marketDecisions} as CbbOutcomeDecision;
  if(decision.artifact.objectSha256!==identity.artifactObjectSha256||decision.artifact.release!==CBB_CONTEXTUAL_OUTCOME_MANIFEST.engineRelease||

@@ -1,5 +1,37 @@
 # Current production model releases and qualified research candidates
 
+## CBB contextual outcome reader — prepared integration, not deployed
+
+Reserved release identifiers for the owner-directed unified contextual reader:
+
+- Model: `cbb_contextual_outcome_2026_11_05_r1`.
+- Covariance calibration: `cbb_contextual_covariance_2026_11_05_r1`.
+- Engine: `cbb_contextual_outcome_forecast_2026_11_05_v5_provider_receipt_contract`.
+- Decision: `cbb_outcome_decision_2026_11_05_r5_provider_receipt_contract`.
+- Grade: `cbb_contextual_outcome_grade_2026_11_05_r4_provider_receipt_identity`.
+- Board: `cbb_contextual_outcome_board_2026_11_05_r1_copy_only`.
+- Publisher: `cbb_member_pipeline_2026_11_05_r40_contextual_outcome`.
+- Adapter/tracking: R26 contextual-outcome identifiers exported by their runtime modules.
+
+This candidate has not been deployed. One fitted contextual score law uses the
+independent forecast as a fallible data point alongside native book prices,
+chronology and cumulative compositions. No preset forecast ratio or manual
+point bonus is added. Its exact score distribution supplies all three market
+probabilities and price-based grades; ancillary references do not reforecast.
+The sole leased writer, T-60 boundary, cross/newcomer no-wager policy and exact
+legacy locked payloads remain authoritative.
+
+The preceding V4 frozen current-input comparison covered 43 incumbent games /
+129 markets: 19→33 Leans, 23 actionable promotions, 9 demotions, no Best Angles,
+30 selection changes and zero unpopulated markets after the timestamp-format
+repair. All 29 Total Leans were Under. These are procedural board effects, not
+accuracy evidence. Applying the new value policy to the old forecasts alone
+would give 34 actionables; do not attribute the entire increase to inference.
+V5 incorporates the subsequent R38 provider-ID and request/completion contract.
+Its final source-bound build, current-input comparison, protected PR release and
+postdeployment checks remain required. Preserve the separate R38/R39 source and
+fixture-clock release declarations when integrating this candidate.
+
 ## NFL source-reaction health semantics — November 5 candidate
 
 The owner clarified that a professional split on an older or different native

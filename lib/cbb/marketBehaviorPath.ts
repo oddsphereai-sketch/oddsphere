@@ -18,7 +18,7 @@ type PathQuote = CbbQuote & { orientationVerified?: boolean };
 type Direction = -1 | 0 | 1;
 export type CbbMarketCanonicalReceiptTuple=[availableBy:string,eventIndex:number,runIndex:number,firstId:number,secondId:number,firstHash:string,secondHash:string];
 export type CbbMarketPathQuoteTuple = [observedAt: string, fetchedAt: string, line: number | null,
-  firstPrice: number, secondPrice: number, originalBook: string|null, provider: CbbQuote["provider"]|0|1|2|3|null, canonicalReceipt?: CbbCanonicalReceipt|CbbMarketCanonicalReceiptTuple, transport?:{providerEventId?:string;requestedAt?:string}];
+  firstPrice: number, secondPrice: number, originalBook: string|null, provider: CbbQuote["provider"]|0|1|2|3|null, canonicalReceipt?: CbbCanonicalReceipt|CbbMarketCanonicalReceiptTuple|null, transport?:{providerEventId?:string;requestedAt?:string}];
 export type CbbMarketPathFlowTuple = [observedAt: string, fetchedAt: string, line: number | null,
   firstMoney: number, secondMoney: number, firstTickets: number, secondTickets: number, originalBook: string|null, eventIdIndex: number, canonicalReceipt?: CbbCanonicalReceipt|CbbMarketCanonicalReceiptTuple];
 export type CbbMarketPathStreamTape = {
@@ -103,7 +103,7 @@ function expandHash(hash:string){
 }
 const expandRun=(run:string,stream:CbbMarketPathStreamTape)=>!stream.canonicalRunPrefix?run:run.startsWith("~")?run.slice(1):stream.canonicalRunPrefix+run;
 const expandClock=(clock:string,stream:CbbMarketPathStreamTape)=>!stream.clockPrefix?clock:clock.startsWith("~")?clock.slice(1):stream.clockPrefix+clock;
-function expandReceipt(source:CbbCanonicalReceipt|CbbMarketCanonicalReceiptTuple|undefined,stream:CbbMarketPathStreamTape):CbbCanonicalReceipt|undefined{
+function expandReceipt(source:CbbCanonicalReceipt|CbbMarketCanonicalReceiptTuple|null|undefined,stream:CbbMarketPathStreamTape):CbbCanonicalReceipt|undefined{
   if(!source)return undefined;
   if(!Array.isArray(source))return structuredClone(source);
   return {kind:"db_inserted_upper_bound",availableBy:expandClock(source[0],stream),providerEventId:stream.canonicalEvents?.[source[1]]??"",
@@ -268,7 +268,7 @@ export function readCbbMarketBehaviorPath(args: {
       const packed:CbbMarketPathQuoteTuple=[compactClock(q.providerObservedAt),compactClock(q.fetchedAt),q.line,q.firstPrice,q.secondPrice,
         q.sportsbook===book?null:q.sportsbook,q.provider==="owls"?0:q.provider==="balldontlie"?1:q.provider==="sharpapi"?2:q.provider==="the_odds_api"?3:null];
       if(q.canonicalReceipt)packed[7]=compactReceipt(q.canonicalReceipt);
-      if(q.providerEventId||q.requestedAt)packed[8]={...(q.providerEventId?{providerEventId:q.providerEventId}:{}),...(q.requestedAt?{requestedAt:compactClock(q.requestedAt)}:{})};
+      if(q.providerEventId||q.requestedAt){packed[7]??=null;packed[8]={...(q.providerEventId?{providerEventId:q.providerEventId}:{}),...(q.requestedAt?{requestedAt:compactClock(q.requestedAt)}:{})};}
       return packed;
     });
     const compactFlows=flows.map((f):CbbMarketPathFlowTuple=>{

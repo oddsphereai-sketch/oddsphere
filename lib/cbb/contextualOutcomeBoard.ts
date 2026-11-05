@@ -5,7 +5,7 @@ import {CBB_OUTCOME_DECISION_RELEASE,cbbOutcomeIndependentInputSha256,type forec
 import type {CbbForecast,CbbMarket} from "./types";
 
 export const CBB_CONTEXTUAL_OUTCOME_BOARD_RELEASE="cbb_contextual_outcome_board_2026_11_05_r1_copy_only" as const;
-export const CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE="cbb_contextual_outcome_grade_2026_11_05_r3_execution_namespace_identity" as const;
+export const CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE="cbb_contextual_outcome_grade_2026_11_05_r4_provider_receipt_identity" as const;
 export const CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE="cbb_contextual_game_outcome_2026_11_05_r1_stored_joint_law" as const;
 export type CbbOutcomeDecision=ReturnType<typeof forecastCbbOutcomeDecision>;
 const MARKETS:readonly CbbMarket[]=["moneyline","spread","total"];

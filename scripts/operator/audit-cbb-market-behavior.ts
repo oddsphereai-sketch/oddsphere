@@ -2,8 +2,8 @@ import fs from 'node:fs';import assert from 'node:assert/strict';import {createH
 import {readCbbMarketBehavior,gradeCbbMarketBehavior} from '../../lib/cbb/marketBehaviorCandidate';
 import {gradeCbbProvisional} from '../../lib/cbb/provisionalGradePolicy';
 import type {CbbForecast,CbbQuote,CbbGame} from '../../lib/cbb/types';
-import type {CbbProvisionalSnapshot} from '../../lib/cbb/provisionalLifecycle';
-type SourceRecord={snapshot:CbbProvisionalSnapshot;awayName:string;homeName:string};
+import type {CbbProvisionalSnapshot,CbbLegacyProvisionalBoard} from '../../lib/cbb/provisionalLifecycle';
+type SourceRecord={snapshot:CbbProvisionalSnapshot&{board:CbbLegacyProvisionalBoard};awayName:string;homeName:string};
 type Source={at:string;rows:SourceRecord[]};
 import artifact from '../../lib/cbb/artifacts/candidate-r3.json';
 import {reviewCbbQuote} from '../../lib/cbb/marketEvidence';
@@ -22,11 +22,11 @@ async function main(){
  for(const row of native.splitRows){const id=Number(row.canonical_event_id),rows=splitById.get(id)??[];rows.push(row);splitById.set(id,rows);}
  const active=source.rows.filter((r)=>r.snapshot.lockedAt===null&&Date.parse(r.snapshot.startsAt)>Date.parse(r.snapshot.board.asOf)+3600_000);
  const counts=(rows:Array<{grade:string}>)=>rows.reduce<Record<string,number>>((a,r)=>(a[r.grade]=(a[r.grade]??0)+1,a),{});
- const bundles=active.map(r=>{const b=r.snapshot.board,s=b.score,fixture=input.games.find((g)=>g.id===r.snapshot.gameId);assert.ok(fixture);assert.ok(b.modelRelease);
+ const bundles=active.map(r=>{const b=r.snapshot.board;assert.ok(!Object.hasOwn(b.marketContext,"contextualOutcomeEvidence"),"Legacy replay cannot reinterpret a released contextual outcome board");const s=b.score,fixture=input.games.find((g)=>g.id===r.snapshot.gameId);assert.ok(fixture);assert.ok(b.modelRelease);
   assert.equal(native.asOf,b.asOf,'native window cutoff must match this decision');
   assert.ok(Date.parse(native.since)<=Date.parse(b.asOf)-6*3600_000,'native window must cover the complete bootstrap');
   const base:CbbForecast={release:b.modelRelease,gameId:r.snapshot.gameId,asOf:b.asOf,homeId:fixture.home_team.id,awayId:fixture.visitor_team.id,homeScore:s.home,awayScore:s.away,margin:s.margin,total:s.total,homeWinProbability:s.homeWinProbability,uncertainty:artifact.uncertainty,possessions:0,inputStatus:'complete',issues:[]};
-  const targets:CbbQuote[]=b.rows.map((row)=>{assert.ok(row.observedQuote&&row.targetBook&&row.quoteObservedAt);return ({gameId:base.gameId,market:row.market,line:row.line,firstPrice:row.observedQuote.firstPrice,secondPrice:row.observedQuote.secondPrice,sportsbook:row.targetBook,provider:row.quoteProvider,providerObservedAt:row.quoteObservedAt,fetchedAt:b.asOf,phase:'current'});});
+  const targets:CbbQuote[]=b.rows.map((row)=>{assert.ok(row.observedQuote&&row.targetBook&&row.quoteObservedAt);return ({gameId:base.gameId,market:row.market,line:row.line,firstPrice:row.observedQuote.firstPrice,secondPrice:row.observedQuote.secondPrice,sportsbook:row.targetBook,provider:row.quoteProvider??undefined,providerObservedAt:row.quoteObservedAt,fetchedAt:b.asOf,phase:'current'});});
   const quotes:CbbQuote[]=b.rows.flatMap((row)=>row.professionalReferenceQuotes??[]),key=`r3-diagnostic-fixture-${base.gameId}`;
   const evidence=pairCbbCanonicalMarketEvidence({game:fixture,decisionAt:b.asOf,priceRows:priceById.get(base.gameId),splitRows:splitById.get(base.gameId)});
   const history=cbbCanonicalBehaviorInputs(evidence);

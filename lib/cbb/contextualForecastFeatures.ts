@@ -25,7 +25,7 @@ export type CbbContextualConsumerQuote = Pick<CbbQuote, "gameId" | "sportsbook" 
   availabilityKind: "http_response" | "db_inserted_upper_bound" | "stored_snapshot_upper_bound";
   orientationProof: "stored_labeled_pair" | "named_fixture_attested" | "native_home_away_fields" | "canonical_named_fixture_join";
   provider?: CbbQuote["provider"]; fetchedAt?: string; requestedAt?: string; receivedAt?: string;
-  canonicalReceipt?: CbbCanonicalReceipt; sourceEventId?: string;
+  canonicalReceipt?: CbbCanonicalReceipt; sourceEventId?: string; providerEventId?: string;
   observationScope?: "retained_market_pair" | "selected_execution_pair";
 };
 export type CbbContextualFeatureInput = {

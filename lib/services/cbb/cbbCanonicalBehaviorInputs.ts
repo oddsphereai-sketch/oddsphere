@@ -16,7 +16,7 @@ function receipt(pair:CbbCanonicalPricePair|CbbCanonicalSplitPair,decisionAt:str
   const first=safeObservationId(pair.first.observationId),second=safeObservationId(pair.second.observationId);
   if(first===null||second===null||first===second)return null;
   const canonical:CbbCanonicalReceipt={kind:"db_inserted_upper_bound",availableBy:pair.availability.availableBy,
-    providerEventId:pair.providerEventId,ingestionRunId:pair.ingestionRunId,observationIds:[first,second],
+    providerEventId:pair.providerEventId,ingestionRunId:pair.ingestionRunId,observationIds:[first,second],collectionStartedAt:pair.availability.runStartedAt,
     rawPayloadHashes:[pair.first.rawPayloadHash,pair.second.rawPayloadHash]};
   const bounds=cbbEvidenceReceiptBounds({fetchedAt:pair.recordedFetchedAt,canonicalReceipt:canonical});
   const retailResponse=pair.kind==="price"&&consumerBook(pair.book);

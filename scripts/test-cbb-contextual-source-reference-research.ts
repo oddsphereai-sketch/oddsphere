@@ -94,7 +94,9 @@ for(const source of [{...native,providerObservedAt:"2026-11-04T18:31:00Z",fetche
  assert.equal(pricer.evaluate({source,target,selection:"first"}).status,"unidentifiable");
 }
 assert.equal(pricer.evaluate({source:native,target:{...target,fetchedAt:"2026-11-04T18:31:30Z"},selection:"first"}).status,"unidentifiable");
-assert.equal(pricer.evaluate({source:native,target:{...target,requestedAt:"2026-11-04T18:31:00Z"},selection:"first"}).status,"unidentifiable");
+const badRequestReference=pricer.evaluate({source:native,target:{...target,requestedAt:"2026-11-04T18:31:00Z"},selection:"first"});
+assert.equal(badRequestReference.targetExpectedValue,pricer.evaluate({source:native,target,selection:"first"}).targetExpectedValue,"Unknown causal start does not erase a genuinely available price reference");
+assert.equal(pricer.evaluate({source:{...native,sourceEventId:"native-A",providerEventId:"native-B"},target,selection:"first"}).status,"unidentifiable","Conflicting quote-owned event identifiers cannot supply price-reference authority");
 assert.equal(pricer.evaluate({source:native,target:{...target,sportsbook:"circa"},selection:"first"}).reason,"source_and_target_are_same_physical_book");
 assert.equal(pricer.evaluate({source:native,target:targetMl,selection:"first"}).reason,"cross_market_reference_not_identified");
 const limited=createCbbJointSourceReferencePricer({gameId:1,asOf,finalLatent:latent,rootNumerics:{maxLawEvaluations:2}});
