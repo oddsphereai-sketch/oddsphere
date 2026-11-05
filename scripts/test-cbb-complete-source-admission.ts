@@ -47,3 +47,23 @@ for(const game of fixture.games){
 for(const [a,b] of [["Jax State","Jackson State"],["N Illinois","Illinois State"],["Penn","Penn State"]])assert.notEqual(cbbProviderInstitutionName(a),cbbProviderInstitutionName(b));
 console.log(JSON.stringify({actualGames:fixture.games.length,sourceContracts:contracts,splitRows,collectorAndWriterJoinParity:true,
   sourceClocksPricesAndLinesExact:true,wrongSchoolAndTimeRejected:true,networkRequests:0,productionWrites:0}));
+
+// Actual17:15 collector rejection: Playbook pbk_f7b1b1590f7d85a452b0
+// Albany Great Danes@Manhattan Jaspers, 2026-11-06T00:00Z.
+// This fixture tests source identity; no synthetic price is claimed as a live quote.
+const forward=JSON.parse(gunzipSync(fs.readFileSync(new URL("./fixtures/cbb-cross-division-20261105/forward-source.json.gz",import.meta.url))).toString()) as {games:CbbGame[]};
+const albany=forward.games.find(g=>g.id===10882660)!;
+assert.equal(albany.date,"2026-11-06T00:00:00.000Z");
+const albanyRef={id:albany.id,externalId:albany.id,slateDate:"2026-11-05",gameDate:albany.date,homeTeamId:albany.home_team.id,
+ awayTeamId:albany.visitor_team.id,homeAbbr:albany.home_team.abbreviation,awayAbbr:albany.visitor_team.abbreviation,
+ homeName:albany.home_team.full_name,awayName:albany.visitor_team.full_name,homeLocation:albany.home_team.college??"",awayLocation:albany.visitor_team.college??""};
+const observed={away:"Albany Great Danes",home:"Manhattan Jaspers",at:"2026-11-06T00:00:00Z"};
+assert.equal(matchCbbSourceGame([albanyRef],observed.away,observed.home,observed.at)?.game.externalId,albany.id);
+assert.equal(matchCbbSourceGame([albanyRef],observed.home,observed.away,observed.at)?.reversed,true);
+assert.equal(matchCbbSourceGame([albanyRef],"Albany State Golden Rams",observed.home,observed.at),null);
+assert.equal(matchCbbSourceGame([albanyRef],"Mount Saint Mary Knights",observed.home,observed.at),null);
+assert.equal(matchCbbSourceGame([albanyRef, {...albanyRef,id:999,externalId:999}],observed.away,observed.home,observed.at),null);
+assert.equal(matchCbbSourceGame([albanyRef],observed.away,observed.home,"2026-11-07T00:00:00Z"),null);
+assert.equal(cbbSplitOrientation(observed.away,observed.home,{homeTeamDisplayName:albanyRef.homeName,awayTeamDisplayName:albanyRef.awayName,
+ cbbHomeCollege:albanyRef.homeLocation,cbbAwayCollege:albanyRef.awayLocation}),"direct");
+console.log("PASS actual Albany/UAlbany source identity: canonical collector/quote/split orientation, wrong school/day and ambiguity controls; no source quote invented.");

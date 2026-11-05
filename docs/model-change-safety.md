@@ -16,8 +16,8 @@ this CBB release must not silently regrade other sports.
 
 The owner requested one contextual market interpretation and forecast with the
 independent model as a data point, no preset model/book blends and no arbitrary
-score offsets. The prepared model R1 /covariance R1 /publisher R40 /adapter and
-tracking R26 family above is not yet deployed. Keep current R38/R39 source and
+score offsets. The prepared model R1 /covariance R1 /publisher R42 /adapter R26 and
+tracking R28 family above is not yet deployed. Keep current R38/R39/R41 source, Albany identity and
 fixture-clock repairs, including transport-native IDs, request starts, response
 completion, unknown observation bounds and locked-record compatibility.
 
@@ -81,6 +81,27 @@ changes zero scores, probabilities, sides, prices or grades. Actionables remain
 direct/context/fail-closed tests, the full model-change gate, current-main
 integration safety, protected PR checks and postmerge normal-writer verification.
 Evidence: `model-audits/2026-11-05-nfl-source-reaction-health.json`.
+
+## Owner-directed CBB exact Albany source identity — November 5
+
+The owner requires available prices and splits to be recovered from genuine
+matching errors rather than described as absent. One exact actual source name,
+Albany Great Danes, was rejected against UAlbany Great Danes despite the same
+Manhattan opponent and00:00Z start. Incumbent model R23 /receipt R19 /publisher
+R41 /tracking R27 and canonical capture R28 admit that exact full-name alias
+through the common collector/quote/split identity path. No generic fuzziness,
+clock widening, quota increase or grading/model formula change is authorized.
+Align the provider query edges with the existing±10-minute matcher, and retain
+only20 sanitized unmatched-event descriptors with a separate total count;
+these use the same already-fetched response and add no request.
+Existing R22/R18 and older locks retain exact authority and original attribution.
+The 22 unsupported cross priors remain unpublished; reader R1's cached-clock
+handoff remains unchanged. Functional positive/reversed/mixed-school/day/ambiguity
+controls, actual saved R22 writer-reader-tracker continuity, unchanged-input
+board counts, the full gate and protected/live source verification are required.
+Available new evidence may affect an unlocked forecast only through the existing
+versioned reader. No manual actionable demotion/promotion or accuracy claim is
+introduced by this source repair.
 
 ## Owner-directed CBB fixture-clock and unsupported-card repair — November 5
 

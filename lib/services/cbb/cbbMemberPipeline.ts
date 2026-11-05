@@ -41,7 +41,7 @@ import {forecastCbbFullDivisionOneBatch} from "@/lib/cbb/fullDivisionOneForecast
 import {buildCbbGameForecastBoard} from "@/lib/cbb/gameForecastBoard";
 import type {CbbProvisionalBoard} from "@/lib/cbb/provisionalLifecycle";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_05_r40_contextual_outcome" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_05_r42_contextual_outcome" as const;
 /** Book/contract choice only. No prior projection, probability or grade runs. */
 export function selectCbbContextualPipelineTargets(quotes:CbbQuote[]):CbbQuote[]{
   const boardBook=chooseCbbSupportedTargetBook(quotes);
@@ -172,7 +172,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   const sourceCoverage={release:"cbb_current_source_coverage_2026_11_05_r1_three_provider_join",theOddsApiConfigured:!!args.theOddsApiKey?.trim(),
     requestedGames:sourceScope.length,gapGames:sourceGaps.length,theOddsApiStatus:theOddsApi?.status??(sourceGaps.length?args.theOddsApiKey?.trim()?"read_failed":"missing_key":"not_needed"),
     theOddsApiRequests,theOddsApiPaidAttempts,theOddsApiCreditsUsed:theOddsApi?.creditsUsed??null,
-    theOddsApiCreditsRemaining:theOddsApi?.creditsRemaining??null,eventsReturned:theOddsApi?.eventsReturned??0,theOddsApiRejections:theOddsApi?.rejections??[],
+    theOddsApiCreditsRemaining:theOddsApi?.creditsRemaining??null,eventsReturned:theOddsApi?.eventsReturned??0,theOddsApiRejections:theOddsApi?.rejections??[],theOddsApiUnmatchedEvents:theOddsApi?.unmatchedEvents??[],theOddsApiUnmatchedEventCount:theOddsApi?.unmatchedEventCount??0,
     quotesByProvider:{} as Record<string,number>,unpricedGameIds:[] as number[],quarantined:0,duplicates:0};
   const extraById=new Map<number,CbbQuote[]>();
   for(const quote of theOddsApi?.quotes??[])extraById.set(quote.gameId,[...(extraById.get(quote.gameId)??[]),quote]);

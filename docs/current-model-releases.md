@@ -10,8 +10,8 @@ Reserved release identifiers for the owner-directed unified contextual reader:
 - Decision: `cbb_outcome_decision_2026_11_05_r6_confidence_price_tiers`.
 - Grade: `cbb_contextual_outcome_grade_2026_11_05_r5_confidence_price_tiers`.
 - Board: `cbb_contextual_outcome_board_2026_11_05_r1_copy_only`.
-- Publisher: `cbb_member_pipeline_2026_11_05_r40_contextual_outcome`.
-- Adapter/tracking: R26 contextual-outcome identifiers exported by their runtime modules.
+- Publisher: `cbb_member_pipeline_2026_11_05_r42_contextual_outcome`.
+- Adapter: R26 contextual-outcome confidence-price identifier; tracking: R28 contextual-outcome identifier, exported by their runtime modules.
 
 This candidate has not been deployed. One fitted contextual score law uses the
 independent forecast as a fallible data point alongside native book prices,
@@ -54,8 +54,9 @@ is 23 Watch→Lean and 4 Lean→Best, with no actionable demotions. This does no
 prove future accuracy or establish current live-board counts. The final audit
 SHA256 is `85ed97da30b1d62d6e2738cbe49ec8fc3b64cc1b7b374d74b7c8648a5328f469`.
 Protected PR publication, explicit private-asset upload approval and
-postdeployment checks remain required. Preserve the separate R38/R39 source and
-fixture-clock release declarations when integrating this candidate.
+postdeployment checks remain required. Preserve the separate R38/R39/R41 source, fixture-clock and Albany identity
+release declarations when integrating this candidate. Publisher R42 and tracking
+R28 incorporate main 4ebd7a06 without relabeling R23/R22 or older locked records.
 
 ## NFL outcome/value separation and player-state authority — November 5 candidate
 
@@ -187,15 +188,15 @@ activation requires protected PR publication and live verification.
 
 Publication identifiers: independent
 `cbb_candidate_2026_11_05_r5_complete_d1_program_priors`, incumbent market model
-`cbb_candidate_2026_11_05_r22_fixture_clock_epoch`, receipt
-`cbb_market_behavior_2026_11_05_r18_fixture_clock_epoch`, cross score
+`cbb_candidate_2026_11_05_r23_albany_source_identity`, receipt
+`cbb_market_behavior_2026_11_05_r19_albany_source_identity`, cross score
 `cbb_cross_division_score_2026_11_05_r1_posterior_score_law`, forecast board
 `cbb_game_forecast_board_2026_11_05_r1_unpriced_outcomes`, forecast-only grade
 `cbb_game_forecast_grade_2026_11_05_r1_no_unquoted_wagers`, frozen outcome
 `cbb_game_outcome_2026_11_05_r1_frozen_winner`, publisher
-`cbb_member_pipeline_2026_11_05_r39_fixture_clock_epoch`, adapter
+`cbb_member_pipeline_2026_11_05_r41_albany_source_identity`, adapter
 `cbb_member_adapter_2026_11_05_r24_unpriced_game_forecast`, tracking
-`cbb_tracking_writer_2026_11_05_r25_fixture_clock_lineage`, training
+`cbb_tracking_writer_2026_11_05_r27_albany_source_identity`, training
 `cbb_current_training_2026_11_05_r4_separate_cross_division_receipts`, and fixture
 seed `cbb_fixture_seed_2026_11_05_r8_verified_complete_d1_identities`.
 
@@ -207,6 +208,24 @@ are documented in
 `docs/model-audits/2026-11-05-cbb-all-division-one-private.md`. The current-input
 43-game /129-market comparison has 0 promotions, 0 demotions, 0 side changes
 and 0 score changes; 22 new cross forecasts add no unqualified wager grades.
+R41/R23/R19/R27 add only the source-proven exact full-name alias
+`Albany Great Danes` → `UAlbany Great Danes`. The actual November5 Playbook
+capture rejected pbk_f7b1b1590f7d85a452b0 at00:00Z against canonical10882660
+with identical Manhattan opponent and time. Shared collector/quote/split
+identity uses the same alias; Albany State, other schools, wrong days and
+ambiguous fixtures stay rejected. Canonical capture advances to
+`market_intelligence_v2_capture_2026_11_05_r28_cbb_albany_source_identity` and
+shared mapping to `cbb_sharp_split_mapping_2026_11_05_r6_albany_source_identity`.
+The current request bounds include the existing±10-minute admission margin
+at both window edges, preventing upstream exclusion of otherwise matchable
+events. Returned unmatched diagnostics retain at most20 short-string native
+event descriptors plus total count; no extra source request is introduced.
+No clock tolerance, provider budget, forecast equation, grade threshold,
+source priority or cache behavior changes. R22/R18 remain explicit compatible
+anchor/path/tracking owners, including actual saved R22 future-lock proof.
+This restores correct source admission, not a win-rate claim or a forced grade
+promotion. See `model-audits/2026-11-05-cbb-albany-source-identity.md`.
+
 The member reader independently versions the cache-to-record handoff as
 `cbb_member_reader_2026_11_05_r1_cached_fixture_clock_handoff`. A cached board
 may briefly retain an old unlocked start while the sole writer saves the
@@ -1280,7 +1299,8 @@ The broader cross-sport split authority path remains under separate audit.
 ## CBB forward retail price journal — November 3
 
 Current source capture is
-`market_intelligence_v2_capture_2026_11_03_r27_cbb_retail_price_journal`, with
+`market_intelligence_v2_capture_2026_11_05_r28_cbb_albany_source_identity`
+(previously `market_intelligence_v2_capture_2026_11_03_r27_cbb_retail_price_journal`), with
 `cbb_retail_price_journal_2026_11_03_r1_existing_response`. The existing sole
 leased collector now retains complete pregame retail quote pairs from its
 already-requested Owls current response in the existing canonical observation
