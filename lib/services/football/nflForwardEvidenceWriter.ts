@@ -162,7 +162,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_05_r110_conviction_risk_grade_cap" as const;
+  "nfl_forward_evidence_writer_2026_11_05_r111_current_game_starter_authority" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
