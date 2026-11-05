@@ -75,6 +75,7 @@ export function createCbbRecommendationRiskEvaluator(args:{latent:CbbContextualL
    marginValueSensitivity,totalValueSensitivity,workingValueSensitivityScale,expectedDownsidePenalty,riskAdjustedExpectedValue,decisionRiskExpectedValue,
    linearizationDiagnostics:{maximumAbsoluteResidual:Math.max(0,...linearizationResiduals.map(s=>Math.abs(s.residual))),residuals:linearizationResiduals},
    numericalErrorEstimate:decisionNumericalErrorEstimate,supported,priceCanSupportRecommendation,maximumPossibleStressedValue,scenarios:observations,
-   reason:!priceCanSupportRecommendation?"price_return_cannot_support_declared_model_risk_even_at_certain_win":supported?"price_advantage_survives_declared_model_sensitivity":riskAdjustedExpectedValue<=decisionNumericalErrorEstimate?"price_advantage_sensitive_to_fitted_location_uncertainty":"price_advantage_too_thin_for_adverse_case_stress"};
+   reason:!priceCanSupportRecommendation?"price_return_cannot_support_declared_model_risk_even_at_certain_win":supported?"price_advantage_survives_declared_model_sensitivity":
+    (assessmentTier==="best"?minimumLocalValue:riskAdjustedExpectedValue)<=decisionNumericalErrorEstimate?"price_advantage_sensitive_to_fitted_location_uncertainty":"price_advantage_too_thin_for_adverse_case_stress"};
  };
 }

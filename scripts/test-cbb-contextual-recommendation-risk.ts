@@ -5,10 +5,10 @@ import {buildCbbInterpretedDecision} from "../lib/cbb/contextualInterpretedDecis
 import {buildCbbContextualMarketInterpretation} from "../lib/cbb/contextualMarketInterpretation";
 import type {CbbMarket} from "../lib/cbb/types";
 const base:CbbContextualLatentGaussian={marginMean:1.45,totalMean:146,marginSd:12,totalSd:16,correlation:0};
-function assess(latent=base,locationSd=.001,price=-120,market:CbbMarket="moneyline",line:number|null=null,selection:"first"|"second"="first"){
+function assess(latent=base,locationSd=.001,price=-120,market:CbbMarket="moneyline",line:number|null=null,selection:"first"|"second"="first",assessmentTier:"lean"|"best"="lean"){
  const p=createCbbContextualScoreLaw(latent).probabilitiesFast(market,line),win=selection==="first"?p.first:p.second,loss=selection==="first"?p.second:p.first;
  const expectedValue=win*(price>0?price/100:100/-price)-loss;
- const value=createCbbRecommendationRiskEvaluator({latent,context:{marginLocationSd:locationSd,totalLocationSd:locationSd,calibrationGames:137}})({market,line,selection,price,expectedValue,resolvedMass:win+loss,numericalValueErrorEstimate:1e-10,probabilityErrorEstimate:1e-11});
+ const value=createCbbRecommendationRiskEvaluator({latent,context:{marginLocationSd:locationSd,totalLocationSd:locationSd,calibrationGames:137},assessmentTier})({market,line,selection,price,expectedValue,resolvedMass:win+loss,numericalValueErrorEstimate:1e-10,probabilityErrorEstimate:1e-11});
  return {...value,original:{win,loss,push:p.push,expectedValue}};
 }
 const low=assess(),fragile=assess(base,.5),largerFragile=assess({...base,marginMean:4.8},40);
@@ -25,6 +25,9 @@ assert.equal(assess(base,.001,-120).supported,true,"Reduced fitted uncertainty i
 const extreme=assess({...base,marginMean:100},.001,-100000),confident=assess({...base,marginMean:30},1,-300);
 assert.ok(extreme.original.expectedValue>0&&!extreme.supported&&!extreme.priceCanSupportRecommendation,"A nearly certain winner is distinct from a useful return at extreme prices");
 assert.ok(confident.supported&&confident.priceCanSupportRecommendation,"Reasonably priced confident favorites remain eligible without an odds veto");
+const cautious=assess({...base,marginMean:5},6,-110),stronger=assess({...base,marginMean:5},6,-110,"moneyline",null,"first","best");
+assert.equal(cautious.supported,true);assert.equal(stronger.supported,false,"A cautiously supported Lean need not survive the Best Angle worst-case test");
+assert.equal(stronger.reason,"price_advantage_sensitive_to_fitted_location_uncertainty","Best's local-scenario failure is not mislabeled as a thin nominal edge");
 const integer=assess({...base,marginMean:3},0,110,"spread",-3);
 assert.ok(integer.original.push>0);
 assert.ok(Math.abs(integer.minimumStressedExpectedValue-(137*integer.original.expectedValue-(integer.original.win+integer.original.loss))/138)<1e-12,"Adverse-case stress preserves refunded push mass");
