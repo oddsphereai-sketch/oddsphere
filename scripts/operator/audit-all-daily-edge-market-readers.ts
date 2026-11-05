@@ -12,6 +12,7 @@ import {
   resolveDailyEdgeAuditHttpPayload,
   type DailyEdgeAuditHttpPayload,
 } from "../../lib/services/dailyEdgeAuditTransport";
+import { assessStrongProfessionalOpposition } from "../../lib/services/dailyEdgeProfessionalOppositionAudit";
 
 type Row = Record<string, any>;
 type Issue = {
@@ -76,6 +77,19 @@ function professionalSplitSection(market: Row): boolean {
   return source === "circa" || source === "pinnacle" || source === "bookmaker";
 }
 
+function latestProfessionalEvidenceAt(market: Row): string | null {
+  const values = [
+    market?.sportsbookSplits?.lastUpdated,
+    ...(Array.isArray(market?.sportsbookSplits?.rows)
+      ? market.sportsbookSplits.rows.flatMap((row: Row) => [row.freshnessCheckedAt, row.observedAt])
+      : []),
+  ];
+  const valid = values
+    .filter((value): value is string => typeof value === "string" && Number.isFinite(Date.parse(value)))
+    .sort((left, right) => Date.parse(right) - Date.parse(left));
+  return valid[0] ?? null;
+}
+
 function gameDate(game: Row): string | null {
   const stamp = game.gameStartAt ?? game.gameTime ?? null;
   if (typeof stamp !== "string") return null;
@@ -83,7 +97,7 @@ function gameDate(game: Row): string | null {
   return Number.isFinite(ms) ? new Date(ms).toISOString().slice(0, 10) : null;
 }
 
-function auditBoard(sport: string, board: Row): { issues: Issue[]; summary: Row } {
+function auditBoard(sport: string, board: Row, auditCheckedAt: string): { issues: Issue[]; summary: Row } {
   const issues: Issue[] = [];
   const gradeCounts: Record<string, number> = {};
   const signalCounts: Record<string, number> = {};
@@ -162,14 +176,64 @@ function auditBoard(sport: string, board: Row): { issues: Issue[]; summary: Row 
       if (professionalSplitSection(market) && selectedSharp && opposingSharp && finite(selectedSharp.moneyPct) && finite(opposingSharp.moneyPct)) {
         const opposition = opposingSharp.moneyPct - selectedSharp.moneyPct;
         const resolvedStatus = String(market.recommendationDecision?.resolvedMarketRead?.status ?? "").toLowerCase();
-        const oppositionExplained = ["mixed", "resistance", "consensus_resistance"].includes(resolvedStatus) ||
-          ["market_resistance", "resistance"].includes(signal);
-        if (opposition >= 25 && !oppositionExplained && ["market_neutral", "market_confirmed", "confirmation", "support", "missing"].includes(signal)) {
+        const oppositionAssessment = assessStrongProfessionalOpposition({
+          oppositionPp: opposition,
+          sport,
+          marketSignal: signal,
+          resolvedMarketReadStatus: resolvedStatus,
+          whyLine: market.whyLine,
+          lockState: game.lockState,
+          lockedAt: game.lockedAt,
+          scheduledLockAt: game.scheduledLockAt,
+          predictionGeneratedAt: game.generatedAt ?? game.updatedAt,
+          professionalEvidenceAt: latestProfessionalEvidenceAt(market),
+          auditCheckedAt,
+        });
+        if (oppositionAssessment.disposition === "live_unexplained") {
           issues.push({ severity: "review", reason: "strong_sharp_opposition_not_explained", sport, matchup, market: marketName,
             details: { pick: market.pick, selectedSharpMoney: selectedSharp.moneyPct, opposingSharpMoney: opposingSharp.moneyPct,
               sourceBook: market.sportsbookSplits?.sourceBook ?? null, marketSignal: market.marketSignal,
               resolvedMarketRead: resolvedStatus || null,
+              whyLine: market.whyLine ?? null,
+              postureDisposition: oppositionAssessment.disposition,
+              liveProductGap: oppositionAssessment.liveProductGap,
+              predictionGeneratedAt: oppositionAssessment.predictionGeneratedAt,
+              professionalEvidenceAt: oppositionAssessment.professionalEvidenceAt,
+              authoritativeRefreshDueAt: oppositionAssessment.authoritativeRefreshDueAt,
+              authoritativeRefreshWindowEndsAt: oppositionAssessment.authoritativeRefreshWindowEndsAt,
+              rawSplitDirectionForecastAuthority: oppositionAssessment.rawSplitDirectionForecastAuthority,
               oddsTrailStops: Array.isArray(market.oddsTrail) ? market.oddsTrail.length : 0,
+              projected: game.projected, verdict: grade, date } });
+        } else if (oppositionAssessment.disposition === "immutable_legacy_locked") {
+          issues.push({ severity: "review", reason: "immutable_legacy_locked_sharp_opposition_context", sport, matchup, market: marketName,
+            details: { pick: market.pick, selectedSharpMoney: selectedSharp.moneyPct, opposingSharpMoney: opposingSharp.moneyPct,
+              sourceBook: market.sportsbookSplits?.sourceBook ?? null, marketSignal: market.marketSignal,
+              resolvedMarketRead: resolvedStatus || null,
+              whyLine: market.whyLine ?? null,
+              lockState: game.lockState ?? null,
+              lockedAt: game.lockedAt ?? null,
+              predictionGeneratedAt: oppositionAssessment.predictionGeneratedAt,
+              professionalEvidenceAt: oppositionAssessment.professionalEvidenceAt,
+              authoritativeRefreshDueAt: oppositionAssessment.authoritativeRefreshDueAt,
+              authoritativeRefreshWindowEndsAt: oppositionAssessment.authoritativeRefreshWindowEndsAt,
+              postureDisposition: oppositionAssessment.disposition,
+              liveProductGap: oppositionAssessment.liveProductGap,
+              storedRecordPreserved: true,
+              rawSplitDirectionForecastAuthority: oppositionAssessment.rawSplitDirectionForecastAuthority,
+              oddsTrailStops: Array.isArray(market.oddsTrail) ? market.oddsTrail.length : 0,
+              projected: game.projected, verdict: grade, date } });
+        } else if (oppositionAssessment.disposition === "late_evidence_pending_authoritative_refresh") {
+          issues.push({ severity: "review", reason: "late_evidence_pending_authoritative_refresh", sport, matchup, market: marketName,
+            details: { pick: market.pick, selectedSharpMoney: selectedSharp.moneyPct, opposingSharpMoney: opposingSharp.moneyPct,
+              sourceBook: market.sportsbookSplits?.sourceBook ?? null, marketSignal: market.marketSignal,
+              resolvedMarketRead: resolvedStatus || null,
+              predictionGeneratedAt: oppositionAssessment.predictionGeneratedAt,
+              professionalEvidenceAt: oppositionAssessment.professionalEvidenceAt,
+              authoritativeRefreshDueAt: oppositionAssessment.authoritativeRefreshDueAt,
+              authoritativeRefreshWindowEndsAt: oppositionAssessment.authoritativeRefreshWindowEndsAt,
+              postureDisposition: oppositionAssessment.disposition,
+              liveProductGap: oppositionAssessment.liveProductGap,
+              rawSplitDirectionForecastAuthority: oppositionAssessment.rawSplitDirectionForecastAuthority,
               projected: game.projected, verdict: grade, date } });
         }
       }
@@ -190,6 +254,7 @@ function auditBoard(sport: string, board: Row): { issues: Issue[]; summary: Row 
 }
 
 async function main(): Promise<void> {
+  const auditCheckedAt = new Date().toISOString();
   const token = process.env.DAILY_EDGE_AUDIT_TOKEN || process.env.CRON_SECRET;
   if (!token) throw new Error("DAILY_EDGE_AUDIT_TOKEN or CRON_SECRET is required");
   const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/api/internal/daily-edge-deep-audit`, {
@@ -206,7 +271,7 @@ async function main(): Promise<void> {
     const board = resolved.boards[sport];
     if (!board) continue;
     selectedBoards[sport] = board;
-    const result = auditBoard(sport, board);
+    const result = auditBoard(sport, board, auditCheckedAt);
     summaries[sport] = result.summary;
     issues.push(...result.issues);
   }
