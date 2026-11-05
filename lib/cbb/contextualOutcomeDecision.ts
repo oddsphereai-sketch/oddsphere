@@ -8,7 +8,7 @@ import {buildCbbInterpretedDecision} from "./contextualInterpretedDecision";
 import type {CbbContextualFeatureInput} from "./contextualForecastFeatures";
 import type {CbbScoreLawNumerics} from "./contextualScoreLawResearch";
 import type {CbbQuote} from "./types";
-export const CBB_OUTCOME_DECISION_RELEASE="cbb_outcome_decision_2026_11_05_r6_confidence_price_tiers" as const;
+export const CBB_OUTCOME_DECISION_RELEASE="cbb_outcome_decision_2026_11_05_r7_noplay_price_lanes" as const;
 function canonical(v:unknown):unknown{if(Array.isArray(v))return v.map(canonical);if(v&&typeof v==="object")return Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>[k,canonical(x)]));return v;}
 export function cbbOutcomeIndependentInputSha256(independent:CbbContextualFeatureInput["independent"]){
  return createHash("sha256").update(JSON.stringify(canonical({gameId:independent.gameId,asOf:independent.asOf,release:independent.release,inputStatus:independent.inputStatus,

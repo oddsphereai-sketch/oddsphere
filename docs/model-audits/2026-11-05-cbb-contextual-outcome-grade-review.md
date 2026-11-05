@@ -112,3 +112,48 @@ Private audit SHA256:
 The shared member presentation, adapter and tracker focused tests also prove
 consistent Best/Lean codes, nonactionable Watch confidence (including numerical
 zero), exact raw probabilities/EV, stored locks and legacy locked precedence.
+
+## R7 owner clarification: priced No Play versus Watch
+
+The owner requested a genuine No Play lane rather than calling every priced pass
+Watchlist. R7 leaves all positive-value Best/Lean classifications and every
+forecast, selection, probability, push, price and EV unchanged. A numerically
+unresolved break-even offer stays Watch. A resolved negative-EV offer stays Watch
+only when pWin-qFair*(pWin+pLose) is resolved positive: the forecast premium is
+consumed by the actual pair's pricing margin. Other resolved negative offers are
+No Play. Invalid/unavailable execution remains Held.
+
+This avoids a fixed economic reserve and an invented extreme-odds floor. For
+-2000/+1600 offers, 94% win probability produces No Play (EV -1.3%), 95% gives
+Watch (EV -0.25%, positive paired-fair premium), and 97% gives Lean (EV +1.85%).
+These are arithmetic examples, not betting advice or accuracy guarantees.
+
+The frozen 43-game grade-only comparison is 33 No Plays, 38 Watchlists, 54 Leans
+and 4 Best Angles: 25 Moneyline, 6 Spread and 2 Total Watchlists become No Play;
+zero actionables or forecasts change. Transition proof SHA256:
+`c0280db987afa6a357ee43b7c837c4c391526e55584d3d80a7d7ecc46b3360c6`.
+Complete priced No Plays retain selection, probabilities, exact price, EV and
+accuracy settlement, with no recommendation confidence or wager units. The
+member DTO, shared fallback and tracker preserve this distinction from Held.
+
+Private model storage was explicitly owner-approved and verified at
+2026-11-05T20:29:53Z: one 591,889-byte immutable gzip object in private
+model-artifacts storage, exact authenticated round-trip SHA256, blocked public
+read, real runtime loader successful, zero prediction evaluations/writes and
+zero provider requests. Upload is not model activation.
+
+The final R7 full-runtime pass took 38.74 seconds for the same 43 inputs, with
+zero errors/Held and exact private-codec, JSONB and board round trips. Compared
+with the preserved R6 report, every score, uncertainty component, interpretation,
+calibration, selected side, probability, push, price, EV, source economics and
+counterevidence field is identical. Only the declared 33 nonactionable labels
+and release metadata change. Final runtime report SHA256:
+`0bfc136776a886763c024c5c5172f7162715eb40230497fdd7eded0e8bfe9dd2`.
+
+The publisher also rechecks the real write clock after inference rather than
+reusing the evidence cutoff for T-60 eligibility. Advancing-clock tests prove
+that a newly computed candidate is discarded after the cutoff, the exact prior
+board/DTO is frozen, a missing prelock record cannot be backdated, and malformed
+or backward clocks cannot publish. This changes no forecast evidence timestamp.
+The existing 300-second cron duration and provider budgets remain unchanged;
+cloud full-slate elapsed time still requires normal-cycle production verification.

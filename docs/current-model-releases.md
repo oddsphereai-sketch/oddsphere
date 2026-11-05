@@ -7,11 +7,11 @@ Reserved release identifiers for the owner-directed unified contextual reader:
 - Model: `cbb_contextual_outcome_2026_11_05_r1`.
 - Covariance calibration: `cbb_contextual_covariance_2026_11_05_r1`.
 - Engine: `cbb_contextual_outcome_forecast_2026_11_05_v5_provider_receipt_contract`.
-- Decision: `cbb_outcome_decision_2026_11_05_r6_confidence_price_tiers`.
-- Grade: `cbb_contextual_outcome_grade_2026_11_05_r5_confidence_price_tiers`.
+- Decision: `cbb_outcome_decision_2026_11_05_r7_noplay_price_lanes`.
+- Grade: `cbb_contextual_outcome_grade_2026_11_05_r6_noplay_price_lanes`.
 - Board: `cbb_contextual_outcome_board_2026_11_05_r1_copy_only`.
 - Publisher: `cbb_member_pipeline_2026_11_05_r42_contextual_outcome`.
-- Adapter: R26 contextual-outcome confidence-price identifier; tracking: R28 contextual-outcome identifier, exported by their runtime modules.
+- Adapter: R26 contextual-outcome confidence-price identifier; tracking: R29 contextual No Play identifier, exported by their runtime modules.
 
 This candidate has not been deployed. One fitted contextual score law uses the
 independent forecast as a fallible data point alongside native book prices,
@@ -39,6 +39,24 @@ agree without inventing professional confirmation. See
 `daily-edge-grade-intent.md` for shared intent and the sport-by-sport review
 boundary. No other sport's grade policy changes in this CBB release.
 
+Decision R7 /grade R6 adds a complete priced No Play lane. Positive offered value
+retains the same Best/Lean policy. Watch means numerically unresolved value, or
+a positive forecast premium over the actual paired fair price consumed by vig.
+Clearly negative offered value without that resolved premium is No Play; only
+missing/invalid evidence is Held. Compare pWin-qFair*(pWin+pLose) so pushes do
+not distort the price comparison. There is no additional extreme-odds floor.
+Against the frozen R6 decisions, R7 yields 33 No Plays, 38 Watchlists, 54 Leans
+and 4 Best Angles: 33 Watch-to-NoPlay changes (25 ML /6 Spread /2 Total), zero
+actionable change and no forecast/side/p/price/EV change. New No Plays keep
+prediction accuracy but have no wager units.
+The final R7 full-runtime report (SHA256
+`0bfc136776a886763c024c5c5172f7162715eb40230497fdd7eded0e8bfe9dd2`)
+confirms exact score/uncertainty/p/side/price/EV equality with R6 and complete
+codec/JSONB/member-board round trips for all 43 frozen inputs.
+ Adapter R26 now ends in
+`contextual_outcome_confidence_price_r2_noplay`; tracking is R29.
+
+
 V5 incorporates the subsequent R38 provider-ID and request/completion contract.
 The final V5 build converged once with five whole-model excluded-game folds;
 its private compressed bundle is 591,889 bytes, SHA256
@@ -53,10 +71,13 @@ visible. Against the immediately preceding V5 candidate grade policy, the change
 is 23 Watch→Lean and 4 Lean→Best, with no actionable demotions. This does not
 prove future accuracy or establish current live-board counts. The final audit
 SHA256 is `85ed97da30b1d62d6e2738cbe49ec8fc3b64cc1b7b374d74b7c8648a5328f469`.
-Protected PR publication, explicit private-asset upload approval and
-postdeployment checks remain required. Preserve the separate R38/R39/R41 source, fixture-clock and Albany identity
+The owner subsequently approved private storage. The 591,889-byte bundle was
+uploaded once at 2026-11-05T20:29:53Z; authenticated download matches its exact
+hash, anonymous public access fails, and the real runtime loader succeeds.
+No model or prediction was activated by that upload. Protected PR publication
+and postdeployment checks remain required. Preserve the separate R38/R39/R41 source, fixture-clock and Albany identity
 release declarations when integrating this candidate. Publisher R42 and tracking
-R28 incorporate main 4ebd7a06 without relabeling R23/R22 or older locked records.
+R29 incorporate main 4ebd7a06 without relabeling R23/R22 or older locked records.
 
 ## NFL outcome/value separation and player-state authority — November 5 candidate
 

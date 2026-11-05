@@ -91,7 +91,11 @@ export function auditCbbCurrentOutcomeDecisions(args:{inputPath:string;rawPath:s
      need(m.price===(first?target.firstPrice:target.secondPrice),"Selected payout changed");close(m.expectedValue,m.probability*(m.price>0?m.price/100:100/-m.price)-m.loseProbability,1e-12,"Payout EV mismatch");
      const policy=decision.gradePolicy,error=p.omittedMassUpperBound+p.quadratureErrorEstimate+p.normalizerErrorEstimate+p.summationRoundoffUpperBound;
      const profit=m.price>0?m.price/100:100/-m.price,valueError=(profit+1)*error+8*Number.EPSILON*(Math.abs(m.probability*profit)+Math.abs(m.loseProbability)+1),positive=m.expectedValue>valueError;
-     const best=positive&&m.probability-error>=policy.bestMinimumWinProbability&&m.price>=policy.bestMinimumAmericanPrice,grade=!positive?"Watchlist":best?"Best Angle":"Lean";need(m.grade===grade,"Published confidence/price tier inconsistent");
+     const implied=(price:number)=>price>0?100/(100+price):-price/(100-price),other=first?target.secondPrice:target.firstPrice,q=implied(m.price)/(implied(m.price)+implied(other));
+     const premium=m.probability-q*(m.probability+m.loseProbability),premiumError=error+16*Number.EPSILON*(Math.abs(m.probability)+Math.abs(q*(m.probability+m.loseProbability))+1);
+     const best=positive&&m.probability-error>=policy.bestMinimumWinProbability&&m.price>=policy.bestMinimumAmericanPrice;
+     const grade=m.probability+m.loseProbability===0?"No Play":positive?(best?"Best Angle":"Lean"):Math.abs(m.expectedValue)<=valueError||premium>premiumError?"Watchlist":"No Play";need(m.grade===grade,"Published confidence/price/NoPlay lane inconsistent");
+     close(m.gradingNumerics.fairPremium,premium,1e-14,"Push-safe fair premium differs");close(m.gradingNumerics.fairPremiumErrorEstimate,premiumError,1e-14,"Fair premium numerical error differs");
      close(m.gradingNumerics.valueErrorEstimate,valueError,1e-14,"Numerical value error differs");need(m.gradingNumerics.valueSignResolvedPositive===positive,"Numerical value sign differs");
      need(!m.positiveProfessionalValue||m.sourceEconomics.some(x=>x.reference.targetExpectedValue!==null&&x.reference.targetExpectedValue>0),"Attributed positive professional reference absent");need(!m.observedProfessionalBookPriceConfirmation||m.bookPriceActions.length>0,"Native action support absent");
     }else need(m.selection===null&&m.probability===null&&m.expectedValue===null&&m.stake===0,"Held receipt invented prediction/economics");

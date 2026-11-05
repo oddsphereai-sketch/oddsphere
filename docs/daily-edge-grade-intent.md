@@ -13,7 +13,8 @@ forecast, count pushes as wins, or silently change the forecast probability.
 | --- | --- |
 | Best Angle | A top-conviction outcome prediction with positive estimated value at a worthwhile straight-bet price. An expensive favorite is not automatically a top play because it is likely to win. |
 | Lean | A positive-value prediction below the top tier. A confident, expensive favorite can qualify; the label alone makes no statement about a combined parlay's probability or value. |
-| Watchlist | A completed, readable prediction whose current price or conviction does not justify an actionable grade. Its outcome probability remains informational. |
+| Watchlist | A completed prediction near break-even, or a favorable forecast relative to paired fair pricing whose offered advantage is consumed by vig. It may merit a better-price watch; its probability remains informational. |
+| No Play | A completed, priced prediction with clearly negative offered value and no resolved forecast advantage over the paired fair price. Keep its predicted side and probability; no wager is implied. |
 | Held / operational exception | Required forecast or execution evidence is incomplete or invalid. Do not disguise a failed evaluation as an ordinary lack of edge. |
 
 Professional-book evidence can confirm, resist, strengthen or change the final
@@ -44,6 +45,11 @@ unconditional selected-win probability for Best Angle, and a Best Angle price of
 The 62% boundary reuses the existing NBA product confidence bar; the -200 price
 boundary follows the NFL approach and the owner's expensive-favorite preference.
 There is no fixed 3%/8% EV reserve or mandatory professional-action confirmation.
+For the No Play/Watch distinction, compare pWin-qFair*(pWin+pLose), with qFair
+from the actual paired offer. This respects push refunds without inflating win
+confidence. No extra extreme-odds cutoff is introduced: a likely winner at
+-2000 can be No Play, Watch or Lean depending on its actual forecast and price.
+Complete priced No Plays retain forecast accuracy but imply no wager units.
 This is a CBB candidate policy, not an already deployed all-sport standard.
 
 NFL, NBA, CFB, NHL, MLB, WNBA and soccer require their own active-path review

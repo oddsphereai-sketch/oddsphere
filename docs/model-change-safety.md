@@ -5,19 +5,23 @@
 The owner's subsequent tier clarification is recorded in
 `daily-edge-grade-intent.md`: top outcome confidence and worthwhile price, with
 expensive positive-value favorites still Lean-eligible. Candidate interpreted
-R6 /decision R6 /grade R5 removes fixed 3%/8% EV reserves and mandatory source
+R7 /decision R7 /grade R6 removes fixed 3%/8% EV reserves and mandatory source
 confirmation. Best additionally requires 62% unconditional win probability and
 price -200 or better. These are explicit product boundaries, not learned accuracy
 claims or market-input activation gates. Pushes remain separate; only numerically
 resolved positive offered value is actionable. Preserve actual sharp-source
 attribution separately from grade, consistent encoded/explicit verdicts and all
-locked records. Broader uniformity requires sport-by-sport active-path review;
+locked records. Watch is reserved for unresolved break-even value or a
+push-adjusted paired-fair premium consumed by actual vig; clear negative offered
+value without that premium is a complete priced No Play, distinct from Held.
+No new extreme-price floor is introduced. No Plays retain accuracy and raw
+p/price/EV but imply no wager units. Broader uniformity requires sport-by-sport active-path review;
 this CBB release must not silently regrade other sports.
 
 The owner requested one contextual market interpretation and forecast with the
 independent model as a data point, no preset model/book blends and no arbitrary
 score offsets. The prepared model R1 /covariance R1 /publisher R42 /adapter R26 and
-tracking R28 family above is not yet deployed. Keep current R38/R39/R41 source, Albany identity and
+tracking R29 family above is not yet deployed. Keep current R38/R39/R41 source, Albany identity and
 fixture-clock repairs, including transport-native IDs, request starts, response
 completion, unknown observation bounds and locked-record compatibility.
 

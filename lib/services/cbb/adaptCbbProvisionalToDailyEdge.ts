@@ -16,7 +16,7 @@ import { buildDailyEdgeMemberPresentation } from "@/app/lab/lib/dailyEdgeRespons
 import { CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INFORMATIONAL_WATCHLIST_GRADE_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE } from "@/lib/cbb/marketBehaviorCandidate";
 import {CBB_CONTINUITY_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_JOINT_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_ALIGNED_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 
-export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_05_r26_contextual_outcome_confidence_price_r1" as const;
+export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_05_r26_contextual_outcome_confidence_price_r2_noplay" as const;
 type GradeLabel="Best Angle"|"Lean"|"Watchlist"|"No Play"|"Held";
 type BoardRow=CbbProvisionalSnapshot["board"]["rows"][number];
 type SplitEvidence=ReturnType<typeof cbbCurrentSplitEvidence>;
@@ -45,9 +45,10 @@ function marketEdge(game:CbbGame,row:BoardRow,projectedTotal:number,homeWinProba
   const selectedLine=row.market==="moneyline"?null:row.market==="spread"&&row.selection==="second"&&row.line!==null?-row.line:row.line;
   const v=verdict(row.grade),probability=row.probability,price=row.price;
   // Outcome probability is not confidence in a wager at this price. New
-  // informational watches retain that probability but supply no actionable
+  // informational watches and priced passes retain that probability but supply no actionable
   // recommendation confidence to the shared Top Available Angles fallback.
-  const priceOnlyWatch=informationalWatchlist&&row.grade==="Watchlist"&&(contextualPolicy||row.expectedValue!==null&&row.expectedValue<0);
+  const priceOnlyWatch=contextualPolicy?(row.grade==="Watchlist"||row.grade==="No Play"):
+    informationalWatchlist&&row.grade==="Watchlist"&&row.expectedValue!==null&&row.expectedValue<0;
   const priceImplied=price===null?null:cbbImpliedProbability(price);
   const fair=row.marketFairProbability;
   const behavior=row as {actualActionConfirmation?:boolean;pathResistance?:boolean};
@@ -102,7 +103,8 @@ export function cbbOfficialGameResultFromScores(snapshot:CbbProvisionalSnapshot,
       const chosen=snapshot.board.gameForecast.selection;
       return {pickResult:((game.homeScore!>game.awayScore!)===(chosen==="first")?"win":"loss") as PickResult,gradeUnits:null};
     }
-    const gradeUnits=outcome===null||row.price===null?null:outcome==="push"?0:outcome==="loss"?-1:row.price>0?row.price/100:100/-row.price;
+    const contextualPass=snapshot.board.modelRelease===CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE&&row.grade==="No Play";
+    const gradeUnits=contextualPass||outcome===null||row.price===null?null:outcome==="push"?0:outcome==="loss"?-1:row.price>0?row.price/100:100/-row.price;
     return {pickResult:outcome,gradeUnits};};
   return {finalScore:{home:game.homeScore,away:game.awayScore},markets:{moneyline:result("moneyline"),total:result("total"),first_inning:result("spread")}};
 }
@@ -169,7 +171,7 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
     const boardRow=rows.get(kind)!;
     if(contextual){
       const stored=contextual.decision.marketDecisions.find(row=>row.market===kind)!;
-      const informational=stored.grade==="Watchlist";
+      const informational=stored.grade==="Watchlist"||stored.grade==="No Play";
       // The output probability is the stored law result, not recommendation
       // confidence in a price. No reference or displayed split can regrade it.
       market.recommendationConfidence=stored.grade==="Held"||informational?null:stored.probability===null?null:stored.probability*100;

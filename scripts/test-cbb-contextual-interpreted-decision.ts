@@ -25,7 +25,7 @@ assert.equal(make(input([{...microTarget,providerObservedAt:"2026-11-05T17:58:00
 assert.ok(Math.abs(result.finalScore.home-result.finalScore.away-result.finalScore.margin)<1e-10);assert.ok(Math.abs(result.finalScore.home+result.finalScore.away-result.finalScore.total)<1e-10);
 for(const row of result.marketDecisions){assert.notEqual(row.grade,"Held");const p=law.probabilitiesFast(row.market,row.target!.line),expected=row.selection==="first"?p.first:p.second,loss=row.selection==="first"?p.second:p.first;assert.ok(Math.abs(row.probability!-expected)<1e-12);assert.ok(Math.abs(row.expectedValue!-(expected*(row.price!>0?row.price!/100:100/-row.price!)-loss))<1e-12);assert.equal(row.grade,"Best Angle","strong final confidence and positive offered value need no invented professional confirmation");}
 const reversed=make(input(),targets,{...latent,marginMean:-14,totalMean:130});assert.equal(reversed.marketDecisions[0].selection,"second");assert.equal(reversed.marketDecisions[1].selection,"second");assert.equal(reversed.marketDecisions[2].selection,"second");
-const expTargets=[{...targets[0],firstPrice:-900,secondPrice:600},...targets.slice(1)],exp=make(input(expTargets),expTargets);assert.equal(exp.marketDecisions[0].grade,"Watchlist");assert.ok(exp.marketDecisions[0].expectedValue!<0);
+const expTargets=[{...targets[0],firstPrice:-900,secondPrice:600},...targets.slice(1)],exp=make(input(expTargets),expTargets);assert.equal(exp.marketDecisions[0].grade,"No Play");assert.ok(exp.marketDecisions[0].expectedValue!<0);
 const pro=[q("moneyline","circa",[-300,250]),q("moneyline","pinnacle",[200,-250])],supported=make(input([...targets,...pro]));assert.equal(supported.marketDecisions[0].grade,"Best Angle");assert.equal(supported.marketDecisions[0].counterevidence?.professionalNegativeReference.length,1,"opposition retained without all-book unanimity veto");assert.deepEqual(supported.finalScore,result.finalScore,"ancillary reference economics cannot numerically reforecast");
 const bdl={...targets[0],provider:"balldontlie" as const};delete (bdl as Partial<typeof bdl>).orientationVerified;delete (bdl as Partial<typeof bdl>).requestedAt;
 const bdlInput=input(targets.slice(1));bdlInput.consumerCurrentQuotes=[{gameId:7,sportsbook:bdl.sportsbook,market:bdl.market,line:bdl.line,firstPrice:bdl.firstPrice,secondPrice:bdl.secondPrice,providerObservedAt:bdl.providerObservedAt,fetchedAt:bdl.fetchedAt,availableBy:bdl.fetchedAt,availabilityKind:"http_response",orientationProof:"native_home_away_fields",provider:"balldontlie"}];
@@ -51,7 +51,7 @@ const integer=[targets[0],{...targets[1],line:-3},{...targets[2],line:146}],push
 const invalid=input();invalid.asOf="2026-11-05T17:58:30Z";invalid.independent.asOf=invalid.asOf;assert.equal(make(invalid).marketDecisions[0].grade,"Held");
 assert.throws(()=>buildCbbInterpretedDecision({input:input(),interpretation:{...buildCbbContextualMarketInterpretation(input()),gameId:8},targets,latent}),/identity mismatch/);
 // Continued below with observed book-price response controls.
-console.log("PASS interpreted decision: one score law → three predictions/pushes/exact EV/grades; same receipt professional support and retained opposition, no grade reforecast, negative-price Watch, actual BDL proof and missing/future Held");
+console.log("PASS interpreted decision: one score law → three predictions/pushes/exact EV/grades; same receipt professional support and retained opposition, no grade reforecast, negative-price nonactionable lane, actual BDL proof and missing/future Held");
 
 // The book's observed price response can support HOME while its cumulative
 // money composition favors AWAY. This identifies neither sharp bettors nor
@@ -100,7 +100,7 @@ console.log("PASS interpreted book-price context: against-composition retained, 
 
 // Product tiers change neither the final selected side nor its forecast. Exact
 // offered economics distinguish a likely winner from a worthwhile priced play.
-const grade=(p:number,price:number,loss=1-p)=>gradeCbbContextualForecastSide({winProbability:p,loseProbability:loss,price});
+const grade=(p:number,price:number,loss=1-p)=>gradeCbbContextualForecastSide({winProbability:p,loseProbability:loss,price,opposingPrice:price<-120?Math.round(-price*.8):-110});
 assert.equal(grade(.53,-110).grade,"Lean","thin positive value is not blocked by a fixed 3% EV reserve");
 assert.equal(grade(.63,-110).grade,"Best Angle");
 for(const price of [-250,-300,-400])assert.equal(grade(.9,price).grade,"Lean","confident positive-value expensive favorites remain Lean, never Best");
@@ -119,8 +119,23 @@ const symmetricTargets=[{...targets[0],firstPrice:-120,secondPrice:110},...targe
 const symmetricReprice=[{...symmetricTargets[0],firstPrice:110,secondPrice:-120},...targets.slice(1)],repriced=make(input(symmetricReprice),symmetricReprice,{...latent,marginMean:0,correlation:0});
 assert.equal(symmetric.marketDecisions[0].selection,repriced.marketDecisions[0].selection,"a price-only change cannot choose the winner, including at a model tie");
 assert.deepEqual(symmetric.finalScore,repriced.finalScore);
-console.log("PASS contextual confidence/price tiers: thin positive Lean, strong reasonably priced Best, steep-favorite Lean, zero/negative Watch, refunded pushes and price-independent winner");
+console.log("PASS contextual confidence/price tiers: thin positive Lean, strong reasonably priced Best, steep-favorite Lean, break-even Watch, negative-value price triage, refunded pushes and price-independent winner");
 
 assert.equal(grade(.9,-900).grade,"Watchlist","floating-point positive dust cannot promote a mathematically break-even price");
-assert.equal(gradeCbbContextualForecastSide({winProbability:.62000000001,loseProbability:.37999999999,price:-110,probabilityErrorEstimate:1e-8}).grade,"Lean","unresolved numerical confidence cannot claim the Best boundary");
-assert.equal(gradeCbbContextualForecastSide({winProbability:.50000000001,loseProbability:.49999999999,price:100,probabilityErrorEstimate:1e-8}).grade,"Watchlist","numerical integration uncertainty is not evidence of positive value");
+assert.equal(gradeCbbContextualForecastSide({winProbability:.62000000001,loseProbability:.37999999999,price:-110,opposingPrice:-110,probabilityErrorEstimate:1e-8}).grade,"Lean","unresolved numerical confidence cannot claim the Best boundary");
+assert.equal(gradeCbbContextualForecastSide({winProbability:.50000000001,loseProbability:.49999999999,price:100,opposingPrice:-110,probabilityErrorEstimate:1e-8}).grade,"Watchlist","numerical integration uncertainty is not evidence of positive value");
+
+assert.equal(grade(.94,-2000).grade,"No Play","a 94% predicted winner at -2000 has no resolved fair-price advantage and is not a bet");
+assert.equal(grade(.97,-2000).grade,"Lean","a genuinely positive-value expensive favorite is not rejected by an invented extra odds floor");
+assert.equal(grade(.75,-400).grade,"No Play","likely winner is distinct from offered or paired-fair value");
+assert.equal(grade(.51,-110).grade,"Watchlist","positive fair-price forecast premium consumed by vig is a price-improvement Watch");
+const pushedWatch=gradeCbbContextualForecastSide({winProbability:.49,loseProbability:.46,price:-110,opposingPrice:-110});
+assert.equal(pushedWatch.grade,"Watchlist","push-safe fair premium, not unconditional p minus paired fair, determines the Watch lane");
+assert.ok(pushedWatch.fairPremium>0);
+const underround=gradeCbbContextualForecastSide({winProbability:.605,loseProbability:.395,price:-150,opposingPrice:160});
+assert.equal(underround.grade,"Lean");assert.ok(underround.fairPremium<0,"positive offered value takes precedence over a negative underround pair-fair premium");
+assert.equal(gradeCbbContextualForecastSide({winProbability:0,loseProbability:0,price:-110,opposingPrice:-110}).grade,"No Play","all-push price is not an actionable win");
+console.log("PASS contextual No Play/Watch split: expensive negative-value favorite, actual paired-vig margin, push-safe premium, exact break-even, underround value and no arbitrary new price floor");
+
+for(const [price,expected] of [[-400,"No Play"],[-300,"Watchlist"],[-250,"Lean"],[-200,"Best Angle"]] as const)
+ assert.equal(grade(.75,price).grade,expected,"The same 75% forecast has paired promotion paths as the actual offer improves, without changing its predicted side");
