@@ -468,7 +468,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_11_05_r112_source_reaction_health/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_11_05_r113_outcome_value_separation/);
 assert.match(writer, /buildNflMarketBrainShadow/);
 assert.match(writer, /readNflOwlsMarketBrainSplitEvidence/,
   "the NFL shadow must consume the canonical Owls evidence lane");
@@ -502,7 +502,23 @@ assert.match(
   /const opening = operationalOpening\(\{[\s\S]*providerOpening: slate\.openingOddsByGame[\s\S]*allowProviderUpgrade: plan\.stage === "unlocked"[\s\S]*\}\);/,
   "verified provider openers may enter market reading only for an unlocked pregame release",
 );
-assert.match(writer, /buildNflPaidTeamScoreBaseForecast/);
+assert.match(writer, /selectNflOutcomeBaseAuthority/);
+const outcomeBaseAuthority = readFileSync(
+  path.resolve("lib/services/football/nflOutcomeBaseAuthority.ts"),
+  "utf8",
+);
+assert.match(outcomeBaseAuthority, /buildNflPaidTeamScoreBaseForecast/);
+assert.match(outcomeBaseAuthority, /accepts no line, price, probability edge, EV, split or sportsbook input/);
+assert.doesNotMatch(
+  outcomeBaseAuthority,
+  /args\.(?:line|price|edge|ev|split|sportsbook)/i,
+  "price attractiveness and value inputs must remain structurally unavailable to outcome-base selection",
+);
+assert.doesNotMatch(
+  writer,
+  /source:\s*["']target_excluded_paired_price_score["']/,
+  "an absolute current-price coordinate must not be submitted as an outcome forecast candidate",
+);
 assert.match(writer, /paidTeamScore: paidProjectionShadow/);
 assert.match(writer, /previous\.provenance === "first_observed"/);
 assert.doesNotMatch(writer, /allowProviderUpgrade: plan\.stage === "t60"/,

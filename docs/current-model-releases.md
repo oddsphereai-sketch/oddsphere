@@ -32,6 +32,60 @@ Its final source-bound build, current-input comparison, protected PR release and
 postdeployment checks remain required. Preserve the separate R38/R39 source and
 fixture-clock release declarations when integrating this candidate.
 
+## NFL outcome/value separation and player-state authority — November 5 candidate
+
+The owner clarified the product boundary: the predicted winner, score, margin,
+total and outcome probabilities optimize for outcome accuracy. An attractive
+offered price, break-even probability, edge or expected value cannot select or
+move those outputs; those economics enter only after the forecast and selected
+contract side are frozen and may affect only the play grade. Chronological
+same-book number/juice movement remains eligible game evidence and is not the
+same thing as choosing a pick because its current price looks attractive.
+Qualified sharp betting activity is likewise outcome evidence: its direction,
+contract, timing and the source book's response may support, resist, adjust or
+flip the unified forecast. That interpretation asks what is most likely to
+happen; only the attractiveness of the offered payout is confined to grading.
+
+The candidate also repairs a current-state omission exposed by JAX@BAL. The
+normal exact-provider completed-game state remains authoritative, but it has no
+player or quarterback input. When the availability resolver verifies that the
+provider quarterback was replaced and a complete player-aware projection was
+collected after the displaced depth snapshot, the selector chooses that single
+market-free player-state law. It never averages or weights the two models. The
+existing relative same-book reader then applies once. The legacy absolute
+`target_excluded_paired_price_score` is removed from the forecast-candidate set;
+it remains available only as contract/grading context.
+
+Candidate identifiers are:
+
+- `nfl_outcome_base_authority_2026_11_05_r1_player_state_value_separation`
+- `nfl_forward_evidence_collector_2026_11_05_r35_outcome_value_separation`
+- `nfl_v1_daily_edge_model_2026_11_05_r55_outcome_value_separation`
+- `nfl_v1_daily_edge_calibration_2026_11_05_r54_outcome_value_separation`
+- `nfl_v1_daily_edge_decision_2026_11_05_r64_outcome_value_separation`
+- `nfl_v1_grade_policy_2026_11_05_r64_outcome_value_separation`
+- `nfl_v1_member_release_2026_11_05_r62_outcome_value_separation`
+- `nfl_market_innovation_runtime_2026_11_05_r7_outcome_value_separation`
+- `nfl_full_game_evidence_runtime_2026_11_05_r20_outcome_value_separation`
+- `nfl_weekly_member_fixture_2026_11_05_r78_outcome_value_separation`
+- `nfl_forward_member_snapshot_2026_11_05_r70_outcome_value_separation`
+- `nfl_forward_evidence_writer_2026_11_05_r113_outcome_value_separation`
+
+The current SELECT-only 15-game audit selects exact-provider state for 13 games
+and player-aware availability state for JAX@BAL and ARI@SEA. After replaying the
+same relative reader, JAX@BAL changes from JAX by 2.78 / total 46.42 to JAX by
+14.08 / total 39.18; the Spread side changes BAL +10 to JAX -10, the Total side
+changes Over 39.5 to Under 39.5, and the Moneyline remains JAX. ARI@SEA changes
+from SEA by 6.51 to SEA by 8.92; its Spread side changes ARI to SEA, while its
+Moneyline and Under remain. The other 13 games retain their selected base and
+market sides. The fixed-point grade replay retains 18 actionables with zero
+actionable promotions and zero actionable demotions; both JAX side changes
+remain Leans, while the ARI-to-SEA Spread change remains non-actionable. This is
+a functional state-authority and value-separation repair, not a future-accuracy
+claim. Exact R69/R61/R77/R63 stored locks retain precedence.
+Predeclaration and rollback:
+`docs/model-audits/2026-11-05-nfl-outcome-value-separation-predeclaration.md`.
+
 ## NFL source-reaction health semantics — November 5 candidate
 
 The owner clarified that a professional split on an older or different native
@@ -108,15 +162,15 @@ activation requires protected PR publication and live verification.
 
 Publication identifiers: independent
 `cbb_candidate_2026_11_05_r5_complete_d1_program_priors`, incumbent market model
-`cbb_candidate_2026_11_05_r21_coordinated_provider_capture`, receipt
-`cbb_market_behavior_2026_11_05_r17_coordinated_provider_capture`, cross score
+`cbb_candidate_2026_11_05_r22_fixture_clock_epoch`, receipt
+`cbb_market_behavior_2026_11_05_r18_fixture_clock_epoch`, cross score
 `cbb_cross_division_score_2026_11_05_r1_posterior_score_law`, forecast board
 `cbb_game_forecast_board_2026_11_05_r1_unpriced_outcomes`, forecast-only grade
 `cbb_game_forecast_grade_2026_11_05_r1_no_unquoted_wagers`, frozen outcome
 `cbb_game_outcome_2026_11_05_r1_frozen_winner`, publisher
-`cbb_member_pipeline_2026_11_05_r38_coordinated_provider_capture`, adapter
+`cbb_member_pipeline_2026_11_05_r39_fixture_clock_epoch`, adapter
 `cbb_member_adapter_2026_11_05_r24_unpriced_game_forecast`, tracking
-`cbb_tracking_writer_2026_11_05_r24_coordinated_source_lineage`, training
+`cbb_tracking_writer_2026_11_05_r25_fixture_clock_lineage`, training
 `cbb_current_training_2026_11_05_r4_separate_cross_division_receipts`, and fixture
 seed `cbb_fixture_seed_2026_11_05_r8_verified_complete_d1_identities`.
 
@@ -128,6 +182,30 @@ are documented in
 `docs/model-audits/2026-11-05-cbb-all-division-one-private.md`. The current-input
 43-game /129-market comparison has 0 promotions, 0 demotions, 0 side changes
 and 0 score changes; 22 new cross forecasts add no unqualified wager grades.
+R39/R22/R18/R25 supersede publication of unsupported unlocked cross-domain
+priors at the owner's November 5 direction. Current-source collection still
+covers every eligible D1 matchup; an incomplete opponent prior must not become
+a published 99.9%/100% prediction or an invented market-only score. The fixed
+65-game input now publishes 43 incumbent D1 forecasts; 22 unsupported cross
+forecasts stay internal. Existing locked cross records remain exact and visible.
+This removes no qualified wager actionable and promotes no other pick. A future
+market-only cross forecast requires actual matched market evidence and its own
+coherent, separately reviewed score law; this repair does not claim that exists.
+
+The actual Chicago State–Incarnate Word unlocked fixture changed from 23:00Z to
+00:00Z. The previous path belonged to the earlier clock and aborted every normal
+refresh. R39 rebuilds unlocked numerical and displayed context from original
+source observations at the corrected fixture clock, records the old clock and
+capture time, and requires unchanged school identity. An earlier genuine saved
+decision may freeze at a corrected T−60; a late/missing qualifying decision cannot
+be invented or backdated and is isolated as a fixture-specific problem. Existing
+locks retain their exact start, projection, prices, grades and evidence even if
+canonical schedule time later changes. A locked clock conflict cannot abort the
+remaining board or reinterpret old tracking. Normal source-acquisition receipts
+log only safe scalar clocks/counts/quota headers, never credentials or raw URLs.
+Independent equations, grading thresholds, cadence and shared writer lease remain
+unchanged. Evidence: `model-audits/2026-11-05-cbb-fixture-clock-publication.md`.
+
 R38/R21/R17 add the owner-directed coordinated current-source path: complete
 Owls and BDL native-book pairs are resolved together with a bounded The Odds API
 current board when coverage still has gaps. Playbook public context continues

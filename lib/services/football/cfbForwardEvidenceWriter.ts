@@ -185,7 +185,7 @@ import { fetchCfbOwlsProvider } from "./cfbOwlsProvider";
 import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_11_04_r150_causal_relative_innovation" as const;
+  "cfb_forward_evidence_writer_2026_11_05_r151_original_t60_tracking_handoff" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -2351,7 +2351,7 @@ function marketHistoryForPayload(payload: CfbForwardEvidencePayload): CfbForward
   };
 }
 
-async function writeOfficialTracking(args: {
+export async function writeCfbOfficialTracking(args: {
   client: SupabaseClient;
   candidates: CfbTrackingCandidate[];
   apply: boolean;
@@ -2360,7 +2360,7 @@ async function writeOfficialTracking(args: {
   now: string;
   priorGamesByWindow?: Map<string, NcaafGame[]>;
 }): Promise<TrackingResult> {
-  const eligible = args.candidates.filter(({ payload }) =>
+  let eligible = args.candidates.filter(({ payload }) =>
     isPublicallyTracked("cfb", computeSlateDate("cfb", payload.game.scheduledStart))
   );
   const trackingGames = eligible.map((candidate) => ({
@@ -2376,6 +2376,8 @@ async function writeOfficialTracking(args: {
   const existingKeys = buildMarketScopedFootballTrackingPlan(trackingGames, (existingRows ?? []) as Array<{ external_id: number; market: string }>).existingKeys;
   if (existingKeys.size === proposed) return { trackingAttempted: true, trackingRecordsProposed: proposed, trackingRecordsInserted: 0, trackingRecordsExisting: existingKeys.size, trackingError: null, trackingProviderRequests: 0 };
 
+  eligible = eligible.filter((candidate) => candidateTrackingMarkets(candidate).some((market) =>
+    !existingKeys.has(`${candidate.payload.game.providerGameId}:${market}`)));
   const payloads = eligible.map(({ payload }) => payload);
   const teamIds = await upsertTeams(args.client, payloads);
   const gameIds = await upsertGames(args.client, payloads, teamIds);
@@ -2470,9 +2472,9 @@ async function writeOfficialTracking(args: {
 }
 
 async function writeOfficialTrackingSafely(
-  args: Parameters<typeof writeOfficialTracking>[0],
+  args: Parameters<typeof writeCfbOfficialTracking>[0],
 ): Promise<TrackingResult> {
-  return runCfbOfficialTrackingSafely(() => writeOfficialTracking(args));
+  return runCfbOfficialTrackingSafely(() => writeCfbOfficialTracking(args));
 }
 
 export function planCfbTrackingRecordInsert(args: {

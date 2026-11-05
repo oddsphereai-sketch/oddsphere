@@ -10,7 +10,13 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 
 export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "nfl_forward_member_snapshot_2026_11_05_r69_source_reaction_health" as const;
+  "nfl_forward_member_snapshot_2026_11_05_r70_outcome_value_separation" as const;
+const NFL_OUTCOME_VALUE_PREDECESSOR = {
+  snapshot: "nfl_forward_member_snapshot_2026_11_05_r69_source_reaction_health",
+  fixture: "nfl_weekly_member_fixture_2026_11_05_r77_source_reaction_health",
+  member: "nfl_v1_member_release_2026_11_05_r61_source_reaction_health",
+  decision: "nfl_v1_daily_edge_decision_2026_11_05_r63_current_game_starter_authority",
+} as const;
 const NFL_SOURCE_REACTION_HEALTH_PREDECESSOR = {
   snapshot: "nfl_forward_member_snapshot_2026_11_05_r68_current_game_starter_authority",
   fixture: "nfl_weekly_member_fixture_2026_11_05_r76_current_game_starter_authority",
@@ -332,6 +338,7 @@ const NFL_RAW_SIGNAL_PREVIOUS_FIXTURE_RELEASE =
 const NFL_NONPUSH_PREVIOUS_FIXTURE_RELEASE =
   "nfl_weekly_member_fixture_2026_09_21_r26_locked_transition_continuity" as const;
 const NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES = [
+  NFL_OUTCOME_VALUE_PREDECESSOR.snapshot,
   NFL_SOURCE_REACTION_HEALTH_PREDECESSOR.snapshot,
   NFL_CURRENT_GAME_STARTER_PREDECESSOR.snapshot,
   NFL_PMF_MEAN_PREDECESSOR.snapshot,
@@ -452,6 +459,11 @@ function nflForwardMemberSnapshotKeyForRelease(
   input: { season: number; week: number },
   snapshotRelease: string,
 ): string {
+  if (snapshotRelease === NFL_OUTCOME_VALUE_PREDECESSOR.snapshot) {
+    return ["nfl", "daily-edge", input.season, input.week, snapshotRelease,
+      NFL_OUTCOME_VALUE_PREDECESSOR.fixture, NFL_OUTCOME_VALUE_PREDECESSOR.member,
+      NFL_OUTCOME_VALUE_PREDECESSOR.decision].join("::");
+  }
   if (snapshotRelease === NFL_SOURCE_REACTION_HEALTH_PREDECESSOR.snapshot) {
     return ["nfl", "daily-edge", input.season, input.week, snapshotRelease,
       NFL_SOURCE_REACTION_HEALTH_PREDECESSOR.fixture, NFL_SOURCE_REACTION_HEALTH_PREDECESSOR.member,
@@ -943,6 +955,10 @@ function validateNflForwardMemberSnapshot(
     decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE &&
     fixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE &&
     heldMemberFixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE) ||
+    (memberRelease === NFL_OUTCOME_VALUE_PREDECESSOR.member &&
+      decisionRelease === NFL_OUTCOME_VALUE_PREDECESSOR.decision &&
+      fixtureRelease === NFL_OUTCOME_VALUE_PREDECESSOR.fixture &&
+      heldMemberFixtureRelease === NFL_OUTCOME_VALUE_PREDECESSOR.fixture) ||
     (memberRelease === NFL_SOURCE_REACTION_HEALTH_PREDECESSOR.member &&
       decisionRelease === NFL_SOURCE_REACTION_HEALTH_PREDECESSOR.decision &&
       fixtureRelease === NFL_SOURCE_REACTION_HEALTH_PREDECESSOR.fixture &&

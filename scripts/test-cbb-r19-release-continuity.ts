@@ -35,7 +35,7 @@ async function check(file:string,expectedModel:string,expectedReceipt:string,exp
   next.snapshot.board.marketContext.verifiedMarketRead!.modelRelease=CBB_FULL_D1_MARKET_MODEL_RELEASE;
   next.snapshot.board.marketContext.verifiedMarketRead!.release=CBB_FULL_D1_READER_RECEIPT_RELEASE;
   tracked.length=0;assert.equal(await writeLockedCbbTracking(next,db),3);
-  assert.ok(tracked.every(r=>r.model_used==="cbb_r21_coordinated_provider_capture"&&r.model_version===CBB_FULL_D1_MARKET_MODEL_RELEASE));
+  assert.ok(tracked.every(r=>r.model_used==="cbb_r22_fixture_clock_epoch"&&r.model_version===CBB_FULL_D1_MARKET_MODEL_RELEASE));
   const corrupt=structuredClone(frozen.record);corrupt.snapshot.board.score.home+=1;
   await assert.rejects(writeLockedCbbTracking(corrupt,db),/receipt differs/);
   console.log(`PASS actual CBB ${expectedLabel} continuity: future lock, exact reader/writer bytes, tracking idempotence, receipt guard, distinct current-release attribution.`);

@@ -5,7 +5,7 @@ import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import { CbbBallDontLieClient } from "@/lib/cbb/ballDontLie";
 import { cbbCanonicalStatus } from "@/lib/cbb/canonicalFixture";
 import { matchCbbProviderVenue as matchCbbVenue } from "@/lib/cbb/providerVenueIdentity";
-import {cbbBehaviorFlows} from "./cbbMarketBehaviorInputs";
+import {cbbBehaviorFlows,cbbContextAtFixtureClock} from "./cbbMarketBehaviorInputs";
 import {assembleCbbContextualReaderInput} from "./cbbContextualReaderInput";
 import {loadCbbContextualOutcomeRuntime,readCbbContextualOutcomeEvidence,type CbbContextualOutcomeRuntime} from "./cbbContextualOutcomeRuntime";
 import { forecastCbbCurrentBatch } from "@/lib/cbb/currentScoreRuntime";
@@ -28,7 +28,7 @@ import { readCbbCapturedMarketHistory,readCbbCapturedNamedSplits } from "./cbbCa
 import { mergeCbbCapturedNamedSplitEvidence,mergeCbbDraftKingsSplitEvidence,mergeCbbReaderEvidence,readCbbCapturedPublicSplits,type CbbPreparedNamedSplitSections,type CbbPreparedPublicSplitSections } from "./cbbReaderMarketEvidence";
 import { readStoredDraftKingsNetworkSplits,applyDraftKingsNetworkSplitFallback } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 import { applySharpApiCurrentSplitOverlay,currentSplitReadDates } from "@/lib/providers/real_api/sharpApiCurrentSplits";
-import { advanceCbbProvisionalSnapshot } from "@/lib/cbb/provisionalLifecycle";
+import { advanceCbbProvisionalSnapshot,CbbFixtureClockError } from "@/lib/cbb/provisionalLifecycle";
 import { isOwnerApprovedCbbMemberExclusion } from "@/lib/cbb/memberBoardScope";
 import {readCbbCanonicalReaderHistory} from "./cbbCanonicalReaderHistory";
 import {pairCbbCanonicalMarketEvidence} from "./cbbCanonicalMarketEvidence";
@@ -186,9 +186,14 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     if(!evidence.quotes.length)sourceCoverage.unpricedGameIds.push(game.id);
   }
   trace("current_quotes_complete");
+  const unsupportedCrossGameIds:number[]=[];
   const sourceGames=candidateGames.filter(game=>{
     const existing=prior.get(game.id),identity=scheduled.get(game.id);
     if(existing?.snapshot.lockedAt)return true;
+    // Owner withdrew unsupported cross-domain priors from the public board.
+    // Keep collecting real markets, but do not replace a missing statistical
+    // input with a generic 99.9% winner or manufacture a market-only score law.
+    if(expandedFixture(game)&&cbbDivisionOneFixture(game).crossDivision){unsupportedCrossGameIds.push(game.id);return false;}
     if(expandedFixture(game)&&!existing&&Date.parse(asOf)>=Date.parse(game.date)-60*60_000)return false;
     return !!identity&&
       (existing!==undefined||expandedFixture(game)||chooseCbbSupportedTargetBook(namedById.get(game.id)?.quotes??[])!==null);
@@ -258,7 +263,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   trace("contextual_runtime_ready");
   const contextualInputCounts={evaluated:0,continued:0,migrated:0,unpriced:0,noWagerDomain:0};
   const boardCandidates=new Map<number,CbbProvisionalBoard>(completeForecasts.map(row=>{
-    const quotes=namedById.get(row.game.id)?.quotes??[],previous=prior.get(row.game.id)?.snapshot??null;
+    const quotes=namedById.get(row.game.id)?.quotes??[],previous=cbbContextAtFixtureClock(prior.get(row.game.id)?.snapshot??null,row.game.date);
     // These original score domains remain forecast-only. Empty targets avoid
     // even discarded old price/probability/grade calculations; raw observations
     // still reach the existing member evidence publication below.
@@ -337,6 +342,10 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   for(const game of publishableGames){
     const identity=scheduled.get(game.id);
     const previous=prior.get(game.id)??null;
+    if(previous?.snapshot.lockedAt&&Date.parse(previous.snapshot.startsAt)!==Date.parse(game.date)){
+      memberGames.push(structuredClone(previous.memberGame));locked++;
+      problems.push(`${game.id}:locked_fixture_clock_change_preserved`);continue;
+    }
     const seededStart=identity?Date.parse(identity.gameStartAt):NaN;
     const providerStart=Date.parse(game.date);
     if(!identity||!Number.isFinite(seededStart)||!Number.isFinite(providerStart)||seededStart!==providerStart||
@@ -353,7 +362,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     if(afterCutoff&&!previous){problems.push(`${game.id}:prelock_snapshot_missing`);continue;}
     if(!afterCutoff&&previous&&!boardCandidates.has(game.id)){
       problems.push(`${game.id}:incomplete_refresh_preserved_prior_forecast`);
-      memberGames.push(cbbMemberGameForReader(previous,game));continue;
+      memberGames.push(structuredClone(previous.memberGame));continue;
     }
     let candidate=null,splitEvidence=null;
     if(!afterCutoff&&!previous?.snapshot.lockedAt){
@@ -362,9 +371,15 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       if(splitEvidence.rows.length===0)problems.push(`${game.id}:verified_splits_unavailable:${splitEvidence.reason}`);
       if(candidate.rows.some(row=>row.grade==="Held"))held++;
     }
-    const result=await writeCbbMemberGame({game,candidate,homeLogo:identity.homeTeamLogo,
+    let result;
+    try{result=await writeCbbMemberGame({game,candidate,homeLogo:identity.homeTeamLogo,
       awayLogo:identity.awayTeamLogo,now:asOf,splitEvidence,marketQuotes:namedById.get(game.id)?.quotes??[],bookHistory,
       capturedNamedSections:preparedSections.get(game.id),capturedPublicSections:preparedPublic.get(game.id)},db);
+    }catch(error){
+      if(!(error instanceof CbbFixtureClockError)||!previous)throw error;
+      problems.push(`${game.id}:fixture_clock_correction_requires_prelock_evidence`);
+      memberGames.push(structuredClone(previous.memberGame));continue;
+    }
     if(result.written)written++;
     if(written>0&&written%25===0)trace(`member_writes_${written}`);
     if(result.record.snapshot.lockedAt)locked++;
@@ -385,7 +400,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     payloadVersion:CBB_MEMBER_PIPELINE_RELEASE,ttlMs:15*60_000,staleMs:24*60*60_000});
   if(!saved.ok)throw new Error(`CBB member snapshot publication failed: ${saved.error}`);
   trace("snapshot_published");
-  return {release:CBB_MEMBER_PIPELINE_RELEASE,currentSourceCoverage:sourceCoverage,requestedDates:dates,sourceGames:sourceGames.length,published:memberGames.length,
+  return {release:CBB_MEMBER_PIPELINE_RELEASE,unsupportedCrossGameIds,currentSourceCoverage:sourceCoverage,requestedDates:dates,sourceGames:sourceGames.length,published:memberGames.length,
     scheduleOnly:candidateGames.length-memberGames.length,missingIdentity,missingLogosOnSchedule,
     written,locked,held,missingLogos,trackingInserted,problems,unpublishedIncomplete,ownerApprovedExclusions,providerWarnings,
     canonicalHistory:{release:canonicalHistory.release,complete:canonicalHistory.complete,price:canonicalHistory.price,split:canonicalHistory.split,elapsedMs:canonicalHistory.elapsedMs},

@@ -208,7 +208,7 @@ export function readCbbMarketBehaviorPath(args: {
   if (!Number.isInteger(limit) || limit < 2 || limit > MAX_QUOTES) throw new Error("CBB path retention bound invalid");
   const previous = args.previous;
   if (previous && (![CBB_MARKET_BEHAVIOR_PATH_RELEASE,"cbb_market_behavior_path_2026_11_04_r5_retained_response_frontier","cbb_market_behavior_path_2026_11_03_r4_identical_preflow_state","cbb_market_behavior_path_2026_11_02_r3_compact_native_frontier","cbb_market_behavior_path_2026_11_02_r2_availability_bounds"].includes(previous.release) || previous.gameId !== base.gameId ||
-    previous.startsAt !== args.startsAt || !Number.isFinite(Date.parse(previous.capturedAt)) || Date.parse(previous.capturedAt) > at)) {
+    Date.parse(previous.startsAt) !== start || !Number.isFinite(Date.parse(previous.capturedAt)) || Date.parse(previous.capturedAt) > at)) {
     throw new Error("CBB path prior identity/cutoff mismatch");
   }
   const excluded = new Set(args.excludedFamilies.map(cbbPathBookFamily));

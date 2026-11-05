@@ -3,6 +3,10 @@ import type { DailyEdgeResponse } from "@/app/lab/lib/labTypes";
 import { cbbOfficialGameResultFromScores } from "./adaptCbbProvisionalToDailyEdge";
 import { readCbbMemberGames,CBB_COMPATIBLE_MEMBER_STORE_RELEASES } from "./cbbMemberGameStore";
 
+type OfficialSchool={external_id:number|string;display_name:string};
+type OfficialResult={status:string|null;home_score:number|null;away_score:number|null;game_date:string;
+  home_team:OfficialSchool|OfficialSchool[]|null;away_team:OfficialSchool|OfficialSchool[]|null};
+
 type MemberLockIndex = {snapshot_key:string;storeRelease:string;gameId:string;startsAt:string;
   lockedAt:string|null;memberId:string;memberExternalId:string;memberStart:string;memberLock:string|null};
 
@@ -20,7 +24,7 @@ async function readLockIndex(board:DailyEdgeResponse,client:typeof supabase):Pro
       const game=board.games.find(game=>game.external_id===id);
       if(!game||rows.has(id)||row.snapshot_key!==`cbb::member-game::${id}`||
         !CBB_COMPATIBLE_MEMBER_STORE_RELEASES.includes(row.storeRelease as typeof CBB_COMPATIBLE_MEMBER_STORE_RELEASES[number])||
-        row.startsAt!==game.gameStartAt||row.memberStart!==row.startsAt||row.memberId!==game.id||
+        row.lockedAt===null&&Date.parse(row.startsAt)!==Date.parse(game.gameStartAt??"")||row.memberStart!==row.startsAt||row.memberId!==game.id||
         Number(row.memberExternalId)!==id||row.memberLock!==row.lockedAt||
         row.lockedAt!==null&&(typeof row.lockedAt!=="string"||!Number.isFinite(Date.parse(row.lockedAt)))){
         throw new Error("CBB locked reader identity mismatch or corrupt lock index");
@@ -44,9 +48,9 @@ export async function overlayCbbLockedMemberGames(board:DailyEdgeResponse,db?:ty
   const lockedIds=ids.filter(id=>index.get(id)!.lockedAt!==null);
   const stored=await readCbbMemberGames(lockedIds,client);
   if(lockedIds.some(id=>!stored.has(id)))throw new Error("CBB board references a missing locked member game record");
-  const finals=new Map<number,{status:string|null;home_score:number|null;away_score:number|null;game_date:string}>();
+  const finals=new Map<number,OfficialResult>();
   for(let i=0;i<lockedIds.length;i+=100){
-    const {data,error}=await client.from("games").select("external_id,status,home_score,away_score,game_date")
+    const {data,error}=await client.from("games").select("external_id,status,home_score,away_score,game_date,home_team:teams!games_home_team_id_fkey(external_id,display_name),away_team:teams!games_away_team_id_fkey(external_id,display_name)")
       .eq("sport","cbb").in("external_id",lockedIds.slice(i,i+100));
     if(error)throw new Error(`CBB official result read failed: ${error.message}`);
     for(const row of data??[]){
@@ -57,11 +61,17 @@ export async function overlayCbbLockedMemberGames(board:DailyEdgeResponse,db?:ty
   const games=board.games.map(game=>{
     if(index.get(game.external_id)!.lockedAt===null)return game;
     const record=stored.get(game.external_id)!;
-    if(record.snapshot.startsAt!==game.gameStartAt||record.memberGame.id!==game.id||
+    if(record.memberGame.id!==game.id||record.memberGame.homeTeamDisplayName!==game.homeTeamDisplayName||
+      record.memberGame.awayTeamDisplayName!==game.awayTeamDisplayName||
       record.snapshot.lockedAt!==index.get(game.external_id)!.lockedAt)throw new Error("CBB locked reader identity mismatch");
     const official=finals.get(game.external_id);
-    if(!official||!Number.isFinite(Date.parse(official.game_date))||
-      Date.parse(official.game_date)!==Date.parse(record.snapshot.startsAt))throw new Error("CBB locked result identity missing");
+    const home=Array.isArray(official?.home_team)?official.home_team[0]:official?.home_team;
+    const away=Array.isArray(official?.away_team)?official.away_team[0]:official?.away_team;
+    const outcome=record.snapshot.board.gameForecast;
+    if(!official||!Number.isFinite(Date.parse(official.game_date))||!home||!away||
+      home.display_name!==record.memberGame.homeTeamDisplayName||away.display_name!==record.memberGame.awayTeamDisplayName||
+      outcome&&(Number(home.external_id)!==outcome.homeId||Number(away.external_id)!==outcome.awayId))
+      throw new Error("CBB locked result identity missing or school changed");
     return {...structuredClone(record.memberGame),result:cbbOfficialGameResultFromScores(record.snapshot,{
       status:official.status,statusState:official.status==="STATUS_FINAL"?"final":null,
       homeScore:official.home_score,awayScore:official.away_score})};
