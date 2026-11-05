@@ -1,8 +1,8 @@
 # Current production model releases and qualified research candidates
 
-## CBB contextual outcome reader — prepared integration, not deployed
+## CBB contextual outcome reader — deployed, first refresh runtime repair
 
-Reserved release identifiers for the owner-directed unified contextual reader:
+Deployed release identifiers for the owner-directed unified contextual reader:
 
 - Model: `cbb_contextual_outcome_2026_11_05_r1`.
 - Covariance calibration: `cbb_contextual_covariance_2026_11_05_r1`.
@@ -13,7 +13,22 @@ Reserved release identifiers for the owner-directed unified contextual reader:
 - Publisher: `cbb_member_pipeline_2026_11_05_r42_contextual_outcome`.
 - Adapter: R26 contextual-outcome confidence-price identifier; tracking: R29 contextual No Play identifier, exported by their runtime modules.
 
-This candidate has not been deployed. One fitted contextual score law uses the
+Production commit `a8d5008476b838cf5eb902a0cee8179e1ef0a346` became Ready at
+2026-11-05T21:48:34Z. The authenticated production readiness check loaded the
+exact private R1 bundle and database binding successfully. Its first normal
+leased rolling refresh began at 21:51:05Z, finished inference at 248 seconds,
+prepared evidence at 258 seconds, and was terminated by the old 300-second route
+limit after 100 member writes. The saved slate remained the previous release;
+do not describe deployment alone as completed board activation.
+
+The scoped runtime repair raises only this route's maximum duration to 540
+seconds, below the unchanged 600-second `prediction_pipeline:cbb` lease. The
+same writer, cadence, provider budgets and model/grade identifiers remain exact;
+there is no numerical behavior change or additional refresh schedule. Complete
+normal-writer publication, live-board verification and unchanged locked-record
+hashes remain required before reporting activation.
+
+One fitted contextual score law uses the
 independent forecast as a fallible data point alongside native book prices,
 chronology and cumulative compositions. No preset forecast ratio or manual
 point bonus is added. Its exact score distribution supplies all three market
