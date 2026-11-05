@@ -1,0 +1,71 @@
+{
+  "auditRelease": "nfl_owls_source_reaction_health_audit_2026_11_05_r1",
+  "status": "candidate",
+  "readOnly": true,
+  "writes": 0,
+  "season": 2026,
+  "week": 9,
+  "scope": {
+    "games": 15,
+    "markets": 45,
+    "falsePartialBefore": 11,
+    "falsePartialAfter": 0,
+    "nonDirectAxes": 10,
+    "verifiedNamedReactionAxes": 10,
+    "uncoveredAxes": 0
+  },
+  "boardImpact": {
+    "before": {
+      "Best Angle": 2,
+      "Lean": 16,
+      "Watchlist": 10,
+      "No Play": 17,
+      "actionable": 18
+    },
+    "after": {
+      "Best Angle": 2,
+      "Lean": 16,
+      "Watchlist": 10,
+      "No Play": 17,
+      "actionable": 18
+    },
+    "scoreChanges": 0,
+    "probabilityChanges": 0,
+    "sideChanges": 0,
+    "priceChanges": 0,
+    "actionablePromotions": 0,
+    "actionableDemotions": 0
+  },
+  "semantics": {
+    "directExactContractAuthority": "unchanged and disclosed per market in owlsModelQualifiedMarkets",
+    "nonDirectAuthority": "source_contract_reaction_context_only",
+    "requiredProof": [
+      "exact game and provider event identity",
+      "Circa or Pinnacle source family",
+      "native split clock before evaluation and kickoff",
+      "complete published money and ticket pressure",
+      "same-source paired quote available before the pressure",
+      "actual economic baseline and subsequent source path"
+    ],
+    "prohibited": [
+      "using a split at one spread or total as direct probability evidence at another",
+      "clearing health from retail-only context",
+      "refreshing the native split clock on retrieval",
+      "inventing a points coefficient from a percentage"
+    ]
+  },
+  "releaseChanges": {
+    "collector": "nfl_forward_evidence_collector_2026_11_05_r34_source_reaction_health",
+    "member": "nfl_v1_member_release_2026_11_05_r61_source_reaction_health",
+    "fixture": "nfl_weekly_member_fixture_2026_11_05_r77_source_reaction_health",
+    "snapshot": "nfl_forward_member_snapshot_2026_11_05_r69_source_reaction_health",
+    "writer": "nfl_forward_evidence_writer_2026_11_05_r112_source_reaction_health"
+  },
+  "unchangedReleases": {
+    "model": "nfl_v1_daily_edge_model_2026_11_05_r54_current_game_starter_authority",
+    "calibration": "nfl_v1_daily_edge_calibration_2026_11_05_r53_current_game_starter_authority",
+    "decision": "nfl_v1_daily_edge_decision_2026_11_05_r63_current_game_starter_authority",
+    "grade": "nfl_v1_grade_policy_2026_11_05_r63_current_game_starter_authority"
+  },
+  "rollback": "Restore R33/R60/R76/R68/R111 for future unlocked rows only; never rewrite a stored locked payload."
+}

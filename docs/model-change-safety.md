@@ -10,6 +10,35 @@ cannot count as blind evidence. These are review obligations, not runtime
 activation gates, quotas, source weights or forecasting rules. Stored locked
 public records retain exact precedence.
 
+## Owner-directed NFL source-reaction health correction — November 5
+
+The owner clarified that a professional split on a different native contract is
+not meaningless: it must be interpreted chronologically with the source book's
+own quote before the pressure and its later line/price response. NFL already
+stores and consumes those exact-game, source-clocked reaction flows. A mismatched
+spread or total cannot become direct probability evidence for the evaluated
+line, but a verified own-contract response can confirm, resist or reverse the
+pressure and affect the unified score law.
+
+The scoped future-unlocked repair changes health classification only. Direct
+authority remains explicit in `owlsModelQualifiedMarkets`. The writer may clear
+`owls_splits_model_partial_contract_coverage` only when every non-direct market
+has a Circa/Pinnacle `source_contract_reaction_context_only` receipt with both
+the paired pre-flow quote clock and the actual economic baseline clock. Retail
+context, an unattested flow, stale history or an unavailable current Owls feed
+cannot clear the finding. Existing locked payloads retain exact R68/R60/R76/R63
+precedence.
+
+The numerical model/calibration/decision/grade releases remain R54/R53/R63/R63.
+Collector/member/fixture/snapshot/writer advance to R34/R61/R77/R69/R112. The
+current SELECT-only 15-game /45-market comparison removes eleven false partial
+findings, covers all ten non-direct axes with verified named reaction paths and
+changes zero scores, probabilities, sides, prices or grades. Actionables remain
+18 with zero promotions and zero demotions. Publication still requires focused
+direct/context/fail-closed tests, the full model-change gate, current-main
+integration safety, protected PR checks and postmerge normal-writer verification.
+Evidence: `model-audits/2026-11-05-nfl-source-reaction-health.json`.
+
 ## Owner-approved CBB complete Division I forecast coverage — November 5
 
 The owner explicitly directed completion of review and live publication for
