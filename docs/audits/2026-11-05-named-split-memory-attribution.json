@@ -1,0 +1,106 @@
+{
+  "date": "2026-11-05",
+  "starting_main": "eb1f5622c4f7edf5f5843fc4b21dac5a73f4feef",
+  "status": "Candidate only; no production changes made during this investigation",
+  "active_code_defect": {
+    "path": "lib/providers/real_api/sharpApiCurrentSplits.ts",
+    "behavior": "mergeCurrentSplitFeeds merges all previous event identities. trimSplitHistory bounds observations per event/book but has no bound on the number or age of events. A five-minute collector refreshes the same durable row, so its TTL does not expire historical events. Each read/write transfers the accumulated feed as uncompressed JSON.",
+    "cadence": "vercel.json: sharp-book-splits-refresh every five minutes",
+    "captured_at": "2026-11-05T14:10:55.275Z",
+    "cfb_rows": 26231,
+    "cfb_distinct_events": 121,
+    "cfb_rows_with_event_date_before_2026_11_05": 13492,
+    "oldest_event_date": "2026-10-27",
+    "cfb_json_payload_bytes": 19553581,
+    "cfb_http_response_bytes": 21228398,
+    "cfb_postgresql_jsonb_text_bytes_earlier_sample": 21228178,
+    "cfb_stored_toast_compressed_bytes_earlier_sample": 1207351,
+    "other_current_jsonb_text_bytes": { "cbb": 5304776, "nfl": 5516759, "nba": 10616021, "nhl": 8676418 },
+    "last_hour_edge_log_observation": {
+      "rpc_snapshot_upsert_requests": 494,
+      "rpc_snapshot_upsert_total_request_bytes": 798641599,
+      "requests_over_10MB": 12,
+      "largest_request_bytes": 19554028,
+      "qualification": "All snapshot RPC traffic, not exclusively the named-book feed. CFB captured compact JSON size matches the largest request class after the existing RPC row envelope."
+    }
+  },
+  "why_upgrade_changed_commitment": {
+    "postgresql_fixed_shared_allocation_before_bytes": 608780288,
+    "postgresql_fixed_shared_allocation_after_bytes": 1163984896,
+    "automatic_increase_bytes": 555204608,
+    "qualification": "Additional automatic allocation is measured; it is not evidence that all added RAM was consumed by the application or that another upgrade will resolve growing transfers."
+  },
+  "controlled_linux_retention_proof": {
+    "run": "https://github.com/oddsphereai-sketch/oddsphere/actions/runs/42042798513",
+    "stack": "Official PostgREST 14.5 Linux static executable and PostgreSQL 17.6; five API pool connections, two RTS capabilities; invented payloads only",
+    "current_reads_after_idle_api_rss_bytes": 112025600,
+    "current_reads_final_api_rss_bytes": 53932032,
+    "current_reads_and_five_19_55MB_writes_after_idle_api_rss_bytes": 493391872,
+    "current_reads_and_five_19_55MB_writes_final_api_rss_bytes": 339513344,
+    "read_only_final_accountable_mapping_bytes": 48398336,
+    "large_writes_final_accountable_mapping_bytes": 337547264,
+    "conditions": "Same three mixed read rounds. Large-write case adds five parallel 19.55MB synthetic RPC bodies. Measure after 35 seconds idle, then recycled connections and 100 small probe requests. Stress comparison, not a replay of observed production concurrency. All common read responses have identical hashes.",
+    "idle_gc_case": "Enabling idle GC frees more completed-result allocations, but Linux LazyFree pages and accountable mappings persist. This is not a demonstrated complete commitment fix.",
+    "native_attribution": "Separate macOS allocation-stack replay identifies libpq receive buffers (pqCheckInBufferSpace) and result allocations (pqResultAlloc). Pool recycling releases receive buffers; completed-result allocations may outlive that recycling. Native evidence is not a production process census."
+  },
+  "paired_linux_raw_vs_compressed": {
+    "run": "https://github.com/oddsphereai-sketch/oddsphere/actions/runs/42043892768",
+    "result": "success; exact common read-response hashes unchanged; compressed synthetic payload decodes exactly",
+    "conditions": "Six fresh API processes; same five-connection pool and current read workload. Compare five parallel raw 19.55MB writes with lossless gzip envelopes of the identical invented payload. This is a controlled stress comparison, not observed production concurrency or the real feed's compression ratio.",
+    "read_only_final_api_rss_bytes": 54345728,
+    "raw_writes_final_api_rss_bytes": 250261504,
+    "compressed_writes_final_api_rss_bytes": 58376192,
+    "read_only_final_api_accountable_mapping_bytes": 48275456,
+    "raw_writes_final_api_accountable_mapping_bytes": 247480320,
+    "compressed_writes_final_api_accountable_mapping_bytes": 52510720,
+    "raw_final_api_lazyfree_bytes": 165969920,
+    "compressed_final_api_lazyfree_bytes": 0,
+    "raw_final_postgresql_backend_accountable_mapping_sum_bytes": 21790720,
+    "compressed_final_postgresql_backend_accountable_mapping_sum_bytes": 21790720,
+    "raw_final_postgresql_managed_context_sum_bytes": 8050600,
+    "compressed_final_postgresql_managed_context_sum_bytes": 8050600,
+    "conclusion": "In this paired experiment, retained reservations predominantly remain in the API process, not backend contexts. Compression returns the tested API retention close to the same read-only case. Linux accountable mapping totals are a reservation diagnostic, not complete host Committed_AS ownership."
+  },
+  "latest_production_read_only_sample": {
+    "at": "2026-11-05T14:23:07.863Z",
+    "host_committed_bytes": 4593250304,
+    "host_available_bytes": 669609984,
+    "swap_free_bytes": 540299264,
+    "swap_total_bytes": 1073737728,
+    "swap_in_counter": 13120,
+    "swap_out_counter": 29930,
+    "oom_kill_counter": 0,
+    "pool_max": 5,
+    "pool_available": 5,
+    "pool_waiting": 0,
+    "pool_timeouts": 0,
+    "interpretation": "Pressure remains live. Paging counters increased since 14:03; no claim that the production problem is resolved."
+  },
+  "lossless_candidate": {
+    "raw_payload_bytes": 19553581,
+    "gzip_base64_envelope_bytes": 988227,
+    "reduction_percent": 94.94605617252411,
+    "exact_json_sha256_before_and_after": "9365beca6f74f426f62399959182a1aedee0e22957285055f13701cf4d045f81",
+    "semantics": "Only future cache writes use a lossless envelope. Existing raw records retain reader precedence. No event, observation, clock, model input, grade, probability, stake or locked member field is changed. Existing writer, key, cadence, merge and retention stay authoritative.",
+    "reader_compatibility": "Central validator accepts raw first, then bounded gzip. Existing direct CBB captured-feed reader already supports this envelope with the same 32MB decode limit.",
+    "limit": "Feeds exceeding the shared decode ceiling stay raw; this candidate reduces the measured current pressure but does not bound accumulated history. Long-term archival partitioning must preserve every stored observation and avoid full-history transfers."
+  },
+  "verification": [
+    "New offline test exercises the existing RPC writer, normal durable reader, direct CBB reader, exact merge parity, legacy raw precedence, unknown fields, past events, Unicode, corruption and bounded decode.",
+    "Private current CFB fixture round-trips every JSON byte with an identical SHA-256; no private fixture was uploaded.",
+    "Existing current split, Owls adapter, five-minute collector, continuity, CFB matching and NFL capture tests pass, including locked-byte preservation assertions.",
+    "Type checking and focused lint pass. Full deployment gates and live verification remain required before publication."
+  ],
+  "limits": [
+    "No direct production PostgREST process RSS, allocator trace or hosted GHC runtime flags are exposed. Controlled retention demonstrates a mechanism and an active workload trigger, not ownership of every committed production byte.",
+    "Managed PostgreSQL memory contexts are not complete operating-system process memory. Backend-versus-API Linux attribution is tested separately.",
+    "The dashboard Severe badge reflects the worst crossed threshold in the selected interval. Current pressure still exists; neither badge behavior nor cache accounting proves the host is healthy.",
+    "No production restart, upgrade, database write, configuration change or deployment was performed."
+  ],
+  "primary_sources": [
+    "https://github.com/PostgREST/postgrest/blob/v14.5/postgrest.cabal#L184",
+    "https://github.com/postgres/postgres/blob/REL_17_STABLE/src/interfaces/libpq/fe-misc.c",
+    "https://www.postgresql.org/docs/current/libpq-single-row-mode.html",
+    "https://downloads.haskell.org/~ghc/9.6.2/docs/users_guide/runtime_control.html"
+  ]
+}

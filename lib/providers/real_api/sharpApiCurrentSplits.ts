@@ -8,6 +8,7 @@ import { cfbProviderTeamMatches } from "@/lib/services/football/cfbProviderTeamI
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { revalidateTag, unstable_cache } from "next/cache";
+import { decodeCurrentSplitFeedTransport, encodeCurrentSplitFeedTransport } from "./currentSplitFeedTransport";
 
 const OWLS_CURRENT_SPLITS_RELEASE = "owls_current_splits_2026_10_27_r1_complete_named_book" as const;
 const CURRENT_SPLITS_RELEASE = "sharpapi_current_splits_2026_10_12_r2_cfb_central_team_identity" as const;
@@ -154,7 +155,7 @@ async function readDurableCurrentSplits(
         await upsertLabResponseSnapshot({
           snapshotKey: key,
           kind: "daily_edge",
-          payload: feed as unknown as Record<string, unknown>,
+          payload: encodeCurrentSplitFeedTransport(feed as unknown as Record<string, unknown>),
           ttlMs: CURRENT_SPLITS_TTL_MS,
           staleMs: CURRENT_SPLITS_STALE_MS,
           sport,
@@ -296,6 +297,12 @@ export function validateSharpApiCurrentSplitFeed(
   value: unknown,
   sport: SupportedSport,
 ): SharpApiCurrentSplitFeed | null {
+  // Existing raw records retain precedence; the envelope changes only transport.
+  return validateRawCurrentSplitFeed(value, sport)
+    ?? validateRawCurrentSplitFeed(decodeCurrentSplitFeedTransport(value), sport);
+}
+
+function validateRawCurrentSplitFeed(value: unknown, sport: SupportedSport): SharpApiCurrentSplitFeed | null {
   if (!isRecord(value)) return null;
   const fetchedAt = timestamp(value.fetchedAt);
   if (
