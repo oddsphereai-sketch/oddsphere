@@ -270,7 +270,7 @@ const withCirca = [
   sharpSplit({ book: "circa", side: "away", betsPct: 0.56, moneyPct: 0.37, at: "2026-10-16T17:53:00Z" }),
 ];
 const circaEvidence = buildNbaMemberGameEvidence({ game, priceRows, splitRows: withCirca, evaluatedAt });
-assert.equal(circaEvidence.moneyline.sportsbookSplits?.sourceBook, "circa", "a complete current Circa pair must silently reclaim priority");
+assert.equal(circaEvidence.moneyline.sportsbookSplits?.sourceBook, "draftkings", "a complete current DraftKings pair must silently own member display");
 assert.equal(circaEvidence.moneyline.sharpBookAvailability.status, "complete");
 
 const staleCircaWithFreshFallback = [

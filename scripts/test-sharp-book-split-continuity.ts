@@ -163,8 +163,15 @@ sticky.games[0]!.markets.moneyline.sportsbookSplits = section(
   [51, 49],
   "draftkings_network",
 );
-assert.equal(reconcileDailyEdgeSharpBookSplitAuthority(sticky, Date.parse("2026-09-20T20:10:00.000Z")), 0);
-assert.equal(sticky.games[0]!.markets.moneyline.sportsbookSplits, null, "the active source remains sticky through a multi-hour update gap");
+assert.equal(reconcileDailyEdgeSharpBookSplitAuthority(sticky, Date.parse("2026-09-20T20:10:00.000Z")), 1);
+assert.equal(sticky.games[0]!.markets.moneyline.sportsbookSplits?.sourceBook, "draftkings_network", "a complete current DraftKings pair owns unlocked member display");
+
+const lockedAuthority = structuredClone(sticky);
+lockedAuthority.games[0]!.lockState = "locked";
+lockedAuthority.games[0]!.lockedAt = "2026-09-20T20:09:30.000Z";
+const lockedAuthorityBytes = JSON.stringify(lockedAuthority);
+assert.equal(reconcileDailyEdgeSharpBookSplitAuthority(lockedAuthority, Date.parse("2026-09-20T20:10:00.000Z")), 0);
+assert.equal(JSON.stringify(lockedAuthority), lockedAuthorityBytes, "display-source reconciliation cannot reinterpret a locked card");
 
 const primary = response();
 primary.games[0]!.markets.moneyline.recommendationDecision!.sharpBookSplits = section(
@@ -178,8 +185,8 @@ primary.games[0]!.markets.moneyline.sportsbookSplits = section(
   [54, 46],
   "draftkings_network",
 );
-assert.equal(reconcileDailyEdgeSharpBookSplitAuthority(primary, Date.parse("2026-09-20T20:10:00.000Z")), 0);
-assert.equal(primary.games[0]!.markets.moneyline.sportsbookSplits, null, "current writer row remains authoritative over old fallback");
+assert.equal(reconcileDailyEdgeSharpBookSplitAuthority(primary, Date.parse("2026-09-20T20:10:00.000Z")), 1);
+assert.equal(primary.games[0]!.markets.moneyline.sportsbookSplits?.sourceBook, "draftkings_network", "a still-current DraftKings pair remains the unlocked display authority");
 
 const previousFeed = __TEST__.captureFeed(restored, "cfb", null);
 const emptyRebuild = response();
@@ -281,17 +288,21 @@ for (const sourceBook of ["circa", "draftkings", "draftkings_network", "betmgm",
  const before=values(market.recommendationDecision);
  const rawSection=section("Sharp Book Splits","2026-09-20T20:09:00Z",[80,20],[60,40],sourceBook);
  market.sportsbookSplits=structuredClone(rawSection);
- assert.equal(alignMarketReadsToDisplayedSharpBookSplits(board),1);
+	 const cosmeticDraftKings=sourceBook==="draftkings"||sourceBook==="draftkings_network";
+	 const internalBefore=JSON.stringify({marketDecision:market.recommendationDecision,gameDecision:game.recommendationDecision,availability:market.sharpBookAvailability});
+	 assert.equal(alignMarketReadsToDisplayedSharpBookSplits(board),cosmeticDraftKings?0:1);
  assert.deepEqual(values(market.recommendationDecision),before,"source correction cannot silently regrade or change evaluated economics");
  assert.deepEqual(market.sportsbookSplits,rawSection,"both retail sides and source timestamps stay visible");
+	 if(cosmeticDraftKings)assert.equal(JSON.stringify({marketDecision:market.recommendationDecision,gameDecision:game.recommendationDecision,availability:market.sharpBookAvailability}),internalBefore,
+	  "DraftKings-first presentation cannot modify any internal reader field");
  assert.equal(game.recommendationDecision.sourceState.sharpBookSplitsAvailable,sourceBook==="circa");
- assert.equal(market.sharpBookAvailability?.status,sourceBook==="circa"?"complete":"unavailable");
+	 assert.equal(market.sharpBookAvailability?.status,cosmeticDraftKings?undefined:sourceBook==="circa"?"complete":"unavailable");
  assert.equal(market.recommendationDecision.reasonCodes.includes("sharp_book_splits_available"),sourceBook==="circa");
  if(sourceBook!=="circa") {
   assert.ok(!/sharp(?:-| )book splits/i.test(market.recommendationDecision.quickRead));
   assert.equal(game.recommendationDecision.sourceState.missingExpectedSources.includes("Sharp Book Splits"),sportExpectsSharpBookContext(sport));
  }
- const repeat=JSON.stringify(board);assert.equal(alignMarketReadsToDisplayedSharpBookSplits(board),1);
+	 const repeat=JSON.stringify(board);assert.equal(alignMarketReadsToDisplayedSharpBookSplits(board),cosmeticDraftKings?0:1);
  assert.equal(JSON.stringify(board),repeat,"repeated overlays do not accumulate invented source evidence");
  for(const lockedFieldOnly of [false,true]) {
   const locked=structuredClone(board);locked.games[0]!.lockState=lockedFieldOnly?"open":"locked";

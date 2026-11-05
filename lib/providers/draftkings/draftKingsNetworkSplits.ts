@@ -614,11 +614,15 @@ function draftKingsShouldReplace(existing: MarketSplitDisplaySection, incoming: 
   const existingCurrent = sectionIsCurrent(existing);
   const incomingCurrent = sectionIsCurrent(incoming);
   if (existingCurrent !== incomingCurrent) return incomingCurrent;
-  if (existing.sourceBook === "circa" || (existing.label === "Sharp Book Splits" && !existing.sourceBook)) return false;
-  if (existing.sourceBook === "betmgm" || existing.label === "BetMGM Splits") return true;
-  if (existing.sourceBook !== "draftkings" && existing.sourceBook !== "draftkings_network" && existing.label !== "DraftKings Splits") return false;
   const incomingAt = sectionSourceTimestamp(incoming);
   const existingAt = sectionSourceTimestamp(existing);
+  if (existing.sourceBook === "circa" || (existing.label === "Sharp Book Splits" && !existing.sourceBook)) {
+    return true;
+  }
+  if (existing.sourceBook === "betmgm" || existing.label === "BetMGM Splits") {
+    return true;
+  }
+  if (existing.sourceBook !== "draftkings" && existing.sourceBook !== "draftkings_network" && existing.label !== "DraftKings Splits") return false;
   return incomingAt > existingAt ||
     (incomingAt === existingAt && hasMemberFacingFreshnessState(existing));
 }

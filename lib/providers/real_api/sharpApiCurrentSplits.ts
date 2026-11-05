@@ -75,7 +75,11 @@ const LEAGUE_BY_SPORT: Record<SupportedSport, string> = {
   wnba: "wnba",
 };
 
-const BOOK_PRIORITY: readonly NamedBook[] = ["circa", "draftkings", "consensus", "betmgm"];
+// Forecast readers keep the established professional-source ordering. Member
+// presentation is intentionally separate: a complete current DraftKings pair
+// is easier for users to recognize and silently occupies the existing panel.
+const MODEL_BOOK_PRIORITY: readonly NamedBook[] = ["circa", "draftkings", "consensus", "betmgm"];
+const DISPLAY_BOOK_PRIORITY: readonly NamedBook[] = ["draftkings", "circa", "consensus", "betmgm"];
 
 const BOOK_LABEL: Record<NamedBook, MarketSplitDisplaySection["label"]> = {
   circa: "Sharp Book Splits",
@@ -305,7 +309,7 @@ export function identifiedNhlProfessionalSplits(args: {
   if (!Number.isFinite(cutoffMs)) return [];
   const out: NhlIdentifiedProfessionalSplit[] = [];
   for (const market of ["moneyline", "spread", "total"] as const) {
-    for (const book of BOOK_PRIORITY) {
+    for (const book of MODEL_BOOK_PRIORITY) {
       const rows = dedupeBookRows(
         matching.filter((row) => normalize(text(row.sportsbook) ?? "") === book),
         market,
@@ -488,7 +492,7 @@ function newestCompleteSection(
   market: SplitMarket,
   candidates: Json[],
 ): MarketSplitDisplaySection | null {
-  for (const book of BOOK_PRIORITY) {
+  for (const book of DISPLAY_BOOK_PRIORITY) {
     const sections = candidates
       .filter((row) => normalize(text(row.sportsbook) ?? "") === book)
       .map((row) => sectionFromRow(game, market, book, row))
@@ -560,7 +564,8 @@ function attachBestMarket(
     lockedCutoffMs !== null &&
     (market.sportsbookSplits?.rows.length || market.recommendationDecision?.sharpBookSplits?.rows.length)
   ) return 0;
-  const sections = BOOK_PRIORITY.flatMap((book) => {
+  const displayPriority = lockedCutoffMs === null ? DISPLAY_BOOK_PRIORITY : MODEL_BOOK_PRIORITY;
+  const sections = displayPriority.flatMap((book) => {
     const rows = dedupeBookRows(
       candidates.filter((row) => normalize(text(row.sportsbook) ?? "") === book),
       sourceMarket,
@@ -822,23 +827,24 @@ function shouldReplace(
   const incomingCurrent = sectionIsFreshAt(incoming, nowMs);
   if (existingCurrent !== incomingCurrent) return incomingCurrent;
   if (existingQuality !== incomingQuality) return incomingQuality > existingQuality;
+  const incomingAt = sectionSourceTimestamp(incoming);
+  const existingAt = sectionSourceTimestamp(existing);
+  if (!existingCurrent && incomingAt !== existingAt) return incomingAt > existingAt;
   const priority = (label: MarketSplitDisplaySection["label"]) => {
-    if (label === "Sharp Book Splits") return 0;
-    if (label === "DraftKings Splits") return 1;
+    if (label === "DraftKings Splits") return 0;
+    if (label === "Sharp Book Splits") return 1;
     if (label === "BetMGM Splits") return 2;
     return 3;
   };
   const sourcePriority = (section: MarketSplitDisplaySection) => {
-    if (section.sourceBook === "circa") return 0;
-    if (section.sourceBook === "draftkings" || section.sourceBook === "draftkings_network") return 1;
+    if (section.sourceBook === "draftkings" || section.sourceBook === "draftkings_network") return 0;
+    if (section.sourceBook === "circa") return 1;
     if (section.sourceBook === "consensus") return 2;
     if (section.sourceBook === "betmgm") return 3;
     return priority(section.label);
   };
   const priorityDelta = sourcePriority(incoming) - sourcePriority(existing);
   if (priorityDelta !== 0) return priorityDelta < 0;
-  const incomingAt = sectionSourceTimestamp(incoming);
-  const existingAt = sectionSourceTimestamp(existing);
   return incomingAt > existingAt ||
     (incomingAt === existingAt && hasMemberFacingFreshnessState(existing));
 }

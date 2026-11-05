@@ -84,8 +84,8 @@ export function cbbQualifiedPublicSplitPair(rows:SplitRow[],id:number,kind:strin
   return pair;
 }
 
-const namedBooks=["circa","draftkings","betmgm"] as const;
-const namedDisplayPriority=(book:string|null|undefined)=>book==="draftkings_network"?1:namedBooks.indexOf(book as typeof namedBooks[number]);
+const namedBooks=["draftkings","circa","betmgm"] as const;
+const namedDisplayPriority=(book:string|null|undefined)=>book==="draftkings_network"?0:namedBooks.indexOf(book as typeof namedBooks[number]);
 function namedSplitPair(rows:SplitRow[],id:number,kind:string,now:number):SplitRow[]|null{
   const sides=kind==="total"?["over","under"]:["away","home"];
   for(const book of namedBooks){

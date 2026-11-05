@@ -139,6 +139,9 @@ export function reconcileDailyEdgeSharpBookSplitAuthority(
 ): number {
   let preferredFallbacks = 0;
   for (const game of response.games) {
+    // Existing locks retain the exact source section stored in their public
+    // record. The display preference applies only to unlocked responses.
+    if (game.lockState === "locked" || game.lockedAt != null) continue;
     for (const marketKey of MARKET_KEYS) {
       const market = game.markets[marketKey];
       if (!market?.sportsbookSplits?.rows.length) continue;
@@ -175,6 +178,9 @@ export function alignMarketReadsToDisplayedSharpBookSplits(response: DailyEdgeRe
       const market = game.markets[marketKey];
       const section = market?.sportsbookSplits ?? null;
       if (!market || !section || sectionQuality(section) !== 2) continue;
+      // DraftKings-first is presentation-only. Do not mirror the displayed
+      // pair into the stored/internal reader decision or source-state fields.
+      if (section.sourceBook === "draftkings" || section.sourceBook === "draftkings_network") continue;
       const professional = professionalSplitSource(section);
       const key = decisionKey[marketKey];
       if (market.recommendationDecision) {
@@ -437,12 +443,12 @@ function sameSource(first: MarketSplitDisplaySection, second: MarketSplitDisplay
 }
 
 function sectionPriority(section: MarketSplitDisplaySection): number {
-  if (section.sourceBook === "circa") return 0;
-  if (section.sourceBook === "draftkings" || section.sourceBook === "draftkings_network") return 1;
+  if (section.sourceBook === "draftkings" || section.sourceBook === "draftkings_network") return 0;
+  if (section.sourceBook === "circa") return 1;
   if (section.sourceBook === "consensus") return 2;
   if (section.sourceBook === "betmgm") return 3;
-  if (section.label === "Sharp Book Splits") return 0;
-  if (section.label === "DraftKings Splits") return 1;
+  if (section.label === "DraftKings Splits") return 0;
+  if (section.label === "Sharp Book Splits") return 1;
   if (section.label === "BetMGM Splits") return 3;
   return 2;
 }
