@@ -1,10 +1,10 @@
 import type { supabase } from "@/lib/db/supabase";
 import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
-import { advanceCbbProvisionalSnapshot, type CbbProvisionalBoard, type CbbProvisionalSnapshot } from "@/lib/cbb/provisionalLifecycle";
+import { CbbFixtureClockError,advanceCbbProvisionalSnapshot, type CbbProvisionalBoard, type CbbProvisionalSnapshot } from "@/lib/cbb/provisionalLifecycle";
 import type { CbbGame } from "@/lib/cbb/types";
 import type { CbbQuote } from "@/lib/cbb/types";
 import type { cbbCurrentSplitEvidence } from "@/lib/cbb/owlsSplitEvidence";
-import { adaptCbbProvisionalGame, cbbOfficialGameResult } from "./adaptCbbProvisionalToDailyEdge";
+import { cbbFixtureChronology,adaptCbbProvisionalGame, cbbOfficialGameResult } from "./adaptCbbProvisionalToDailyEdge";
 import { mergeCbbReaderEvidence,cbbQualifiedNamedSplitSection,cbbQualifiedPublicSplitSection,type CbbPreparedNamedSplitSections,type CbbPreparedPublicSplitSections } from "./cbbReaderMarketEvidence";
 import { accumulateCbbPublishedQuotes, BOOK_DISPLAY_HISTORY_RELEASE, type BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
 
@@ -67,24 +67,32 @@ export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisi
   const client=db??(await import("@/lib/db/supabase")).supabase;
   const existing=await readCbbMemberGame(args.game.id,client);
   if(existing&&existing.snapshot.lockedAt!==null)return {record:existing,written:false};
+  if(existing&&(existing.memberGame.homeTeamDisplayName!==args.game.home_team.full_name||
+    existing.memberGame.awayTeamDisplayName!==args.game.visitor_team.full_name||
+    existing.snapshot.board.gameForecast&&(existing.snapshot.board.gameForecast.homeId!==args.game.home_team.id||
+      existing.snapshot.board.gameForecast.awayId!==args.game.visitor_team.id)))
+    throw new Error("CBB stored school identity changed; fixture-clock repair is not a matchup migration");
   if(Date.parse(args.now)>=Date.parse(args.game.date)){
+    if(existing&&Date.parse(existing.snapshot.startsAt)!==Date.parse(args.game.date))
+      throw new CbbFixtureClockError("CBB corrected fixture already started; preserving prior without a post-start lock");
     throw new Error(`CBB ${args.game.id} missed pregame lock; never publish a post-start lock`);
   }
   const next=advanceCbbProvisionalSnapshot({existing:existing?.snapshot??null,candidate:args.candidate,
     startsAt:args.game.date,now:args.now});
   const freezing=existing!==null&&next.lockedAt!==null;
+  const retained=existing&&(freezing||Date.parse(existing.snapshot.startsAt)===Date.parse(args.game.date))?existing:null;
   const evidenceAt=freezing?Date.parse(args.game.date)-60*60_000:Date.parse(args.now);
   const empty:BookDisplayFeed={release:BOOK_DISPLAY_HISTORY_RELEASE,sport:"cbb",fetchedAt:args.now,eventsAt:args.now,events:[],rows:[]};
   const captured=args.bookHistory?{...args.bookHistory,rows:args.bookHistory.rows.filter(row=>row.event===args.game.id)}:empty;
-  const history=accumulateCbbPublishedQuotes(captured,existing?[existing.memberGame]:[],null,evidenceAt);
+  const history=freezing?empty:accumulateCbbPublishedQuotes(captured,retained?[retained.memberGame]:[],null,evidenceAt);
   // A future lock freezes the existing published decision and evidence. It
   // must not rebuild the DTO with empty split/quote arguments at the cutoff.
   const candidate=freezing?structuredClone(existing.memberGame):adaptCbbProvisionalGame({game:args.game,snapshot:next,
     homeLogo:args.homeLogo,awayLogo:args.awayLogo,now:args.now,splitEvidence:args.splitEvidence,marketQuotes:args.marketQuotes});
-  const memberGame=mergeCbbReaderEvidence({sport:"cbb",games:[candidate]} as Parameters<typeof mergeCbbReaderEvidence>[0],history,[],evidenceAt).games[0];
+  const memberGame=freezing?candidate:mergeCbbReaderEvidence({sport:"cbb",games:[candidate]} as Parameters<typeof mergeCbbReaderEvidence>[0],history,[],evidenceAt).games[0];
   if(!freezing){
     for(const key of ["moneyline","first_inning","total"] as const){
-      const market=memberGame.markets[key],section=args.capturedNamedSections?.[key]??existing?.memberGame.markets[key].sportsbookSplits;
+      const market=memberGame.markets[key],section=args.capturedNamedSections?.[key]??retained?.memberGame.markets[key].sportsbookSplits;
       if(cbbQualifiedNamedSplitSection(market.sportsbookSplits,section??null,evidenceAt,{allowRetained:true})){
         market.sportsbookSplits=structuredClone(section!.sourceBook==="draftkings_network"
           ?{...section!,label:"DraftKings Splits" as const}:section!);
@@ -92,11 +100,13 @@ export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisi
           ?{status:"complete",message:"Verified two-sided professional split data is available.",lastUpdated:section!.sourceObservedAt??section!.lastUpdated??""}
           :{status:"unavailable",message:"No current verified professional split for this market.",lastUpdated:null};
       }
-      const publicSection=args.capturedPublicSections?.[key]??existing?.memberGame.markets[key].publicSplits;
+      const publicSection=args.capturedPublicSections?.[key]??retained?.memberGame.markets[key].publicSplits;
       if(cbbQualifiedPublicSplitSection(publicSection,key,evidenceAt))market.publicSplits=structuredClone(publicSection!);
     }
   }
   if(freezing){
+    // The prior decision/evidence stay exact; only unlocked fixture chronology changes.
+    Object.assign(memberGame,cbbFixtureChronology(next.startsAt));
     memberGame.lockedAt=next.lockedAt;memberGame.lockState="locked";
     for(const market of Object.values(memberGame.markets)){
       market.lockedLineAmerican=market.priceAmerican;market.lockedLineAt=next.lockedAt;
@@ -115,11 +125,12 @@ export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisi
 
 /** Locked DTO first. Only official result fields may accrue afterward. */
 export function cbbMemberGameForReader(record:CbbStoredMemberGame,latestGame:CbbGame):DailyEdgeGameDto{
-  if(record.snapshot.gameId!==latestGame.id||record.snapshot.startsAt!==latestGame.date||
+  if(record.snapshot.gameId!==latestGame.id||
     record.memberGame.external_id!==latestGame.id)throw new Error("CBB reader identity changed after publication");
   if(record.snapshot.lockedAt!==null){
     if(record.memberGame.lockedAt!==record.snapshot.lockedAt)throw new Error("CBB locked DTO mismatch; preserve and request owner correction");
     return {...structuredClone(record.memberGame),result:cbbOfficialGameResult(latestGame,record.snapshot)};
   }
+  if(Date.parse(record.snapshot.startsAt)!==Date.parse(latestGame.date))throw new Error("CBB unlocked reader fixture clock changed before refresh");
   return structuredClone(record.memberGame);
 }

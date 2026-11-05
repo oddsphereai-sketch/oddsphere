@@ -76,15 +76,15 @@ activation requires protected PR publication and live verification.
 
 Publication identifiers: independent
 `cbb_candidate_2026_11_05_r5_complete_d1_program_priors`, incumbent market model
-`cbb_candidate_2026_11_05_r21_coordinated_provider_capture`, receipt
-`cbb_market_behavior_2026_11_05_r17_coordinated_provider_capture`, cross score
+`cbb_candidate_2026_11_05_r22_fixture_clock_epoch`, receipt
+`cbb_market_behavior_2026_11_05_r18_fixture_clock_epoch`, cross score
 `cbb_cross_division_score_2026_11_05_r1_posterior_score_law`, forecast board
 `cbb_game_forecast_board_2026_11_05_r1_unpriced_outcomes`, forecast-only grade
 `cbb_game_forecast_grade_2026_11_05_r1_no_unquoted_wagers`, frozen outcome
 `cbb_game_outcome_2026_11_05_r1_frozen_winner`, publisher
-`cbb_member_pipeline_2026_11_05_r38_coordinated_provider_capture`, adapter
+`cbb_member_pipeline_2026_11_05_r39_fixture_clock_epoch`, adapter
 `cbb_member_adapter_2026_11_05_r24_unpriced_game_forecast`, tracking
-`cbb_tracking_writer_2026_11_05_r24_coordinated_source_lineage`, training
+`cbb_tracking_writer_2026_11_05_r25_fixture_clock_lineage`, training
 `cbb_current_training_2026_11_05_r4_separate_cross_division_receipts`, and fixture
 seed `cbb_fixture_seed_2026_11_05_r8_verified_complete_d1_identities`.
 
@@ -96,6 +96,30 @@ are documented in
 `docs/model-audits/2026-11-05-cbb-all-division-one-private.md`. The current-input
 43-game /129-market comparison has 0 promotions, 0 demotions, 0 side changes
 and 0 score changes; 22 new cross forecasts add no unqualified wager grades.
+R39/R22/R18/R25 supersede publication of unsupported unlocked cross-domain
+priors at the owner's November 5 direction. Current-source collection still
+covers every eligible D1 matchup; an incomplete opponent prior must not become
+a published 99.9%/100% prediction or an invented market-only score. The fixed
+65-game input now publishes 43 incumbent D1 forecasts; 22 unsupported cross
+forecasts stay internal. Existing locked cross records remain exact and visible.
+This removes no qualified wager actionable and promotes no other pick. A future
+market-only cross forecast requires actual matched market evidence and its own
+coherent, separately reviewed score law; this repair does not claim that exists.
+
+The actual Chicago State–Incarnate Word unlocked fixture changed from 23:00Z to
+00:00Z. The previous path belonged to the earlier clock and aborted every normal
+refresh. R39 rebuilds unlocked numerical and displayed context from original
+source observations at the corrected fixture clock, records the old clock and
+capture time, and requires unchanged school identity. An earlier genuine saved
+decision may freeze at a corrected T−60; a late/missing qualifying decision cannot
+be invented or backdated and is isolated as a fixture-specific problem. Existing
+locks retain their exact start, projection, prices, grades and evidence even if
+canonical schedule time later changes. A locked clock conflict cannot abort the
+remaining board or reinterpret old tracking. Normal source-acquisition receipts
+log only safe scalar clocks/counts/quota headers, never credentials or raw URLs.
+Independent equations, grading thresholds, cadence and shared writer lease remain
+unchanged. Evidence: `model-audits/2026-11-05-cbb-fixture-clock-publication.md`.
+
 R38/R21/R17 add the owner-directed coordinated current-source path: complete
 Owls and BDL native-book pairs are resolved together with a bounded The Odds API
 current board when coverage still has gaps. Playbook public context continues

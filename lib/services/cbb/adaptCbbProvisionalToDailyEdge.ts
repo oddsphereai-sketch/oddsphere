@@ -27,6 +27,8 @@ const etMinuteFormatter=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_Y
 const etTime=(date:string)=>etTimeFormatter.format(new Date(date));
 const etMinutes=(date:string)=>{const parts=etMinuteFormatter.formatToParts(new Date(date));
   return Number(parts.find(p=>p.type==="hour")?.value??0)*60+Number(parts.find(p=>p.type==="minute")?.value??0);};
+export function cbbFixtureChronology(date:string){return {gameTime:etTime(date),gameStartAt:date,gameStartMinutes:etMinutes(date),
+  scheduledLockAt:new Date(Date.parse(date)-3600_000).toISOString()};}
 const selectionLabel=(game:CbbGame,row:BoardRow):string|null=>{
   if(row.selection===null)return null;
   if(row.market==="total")return `${row.selection==="first"?"Over":"Under"} ${row.line}`;
@@ -219,8 +221,7 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
   return {id:`cbb-${game.id}`,sport:"cbb",external_id:game.id,
     awayTeam:game.visitor_team.abbreviation,awayTeamDisplayName:game.visitor_team.full_name,cbbAwayCollege:game.visitor_team.college,
     awayTeamLogo:args.awayLogo,homeTeam:game.home_team.abbreviation,homeTeamDisplayName:game.home_team.full_name,cbbHomeCollege:game.home_team.college,
-    homeTeamLogo:args.homeLogo,gameTime:etTime(game.date),gameStartAt:game.date,gameStartMinutes:etMinutes(game.date),
-    scheduledLockAt:new Date(cutoff).toISOString(),lockState:locked?"locked":Date.parse(now)>=cutoff?"locking":"open",
+    homeTeamLogo:args.homeLogo,...cbbFixtureChronology(game.date),lockState:locked?"locked":Date.parse(now)>=cutoff?"locking":"open",
     lockedAt:snapshot.lockedAt,updatedAt:snapshot.capturedAt,generatedAt:snapshot.capturedAt,holdReason:null,
     homeStarter:null,awayStarter:null,predictions:{ml:prediction(ml),total:{...prediction(total),line:total.line},nrfi:prediction(spread)},
     markets:{moneyline:ml,total,first_inning:spread},decisionLine:`${game.visitor_team.abbreviation} ${snapshot.board.score.away.toFixed(1)} · ${game.home_team.abbreviation} ${snapshot.board.score.home.toFixed(1)}; ${topVerdict.label}.`,

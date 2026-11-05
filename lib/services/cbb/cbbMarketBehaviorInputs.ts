@@ -5,6 +5,12 @@ import type {CbbProvisionalSnapshot} from "@/lib/cbb/provisionalLifecycle";
 import type {CbbForecast,CbbTrainingGame} from "@/lib/cbb/types";
 import type {cbbCurrentSplitEvidence} from "@/lib/cbb/owlsSplitEvidence";
 
+/** Rebuild unlocked numerical context from original canonical observations after
+ * a real fixture-clock change; never relabel an old path or observation clock. */
+export function cbbContextAtFixtureClock(previous:CbbProvisionalSnapshot|null,startsAt:string):CbbProvisionalSnapshot|null{
+ return previous&&!previous.lockedAt&&Date.parse(previous.startsAt)===Date.parse(startsAt)?previous:null;
+}
+
 export function cbbIndependentInputKey(fixture:{id:number;homeId:number;awayId:number;neutral:boolean|null;season:number},history:CbbTrainingGame[],programInputs?:unknown){
  return createHash("sha256").update(JSON.stringify({release:CBB_CURRENT_SCORE_RELEASE,fixture,history,
   ...(programInputs===undefined?{}:{programInputs})})).digest("hex");
