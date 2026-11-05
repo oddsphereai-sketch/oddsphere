@@ -14,12 +14,12 @@ import {CBB_RETAIL_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_GRAD
 import {CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import { CBB_PROVISIONAL_GRADE_RELEASE, CBB_LEGACY_PROVISIONAL_GRADE_RELEASE } from "@/lib/cbb/provisionalGradePolicy";
 import type { CbbStoredMemberGame } from "./cbbMemberGameStore";
-import {CBB_FULL_D1_SCORE_RELEASE,CBB_FULL_D1_MARKET_MODEL_RELEASE,CBB_PREVIOUS_FULL_D1_MARKET_MODEL_RELEASE} from "@/lib/cbb/fullDivisionOneReleases";
+import {CBB_FULL_D1_SCORE_RELEASE,CBB_FULL_D1_MARKET_MODEL_RELEASE,CBB_PREVIOUS_FULL_D1_MARKET_MODEL_RELEASE,CBB_SOURCE_ADMISSION_MARKET_MODEL_RELEASE} from "@/lib/cbb/fullDivisionOneReleases";
 import {CBB_CROSS_DIVISION_SCORE_RELEASE,CBB_FULL_D1_COVERAGE_START} from "@/lib/cbb/crossDivisionPrior";
 import {CBB_GAME_FORECAST_GRADE_RELEASE,CBB_GAME_OUTCOME_RELEASE} from "@/lib/cbb/gameForecastBoard";
 import {normalCdf} from "@/lib/cbb/model";
 
-export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_05_r23_source_admission_lineage" as const;
+export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_05_r24_coordinated_source_lineage" as const;
 /** Hash stored JSON independently of PostgreSQL jsonb object-key ordering. */
 export function cbbTrackingEvidenceSha256(record:CbbStoredMemberGame):string {
   const sorted=(value:unknown):unknown=>Array.isArray(value)?value.map(sorted)
@@ -31,7 +31,7 @@ const receivedMarketGradeReleases:readonly string[]=[CBB_MARKET_BEHAVIOR_GRADE_R
 
 /** Never relabel an earlier public lock with the current score model. */
 export function cbbLockedModelRelease(board:{release:string;modelRelease?:string}):string{
-  if([CBB_FULL_D1_SCORE_RELEASE,CBB_FULL_D1_MARKET_MODEL_RELEASE,CBB_PREVIOUS_FULL_D1_MARKET_MODEL_RELEASE,CBB_CROSS_DIVISION_SCORE_RELEASE].includes(board.modelRelease as typeof CBB_FULL_D1_SCORE_RELEASE))return board.modelRelease!;
+  if([CBB_FULL_D1_SCORE_RELEASE,CBB_FULL_D1_MARKET_MODEL_RELEASE,CBB_SOURCE_ADMISSION_MARKET_MODEL_RELEASE,CBB_PREVIOUS_FULL_D1_MARKET_MODEL_RELEASE,CBB_CROSS_DIVISION_SCORE_RELEASE].includes(board.modelRelease as typeof CBB_FULL_D1_SCORE_RELEASE))return board.modelRelease!;
   if(board.modelRelease===CBB_SCORE_RESEARCH_RELEASE||board.modelRelease===CBB_CURRENT_SCORE_RELEASE||board.modelRelease===CBB_PREVIOUS_CURRENT_SCORE_RELEASE||board.modelRelease===CBB_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_NATIVE_COUNTERPRESSURE_MODEL_RELEASE||board.modelRelease===CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_JOINT_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_ALIGNED_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_RETAIL_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_PRIOR_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE)return board.modelRelease;
   if(board.modelRelease!==undefined)throw new Error("CBB locked model release is unknown");
   if(["cbb_candidate_2026_10_29_r2_explicit_unqualified_reader","cbb_candidate_2026_10_29_r3_exact_quote_reader_fields",
@@ -62,7 +62,7 @@ export async function writeLockedCbbTracking(record: CbbStoredMemberGame, db?: t
   const { snapshot, memberGame } = record;
   const gradeRelease = cbbLockedGradeRelease(snapshot.board);
   const modelRelease = cbbLockedModelRelease(snapshot.board);
-  if(modelRelease===CBB_FULL_D1_MARKET_MODEL_RELEASE||modelRelease===CBB_PREVIOUS_FULL_D1_MARKET_MODEL_RELEASE||modelRelease===CBB_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_NATIVE_COUNTERPRESSURE_MODEL_RELEASE||modelRelease===CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_JOINT_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_ALIGNED_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_RETAIL_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_PRIOR_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE){
+  if(modelRelease===CBB_FULL_D1_MARKET_MODEL_RELEASE||modelRelease===CBB_SOURCE_ADMISSION_MARKET_MODEL_RELEASE||modelRelease===CBB_PREVIOUS_FULL_D1_MARKET_MODEL_RELEASE||modelRelease===CBB_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_NATIVE_COUNTERPRESSURE_MODEL_RELEASE||modelRelease===CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_JOINT_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_ALIGNED_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_RETAIL_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_PRIOR_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE){
     const read=snapshot.board.marketContext.verifiedMarketRead;
     if(!read||read.modelRelease!==modelRelease||read.anchors.gameId!==snapshot.gameId||
       !(receivedMarketGradeReleases.includes(gradeRelease)||gradeRelease===CBB_GAME_FORECAST_GRADE_RELEASE)||(["home","away","margin","total","homeWinProbability"] as const).some(key=>read.finalScore[key]!==snapshot.board.score[key]))
@@ -133,7 +133,8 @@ export async function writeLockedCbbTracking(record: CbbStoredMemberGame, db?: t
       slate_date: fixture.slate_date, game_date: snapshot.startsAt,
       matchup: `${memberGame.awayTeamDisplayName} @ ${memberGame.homeTeamDisplayName}`,
       market: row.market, pick: side, side, line_value: line, odds_american: row.price,
-      odds_decimal: null, model_used: modelRelease===CBB_FULL_D1_MARKET_MODEL_RELEASE?"cbb_r20_complete_source_admission":
+      odds_decimal: null, model_used: modelRelease===CBB_FULL_D1_MARKET_MODEL_RELEASE?"cbb_r21_coordinated_provider_capture":
+        modelRelease===CBB_SOURCE_ADMISSION_MARKET_MODEL_RELEASE?"cbb_r20_complete_source_admission":
         modelRelease===CBB_PREVIOUS_FULL_D1_MARKET_MODEL_RELEASE?"cbb_r19_complete_d1_program_priors":
         modelRelease===CBB_FULL_D1_SCORE_RELEASE?"cbb_independent_r5_complete_d1_program_priors":
         modelRelease===CBB_CROSS_DIVISION_SCORE_RELEASE?"cbb_cross_division_r1_posterior_score_law":modelRelease===CBB_SCORE_RESEARCH_RELEASE?"cbb_independent_r2_provisional_market_reader":

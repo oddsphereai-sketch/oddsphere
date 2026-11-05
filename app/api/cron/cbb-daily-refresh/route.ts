@@ -44,7 +44,7 @@ export async function GET(request: Request): Promise<Response> {
     if (!owlsKey) throw new Error("OWLS_INSIGHT_API_KEY missing for CBB member writer");
     const training = await refreshCbbCurrentTraining({season,anchorDate:today,apiKey,now:now.toISOString()});
     trace("training_complete");
-    const board = await refreshCbbMemberBoard({anchorDate:today,season,bdlKey:apiKey,owlsKey,
+    const board = await refreshCbbMemberBoard({anchorDate:today,season,bdlKey:apiKey,owlsKey,theOddsApiKey:process.env.THE_ODDS_API_KEY?.trim(),
       trainingGames:training.receipt.games,crossTrainingGames:training.receipt.crossDivisionGames,syncFixtures:async games=>{
         // Reuse this leased writer's captured fixtures: no second provider poll.
         // The canonical seeder preserves both member and tracking locks.
@@ -70,7 +70,7 @@ export async function GET(request: Request): Promise<Response> {
       records_updated: seeded.reduce((sum, row) => sum + (row.written ? row.games + row.teams : 0), 0)
         + board.written + board.trackingInserted + training.added + graded.reduce((sum,row)=>sum+row.settled,0),
       api_calls_made: seeded.reduce((sum, row) => sum + row.providerCalls + (row.games ? 2 : 0), 0)
-        + training.providerCalls + board.providerCalls + board.owlsCalls,
+        + training.providerCalls + board.providerCalls + board.owlsCalls + board.currentSourceCoverage.theOddsApiRequests,
       details: { release: board.release, seeded, training:{added:training.added,pending:training.pending,rejected:training.rejected},
         board,graded,predictionPublication:true },
     };

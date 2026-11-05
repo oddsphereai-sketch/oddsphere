@@ -38,3 +38,7 @@ assert.equal(resistance.status,"retained");assert.equal(resistance.reason,"quali
 const multipleResistance=selectCbbSourceEpisode([{...a,resolved:false,currentDirection:0,qualifiedNetResistance:true},{...follower,resolved:false,currentDirection:0,qualifiedNetResistance:true}]);
 assert.equal(multipleResistance.status,"retained");assert.equal(multipleResistance.selectedId,null);assert.equal(multipleResistance.opposingIds.length,2,"more agreeing held reactions cannot reactivate a missing-unique-source gate");
 console.log("PASS CBB observed episode authority: leadership, poll ambiguity, current opposition, supersession, equivalence and symmetry");
+const unknownRequest={...follower,beforeEarliest:null};
+assert.equal(selectCbbSourceEpisode([a,unknownRequest]).status,"unresolved","unknown request lower bound cannot establish cross-book leadership");
+assert.equal(selectCbbSourceEpisode([{...a,beforeEarliest:null}]).selectedId,a.id,"known native economic episode is not erased by unknown request metadata");
+assert.throws(()=>selectCbbSourceEpisode([{...a,beforeEarliest:NaN}]),/distinct ordered/,"malformed bounds must be explicitly unknown, never silently accepted");

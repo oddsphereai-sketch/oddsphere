@@ -1,3 +1,5 @@
+import {fetchCbbTheOddsApiCurrent,type CbbTheOddsApiReceipt} from "./cbbTheOddsApiCurrent";
+import {mergeCbbCurrentSourceQuotes} from "@/lib/cbb/currentSourceQuotes";
 import type { supabase } from "@/lib/db/supabase";
 import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import { CbbBallDontLieClient } from "@/lib/cbb/ballDontLie";
@@ -11,7 +13,7 @@ import { forecastCbbCurrentBatch } from "@/lib/cbb/currentScoreRuntime";
 import { normalizeCbbOwlsCurrent } from "@/lib/cbb/owlsMarketEvidence";
 import { cbbCurrentSplitEvidence } from "@/lib/cbb/owlsSplitEvidence";
 import { buildCbbProvisionalBoard, chooseCbbSupportedTargetBook } from "@/lib/cbb/provisionalBoard";
-import {mergeCbbCurrentProviderQuotes} from "@/lib/cbb/currentProviderQuotes";
+import {cbbCurrentProviderQuotes} from "@/lib/cbb/currentProviderQuotes";
 import type { CbbGame, CbbTrainingGame, CbbOdds, CbbQuote } from "@/lib/cbb/types";
 import { OwlsInsightClient } from "@/lib/providers/owls/owlsInsightClient";
 import type { RawOwlsOddsResponse } from "@/lib/providers/owls/owlsSharpBookOdds";
@@ -42,7 +44,7 @@ import {forecastCbbFullDivisionOneBatch} from "@/lib/cbb/fullDivisionOneForecast
 import {buildCbbGameForecastBoard,attachCbbGameOutcome} from "@/lib/cbb/gameForecastBoard";
 import type {CbbProvisionalBoard} from "@/lib/cbb/provisionalLifecycle";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_05_r37_complete_source_admission" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_05_r38_coordinated_provider_capture" as const;
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
 const expandedFixture=(game:CbbGame)=>computeSlateDate("cbb",game.date)>=CBB_FULL_D1_COVERAGE_START;
 const eligibleFixture=(game:CbbGame)=>expandedFixture(game)?cbbDivisionOneFixture(game).eligible:
@@ -50,7 +52,8 @@ const eligibleFixture=(game:CbbGame)=>expandedFixture(game)?cbbDivisionOneFixtur
 
 /** The sole leased writer publishes the same exact locked/unlocked tuples the
  * member page reads. No request-time model or market recomputation. */
-export async function refreshCbbMemberBoard(args:{anchorDate:string;season:number;now?:string;bdlKey:string;owlsKey:string;
+export async function refreshCbbMemberBoard(args:{anchorDate:string;season:number;now?:string;bdlKey:string;owlsKey:string;theOddsApiKey?:string;
+  theOddsApiReader?:typeof fetchCbbTheOddsApiCurrent;
   trainingGames:CbbTrainingGame[];crossTrainingGames?:CrossDivisionGame[];nowClock?:()=>string;db?:typeof supabase;provider?:CbbBallDontLieClient;owls?:OwlsInsightClient;
   fetcher?:typeof fetch;loadSchedule?:typeof loadCbbRollingSchedule;canonicalHistoryReader?:typeof readCbbCanonicalReaderHistory;
   fallbackOdds?:CbbOdds[];saveSnapshot?:typeof upsertLabResponseSnapshot;syncFixtures?:(games:CbbGame[])=>Promise<unknown>}){
@@ -69,12 +72,15 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     provider.gamesForDates(providerDates.slice(0,7),args.season),
     provider.gamesForDates(providerDates.slice(7),args.season),
     (args.loadSchedule??loadCbbRollingSchedule)(args.anchorDate),
-    owls.odds<RawOwlsOddsResponse>("ncaab").then(response=>({response,fetchedAt:nowClock()})),
-    owls.splits<RawOwlsSplitsResponse>("ncaab").then(response=>({response,fetchedAt:nowClock()})),
+    owls.odds<RawOwlsOddsResponse>("ncaab").then(response=>({response,fetchedAt:nowClock(),error:null as string|null}))
+      .catch(()=>({response:{body:{success:false,data:[] as NonNullable<RawOwlsOddsResponse["data"]>}},fetchedAt:nowClock(),error:"Owls current odds request failed"})),
+    owls.splits<RawOwlsSplitsResponse>("ncaab").then(response=>({response,fetchedAt:nowClock(),error:null as string|null}))
+      .catch(()=>({response:{body:{success:false,data:[] as NonNullable<RawOwlsSplitsResponse["data"]>}},fetchedAt:nowClock(),error:"Owls current splits request failed"})),
   ]);
   trace("provider_capture_complete");
   const odds=oddsReceipt.response,splits=splitsReceipt.response;
-  if(odds.body.success!==true||!odds.body.data)throw new Error("CBB named sportsbook feed unavailable");
+  const oddsUnavailable=odds.body.success!==true||!odds.body.data;
+  if(oddsUnavailable&&!oddsReceipt.error)oddsReceipt.error="Owls current odds response unavailable";
   // Capture time is taken after the remote response; never predate a quote
   // verification just because the cron began several seconds earlier.
   let asOf=nowClock();
@@ -115,24 +121,63 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       evidence.quotes=evidence.quotes.map(quote=>({...quote,requestedAt:oddsRequestedAt}));
       return [game.id,evidence] as const;
     }));
-  const providerWarnings:string[]=[];
+  const providerWarnings:string[]=[oddsReceipt.error,splitsReceipt.error].filter((e):e is string=>e!==null);
   const [bookHistory,capturedSplits,draftKingsFeed]=await Promise.all([
     readCbbCapturedMarketHistory(db).catch(error=>{providerWarnings.push(error instanceof Error?error.message:"CBB captured history unavailable");return null;}),
     readCbbCapturedNamedSplits(db,currentSplitReadDates(args.anchorDate,candidateGames.map(game=>game.date))).catch(error=>{providerWarnings.push(error instanceof Error?error.message:"CBB captured splits unavailable");return null;}),
     readStoredDraftKingsNetworkSplits("cbb",db).catch(error=>{providerWarnings.push(error instanceof Error?error.message:"CBB stored DraftKings splits unavailable");return null;}),
   ]);
+  const sourceCovered=(quotes:CbbQuote[])=>["moneyline","spread","total"].every(market=>quotes.some(q=>q.market===market)&&
+    quotes.some(q=>q.market===market&&["pinnacle","ps3838","circa","bookmaker"].includes(q.sportsbook)));
   const needsFallback=candidateGames.filter(game=>!prior.get(game.id)?.snapshot.lockedAt&&Date.parse(game.date)>Date.parse(asOf)&&
-    !["moneyline","spread","total"].every(market=>namedById.get(game.id)?.quotes.some(q=>q.market===market)));
+    !sourceCovered(namedById.get(game.id)?.quotes??[]));
   if(needsFallback.length){
     try{
       const quoteDates=[...new Set(needsFallback.map(game=>game.date.slice(0,10)))];
+      const bdlRequestedAt=args.fallbackOdds===undefined&&typeof provider.odds==="function"?nowClock():undefined;
       const rows=args.fallbackOdds??(typeof provider.odds==="function"?await provider.odds(quoteDates,"current"):[]);
       asOf=nowClock();
       for(const game of candidateGames.filter(game=>Date.parse(game.date)>Date.parse(asOf)&&!prior.get(game.id)?.snapshot.lockedAt)){
         const primary=namedById.get(game.id)!;
-        primary.quotes=mergeCbbCurrentProviderQuotes(primary.quotes,rows,game,asOf);
+        // Retain every complete transport pair until the one final three-source
+        // merge. A preliminary conflict must not be erased and revived later.
+        primary.quotes.push(...cbbCurrentProviderQuotes(rows,game,asOf,bdlRequestedAt));
       }
     }catch(error){providerWarnings.push(`BDL odds gap fill unavailable: ${error instanceof Error?error.message:"source failure"}`);}
+  }
+  // All transports feed the same canonical book/market resolver and sole
+  // leased writer. A retail quote cannot hide a missing professional source.
+  const sourceScope=candidateGames.filter(game=>!prior.get(game.id)?.snapshot.lockedAt&&Date.parse(game.date)>Date.parse(asOf));
+  const sourceGaps=sourceScope.filter(game=>{
+    const preview=mergeCbbCurrentSourceQuotes(namedById.get(game.id)?.quotes??[],game.id,asOf);
+    return !sourceCovered(preview.quotes);
+  });
+  let theOddsApi:CbbTheOddsApiReceipt|null=null,theOddsApiRequests=0,theOddsApiPaidAttempts=0;
+  if(sourceGaps.length&&args.theOddsApiKey?.trim()){
+    try{
+      // One board read includes all open fixtures in the requested window, so a
+      // new source can update an existing book as well as fill an empty market.
+      theOddsApi=await (args.theOddsApiReader??fetchCbbTheOddsApiCurrent)({apiKey:args.theOddsApiKey,games:sourceScope,now:nowClock,
+        onRequest:kind=>{theOddsApiRequests++;if(kind==="current")theOddsApiPaidAttempts++;}});
+      asOf=nowClock();
+      if(theOddsApi.status!=="read")providerWarnings.push(`The Odds API CBB source: ${theOddsApi.status}`);
+    }catch{providerWarnings.push("The Odds API CBB current source failed; other qualified providers retained");}
+  }
+  const sourceCoverage={release:"cbb_current_source_coverage_2026_11_05_r1_three_provider_join",theOddsApiConfigured:!!args.theOddsApiKey?.trim(),
+    requestedGames:sourceScope.length,gapGames:sourceGaps.length,theOddsApiStatus:theOddsApi?.status??(sourceGaps.length?args.theOddsApiKey?.trim()?"read_failed":"missing_key":"not_needed"),
+    theOddsApiRequests,theOddsApiPaidAttempts,theOddsApiCreditsUsed:theOddsApi?.creditsUsed??null,
+    theOddsApiCreditsRemaining:theOddsApi?.creditsRemaining??null,eventsReturned:theOddsApi?.eventsReturned??0,theOddsApiRejections:theOddsApi?.rejections??[],
+    quotesByProvider:{} as Record<string,number>,unpricedGameIds:[] as number[],quarantined:0,duplicates:0};
+  const extraById=new Map<number,CbbQuote[]>();
+  for(const quote of theOddsApi?.quotes??[])extraById.set(quote.gameId,[...(extraById.get(quote.gameId)??[]),quote]);
+  for(const game of sourceScope){
+    const evidence=namedById.get(game.id)!;
+    const joined=mergeCbbCurrentSourceQuotes([...evidence.quotes,...extraById.get(game.id)??[]],game.id,asOf);
+    evidence.quotes=joined.quotes;
+    evidence.rejected.push(...joined.quarantined,...(theOddsApi?.rejections??[]).filter(r=>r.gameId===game.id).map(({gameId,...reason})=>{void gameId;return reason;}));
+    sourceCoverage.quarantined+=joined.quarantined.length;sourceCoverage.duplicates+=joined.duplicates;
+    for(const quote of evidence.quotes){const origin=quote.provider??"unknown";sourceCoverage.quotesByProvider[origin]=(sourceCoverage.quotesByProvider[origin]??0)+1;}
+    if(!evidence.quotes.length)sourceCoverage.unpricedGameIds.push(game.id);
   }
   trace("current_quotes_complete");
   const sourceGames=candidateGames.filter(game=>{
@@ -213,7 +258,11 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   }
   trace("decision_split_context_complete");
   const retainedInputCounts={captured:0,preserved_valid:0,preserved_invalid:0,unavailable:0};
-  const boardCandidates=new Map<number,CbbProvisionalBoard>(forecasts.filter(row=>row.forecast.inputStatus==="complete").map(row=>{
+  const preservedQuoteOutages=forecasts.filter(row=>oddsUnavailable&&!(namedById.get(row.game.id)?.quotes.length)&&
+    prior.get(row.game.id)?.snapshot.board.rows.some(market=>market.price!==null)).map(row=>row.game.id);
+  if(preservedQuoteOutages.length)providerWarnings.push(`CBB source outage preserved prior priced forecasts (${preservedQuoteOutages.join(",")})`);
+  const boardCandidates=new Map<number,CbbProvisionalBoard>(forecasts.filter(row=>row.forecast.inputStatus==="complete"&&
+    !preservedQuoteOutages.includes(row.game.id)).map(row=>{
     const quotes=namedById.get(row.game.id)?.quotes??[],baseline=buildCbbProvisionalBoard(row.forecast,quotes);
     const targets=baseline.rows.flatMap(market=>{const target=quotes.find(q=>q.market===market.market&&q.sportsbook===market.targetBook&&q.providerObservedAt===market.quoteObservedAt&&q.line===market.line);return target?[target]:[];});
     const key=cbbIndependentInputKey(row.game,args.trainingGames,row.coverage??undefined),previous=prior.get(row.game.id)?.snapshot??null;
@@ -352,7 +401,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     payloadVersion:CBB_MEMBER_PIPELINE_RELEASE,ttlMs:15*60_000,staleMs:24*60*60_000});
   if(!saved.ok)throw new Error(`CBB member snapshot publication failed: ${saved.error}`);
   trace("snapshot_published");
-  return {release:CBB_MEMBER_PIPELINE_RELEASE,requestedDates:dates,sourceGames:sourceGames.length,published:memberGames.length,
+  return {release:CBB_MEMBER_PIPELINE_RELEASE,currentSourceCoverage:sourceCoverage,requestedDates:dates,sourceGames:sourceGames.length,published:memberGames.length,
     scheduleOnly:candidateGames.length-memberGames.length,missingIdentity,missingLogosOnSchedule,
     written,locked,held,missingLogos,trackingInserted,problems,unpublishedIncomplete,ownerApprovedExclusions,providerWarnings,
     canonicalHistory:{release:canonicalHistory.release,complete:canonicalHistory.complete,price:canonicalHistory.price,split:canonicalHistory.split,elapsedMs:canonicalHistory.elapsedMs},

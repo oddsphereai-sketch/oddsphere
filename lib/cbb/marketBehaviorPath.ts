@@ -4,7 +4,7 @@ import type { CbbCanonicalReceipt, CbbForecast, CbbMarket, CbbQuote } from "./ty
 import { cbbEvidenceAvailableAt, cbbEvidenceProvablyBefore } from "./marketReceiptTime";
 import type { CbbBehaviorFlow } from "./marketBehaviorCandidate";
 
-export const CBB_MARKET_BEHAVIOR_PATH_RELEASE = "cbb_market_behavior_path_2026_11_04_r5_retained_response_frontier" as const;
+export const CBB_MARKET_BEHAVIOR_PATH_RELEASE = "cbb_market_behavior_path_2026_11_05_r6_transport_receipt_clocks" as const;
 const BOOKS = ["circa", "pinnacle", "bookmaker"];
 const MARKETS: CbbMarket[] = ["moneyline", "spread", "total"];
 // Current writer cadence is15 minutes:32 states cover7h45, exceeding the
@@ -18,7 +18,7 @@ type PathQuote = CbbQuote & { orientationVerified?: boolean };
 type Direction = -1 | 0 | 1;
 export type CbbMarketCanonicalReceiptTuple=[availableBy:string,eventIndex:number,runIndex:number,firstId:number,secondId:number,firstHash:string,secondHash:string];
 export type CbbMarketPathQuoteTuple = [observedAt: string, fetchedAt: string, line: number | null,
-  firstPrice: number, secondPrice: number, originalBook: string|null, provider: CbbQuote["provider"]|0|1|2|null, canonicalReceipt?: CbbCanonicalReceipt|CbbMarketCanonicalReceiptTuple];
+  firstPrice: number, secondPrice: number, originalBook: string|null, provider: CbbQuote["provider"]|0|1|2|3|null, canonicalReceipt?: CbbCanonicalReceipt|CbbMarketCanonicalReceiptTuple, transport?:{providerEventId?:string;requestedAt?:string}];
 export type CbbMarketPathFlowTuple = [observedAt: string, fetchedAt: string, line: number | null,
   firstMoney: number, secondMoney: number, firstTickets: number, secondTickets: number, originalBook: string|null, eventIdIndex: number, canonicalReceipt?: CbbCanonicalReceipt|CbbMarketCanonicalReceiptTuple];
 export type CbbMarketPathStreamTape = {
@@ -39,7 +39,7 @@ export type CbbMarketPathStreamTape = {
   flowTruncatedBefore: string | null;
 };
 export type CbbMarketBehaviorPathTape = {
-  release: typeof CBB_MARKET_BEHAVIOR_PATH_RELEASE|"cbb_market_behavior_path_2026_11_03_r4_identical_preflow_state"|"cbb_market_behavior_path_2026_11_02_r3_compact_native_frontier"|"cbb_market_behavior_path_2026_11_02_r2_availability_bounds";
+  release: typeof CBB_MARKET_BEHAVIOR_PATH_RELEASE|"cbb_market_behavior_path_2026_11_04_r5_retained_response_frontier"|"cbb_market_behavior_path_2026_11_03_r4_identical_preflow_state"|"cbb_market_behavior_path_2026_11_02_r3_compact_native_frontier"|"cbb_market_behavior_path_2026_11_02_r2_availability_bounds";
   gameId: number;
   startsAt: string;
   capturedAt: string;
@@ -113,9 +113,9 @@ function expandReceipt(source:CbbCanonicalReceipt|CbbMarketCanonicalReceiptTuple
  * safe IDs, prices and hashes all expand without reconstructing evidence. */
 export function expandCbbMarketBehaviorPathStream(tape:CbbMarketBehaviorPathTape,stream:CbbMarketPathStreamTape){
   const quotes:PathQuote[]=stream.quotes.map(q=>{
-    const canonicalReceipt=expandReceipt(q[7],stream),provider=q[6]===0?"owls":q[6]===1?"balldontlie":q[6]===2?"sharpapi":q[6];
+    const canonicalReceipt=expandReceipt(q[7],stream),provider=q[6]===0?"owls":q[6]===1?"balldontlie":q[6]===2?"sharpapi":q[6]===3?"the_odds_api":q[6];
     return {gameId:tape.gameId,market:stream.market,sportsbook:q[5]??stream.book,providerObservedAt:expandClock(q[0],stream),fetchedAt:expandClock(q[1],stream),line:q[2],firstPrice:q[3],secondPrice:q[4],
-      ...(provider===null?{}:{provider}),...(canonicalReceipt?{canonicalReceipt}:{}),phase:"current",orientationVerified:true};
+      ...(provider===null?{}:{provider}),...(q[8]?.providerEventId?{providerEventId:q[8].providerEventId}:{}),...(q[8]?.requestedAt?{requestedAt:expandClock(q[8].requestedAt,stream)}:{}),...(canonicalReceipt?{canonicalReceipt}:{}),phase:"current",orientationVerified:true};
   });
   const flows:CbbBehaviorFlow[]=stream.flows.map(f=>{
     const canonicalReceipt=expandReceipt(f[9],stream);
@@ -207,7 +207,7 @@ export function readCbbMarketBehaviorPath(args: {
   const limit = args.limitPerSource ?? MAX_QUOTES;
   if (!Number.isInteger(limit) || limit < 2 || limit > MAX_QUOTES) throw new Error("CBB path retention bound invalid");
   const previous = args.previous;
-  if (previous && (![CBB_MARKET_BEHAVIOR_PATH_RELEASE,"cbb_market_behavior_path_2026_11_03_r4_identical_preflow_state","cbb_market_behavior_path_2026_11_02_r3_compact_native_frontier","cbb_market_behavior_path_2026_11_02_r2_availability_bounds"].includes(previous.release) || previous.gameId !== base.gameId ||
+  if (previous && (![CBB_MARKET_BEHAVIOR_PATH_RELEASE,"cbb_market_behavior_path_2026_11_04_r5_retained_response_frontier","cbb_market_behavior_path_2026_11_03_r4_identical_preflow_state","cbb_market_behavior_path_2026_11_02_r3_compact_native_frontier","cbb_market_behavior_path_2026_11_02_r2_availability_bounds"].includes(previous.release) || previous.gameId !== base.gameId ||
     previous.startsAt !== args.startsAt || !Number.isFinite(Date.parse(previous.capturedAt)) || Date.parse(previous.capturedAt) > at)) {
     throw new Error("CBB path prior identity/cutoff mismatch");
   }
@@ -266,8 +266,10 @@ export function readCbbMarketBehaviorPath(args: {
       intern(canonicalRuns,compactRun(source.ingestionRunId)),source.observationIds[0],source.observationIds[1],packHash(source.rawPayloadHashes[0]),packHash(source.rawPayloadHashes[1])];
     const compactQuotes=quotes.map((q):CbbMarketPathQuoteTuple=>{
       const packed:CbbMarketPathQuoteTuple=[compactClock(q.providerObservedAt),compactClock(q.fetchedAt),q.line,q.firstPrice,q.secondPrice,
-        q.sportsbook===book?null:q.sportsbook,q.provider==="owls"?0:q.provider==="balldontlie"?1:q.provider==="sharpapi"?2:null];
-      if(q.canonicalReceipt)packed[7]=compactReceipt(q.canonicalReceipt);return packed;
+        q.sportsbook===book?null:q.sportsbook,q.provider==="owls"?0:q.provider==="balldontlie"?1:q.provider==="sharpapi"?2:q.provider==="the_odds_api"?3:null];
+      if(q.canonicalReceipt)packed[7]=compactReceipt(q.canonicalReceipt);
+      if(q.providerEventId||q.requestedAt)packed[8]={...(q.providerEventId?{providerEventId:q.providerEventId}:{}),...(q.requestedAt?{requestedAt:compactClock(q.requestedAt)}:{})};
+      return packed;
     });
     const compactFlows=flows.map((f):CbbMarketPathFlowTuple=>{
       const packed:CbbMarketPathFlowTuple=[compactClock(f.observedAt),compactClock(f.fetchedAt),f.line,f.firstMoney,f.secondMoney,f.firstTickets,f.secondTickets,
