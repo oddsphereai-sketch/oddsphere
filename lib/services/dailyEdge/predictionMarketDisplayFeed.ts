@@ -21,6 +21,7 @@ import { marketDisplayGameIdentity } from "@/lib/cbb/marketDisplayIdentity";
 import { recoverCfbHistoricalChart } from "@/lib/providers/owls/cfbHistoricalChart";
 import { publishedMarketIdentities,verifiedPublishedMarketDetail,PUBLISHED_MARKET_READER_RELEASE } from "./predictionMarketPublishedIdentity";
 import { readCbbMemberGame } from "../cbb/cbbMemberGameStore";
+import { PRELOCK_MARKET_CACHE_RELEASE, encodePrelockMarketCache, decodePrelockMarketCache, type PrelockMarketKind } from "@/lib/providers/owls/prelockMarketCache";
 
 const prelockKey=(sport:PredictionMarketSport)=>`daily-edge::prediction-market-prelock::${sport}::${PREDICTION_MARKET_PRELOCK_RELEASE}`;
 async function prelockStored(sport:PredictionMarketSport):Promise<PrelockFeed|null>{
@@ -29,9 +30,14 @@ async function prelockStored(sport:PredictionMarketSport):Promise<PrelockFeed|nu
   if(p?.encoding==="gzip-base64"&&typeof p.payload==="string")p=JSON.parse(gunzipSync(Buffer.from(p.payload,"base64"),{maxOutputLength:64_000_000}).toString());
   return p?.release===PREDICTION_MARKET_PRELOCK_RELEASE&&p.sport===sport&&Array.isArray(p.rows)?p as PrelockFeed:null;
 }
-const prelockCompressed=unstable_cache(async(sport:PredictionMarketSport)=>gzipSync(JSON.stringify(await prelockStored(sport))).toString("base64"),[PREDICTION_MARKET_PRELOCK_RELEASE],{revalidate:30,tags:[PREDICTION_MARKET_PRELOCK_RELEASE]});
-export async function readPredictionMarketPrelockFeed(sport:PredictionMarketSport):Promise<PrelockFeed|null>{
-  return JSON.parse(gunzipSync(Buffer.from(await prelockCompressed(sport),"base64"),{maxOutputLength:64_000_000}).toString());
+// Full CFB/CBB archives exceed Next's 2 MB entry limit even after gzip.
+// Share the requested market across all charts instead of repeatedly fetching
+// an entry Next cannot retain. Keep the complete legacy read available.
+const prelockCompressed=unstable_cache(async(sport:PredictionMarketSport,kind:PrelockMarketKind)=>
+  encodePrelockMarketCache(await prelockStored(sport),kind),
+  [PREDICTION_MARKET_PRELOCK_RELEASE,PRELOCK_MARKET_CACHE_RELEASE],{revalidate:30,tags:[PREDICTION_MARKET_PRELOCK_RELEASE]});
+export async function readPredictionMarketPrelockFeed(sport:PredictionMarketSport,kind?:PrelockMarketKind):Promise<PrelockFeed|null>{
+  return kind===undefined?prelockStored(sport):decodePrelockMarketCache(await prelockCompressed(sport,kind));
 }
 
 export const predictionMarketBookSnapshotKey=(sport:PredictionMarketSport)=>`daily-edge::prediction-market-books::${sport}::${BOOK_DISPLAY_HISTORY_RELEASE}`;
