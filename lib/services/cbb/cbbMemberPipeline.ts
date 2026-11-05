@@ -54,6 +54,9 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   trainingGames:CbbTrainingGame[];crossTrainingGames?:CrossDivisionGame[];nowClock?:()=>string;db?:typeof supabase;provider?:CbbBallDontLieClient;owls?:OwlsInsightClient;
   fetcher?:typeof fetch;loadSchedule?:typeof loadCbbRollingSchedule;canonicalHistoryReader?:typeof readCbbCanonicalReaderHistory;
   fallbackOdds?:CbbOdds[];saveSnapshot?:typeof upsertLabResponseSnapshot;syncFixtures?:(games:CbbGame[])=>Promise<unknown>}){
+  const started=Date.now();
+  const trace=(stage:string)=>console.info(`[cbb-member-pipeline] release=${CBB_MEMBER_PIPELINE_RELEASE} stage=${stage} elapsed_ms=${Date.now()-started}`);
+  trace("start");
   const db=args.db??(await import("@/lib/db/supabase")).supabase;
   const provider=args.provider??new CbbBallDontLieClient(args.bdlKey,{maxRequests:160});
   const owls=args.owls??new OwlsInsightClient(args.owlsKey,{timeoutMs:8_000});
@@ -67,6 +70,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     owls.odds<RawOwlsOddsResponse>("ncaab").then(response=>({response,fetchedAt:nowClock()})),
     owls.splits<RawOwlsSplitsResponse>("ncaab").then(response=>({response,fetchedAt:nowClock()})),
   ]);
+  trace("provider_capture_complete");
   const odds=oddsReceipt.response,splits=splitsReceipt.response;
   if(odds.body.success!==true||!odds.body.data)throw new Error("CBB named sportsbook feed unavailable");
   // Capture time is taken after the remote response; never predate a quote
@@ -100,7 +104,9 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     return {...game,home_team:game.home_team.abbreviation?.trim()?game.home_team:{...game.home_team,abbreviation:canonical.homeTeam},
       visitor_team:game.visitor_team.abbreviation?.trim()?game.visitor_team:{...game.visitor_team,abbreviation:canonical.awayTeam}};
   });
+  trace("fixture_sync_complete");
   const prior=await readCbbMemberGames(candidateGames.map(game=>game.id),db);
+  trace("prior_members_read");
   const namedById=new Map<number,{quotes:CbbQuote[];rejected:ReturnType<typeof normalizeCbbOwlsCurrent>["rejected"]}>(candidateGames.filter(game=>Date.parse(game.date)>Date.parse(asOf))
     .map(game=>{
       const evidence=normalizeCbbOwlsCurrent(game,odds.body,oddsReceipt.fetchedAt,asOf);
@@ -126,6 +132,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       }
     }catch(error){providerWarnings.push(`BDL odds gap fill unavailable: ${error instanceof Error?error.message:"source failure"}`);}
   }
+  trace("current_quotes_complete");
   const sourceGames=candidateGames.filter(game=>{
     const existing=prior.get(game.id),identity=scheduled.get(game.id);
     if(existing?.snapshot.lockedAt)return true;
@@ -146,6 +153,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     Promise.all(contextDays.map(async date=>[date,await fetchCbbDayEvents(date,args.fetcher)] as const)),
     (args.canonicalHistoryReader??readCbbCanonicalReaderHistory)({db,gameIds:forecastGames.map(game=>game.id),asOf}),
   ]);
+  trace("official_and_canonical_evidence_complete");
   const dayEvents=new Map(eventRows);
   if(forecastGames.some(expandedFixture))asOf=nowClock();
   if(!canonicalHistory.complete)providerWarnings.push(`CBB canonical reader history incomplete: price=${canonicalHistory.price.reason}; split=${canonicalHistory.split.reason}`);
@@ -175,6 +183,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     return !!evidence&&!!cbbCrossDivisionContext(game,evidence.events,evidence.fetchedAt);
   });
   if(expandedReady.length)forecasts.push(...forecastCbbFullDivisionOneBatch(expandedReady,asOf,args.trainingGames,dayEvents,args.crossTrainingGames));
+  trace("independent_forecasts_complete");
   const forecastById=new Map(forecasts.map(row=>[row.game.id,row.forecast]));
   const memberGames:DailyEdgeGameDto[]=[],problems:string[]=[],unpublishedIncomplete:number[]=[],ownerApprovedExclusions:number[]=[];
   const splitEvidenceById=new Map(forecastGames.map(game=>[game.id,cbbCurrentSplitEvidence(game,odds.body,splits.body,splitsReceipt.fetchedAt,asOf)]));
@@ -200,6 +209,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       earlierInputKeys.set(row.game.id,cbbIndependentInputKey(row.game,history));
     }}catch{/* An unreproducible independent baseline cannot attest a legacy anchor. */}
   }
+  trace("decision_split_context_complete");
   const retainedInputCounts={captured:0,preserved_valid:0,preserved_invalid:0,unavailable:0};
   const boardCandidates=new Map<number,CbbProvisionalBoard>(forecasts.filter(row=>row.forecast.inputStatus==="complete").map(row=>{
     const quotes=namedById.get(row.game.id)?.quotes??[],baseline=buildCbbProvisionalBoard(row.forecast,quotes);
@@ -256,6 +266,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     if(!evaluated){unpublishedIncomplete.push(game.id);problems.push(`${game.id}:incomplete_evaluation_unpublished`);}
     return !!evaluated;
   });
+  trace("market_forecasts_complete");
   const previousReady=sourceGames.some(game=>{
     const previous=prior.get(game.id);
     return previous&&!previous.snapshot.lockedAt&&Date.parse(game.date)>Date.parse(asOf)&&
@@ -286,6 +297,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       preparedPublic.set(game.external_id,Object.fromEntries(Object.entries(game.markets).filter(([,market])=>market.publicSplits.length===2).map(([key,market])=>[key,market.publicSplits])));
     }
   }
+  trace("member_evidence_prepared");
   let written=0,locked=0,held=0,missingLogos=0,trackingInserted=0;
   for(const game of publishableGames){
     const identity=scheduled.get(game.id);
@@ -319,6 +331,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       awayLogo:identity.awayTeamLogo,now:asOf,splitEvidence,marketQuotes:namedById.get(game.id)?.quotes??[],bookHistory,
       capturedNamedSections:preparedSections.get(game.id),capturedPublicSections:preparedPublic.get(game.id)},db);
     if(result.written)written++;
+    if(written>0&&written%25===0)trace(`member_writes_${written}`);
     if(result.record.snapshot.lockedAt)locked++;
     trackingInserted+=await writeLockedCbbTracking(result.record,db);
     memberGames.push(cbbMemberGameForReader(result.record,game));
@@ -336,6 +349,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     kind:"daily_edge",sport:"cbb",slateDate:args.anchorDate,payload:response,source:"cbb_prediction_pipeline",
     payloadVersion:CBB_MEMBER_PIPELINE_RELEASE,ttlMs:15*60_000,staleMs:24*60*60_000});
   if(!saved.ok)throw new Error(`CBB member snapshot publication failed: ${saved.error}`);
+  trace("snapshot_published");
   return {release:CBB_MEMBER_PIPELINE_RELEASE,requestedDates:dates,sourceGames:sourceGames.length,published:memberGames.length,
     scheduleOnly:candidateGames.length-memberGames.length,missingIdentity,missingLogosOnSchedule,
     written,locked,held,missingLogos,trackingInserted,problems,unpublishedIncomplete,ownerApprovedExclusions,providerWarnings,
