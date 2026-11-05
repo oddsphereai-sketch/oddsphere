@@ -93,7 +93,7 @@ export async function testCbbContextualOutcomeLocks(){
   // New risk-based priced passes can retain positive nominal EV. They remain
   // complete forecasts without recommendation confidence or wager exposure.
   const extremeTargets=[{...targets[0],firstPrice:-100000,secondPrice:5000},...targets.slice(1)];
-  const extremeBoard=releasedBoard(true,extremeTargets,{marginMean:100,totalMean:146,marginSd:11,totalSd:15,correlation:.1});
+  const extremeBoard=releasedBoard(true,extremeTargets,{marginMean:60,totalMean:146,marginSd:11,totalSd:15,correlation:.1});
   assert.equal(extremeBoard.rows[0].grade,"No Play");assert(extremeBoard.rows[0].expectedValue!>0);
   stored=null;await writeCbbMemberGame({game,candidate:extremeBoard,homeLogo:null,awayLogo:null,now:at,marketQuotes:extremeTargets},db);
   const extremeLock=(await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:lock},db)).record;
