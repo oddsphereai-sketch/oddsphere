@@ -1,0 +1,117 @@
+{
+  "date": "2026-11-05",
+  "starting_main": "a3db47c6dcb61b374fc64052c0ed7a541bd20cc3",
+  "scope": "Read-only production workload inventory; disposable local PostgreSQL/PostgREST profiling. No production code, database settings, model input/output, cadence, lock, history or retention changes.",
+  "native_platform": "macOS arm64 client; PostgreSQL 17.6 / PostgREST 14.5",
+  "conditions": "Five database pool connections, two RTS capabilities, fixed 128MB local shared_buffers and 7MB work_mem. Three concurrent mixed-current-page rounds; legacy case first reads five 1000-row pages. Six frozen CFB source shapes are repeated with synthetic IDs, existing frozen NFL rows and four current cache captures remain private outside the repository.",
+  "findings": [
+    {
+      "case": "current",
+      "peak_api_rss_bytes": 186580992,
+      "managed_backend_context_bytes_after_mix": 14782096,
+      "native_live_allocations": {
+        "after_mix": {
+          "libpq_receive_buffer_bytes": 62685184,
+          "libpq_result_bytes": 12341760
+        },
+        "idle45": {
+          "libpq_receive_buffer_bytes": 62685184,
+          "libpq_result_bytes": 12341760
+        },
+        "after_small_request": {
+          "libpq_receive_buffer_bytes": 0,
+          "libpq_result_bytes": 12392960
+        },
+        "final": {
+          "libpq_receive_buffer_bytes": 0,
+          "libpq_result_bytes": 153600
+        }
+      },
+      "response_bytes": [
+        12278756,
+        8098536,
+        5531862,
+        2550024,
+        3297584,
+        12278756,
+        8098536
+      ]
+    },
+    {
+      "case": "legacy_then_current",
+      "peak_api_rss_bytes": 843169792,
+      "managed_backend_context_bytes_after_mix": 15618704,
+      "native_live_allocations": {
+        "after_mix": {
+          "libpq_receive_buffer_bytes": 335626240,
+          "libpq_result_bytes": 262128640
+        },
+        "idle45": {
+          "libpq_receive_buffer_bytes": 335626240,
+          "libpq_result_bytes": 262128640
+        },
+        "after_small_request": {
+          "libpq_receive_buffer_bytes": 0,
+          "libpq_result_bytes": 262179840
+        },
+        "final": {
+          "libpq_receive_buffer_bytes": 0,
+          "libpq_result_bytes": 249966080
+        }
+      },
+      "response_bytes": [
+        49939315,
+        49939315,
+        49939315,
+        49939315,
+        49939315,
+        12278756,
+        8098536
+      ]
+    },
+    {
+      "case": "current_idle_gc",
+      "peak_api_rss_bytes": 174096384,
+      "managed_backend_context_bytes_after_mix": 15333008,
+      "native_live_allocations": {
+        "after_mix": {
+          "libpq_receive_buffer_bytes": 62685184,
+          "libpq_result_bytes": 12341760
+        },
+        "idle45": {
+          "libpq_receive_buffer_bytes": 62685184,
+          "libpq_result_bytes": 0
+        },
+        "after_small_request": {
+          "libpq_receive_buffer_bytes": 0,
+          "libpq_result_bytes": 51200
+        },
+        "final": {
+          "libpq_receive_buffer_bytes": 0,
+          "libpq_result_bytes": 51200
+        }
+      },
+      "response_bytes": [
+        12278756,
+        8098536,
+        5531862,
+        2550024,
+        3297584,
+        12278756,
+        8098536
+      ]
+    }
+  ],
+  "sources": [
+    "https://github.com/PostgREST/postgrest/blob/v14.5/postgrest.cabal#L184",
+    "https://github.com/postgres/postgres/blob/REL_17_STABLE/src/interfaces/libpq/fe-misc.c"
+  ],
+  "limits": [
+    "Mac RSS may drop when macOS compresses pages although allocations remain live; do not treat RSS alone as released commitment.",
+    "Local allocation traces identify exact native call stacks, but do not identify every production host committed byte.",
+    "Hosted runtime overrides are unavailable. Upstream -I0 is verified; effective hosted GC configuration is unconfirmed.",
+    "Later live API sessions have recycled. A two-day-old listener alone is not evidence that request connections fail to recycle.",
+    "Current Linux follow-up uses synthetic data and never receives production credentials or fixtures."
+  ],
+  "linux_followup": "pending isolated CI replay"
+}
