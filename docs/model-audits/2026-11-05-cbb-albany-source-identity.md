@@ -8,8 +8,14 @@ Albany Great Danes at Manhattan Jaspers,2026-11-06T00:00Z. Canonical10882660
 is UAlbany Great Danes at the same Manhattan school and exact start. The
 shared exact identity map lacked this full-name alias. The Odds API's actual
 approved17:20 board receipt separately classified10882660 exact_event_absent;
-a free independent catalog name check remains pending, so that raw event's
-identity/odds availability is not claimed proven here.
+the separately approved free catalog lookup could not proceed because the saved
+Vercel login was denied metadata access (403). No catalog/provider request was
+made by that attempt. To avoid repeat credential/API requests, the normal reader
+now retains minimal unmatched source event ID/school/start descriptors and logs
+at most20 public-event descriptors plus total count. This uses the already-fetched
+response, adds no request and exposes no key, URL, price or raw response body.
+Live unmatched-event evidence must independently establish whether a remaining
+absence is a name issue; a canonical rejection alone is not source-absence proof.
 
 Add only Albany Great Danes→UAlbany Great Danes. Shared canonical collection,
 quote/split qualification and reader matching use the same function. Do not

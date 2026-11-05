@@ -10,8 +10,8 @@ const aliases:Record<string,string>={williamhill_us:"caesars"};
 const int=(value:string|null)=>{const n=value===null?NaN:Number(value);return Number.isInteger(n)&&n>=0?n:null;};
 export type CbbTheOddsApiReceipt={release:typeof CBB_THE_ODDS_API_CURRENT_RELEASE;status:"read"|"credit_reserve"|"quota_unavailable";
   requestedAt:string;availableAt:string;requests:number;paidRequests:number;creditsUsed:number;creditsRemaining:number|null;
-  eventsReturned:number;quotes:CbbQuote[];rejections:Array<CbbCurrentOddsRejection&{gameId:number}>};
-export function normalizeCbbTheOddsApiCurrent(games:CbbGame[],body:unknown,requestedAt:string,availableAt:string):Pick<CbbTheOddsApiReceipt,"eventsReturned"|"quotes"|"rejections">{
+  eventsReturned:number;unmatchedEvents?:Array<{eventId:string;away:string;home:string;startsAt:string}>;quotes:CbbQuote[];rejections:Array<CbbCurrentOddsRejection&{gameId:number}>};
+export function normalizeCbbTheOddsApiCurrent(games:CbbGame[],body:unknown,requestedAt:string,availableAt:string):Pick<CbbTheOddsApiReceipt,"eventsReturned"|"unmatchedEvents"|"quotes"|"rejections">{
  if(!Array.isArray(body))throw Error("CBB The Odds API response must be an event array");
  const events=body.filter((e):e is RawOwlsOddsEvent&{id:string;sport_key:string}=>!!e&&typeof e==="object"&&
    e.sport_key==="basketball_ncaab"&&typeof e.id==="string"&&!!e.id&&e.id.length<=256);
@@ -34,7 +34,8 @@ export function normalizeCbbTheOddsApiCurrent(games:CbbGame[],body:unknown,reque
   rejections.push(...result.rejected.map(r=>({...r,gameId:game.id})));
   if(!result.quotes.length&&!result.rejected.length)rejections.push({gameId:game.id,book:null,reason:"no_complete_named_book_markets"});
  }
- return {eventsReturned:body.length,quotes,rejections};
+ return {eventsReturned:body.length,quotes,rejections,unmatchedEvents:events.filter(e=>!used.has(e.id)).map(e=>({
+  eventId:e.id,away:e.away_team??"",home:e.home_team??"",startsAt:e.commence_time??""}))};
 }
 // Whitelist only non-secret acquisition facts. The normal cron response body
 // is not retained by refreshLogger; these receipts make ordinary cycles
@@ -49,7 +50,8 @@ function observed(receipt:CbbTheOddsApiReceipt):CbbTheOddsApiReceipt{
    requestedAt:receipt.requestedAt,availableAt:receipt.availableAt,requests:receipt.requests,paidRequests:receipt.paidRequests,
    creditsUsed:receipt.creditsUsed,creditsRemaining:receipt.creditsRemaining,eventsReturned:receipt.eventsReturned,
    matchedGames:new Set(receipt.quotes.map(q=>q.gameId)).size,quoteGameIds:[...new Set(receipt.quotes.map(q=>q.gameId))],
-   quotes:receipt.quotes.length,rejectionReasons,rejectedGameIds})}`);
+   quotes:receipt.quotes.length,rejectionReasons,rejectedGameIds,unmatchedEventCount:receipt.unmatchedEvents?.length??0,
+   unmatchedEventSample:(receipt.unmatchedEvents??[]).slice(0,20)})}`);
  return receipt;
 }
 function failed(stage:"quota"|"current",status:number|null,requests:number,creditsUsed:number|null,creditsRemaining:number|null){

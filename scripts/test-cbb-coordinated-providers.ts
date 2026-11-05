@@ -14,6 +14,9 @@ async function main(){
  assert.equal(normalizeCbbTheOddsApiCurrent([game],[source,{...source,id:'duplicate'}],f.capturedAt,f.capturedAt).quotes.length,0);
  assert.equal(normalizeCbbTheOddsApiCurrent([game],[{...source,away_team:'Jackson State'}],f.capturedAt,f.capturedAt).quotes.length,0);
  assert.equal(normalizeCbbTheOddsApiCurrent([game],[{...source,commence_time:'2026-12-05T23:00:00Z'}],f.capturedAt,f.capturedAt).quotes.length,0);
+ const unmatched=normalizeCbbTheOddsApiCurrent([game],[source,{...source,id:'unmatched-native-event',away_team:'Unmatched school'}],f.capturedAt,f.capturedAt);
+ assert.deepEqual(unmatched.quotes,result.quotes,"name diagnostics cannot change admitted quotes");
+ assert.deepEqual(unmatched.unmatchedEvents,[{eventId:'unmatched-native-event',away:'Unmatched school',home:source.home_team??'',startsAt:source.commence_time??''}]);
  const q=result.quotes[0],duplicates=mergeCbbCurrentSourceQuotes([q,{...q,provider:'owls'}],game.id,f.capturedAt);
  assert.equal(duplicates.quotes.length,1);assert.equal(duplicates.duplicates,1);
  const owls={...q,provider:'owls' as const},bdl={...q,provider:'balldontlie' as const,firstPrice:q.firstPrice-10};
