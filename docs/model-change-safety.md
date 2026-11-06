@@ -20,7 +20,7 @@ improvements. Evidence and limits:
 
 The owner explicitly clarified in the Daily Edge market-grading chat that price
 is one input to the grade and that some confident Leans may have bad prices.
-The scoped CBB R9/R8 and NBA R29 policy therefore adds an outcome-confidence
+The scoped CBB R11/R10 and NBA R29 policy therefore adds an outcome-confidence
 Lean path while retaining the exact final forecast, selected quote and nominal
 EV. This supersedes a universal positive-EV Lean requirement for these new
 unlocked releases. It does not authorize changes to historical locked grades,

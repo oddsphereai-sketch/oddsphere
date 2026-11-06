@@ -33,18 +33,18 @@ apply after confidence qualification. A confidence-only Lean cannot inherit a
 positive-value Best promotion. New intelligence and tracking snapshots stamp
 their actual grade policy; old captures are not restamped.
 
-CBB decision/interpreted R9, grade R8, publisher R45, adapter R28 and tracking
-R31 end in `confidence_led_lean`. Model R1/covariance R1 and its complete market
-reader remain exact. The new confidence assessment reuses existing shifted-law
+CBB decision/interpreted R11, grade R10, publisher R51, adapter R34 and tracking
+R37 end in `confidence_led_lean`. The merged economic Total / retained Margin
+R7 model, covariance, private artifact and complete market reader remain exact. The new confidence assessment reuses existing shifted-law
 win/loss results, rather than evaluating another model or another score law.
 Its net win-minus-loss sensitivity retains the one-adverse-resolved-case policy
 and push refunds; the actual quote must still support the declared return risk.
 The actual-price EV assessment stays separate and may honestly fail on a Lean.
 Best retains its existing stronger actual-value and uncertainty assessment.
-The preceding R8/R7 and R7/R6 decision/grade pairs remain explicitly readable;
+The preceding R10/R9 (R7 model), R8/R7 and R7/R6 (R1 model) decision/grade pairs remain explicitly readable;
 their locked member and tracking payloads stay exact.
 
-The outcome-blind frozen-input comparison covers 58 CBB games/174 markets and
+The original R1-model outcome-blind frozen-input comparison covers 58 CBB games/174 markets and
 nine NBA games/27 markets, captured separately from the earlier member-board
 coverage inventory. CBB moves 36 Lean/1 Best/99 Watch/38 No Play to
 63/1/79/31 through 27 actionable promotions and zero demotions. NBA moves
@@ -57,6 +57,7 @@ does not blanket-rewrite their sport-specific authorities or the concurrent CBB
 Total-head development. The existing sport leases, single writers, provider
 budgets, schedules and T-60 locks remain. Required verification and production
 status: `model-audits/2026-11-06-confidence-led-market-grades.md`.
+
 ## CBB economic Total / retained raw Margin R7
 
 Production remains R1/R44 until the protected R7 release and normal writer are

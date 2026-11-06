@@ -55,9 +55,11 @@ for (const stored of nba) {
   }
 }
 
-const decoded: Array<{stored:any;read:NonNullable<ReturnType<typeof readCbbContextualOutcomeEvidence>>}> = cbb.filter((r: any) => r.payload.snapshot.lockedAt === null &&
+const decoded: Array<{stored:any;read:NonNullable<ReturnType<typeof readCbbContextualOutcomeEvidence>>}> = cbb.filter((r: any) => (!flag("cbb-model")||r.payload.snapshot.board.modelRelease===flag("cbb-model"))&&r.payload.snapshot.lockedAt === null &&
   r.payload.snapshot.board.marketContext?.contextualOutcomeEvidence).map((r: any) => ({ stored: r,
     read: readCbbContextualOutcomeEvidence(r.payload.snapshot.board as CbbReleasedOutcomeBoard)! }));
+const cbbModelReleases=[...new Set(decoded.map(({stored})=>stored.payload.snapshot.board.modelRelease))];
+assert(cbbModelReleases.length===1,"Choose exactly one captured CBB model release with --cbb-model; do not blend releases");
 const sampleCounts = new Map<string, number>();
 for (const { read } of decoded) for (const row of read.decision.marketDecisions) if (row.recommendationRisk) {
   const key = read.decision.artifact.objectSha256, n = row.recommendationRisk.context.calibrationGames;
@@ -99,7 +101,7 @@ const impact = (rows: any[]) => ({ markets: rows.length, before: count(rows.map(
   changes: rows.filter(r => r.previous !== r.next),
   byMarket: Object.fromEntries(["moneyline", "spread", "total"].map(m => [m, { before: count(rows.filter(r => r.market === m).map(r => r.previous)), after: count(rows.filter(r => r.market === m).map(r => r.next)) }])) });
 const report = { generatedAt: new Date().toISOString(), date, productionWrites: 0, providerCalls: 0, fits: 0,
-  cbbGradingMs:Math.round(performance.now()-gradingStarted),
+  cbbGradingMs:Math.round(performance.now()-gradingStarted),cbbModelReleases,
   replaySourceClocks:{nba:[...new Set(nba.map((r:any)=>r.snapshot_json.as_of))],cbb:[...new Set(decoded.map(({stored})=>stored.payload.snapshot.capturedAt))]},
   startingBase: "b77b1ed087765f7f9b5ce9ec323c0517d00b5408", coverage,
   nba: impact(nbaRows), cbb: impact(cbbRows), unchanged: ["score", "selected_side", "probability", "push", "price", "nominal_expected_value", "stored_payloads"],

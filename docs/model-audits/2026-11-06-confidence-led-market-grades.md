@@ -132,7 +132,7 @@ The existing 540-second route and 600-second sport lease remain unchanged.
 
 Tests exercise negative-EV confidence Leans through the real CBB member writer,
 lock, member reader and tracking serializer with in-memory storage. An existing
-R8/R7 or R7/R6 lock cannot be replaced by the new candidate. New confidence
+R10/R9, R8/R7 or R7/R6 lock cannot be replaced by the new candidate. New confidence
 receipts independently recheck their scalar qualification on publication;
 JSONB key order cannot change it. NBA's old R28 Watch and release remain exact
 when a current R29 dynamic card would be Lean. Missing, stale, future,
@@ -154,3 +154,27 @@ The focused CBB/NBA forecast, grading, price-reference, evidence-codec, causal
 market-consequence, member/lock and tracking tests pass. Type checking and the
 isolated production build are checked separately. Publication and live proof
 are pending; this document must not be read as a deployment claim.
+
+## Fresh production-base reconciliation
+
+PR #1048 merged as `6b129bb07c7ae1d5dc64d1f8718b65b3a3fee416`. Its tree
+`be9837e20a3517e3fbd387d2a8c6128c858b385c` is exactly the reviewed CBB
+PR head. Every overlapping code/document hunk was reconciled, retaining the
+economic Total, raw Margin and R7 covariance/private-artifact bindings. The
+first local conflict-resolution helper had an overbroad marker match; affected
+files were restored from unchanged committed merge stages before reconciliation
+and verification. No production or shared worktree was touched.
+
+The candidate identifiers advance beyond the merged release: CBB decision and
+interpreted decision R11, grade R10, publisher R51, adapter R34, tracking R37.
+R7 model/calibration/evidence and engine remain unchanged. Stored R10/R9
+decisions remain readable under R7; R8/R7 and R7/R6 remain bound exclusively to
+their original R1 manifest. New confidence semantics are admitted only for the
+new decision release. The lock integration tests cover current negative-EV
+Lean publication, earlier R7 lock precedence and both R1 legacy cohorts.
+
+The 174-market CBB counts above describe the frozen R1 law only. They are not
+a forecast of the R7 board; a new R7 same-input comparison and natural-writer
+verification are required before the final deployment claim. Full model gate,
+affected focused tests, build/types and integration safety are rerun against
+the actual merged production base.

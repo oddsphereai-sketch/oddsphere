@@ -9,7 +9,7 @@ reflect stronger outcome confidence and/or better price quality after the full
 market interpretation. This supersedes the universal positive-EV Lean meaning
 in the November 5 text below, which remains historical release documentation.
 
-The first scoped repair is CBB R9 decision/R8 grade and NBA grade R29. Both
+The first scoped repair is CBB R11 decision/R10 grade and NBA grade R29. Both
 retain their actual final model probability and exact nominal price EV. They
 permit a confidence-led Lean inside the actual same-book paired-price margin;
 price disagreement beyond that envelope still matters. CBB also checks its
