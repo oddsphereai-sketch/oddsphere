@@ -1,165 +1,174 @@
 # Player-prop AI product: full-scope offline validation
 
-Starting base: `6b129bb07c7ae1d5dc64d1f8718b65b3a3fee416`.
-Offline contract: `player_props_ai_offline_full_product_2026_11_06_r1`.
+Continuation base: `7f15ca4e8069bc30096633d6ccfe3c90776f82cd`.
+Packet contract: `player_props_ai_offline_full_product_2026_11_06_r1`.
+Research behavior is exported by `probability-proposals.ts`; receipts preserve each
+original request. This is a manual local evaluation system, not a deployed model.
 
-## Intended member experience
+## Intended product
 
-Assess each offered player individually, covering the complete required catalog in
-`ops-local/player-props-ai/catalog.ts`. NBA has all eight current core markets,
-including combinations. NFL includes its existing eight markets plus passing
-touchdowns and interceptions as required additions. MLB includes seventeen main
-pitcher/batter markets. Existing research-only markets remain explicitly inventoried.
-Additional commonly offered markets have an expansion list; the catalog is not a
-claim that all customers' preferences have been researched.
+Assess every offered player individually across the required catalog: eight NBA,
+ten NFL and seventeen MLB markets. NFL passing touchdowns/interceptions are required
+additions; an inventory entry is not a qualified forecasting head or executable quote.
+Expansion/research-only markets remain explicitly inventoried. There is no side quota.
 
-There are exactly two logical reviews per game, on the Eastern game date: an early
-review and a final review before the existing lock. Both examine every covered
-player and market. The final review receives refreshed evidence, not merely the
-early review's prose. A game-level request shares context; it does not substitute
-one assessment of the game for individual player assessments. Larger games may
-eventually need request partitions within the same two logical slots; their cost
-and completion must be measured before adopting them.
+Exactly two logical reviews occur on the Eastern game date: early and before the
+existing lock. The final review gets refreshed evidence. A stronger model may replace
+at most 10% of final reviews; it never adds a third review. The offline scheduling key
+includes the scheduled date, sport, game and stage, so a reschedule to another date is
+not confused with an already completed slot. This does not migrate locked records.
 
-AI can propose substantive forecast changes. A sport-specific coherent numerical
-forecast must turn accepted changes into probabilities for every line, related
-combination and binary event. Calibration and exact executable prices determine
-grades and stakes. Self-reported AI confidence is not a calibrated win probability.
-Binary touchdowns/home runs cannot be inferred from mean yardage/hits. There is no
-target ratio of Overs to Unders.
+Large reviews are partitioned by whole players with all their markets intact. Every
+partition receives shared all-player baseline context. These are requests within the
+same logical review. The full review is accepted only when every partition completes
+and passes validation; partial delivery is not a completed game review.
 
-## Implemented offline components
+## Implemented evidence and output
 
-The local CLI compiles available cached NBA/NFL exports into both logical review
-slots. It preserves all offered player/market identities, retains a normalized raw
-quote archive, and marks unavailable sources and unsupported model heads. Missing
-future boards are not counted as zero workload. It performs no network or provider
-calls, reads no credentials, and imports no production writer at runtime.
+`export-sources.ts` and `prepare-current-nba.ts` use SELECT-only existing caches.
+`build-full.ts` and `enrichment.ts` compile cached NBA/NFL logs, publicly available NFL
+history, timestamped NBA availability, and immutable pre-lock MLB source snapshots.
+Player joins reject ambiguous identities. Availability and cache timestamps must precede
+the input cutoff. A past box score is not considered available merely because the game
+probably ended. Replays with late or missing evidence retain explicit gaps.
 
-`market-report.ts` computes exact-book/line price pairs and alternate-ladder research
-summaries. The AI input retains the full available chronology at each selected anchor
-line and a report for every offered scope. Raw alternate traces remain in local
-artifacts. The summaries retain earliest/latest pairs at the anchor, representative
-observed ladder pairs, ages, coverage and nonmonotonicity counts. They do not claim
-to preserve every alternate-line narrative, infer money/splits, or establish who
-caused a move. Anchor inference is labelled when a timestamped model line is absent.
-This summary is an experimental compression candidate and needs an accuracy
-comparison against fuller evidence before product adoption.
+MLB records retain their original model release and locked payload digests. Historical
+releases may inform workload size; they cannot be blended into current-model accuracy.
+NFL additional QB heads remain diagnostic-only until independently qualified, and the
+stored export lacks their executable prices. Existing collection supports those markets;
+this harness does not create a second sports-data collector or writer.
 
-An exact reversible codec then shares repeated fields and identical values. Tests
-and the CLI prove normalized-packet roundtrip, including quote precision and order.
-That proves data preservation, not that a cheap AI understands the codec or that
-the summary preserves all predictive information. Readable tables versus encoded
-inputs must be compared in paid evaluation. Structured output requires every
-player/market and checks evidence references; fabricated evidence, omitted scopes,
-refusals and incomplete responses cannot be accepted as completed reviews.
+`market-report.ts` preserves exact-book/line price pairs, anchor chronologies and observed
+alternate-ladder summaries. Complete raw alternate traces remain in private artifacts.
+Summary compression is lossy and needs quality evaluation. Native last-price-change time
+and our confirmation/receipt time are distinct. Opening prices and legacy rows with an
+unknown opening marker are not qualified current references. Multiple feeds for one
+book do not establish independent market breadth. An execution book cannot confirm its
+own edge. Missing money/splits remain missing; price motion does not identify sharp money.
 
-`core.ts` also includes a local joint-path reweighting/pricing primitive: probabilities,
-combo projections and push-aware EV can be generated from one supplied joint law.
-Its fixtures are synthetic. Real qualified NBA/NFL/MLB joint-law adapters, the bridge
-from AI proposals to a calibrated law, and approved sport-specific grade policies
-are not implemented here. The current response schema intentionally produces
-research interpretations/directions rather than invented actionable probabilities.
+`readable.ts` uses named compact tables, shared context and short citation aliases.
+Recent games remain individual; older season arrays have numerical summaries with raw
+values archived. Prior grades and audit-only hashes do not anchor the AI. The reversible
+codec remains available for comparison; roundtrip preservation alone proves no AI skill.
 
-`validation.ts` compares paired held-out forecasts by sport, market and exact release
-pair, checks issue/lock/outcome timestamps, reports Brier/log loss/calibration,
-direction accuracy, exact-price unit profit, promotions, demotions and side flips.
-This descriptive report does not qualify a production release. Statistical
-uncertainty must account for correlated props within a game, and model selection
-must occur before the held-out interval. Archived exact locked values take precedence
-over retrospective reconstruction when preparing evaluation inputs.
+The required keyed schema enumerates each player and market and restricts citations to
+that player's evidence. Every supported exact event can receive an uncalibrated numerical
+probability hypothesis. Point proposals are relative to the independent projection, not
+the betting line. Generic uncertainty is not an excuse to invent missing data or imply
+calibrated confidence. DNP/void is never an Under win. Integer-line push targets without
+an appropriate distribution are excluded from this binary probability benchmark.
 
-## Cost contract
+`point-forecast.ts` derives combinations from components and checks physical identities,
+including points versus made threes and completions versus attempts. Rejected outputs
+retain their vendor receipt and cost. Raw probabilities are saved before point gating
+so failed games cannot quietly disappear from evaluation. They are never accepted picks.
+`recover-research.ts` can create a separately labelled raw-hypothesis supplement from an
+original complete receipt; it cannot repair the original result or authorize publication.
 
-The earlier narrow-market cost estimate is not a full-product estimate. Budget
-validation requires all of the following:
+`probability-proposals.ts` and `score-local.ts` reject after-lock issues, future cutoffs,
+duplicate stage forecasts and invalid probability values. They score exact events with
+Brier/log loss against the recorded independent baseline, preserving release/market/stage
+cohorts. Pushes and voids are excluded explicitly. Score all predeclared games, including
+raw hypotheses from rejected games, and report guard/fallback performance separately.
+Correlated props need game-cluster uncertainty. One slate cannot qualify all markets.
 
-1. A complete monthly calendar for every in-season covered sport, including heavy
-   days, plus known upper bounds for added/postponed games and retries.
-2. Complete individual-player evidence and all required markets; absent NFL heads,
-   MLB-season workload or availability sources cannot disappear from the estimate.
-3. Actual model-specific API input counts and observed total billed output, including
-   reasoning and failed/incomplete attempts. Local `o200k_base` counts are proxies.
-4. Demonstrated complete, useful output at the chosen token limits and quality
-   comparison for the evidence compression and model choices.
-5. A whole-month plan within the agreed ceiling with allowance and evaluation reserve.
+A supplied synthetic joint-law primitive can generate coherent paths and exact-price EV.
+Real sport-specific calibrated joint-law bridges and approved grade/stake adapters are
+still qualification work. Raw AI probabilities, prose confidence and coherent means do
+not substitute for them. No live probabilities, grades, stakes or locked payloads change.
 
-The default planner prices one inexpensive early review and one stronger final
-review for every game. It can also compare an explicit allocation in which a
-stronger model replaces the inexpensive final review on at most 10% of games:
-set each game's `finalModel` and `maxStrongFinalFraction: 0.1`. This still gives every
-game exactly two reviews and every covered player an assessment. It is not an
-automatic downgrade and does not add a third review. Either model allocation needs
-its own output/accuracy proof; it cannot be selected merely because it fits the bill.
-The planner reserves all final reviews first. It uses standard rates, accounts
-for long-context pricing conservatively at 272K input tokens, assumes no cache or
-Batch discount, and includes a default 20% allowance plus $5 evaluation reserve.
-An allowance is not a guarantee against unknown demand. The planner does not enforce
-a production cap or authorize stopping the product halfway through a month. A plan
-that fails must be redesigned before launch. Output caps are spending bounds only;
-they do not prove a review can finish or retain quality.
+## Measured-cost workflow and spending bounds
 
-Rates were checked on 2026-11-06 against [official pricing](https://developers.openai.com/api/docs/pricing):
-GPT-6 Luna $0.10 input/$0.50 output and GPT-6.1 Terra $1 input/$5 output per million
-short-context standard tokens. [Reasoning tokens](https://developers.openai.com/api/docs/guides/reasoning)
-are part of billed output. The final slot cannot rely on the
-[Batch API's 24-hour completion window](https://developers.openai.com/api/docs/guides/batch).
-Sports-data subscriptions, hosting/database, taxes and other AI products must be
-budgeted separately rather than hidden in the player-prop token estimate.
+`api-eval.ts` implements a fixed $2 total LOCAL evaluation ceiling, shared across all
+manual cases. It reserves every request in a game/slate before generation, claims each
+reservation once, and atomically persists usage. Failed/incomplete calls count; a timeout
+without usage retains its full reserve. There is no automatic paid retry. Never delete
+or reset this ledger to obtain more test budget. This controls this harness, not other
+activity under the same OpenAI project/key, and is not a deployed monthly cap.
+
+Keep `OPENAI_API_KEY` in a private mode-0600 environment file outside Git; load it with
+`node --env-file=/private/tmp/PRIVATE_ENV ...`. No key belongs in source, public browser
+variables or reports. Count-only tools call the actual model-specific input-token API;
+local tokenizer counts are explicitly proxies. Private production-derived datasets and
+results remain outside Git and must not be included in a public PR.
+
+Standard pricing and cache-write rules were checked against [OpenAI pricing](https://developers.openai.com/api/docs/pricing)
+and [prompt caching](https://developers.openai.com/api/docs/guides/prompt-caching).
+Default 30-minute cache writes cost 1.25 times ordinary input. Two reviews hours apart
+should not assume reuse. Generation uses `prompt_cache_options: { mode: "explicit" }`
+with no breakpoints, avoiding cache writes; verify zero writes in returned usage.
+`reconcile-costs.ts` includes writes in historical receipts and retains the earlier ledger
+quote with its correction. Original vendor receipts are never edited. The no-discount
+billing function charges cache reads at ordinary rates conservatively and includes all
+billed output, including reasoning. These calculations are not invoice reconciliation.
+
+`profile-costs.ts` measures model-specific input counts per player-preserving request.
+`build-calendar.py` uses complete selected month calendars, including heavy days.
+`monthly-cost-report.ts` projects two final-sized reviews per game, with largest observed
+output-per-market density, per-request billing, a 20% allowance and $5 evaluation reserve.
+It reports ordinary, doubled-output, largest-sampled-game and full-output-cap scenarios.
+Output density for stronger NFL/MLB reviews remains an assumption until measured; a
+stronger NBA comparison does not prove cross-sport reliability or accuracy.
+
+Full primary coverage must be funded for the entire month before stronger upgrades are
+admitted. The planner compares a fixed 10% stronger allocation against the affordable
+allocation up to 10%. If the primary reserve itself fails, report that failure before
+launch: do not silently drop markets, stop reviews mid-month or claim a guaranteed $50.
+An allowance and sampled workloads are projections, not a hard future workload bound.
+Every-request-at-output-cap scenarios can exceed the target even when ordinary loads fit.
+No production scheduler/monthly reservation system has been deployed by this work.
+Sports-data subscriptions, hosting/database, taxes and other AI products are excluded.
 
 ## Reproduce locally
 
-Use an existing read-only source export; these commands make no paid calls:
+These checks make no network calls:
 
 ```bash
 node --import tsx ops-local/player-props-ai/test.ts
-node --import tsx ops-local/player-props-ai/cli.ts build \
-  --input=/private/tmp/props-source.json \
-  --out-dir=/private/tmp/props-full-product-new-run
+node --import tsx ops-local/player-props-ai/api-eval.test.ts
+node --import tsx ops-local/player-props-ai/full-product.test.ts
+node --import tsx ops-local/player-props-ai/cost-plan.test.ts
 
-# Optional local proxy tokenizer; tiktoken must be installed in the operator environment.
-python3 ops-local/player-props-ai/count-tokens.py \
-  /private/tmp/props-full-product-new-run/manifest.json
+# Read-only local build from exported sources; NEW private destination.
+node --import tsx ops-local/player-props-ai/build-full.ts \
+  --input=/private/tmp/enriched-source.json --nflverse=/private/tmp/nfl-history.json \
+  --out-dir=/private/tmp/full-product-new
 
-node --import tsx ops-local/player-props-ai/cli.ts plan \
-  --input=/private/tmp/complete-month-plan.json \
-  --out=/private/tmp/month-plan-result.json
+# Exact count-only preflight. Does not generate forecasts.
+node --env-file=/private/tmp/PRIVATE_ENV --import tsx \
+  ops-local/player-props-ai/profile-costs.ts \
+  --manifest=/private/tmp/full-product-new/manifest.json --out=/private/tmp/new-profiles.json
 
-node --import tsx ops-local/player-props-ai/cli.ts evaluate \
-  --input=/private/tmp/paired-held-out-forecasts.json \
-  --out=/private/tmp/paired-result.json
+# Manual paid generation, governed by the fixed common evaluation ledger.
+node --env-file=/private/tmp/PRIVATE_ENV --import tsx \
+  ops-local/player-props-ai/api-run.ts --mode=generate --partition=true \
+  --packet=/private/tmp/research-packet.json --model=gpt-6-luna \
+  --max-output=16000 --label=UNIQUE_DELIBERATE_ATTEMPT
+
+node --import tsx ops-local/player-props-ai/monthly-cost-report.ts \
+  /private/tmp/new-profiles.json /private/tmp/calendar.json \
+  /private/tmp/receipt-directory /private/tmp/new-cost-report.json
+
+node --import tsx ops-local/player-props-ai/score-local.ts \
+  /private/tmp/scoring-manifest.json /private/tmp/new-score-report.json
 ```
 
-Plan and evaluation input types are exported by `validation.ts`; their shapes and
-synthetic examples are exercised in `test.ts`. Output paths must be outside the
-repository and must not already exist. Local artifacts can contain private player
-research and production-derived information: they are not PR contents.
+The scoring manifest contains `forecastFiles` (saved probability artifacts) and optional
+`outcomeFile`. Outcomes use `SettledOutcome` from `probability-proposals.ts`: exact proposal
+ID, settled/void/push status, actual stat or null, official availability timestamp and
+source. Do not manufacture outcomes or infer participation from an absent box-score row.
+With no outcome file the report correctly says pending; it does not report accuracy.
 
-## Remaining evidence before live work
+## Gate before production
 
-The current source adapter does not provide a qualified MLB packet source. NFL
-lacks individual raw game logs and opponent history in this export, and passing-TD
-and interception model heads need real implementations. NBA needs timestamped
-injury/lineup evidence and verified historical stat availability times. Some current
-exports cannot be used to reconstruct an earlier review; they are excluded at that
-cutoff and labelled. Planned future slots are scenarios, not observations of future
-day-of evidence. Missing split feeds remain missing; odds movement is not money.
+Accuracy improvement requires frozen held-out comparisons against the independent model,
+current member decisions and a qualified market baseline. Report full boards, both sides,
+binary/combination markets, promotions paired with demotions, exact prices and board-count
+impact. Select compression/model policies before the holdout. A flatter board is no proof.
 
-There is no OpenAI API key configured in this workspace. No AI generation, actual
-billed usage, model comprehension, latency/reliability or accuracy improvement has
-been measured by this build. Connect credentials securely through the environment
-before a separately bounded paid evaluation; never place a key in chat or source.
-This CLI intentionally has no paid execution path or retry loop.
-
-After evidence, forecast adapters and budget are complete, compare the full intended
-product against the frozen independent model, current member decisions and a qualified
-market baseline. Include full boards, heavy slates, both directions, binary/combination
-markets, every grade and paired promotion/demotion impact. Do not tune on the holdout.
-Improvement is not established by a more balanced board or convincing explanations.
-
-Any eventual production integration must use the existing sport-scoped
-`prediction_pipeline` lease and sole writer, bump the affected release identifiers,
-follow `docs/model-change-safety.md`, and prove exact locked-record precedence. Do
-not deploy this harness, a shadow model, or candidate predictions into a production
-database/cron/member snapshot. Production work requires the full repository gates,
-fresh-main PR integration checks and post-deployment verification.
+Follow `docs/model-change-safety.md`, bump affected production release identifiers, update
+the model registry and retain the shared `prediction_pipeline` lease and sole writer.
+Prove writer immutability and exact legacy locked reader precedence. Run all required
+model/integration checks from a clean fresh-main branch and publish only through a PR.
+Verify live release, cron health, coherence, data coverage and reader snapshots after any
+future qualified deployment. Until those gates pass, keep these artifacts offline.

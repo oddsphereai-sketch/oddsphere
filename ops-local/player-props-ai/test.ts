@@ -18,7 +18,12 @@ const packet: GamePacket = {
   ],
 };
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+packet.quotes = packet.quotes.map(q => ({ ...q, opening: false }));
 const before = digest(packet);
+assert.equal(bill("gpt-6-luna", { input: 1000, output: 0, cacheWrite30m: 1000 }), 0.000125);
+assert.equal(bill("gpt-6-luna", { input: 1000, output: 0, cacheWrite12h: 1000 }), 0.00025);
+assert.throws(() => bill("gpt-6-luna", { input: 1000, output: 0, cacheWrite30m: 1001 }), /cache-write/);
+assert.notEqual(slots(packet)[0].key, slots({ ...packet, start: "2026-11-07T23:00:00Z", lock: "2026-11-07T22:00:00Z" })[0].key);
 assert.equal(validatePacket(packet).players, 1);
 assert.deepEqual(decode(encode(packet as unknown as Json)), packet);
 assert.deepEqual(unpack(pack(packet)), packet);
@@ -52,12 +57,19 @@ for (const start of ["2026-11-01T14:30:00Z", "2026-03-08T16:00:00Z", "2026-11-09
 assert.throws(() => slots({ ...packet, start: "2026-11-06T05:05:00Z", lock: "2026-11-06T04:05:00Z" }));
 const pairs = referencePairs(packet, { playerId: "player-1", market: "points", line: 10.5, book: "target" }, 300000);
 assert.equal(pairs.length, 1); assert.equal(pairs[0].over, 0.5);
+const feeds = clone(packet); feeds.quotes.push({ ...feeds.quotes[1], provider: "second_feed", id: "feed2over" }, { ...feeds.quotes[2], provider: "second_feed", id: "feed2under" });
+assert.equal(referencePairs(feeds, { playerId: "player-1", market: "points", line: 10.5, book: "target" }, 300000).length, 1);
+const unchanged = clone(packet); unchanged.quotes.forEach(q => { q.observedAt = "2026-11-05T12:00:00Z"; });
+assert.equal(referencePairs(unchanged, { playerId: "player-1", market: "points", line: 10.5, book: "target" }, 300000).length, 1); // Fresh confirmation of an unchanged price is current.
+unchanged.quotes.forEach(q => { q.opening = true; });
+assert.equal(referencePairs(unchanged, { playerId: "player-1", market: "points", line: 10.5, book: "target" }, 300000).length, 0);
 const mismatched = clone(packet); mismatched.quotes[2].line = 11.5;
 assert.equal(referencePairs(mismatched, { playerId: "player-1", market: "points", line: 10.5, book: "target" }, 300000).length, 0);
 
 const law = [{ id: "low", weight: 0.5, stats: { points: 8, rebounds: 2, assists: 1 } }, { id: "high", weight: 0.5, stats: { points: 12, rebounds: 6, assists: 3 } }];
 const changed = reweight(law, [{ id: "low", multiplier: 1 }, { id: "high", multiplier: 3 }]);
 assert.equal(price(changed, "points_rebounds", 15.5, "over", 100).win, 0.75);
+assert.equal(price(changed, "points", 12, "yes", 100).win, 0.75); // 12+ milestone is not merely scoring any point.
 assert.equal(price(changed, "points_rebounds", 15.5, "over", 100).mean, price(changed, "points", 9, "over", 100).mean + price(changed, "rebounds", 3, "over", 100).mean);
 assert.deepEqual(price(changed, "points", 12, "under", -100), { mean: 11, win: 0.25, push: 0.75, loss: 0, ev: 0.25 });
 assert.equal(law[0].weight, 0.5);
@@ -65,8 +77,12 @@ assert.throws(() => reweight(law, [{ id: "low", multiplier: 1 }, { id: "low", mu
 assert.throws(() => price(changed, "anytime_td", 0.5, "yes", 500)); // Never infer a TD event from yardage.
 assert.equal(price(reweight([{ id: "negative", weight: 0.5, stats: { rushing_yards: -2 } }, { id: "positive", weight: 0.5, stats: { rushing_yards: 4 } }], [{ id: "negative", multiplier: 1 }, { id: "positive", multiplier: 1 }]), "rushing_yards", 0.5, "under", 100).win, 0.5);
 
-const review = { players: [{ playerId: "player-1", markets: packet.players[0].markets.map(market => ({ market, interpretation: "Synthetic workload evidence supports retaining the baseline", forecastDirection: "retain", evidenceIds: ["e1"], gaps: [] })) }] };
+const review: import("./core").Review = { players: [{ playerId: "player-1", assessment: "Synthetic assessment", gaps: [], markets: packet.players[0].markets.map(market => ({ market, interpretation: "Synthetic workload evidence supports retaining the baseline", proposedProjection: 10, forecastDirection: "retain", evidenceIds: ["e1"], gaps: [] })) }] };
 validateReview(packet, review);
+const sharedGap = clone(review); sharedGap.players[0].gaps = ["Synthetic shared availability gap"];
+sharedGap.players[0].markets[0].forecastDirection = "insufficient_evidence";
+validateReview(packet, sharedGap);
+sharedGap.players[0].gaps = []; assert.throws(() => validateReview(packet, sharedGap));
 assert.throws(() => validateReview(packet, { players: [] }));
 const fabricated = clone(review); fabricated.players[0].markets[0].evidenceIds = ["nonexistent"];
 assert.throws(() => validateReview(packet, fabricated));
@@ -113,6 +129,12 @@ for (const p of adapted.packets) validatePacket(p);
 assert.deepEqual(adapted.packets.filter(p => p.sport === "nfl").map(p => p.players[0].evidence.length), [0, 0]);
 assert.ok(coverage(adapted.packets).find(c => c.sport === "nfl")!.missingMarkets.includes("passing_tds"));
 assert.equal(digest(source), originalSource);
+const lateCache = { ...clone(source), currentNba: { games: [{ gameId: 123, startTime: "2026-11-04T23:00:00Z", homeTeam: "A", awayTeam: "B", homeTeamId: 1, awayTeamId: 2 }],
+  boxes: [{ gameId: 123, playerId: 1, teamId: 1, points: 20 }], advanced: [], updatedAt: "2026-11-07T12:00:00Z" } } as unknown as CachedExport;
+const unavailable = fromCachedExport(lateCache).packets.filter(p => p.sport === "nba");
+assert.ok(unavailable.every(p => !p.players[0].evidence.some(e => e.kind === "recent_games")));
+const available = fromCachedExport({ ...lateCache, currentNba: { ...lateCache.currentNba, updatedAt: "2026-11-06T12:00:00Z" } }).packets.filter(p => p.sport === "nba");
+assert.ok(available.every(p => p.players[0].evidence.some(e => e.kind === "recent_games" && e.availableAt === "2026-11-06T12:00:00Z")));
 
 // Offline entry points must not acquire writer/provider/network capabilities as this evolves.
 for (const name of ["catalog.ts", "core.ts", "validation.ts", "adapters.ts", "market-report.ts", "cli.ts"]) {
