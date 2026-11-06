@@ -12,6 +12,7 @@ import {
   selectLatestCfbMemberEvidenceRows,
 } from "../lib/services/football/cfbMemberFixture";
 import { cfbTeamIdentity } from "../lib/services/football/cfbTeamIdentity";
+import { CURRENT_SPLIT_EVIDENCE_READER_RELEASE } from "../lib/services/recommendationDecision";
 import { finalizeDailyEdgeResponseCoherence } from "../app/lab/lib/dailyEdgeResponseCoherence";
 import { dailyEdgeOutcomeForecastLabel } from "../app/lab/lib/dailyEdgeOutcomeForecast";
 import {
@@ -1483,6 +1484,9 @@ assert.equal(member.snapshot.games.length, 1);
 assert.equal(member.fixtureRelease, CFB_MEMBER_FIXTURE_RELEASE);
 assert.equal(member.snapshot.games[0]!.lockState, "locked", "only a fully valid immutable T-60 tuple is labeled locked");
 assert.equal(member.snapshot.games[0]!.lockedAt, lockedAt);
+assert.ok(Object.values(member.snapshot.games[0]!.markets).every(market =>
+  !market.recommendationDecision?.reasonCodes.includes(CURRENT_SPLIT_EVIDENCE_READER_RELEASE)),
+"existing immutable T-60 cards keep legacy split interpretation without the open-card presentation stamp");
 const previousExactPricePayload: CfbForwardEvidencePayload = {
   ...evidence.payload,
   schemaRelease: CFB_FORWARD_FINAL_WINNER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE as unknown as typeof evidence.payload.schemaRelease,
@@ -1752,6 +1756,18 @@ lockedNewsRow.payload.availability.report=structuredClone(staleNewsRow.payload.a
 lockedNewsRow.payloadSha256=hashCfbForwardEvidencePayload(lockedNewsRow.payload);
 assert.deepEqual(buildCfbMemberFixture([lockedNewsRow]).availability[game.providerGameId],lockedNewsRow.payload.availability.report,
  "legacy locked injury evidence takes precedence over new news qualification");
+const openSplitSummary = buildCfbMemberFixtureAtTime([unlockedRow], unlockedPayload.capturedAt).snapshot.games[0]!;
+assert.equal(openSplitSummary.lockState, "open");
+assert.ok(Object.values(openSplitSummary.markets).every(market =>
+  market.recommendationDecision?.reasonCodes.includes(CURRENT_SPLIT_EVIDENCE_READER_RELEASE)),
+"only the open CFB card opts into current split interpretation");
+for (const decision of unlockedRow.payload.decisions.evaluatedBets) {
+  const key = decision.market === "spread" ? "first_inning" : decision.market;
+  const market = openSplitSummary.markets[key];
+  assert.equal(market.modelProb, decision.modelProbability);
+  assert.equal(market.priceAmerican, decision.evaluatedQuote.price);
+  assert.equal(market.verdict.label, decision.grade, "open split narration never changes the writer's grade");
+}
 
 assert.deepEqual(
   retainCfbMemberLockedGamesForBoardDate({

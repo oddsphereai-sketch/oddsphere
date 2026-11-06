@@ -1,5 +1,27 @@
 # Model change safety protocol
 
+## Owner-directed November 6 Daily Edge current-source correctness repair
+
+The owner explicitly requested an audit of every Daily Edge sport with games
+today, current stats/markets and actual forecast/grade interpretation, with
+confirmed gaps repaired. This scoped correction restores four exact observed
+CBB provider institution aliases, versions the source input contract and stamps
+it in future receipts. The current fitted R1 forecast and R8/R7 decision/grade
+method remain unchanged; only genuinely available newly matched inputs may
+change future projections or recommendations. Unknown/wrong institutions,
+future knowledge and historical backdating remain rejected.
+
+The accompanying NBA and open-CFB explanation corrections change no numerical
+forecast, probability, executable price, grade or stake. Stale split rows remain
+preserved as context; locked and legacy readers keep exact precedence. There is
+no new fit, backtest tournament, grade threshold, writer, schedule, provider
+budget or live shadow output. Normal full/focused checks, same-input board
+effects and paired promotion/demotion controls, protected fresh-main PR,
+completed existing writers and actual source/reader/lock proof remain required.
+The bounded functional repair is evaluated prospectively; numerical coherence
+must not be reported as demonstrated prediction accuracy. Evidence:
+`docs/model-audits/2026-11-06-daily-edge-product-health.md`.
+
 ## Owner-directed CBB Lean recommendation quality — November 5
 
 The owner explicitly requested repair of overly permissive Leans using market

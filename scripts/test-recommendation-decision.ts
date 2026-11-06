@@ -1,4 +1,5 @@
-import { applySharpBookSplitSectionToDecision, buildRecommendationDecision } from "../lib/services/recommendationDecision";
+import { applySharpBookSplitSectionToDecision, buildRecommendationDecision, CURRENT_SPLIT_EVIDENCE_READER_RELEASE } from "../lib/services/recommendationDecision";
+import type { MarketSplitDisplaySection } from "../lib/types/domain/RecommendationDecision";
 import { applyDailyEdgeRenderedCopyFlags } from "../lib/services/dailyEdge/memberFacingCopyRenderer";
 import { buildEdgeStackRows } from "../app/lab/lib/edgeStackRows";
 import type { MarketEdgeDto } from "../app/lab/lib/labTypes";
@@ -270,6 +271,66 @@ const noEdge = buildRecommendationDecision({
   markets: [{ ...baseMarket, edgePp: 0.4, playGrade: "No Play", marketReadV2: read({ consensusMoney: 0.51, consensusBets: 0.50, sharp: null }) }],
 });
 check("No Play can be used with present data", noEdge.markets.moneyline?.playGrade === "No Play" && noEdge.markets.moneyline.consensusSplits !== null);
+
+// The new open-card interpretation is explicit. Existing/default callers,
+// including immutable CFB locks, retain their exact legacy interpretation.
+const staleNamed: MarketSplitDisplaySection = {
+  label: "Sharp Book Splits", sourceBook: "circa", signal: "strong resistance against the pick",
+  lastUpdated: "2026-11-06T10:02:00Z", rows: [
+    {side: "away", label: "CWS", moneyPct: 20, betsPct: 30, observedAt: "2026-11-06T10:02:00Z", isStale: true},
+    {side: "home", label: "KC", moneyPct: 80, betsPct: 70, observedAt: "2026-11-06T10:02:00Z", isStale: true},
+  ],
+};
+const currentMarket = {...baseMarket, publicSplits: baseMarket.publicSplits.map(row => ({...row, isStale: false})),
+  marketReadV2: null, sharpBookSplitsOverride: staleNamed, allowBestAngleMarketConflict: true};
+const currentArgs = {sport: "cfb", slateDate: "2026-11-06", gameId: "current-cfb", homeTeam: "KC", awayTeam: "CWS", markets: [currentMarket]};
+const inputBefore = JSON.stringify(currentArgs);
+const legacyStale = buildRecommendationDecision(currentArgs);
+const explicitLegacy = buildRecommendationDecision({...currentArgs, currentSplitEvidenceOnly: false});
+check("Default and explicit legacy stale interpretation are byte-identical", JSON.stringify(legacyStale) === JSON.stringify(explicitLegacy));
+check("Legacy stale opposition remains the stored mixed read", legacyStale.markets.moneyline?.resolvedMarketRead.status === "mixed");
+const currentStale = buildRecommendationDecision({...currentArgs, currentSplitEvidenceOnly: true});
+const currentMoneyline = currentStale.markets.moneyline!;
+check("Open CFB stale opposition is older context rather than current mixed pressure", currentMoneyline.resolvedMarketRead.status === "consensus_support" && !currentMoneyline.sourceConflict);
+check("Older context is explicitly labeled", currentMoneyline.quickRead.includes("Older sharp book splits") && currentMoneyline.quickRead.includes("do not establish current pressure"));
+check("Original stale section and timestamps remain exact", JSON.stringify(currentMoneyline.sharpBookSplits) === JSON.stringify(staleNamed));
+check("Opt-in interpretation has its own presentation release", currentMoneyline.reasonCodes.includes(CURRENT_SPLIT_EVIDENCE_READER_RELEASE));
+check("Legacy interpretation has no new presentation stamp", !legacyStale.markets.moneyline!.reasonCodes.includes(CURRENT_SPLIT_EVIDENCE_READER_RELEASE));
+check("Summary migration preserves price/probability/grade", currentMoneyline.price === legacyStale.markets.moneyline!.price && currentMoneyline.modelProbability === legacyStale.markets.moneyline!.modelProbability && currentMoneyline.playGrade === legacyStale.markets.moneyline!.playGrade);
+check("Summary migration never mutates source input", JSON.stringify(currentArgs) === inputBefore);
+const noCurrentSplit = {...currentMarket, publicSplits: [], sharpBookSplitsOverride: {...staleNamed, rows: []}};
+const signalOnly = buildRecommendationDecision({...currentArgs, currentSplitEvidenceOnly: true, markets: [noCurrentSplit]});
+check("Signal-only section cannot resurrect fresh pressure", signalOnly.markets.moneyline!.resolvedMarketRead.status === "no_clear_signal" && signalOnly.markets.moneyline!.quickRead.includes("freshness") && signalOnly.markets.moneyline!.quickRead.includes("unverified"));
+const unknownTime = buildRecommendationDecision({...currentArgs, currentSplitEvidenceOnly: true, markets: [{...currentMarket,
+  sharpBookSplitsOverride: {...staleNamed, rows: staleNamed.rows.map(row => ({...row, isStale: undefined}))}}]});
+check("Missing freshness does not claim current professional pressure", unknownTime.markets.moneyline!.resolvedMarketRead.status === "consensus_support" && unknownTime.markets.moneyline!.quickRead.includes("unverified"));
+const currentPriceOnly = buildRecommendationDecision({...currentArgs, currentSplitEvidenceOnly: true,
+  markets: [{...noCurrentSplit, lineMovementOverride: "resistance"}]});
+check("Current price response still reads without a fresh split", currentPriceOnly.markets.moneyline!.resolvedMarketRead.status === "resistance" && currentPriceOnly.markets.moneyline!.quickRead.includes("Observed price movement"));
+const freshPressure: MarketSplitDisplaySection = {...staleNamed, signal: null,
+  rows: staleNamed.rows.map(row => ({...row, isStale: false, moneyPct: row.side === "away" ? 65 : 35, betsPct: row.side === "away" ? 60 : 40}))};
+const pressureResponse = buildRecommendationDecision({...currentArgs, currentSplitEvidenceOnly: true,
+  markets: [{...currentMarket, sharpBookSplitsOverride: freshPressure, lineMovementOverride: "resistance"}]});
+check("Fresh pressure and opposing observed response remain distinct", pressureResponse.markets.moneyline!.resolvedMarketRead.status === "mixed" && pressureResponse.markets.moneyline!.resolvedMarketRead.copy.includes("observed price response"));
+const retailSection: MarketSplitDisplaySection = {...freshPressure, label: "DraftKings Splits", sourceBook: "draftkings"};
+const retailBuilt = buildRecommendationDecision({...currentArgs, currentSplitEvidenceOnly: true,
+  markets: [{...currentMarket, sharpBookSplitsOverride: retailSection}]});
+check("Current retail display never establishes professional source coverage", !retailBuilt.sourceState.sharpBookSplitsAvailable && retailBuilt.markets.moneyline!.reasonCodes.includes("named_retail_splits_available"));
+const retail = applySharpBookSplitSectionToDecision({sport: "cfb", marketKey: "moneyline", decision: currentMoneyline,
+  section: retailSection, currentSplitEvidenceOnly: true});
+check("Named retail overlay retains its physical source without professional authority", retail.sharpBookSplits?.sourceBook === "draftkings" && retail.reasonCodes.includes("named_retail_splits_available") && !retail.reasonCodes.includes("sharp_book_splits_available"));
+check("Named retail overlay never regrades", retail.playGrade === currentMoneyline.playGrade && retail.modelProbability === currentMoneyline.modelProbability && retail.price === currentMoneyline.price);
+const staleRetail = applySharpBookSplitSectionToDecision({sport: "cfb", marketKey: "moneyline", decision: currentMoneyline,
+  section: {...staleNamed, label: "DraftKings Splits", sourceBook: "draftkings"}, currentSplitEvidenceOnly: true});
+check("Older retail context is labeled by its actual book", staleRetail.quickRead.includes("Older DraftKings splits") && !/sharp book pressure/i.test(staleRetail.quickRead));
+const inheritedOverlay = applySharpBookSplitSectionToDecision({sport: "cfb", marketKey: "moneyline", decision: currentMoneyline, section: staleNamed});
+check("Later overlays inherit the open-card contract without a new caller flag", inheritedOverlay.resolvedMarketRead.status === "consensus_support" && inheritedOverlay.quickRead.includes("Older sharp book splits") && inheritedOverlay.reasonCodes.includes(CURRENT_SPLIT_EVIDENCE_READER_RELEASE));
+check("Inherited overlays retain original section and economics", JSON.stringify(inheritedOverlay.sharpBookSplits) === JSON.stringify(staleNamed) && inheritedOverlay.playGrade === currentMoneyline.playGrade && inheritedOverlay.price === currentMoneyline.price && inheritedOverlay.modelProbability === currentMoneyline.modelProbability);
+const inheritedUnknown = applySharpBookSplitSectionToDecision({sport: "cfb", marketKey: "moneyline", decision: currentMoneyline,
+  section: {...staleNamed, rows: staleNamed.rows.map(row => ({...row, isStale: undefined}))}});
+check("Inherited overlays cannot resurrect unknown freshness or its legacy signal", inheritedUnknown.resolvedMarketRead.status === "consensus_support" && inheritedUnknown.quickRead.includes("unverified"));
+const legacyOverlay = applySharpBookSplitSectionToDecision({sport: "cfb", marketKey: "moneyline", decision: legacyStale.markets.moneyline!, section: staleNamed});
+check("Unstamped legacy overlays preserve existing interpretation", legacyOverlay.resolvedMarketRead.status === "mixed" && !legacyOverlay.reasonCodes.includes(CURRENT_SPLIT_EVIDENCE_READER_RELEASE));
 
 if (fail > 0) process.exit(1);
 console.log("\nAll recommendation decision tests passed.");

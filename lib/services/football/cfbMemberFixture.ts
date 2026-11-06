@@ -1485,6 +1485,7 @@ function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardMarket
     payload,
     movementRows,
     projected,
+    currentSplitEvidenceOnly: lockState === "open",
     moneyline: { market: moneyline, decision: moneylineDecision },
     total: { market: total, decision: totalDecision },
     spread: { market: spread, decision: spreadDecision },
@@ -1640,6 +1641,7 @@ function buildCfbRecommendationDecision(args: {
   payload: CfbForwardEvidencePayload;
   movementRows: CfbForwardMarketHistoryEvidence[];
   projected: { away: number; home: number };
+  currentSplitEvidenceOnly: boolean;
   moneyline: { market: MarketEdgeDto; decision: CfbV1ExactPriceDecision | null };
   total: { market: MarketEdgeDto; decision: CfbV1ExactPriceDecision | null };
   spread: { market: MarketEdgeDto; decision: CfbV1ExactPriceDecision | null };
@@ -1675,6 +1677,7 @@ function buildCfbRecommendationDecision(args: {
   });
   return buildRecommendationDecision({
     sport: "cfb",
+    currentSplitEvidenceOnly: args.currentSplitEvidenceOnly,
     slateDate: localDate(args.payload.game.scheduledStart),
     gameId: `cfb-${args.payload.game.providerGameId}`,
     homeTeam: args.payload.game.home.abbreviation,

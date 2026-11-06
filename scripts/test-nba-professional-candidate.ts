@@ -9,7 +9,9 @@ import {
   buildNbaProfessionalCandidate,
 } from "../lib/services/nba/nbaProfessionalCandidate";
 import { buildNbaProfessionalMarketReader } from "../lib/services/nba/nbaProfessionalMarketReader";
-import { buildMarketSignal, buildNbaSharpStatus } from "../lib/services/nba/adaptNbaToDailyEdgeResponse";
+import { adaptNbaToDailyEdgeResponse, buildMarketSignal, buildNbaSharpStatus, buildNbaStoredPostureSummary,
+  NBA_MEMBER_POSTURE_PRESENTATION_RELEASE } from "../lib/services/nba/adaptNbaToDailyEdgeResponse";
+import type { NbaDailyEdgeDto, NbaDailyEdgeGameDto } from "../lib/services/nba/buildNbaDailyEdgeDto";
 
 const artifact: NbaPortableModelArtifact = {
   release: "fixture",
@@ -294,6 +296,66 @@ for (const key of ["ml", "spread", "total"] as const) {
 }
 assert.equal(observedIntel.spread.effective_confidence, 52,
   "corroborated opposition caps the non-actionable Watchlist confidence without changing the forecast");
+
+// The economics stage cannot assert absence of opposition before final posture
+// has been applied. The member caution and summary use that stored final state.
+assert.doesNotMatch(originalIntel.spread.rationale.join(" "), /no qualified market evidence opposing/);
+assert.doesNotMatch(observedIntel.spread.rationale.join(" "), /no qualified market evidence opposing/);
+assert.match(NBA_MEMBER_POSTURE_PRESENTATION_RELEASE, /2026_11_06_r2/);
+const withPostures = (changes: Partial<typeof posture>): typeof observedIntel => ({
+  ...observedIntel,
+  ml: { ...observedIntel.ml, named_book_posture: undefined },
+  total: { ...observedIntel.total, named_book_posture: undefined },
+  spread: { ...observedIntel.spread, named_book_posture: { ...posture,
+    opposingSources: [], supportingSources: [], conflictingSources: [],
+    staticOpposingSources: [], convictionRiskSources: [], heldResistanceSupportingSources: [], ...changes } },
+});
+assert.equal(buildNbaStoredPostureSummary(withPostures({ opposingSources: ["pinnacle"] })).key, "push_against");
+assert.equal(buildNbaStoredPostureSummary(withPostures({ supportingSources: ["circa"] })).key, "support");
+assert.equal(buildNbaStoredPostureSummary(withPostures({ conflictingSources: ["pinnacle"] })).key, "mixed");
+assert.equal(buildNbaStoredPostureSummary(withPostures({ heldResistanceSupportingSources: ["circa"] })).key, "mixed",
+  "holding against pressure does not manufacture directional confirmation");
+assert.equal(buildNbaStoredPostureSummary(withPostures({ convictionRiskSources: ["circa:buyback"] })).key, "mixed");
+assert.equal(buildNbaStoredPostureSummary(withPostures({})).key, "no_data",
+  "an empty posture cannot fabricate a directional observation");
+assert.equal(buildNbaStoredPostureSummary(withPostures({ pickedSide: "away", supportingSources: ["circa"] })).key, "no_data");
+assert.equal(buildNbaStoredPostureSummary({ ...originalIntel,
+  ml: { ...originalIntel.ml, named_book_posture: undefined },
+  spread: { ...originalIntel.spread, named_book_posture: undefined },
+  total: { ...originalIntel.total, named_book_posture: undefined } }).key, "no_data",
+  "legacy model conviction is not named-book evidence");
+const pairedIntelligence = withPostures({ opposingSources: ["pinnacle"] });
+const pairedTotalSide = pairedIntelligence.total.pick_side;
+assert.notEqual(pairedTotalSide, null);
+pairedIntelligence.total.named_book_posture = { ...posture, market: "total", pickedSide: pairedTotalSide!,
+  opposingSources: [], supportingSources: ["circa"], conflictingSources: [], convictionRiskSources: [],
+  staticOpposingSources: [], heldResistanceSupportingSources: [] };
+assert.equal(buildNbaStoredPostureSummary(pairedIntelligence).key, "mixed",
+  "support on one market cannot hide opposition on another");
+const staleRationale = withPostures({ opposingSources: ["pinnacle"] });
+staleRationale.spread.rationale = ["Strong independent value at the selected price with no qualified market evidence opposing the side.",
+  "Named-book economic movement opposes this pick."];
+const copyFixture = {
+  game_external_id: 9, home_abbr: "HME", away_abbr: "AWY", tip_iso_utc: "2026-10-20T23:00:00Z",
+  projection: { home_score: observedCandidate.final.homeScore, away_score: observedCandidate.final.awayScore,
+    total: observedCandidate.final.total, spread_home: observedCandidate.final.marginHome },
+  intelligence: staleRationale, quick_read: "Model summary alone is not a source observation.",
+  injuries: { home_known: true, away_known: true, home_players: [], away_players: [] },
+} as unknown as NbaDailyEdgeGameDto;
+const copyBytes = JSON.stringify(copyFixture);
+const copied = adaptNbaToDailyEdgeResponse({ as_of: fetchedAt, slate_date_et: "2026-10-20",
+  market_signals_capability: "available", games: [copyFixture] } as NbaDailyEdgeDto).games[0]!;
+assert.match(copied.markets.first_inning.guidedWatchOut!, /resists this pick/);
+assert.doesNotMatch(copied.markets.first_inning.guidedWatchOut!, /no qualified market evidence opposing/);
+assert.match(copied.markets.first_inning.whyLine!, /resists this pick/);
+assert.equal(copied.breakdown!.sharpRead.key, "push_against");
+assert.deepEqual(copied.projected, { home: copyFixture.projection.home_score, away: copyFixture.projection.away_score });
+for (const [key, memberKey] of [["ml", "moneyline"], ["spread", "first_inning"], ["total", "total"]] as const) {
+  assert.equal(copied.markets[memberKey].modelProb, staleRationale[key].model_prob_on_pick);
+  assert.equal(copied.markets[memberKey].currentPriceAmerican, staleRationale[key].current_price.odds_american);
+  assert.equal(copied.markets[memberKey].confidence, staleRationale[key].effective_confidence / 100);
+}
+assert.equal(JSON.stringify(copyFixture), copyBytes, "presentation must not mutate stored source or numerical fields");
 
 const injuredSnapshot: NbaGameSnapshot = {
   ...snapshot,

@@ -1,5 +1,46 @@
 # Current production model releases and qualified research candidates
 
+## November 6 Daily Edge current-source and explanation repair
+
+The owner requested a whole-product audit of today's inputs, pipelines and
+market-to-forecast/grade behavior, followed by repairs of demonstrated gaps.
+The implementation is prepared from production base
+`b90da4d94c91948821dc72894fd741f181dae92d`; production verification is required.
+
+CBB provider identity advances to
+`cbb_provider_identity_2026_11_06_r7_current_board_source_aliases`, input assembly
+to `cbb_contextual_reader_input_2026_11_06_r5_current_source_identity`, and the
+sole publisher to `cbb_member_pipeline_2026_11_06_r44_current_source_identity`.
+Every newly assembled input stores the provider-identity release in its
+compressed source-state evidence; earlier receipts and locks are not restamped.
+The exact observed N Colorado, SC State, Miss Valley St and MTSU institution
+aliases restore available Circa/retail context. Tennessee remains a different
+school. Fitted model R1/covariance R1, decision R8, grade R7, adapter R27 and
+tracking R30 are unchanged; corrected inputs can change future forecasts and
+recommendations through that existing model. This is an input-contract repair,
+not a new fit or permission to pool input-contract eras as one comparison.
+
+NBA presentation becomes
+`nba_member_posture_presentation_2026_11_06_r2_consistent_stored_posture`.
+Its caution and game summary use actual matched named-book posture, and the
+economic rationale no longer asserts absence of opposition before posture is
+applied. Model R36/marriage R38/grade R28 remain exact. Same-input comparison of
+all nine current games /27 markets changes only intended explanation fields.
+
+CFB's optional open-card summary contract is
+`current_split_evidence_reader_2026_11_06_r1_open_cfb_context`, stamped in the
+recommendation's reason codes and inherited by later context-only overlays.
+Explicitly stale/unverified splits remain visible as older context rather than
+current pressure. Actual price movement remains readable without fresh splits.
+Only open CFB cards opt in; stored locked/legacy decisions keep their exact
+interpretation. The numerical CFB release family, actual grades and stakes do
+not change. All 15 current market tuples remain exact on the same inputs.
+
+Provider budgets, refresh schedules, sport-scoped prediction leases and single
+writers remain unchanged. Audit coverage, current-source reconciliation,
+same-input effects, limitations, tests and live proof are recorded in
+`model-audits/2026-11-06-daily-edge-product-health.md`.
+
 ## CBB contextual Lean quality — deployed and verified November 5
 
 The owner requested a correction to any-positive-EV Lean eligibility. Active
