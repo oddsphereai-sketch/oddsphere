@@ -1,5 +1,45 @@
 # Current production model releases and qualified research candidates
 
+## CBB direct Total / retained raw Margin R6 — HELD, never deployed
+
+R6 is rejected for demonstrated economic-price extrapolation and unsupported
+current Total magnitudes. Do not activate it. See
+`model-audits/2026-11-06-cbb-total-head-r6-disposition.json`.
+
+This candidate was limited to replacing the CBB Total inference head. Existing
+production remains R1/R44 until this clean protected release is merged and the
+normal writer publishes it. Retained R1 raw Margin still has the documented
+source-allocation limitation; R6 is not completion of all CBB or Daily Edge markets.
+The rejected R5 Margin head is never executed. Other sports are unchanged.
+
+Target identifiers:
+
+- Model: `cbb_contextual_outcome_2026_11_06_r6_direct_total_retained_margin`.
+- Calibration: `cbb_contextual_covariance_2026_11_06_r6_direct_total_retained_margin`.
+- Evidence: `cbb_contextual_outcome_evidence_2026_11_06_r6_direct_total_retained_margin`.
+- Engine: `cbb_contextual_composite_2026_11_06_v1_direct_total_retained_margin`.
+- Decision: `cbb_outcome_decision_2026_11_06_r9_direct_total_retained_margin`.
+- Grade: `cbb_contextual_outcome_grade_2026_11_06_r8_direct_total_retained_margin`.
+- Publisher: `cbb_member_pipeline_2026_11_06_r49_direct_total_retained_margin`.
+- Adapter: `cbb_member_adapter_2026_11_06_r32_direct_total_retained_margin_family`.
+- Tracking: `cbb_tracking_writer_2026_11_06_r35_direct_total_retained_margin_family`.
+
+One new joint calibration pairs137 saved old excluded-game Margin predictions
+plus45 genuinely unseen old-full Margin predictions with182 excluded-game direct
+Total predictions. Per-axis fit and normalizer provenance are explicit; axis
+folds differ. Existing calibrations cannot be reused. One final score law owns
+moneyline/spread/total probabilities and exact-price grades. Preserving the raw
+Margin predictor does not guarantee unchanged conditioned ML/spread probabilities.
+The grade/risk policy itself is unchanged. Every R1 stored lock retains its exact
+score, probability, pick, price, grade, evidence and tracking identity.
+
+Required source/decision/grade/board/lock/budget and actual production publication
+proof remains pending. No forecast refit, paid AI call, new provider request,
+source-allocation correction for Margin, new writer, lease or cadence is included.
+See `model-audits/2026-11-06-cbb-total-head-predeclaration.json` and the
+all-sport standard `market-inference-contract.md`.
+
+
 ## November 6 Daily Edge current-source and explanation repair
 
 The owner requested a whole-product audit of today's inputs, pipelines and

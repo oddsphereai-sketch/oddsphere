@@ -6,11 +6,15 @@ import type {CbbForecast,CbbMarket} from "./types";
 import {CBB_CONTEXTUAL_RECOMMENDATION_RISK_RELEASE} from "./contextualRecommendationRisk";
 
 export const CBB_CONTEXTUAL_OUTCOME_BOARD_RELEASE="cbb_contextual_outcome_board_2026_11_05_r1_copy_only" as const;
-export const CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE="cbb_contextual_outcome_grade_2026_11_05_r7_contextual_recommendation_risk" as const;
+export const CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE="cbb_contextual_outcome_grade_2026_11_06_r8_direct_total_retained_margin" as const;
+export const CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE="cbb_contextual_outcome_grade_2026_11_05_r7_contextual_recommendation_risk" as const;
+export const CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE="cbb_outcome_decision_2026_11_05_r8_contextual_recommendation_risk" as const;
 export const CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE="cbb_contextual_outcome_grade_2026_11_05_r6_noplay_price_lanes" as const;
 export const CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE="cbb_outcome_decision_2026_11_05_r7_noplay_price_lanes" as const;
 export const CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE="cbb_contextual_game_outcome_2026_11_05_r1_stored_joint_law" as const;
-export type CbbOutcomeDecision=ReturnType<typeof forecastCbbOutcomeDecision>;
+type CurrentOutcomeDecision=ReturnType<typeof forecastCbbOutcomeDecision>;
+export type CbbOutcomeDecision=Omit<CurrentOutcomeDecision,"release">&{release:CurrentOutcomeDecision["release"]|typeof CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE|typeof CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE};
+export function cbbOutcomeGradeReleaseForDecision(release:CbbOutcomeDecision["release"]){return release===CBB_OUTCOME_DECISION_RELEASE?CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE:release===CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE?CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE:CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE;}
 const MARKETS:readonly CbbMarket[]=["moneyline","spread","total"];
 const finite=(v:unknown):v is number=>typeof v==="number"&&Number.isFinite(v);
 const validProbability=(v:unknown):v is number=>finite(v)&&v>=0&&v<=1;
@@ -26,7 +30,7 @@ function referenceState(row:CbbOutcomeDecision["marketDecisions"][number]){
 
 export function buildCbbContextualOutcomeBoard(args:{decision:CbbOutcomeDecision;independent:CbbForecast}){
  const {decision,independent}=args,asOf=Date.parse(decision.asOf),priorAt=Date.parse(independent.asOf);
- if(![CBB_OUTCOME_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE].includes(decision.release)||decision.authority!=="offline_research_only"||
+ if(![CBB_OUTCOME_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE].includes(decision.release)||decision.authority!=="offline_research_only"||
   !["future","retrospective_development"].includes(decision.mode)||!Number.isSafeInteger(decision.gameId)||decision.gameId<=0||
   independent.gameId!==decision.gameId||independent.inputStatus!=="complete"||!Number.isSafeInteger(independent.homeId)||
   !Number.isSafeInteger(independent.awayId)||independent.homeId<=0||independent.awayId<=0||independent.homeId===independent.awayId||
@@ -51,7 +55,7 @@ export function buildCbbContextualOutcomeBoard(args:{decision:CbbOutcomeDecision
    throw Error("CBB outcome board selected market lacks stored economics");
   if(row.grade==="Held"&&(row.selection!==null||row.probability!==null||row.pushProbability!==null||row.loseProbability!==null||row.price!==null||row.expectedValue!==null))
    throw Error("CBB outcome board Held decision has wager economics");
-  if(decision.release===CBB_OUTCOME_DECISION_RELEASE&&(row.grade==="Lean"||row.grade==="Best Angle"||row.gradingNumerics?.valueSignResolvedPositive)&&
+  if(decision.release!==CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE&&(row.grade==="Lean"||row.grade==="Best Angle"||row.gradingNumerics?.valueSignResolvedPositive)&&
    (!row.recommendationRisk||row.recommendationRisk.release!==CBB_CONTEXTUAL_RECOMMENDATION_RISK_RELEASE||row.recommendationRisk.assessmentTier!=="lean"||
     row.recommendationRisk.nominalExpectedValue!==row.expectedValue||
     ((row.grade==="Lean"||row.grade==="Best Angle")&&!row.recommendationRisk.supported)||
@@ -74,7 +78,7 @@ export function buildCbbContextualOutcomeBoard(args:{decision:CbbOutcomeDecision
  });
  const targetBooks=[...new Set(rows.filter(r=>r.selection!==null).map(r=>r.targetBook))];
  return {release:CBB_CONTEXTUAL_OUTCOME_BOARD_RELEASE,authority:decision.authority,mode:decision.mode,
-  modelRelease:decision.artifact.release,decisionRelease:decision.release,gradeRelease:decision.release===CBB_OUTCOME_DECISION_RELEASE?CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE:CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,
+  modelRelease:decision.artifact.release,decisionRelease:decision.release,gradeRelease:cbbOutcomeGradeReleaseForDecision(decision.release),
   gameId:decision.gameId,asOf:decision.asOf,targetBook:targetBooks.length===1?targetBooks[0]:null,
   score:structuredClone(score),rows,
   gameForecast:{release:CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE,homeId:independent.homeId,awayId:independent.awayId,

@@ -1,0 +1,16 @@
+{
+  "envelopeRelease": "cbb_private_outcome_artifact_2026_11_06_r2_schema_dictionary",
+  "logicalModelJSONBytes": 41506387,
+  "runtimeModelRelease": "cbb_contextual_outcome_2026_11_06_r6_direct_total_retained_margin",
+  "engineRelease": "cbb_contextual_composite_2026_11_06_v1_direct_total_retained_margin",
+  "methodSha256": "228d944281e0977925fd19d00460bf4891e1385055d89b06f168d5aaae30ea5f",
+  "modelJSONSha256": "85b6d31a4bdb2b1befc827b17dd6bf1241fad9bc00d074b43b80087e63e8fea9",
+  "modelObjectSha256": "15878837307c3bf3ecaefb105fcc13ed33073d3eb9275d1fdd76795cfba66d88",
+  "calibrationJSONSha256": "103835b243c8e6aca95bab57c153196bb60241a57b1f86b9629b345cd4b9e1df",
+  "calibrationMethodSha256": "c27ab973cb5d3a870940960c25c367060f16b73da6a8e904c5943255bf672d75",
+  "compressedSha256": "cb0a8921a8830e6b7945173335934426a1843d236886992184c10c4ce8aa76ac",
+  "uncompressedSha256": "9685292aa8aaff4f2f3b268623a7d34b1c16a7b8c25de9c4b0181794568cc601",
+  "compressedBytes": 985837,
+  "uncompressedBytes": 8843387,
+  "availableBy": "2026-11-06T18:08:11.601Z"
+}

@@ -1,5 +1,5 @@
-import {CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE,CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE,readCbbContextualOutcomeEvidence,type CbbReleasedOutcomeBoard} from "./cbbContextualOutcomeRuntime";
-import {CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE} from "@/lib/cbb/contextualOutcomeBoard";
+import {resolveCbbContextualOutcomeRelease,readCbbContextualOutcomeEvidence,type CbbReleasedOutcomeBoard} from "./cbbContextualOutcomeRuntime";
+import {CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE} from "@/lib/cbb/contextualOutcomeBoard";
 import {CBB_NATIVE_COUNTERPRESSURE_MODEL_RELEASE,CBB_NATIVE_COUNTERPRESSURE_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import {CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_MONEYLINE_VALUE_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import { createHash } from "node:crypto";
@@ -21,7 +21,7 @@ import {CBB_CROSS_DIVISION_SCORE_RELEASE,CBB_FULL_D1_COVERAGE_START} from "@/lib
 import {CBB_GAME_FORECAST_GRADE_RELEASE,CBB_GAME_OUTCOME_RELEASE} from "@/lib/cbb/gameForecastBoard";
 import {normalCdf} from "@/lib/cbb/model";
 
-export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_05_r30_contextual_recommendation_risk" as const;
+export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_06_r35_direct_total_retained_margin_family" as const;
 /** Hash stored JSON independently of PostgreSQL jsonb object-key ordering. */
 export function cbbTrackingEvidenceSha256(record:CbbStoredMemberGame):string {
   const sorted=(value:unknown):unknown=>Array.isArray(value)?value.map(sorted)
@@ -33,7 +33,7 @@ const receivedMarketGradeReleases:readonly string[]=[CBB_MARKET_BEHAVIOR_GRADE_R
 
 /** Never relabel an earlier public lock with the current score model. */
 export function cbbLockedModelRelease(board:{release:string;modelRelease?:string}):string{
-  if(board.modelRelease===CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE)return board.modelRelease;
+  const contextual=resolveCbbContextualOutcomeRelease(board.modelRelease);if(contextual)return contextual.modelRelease;
   if([CBB_FULL_D1_SCORE_RELEASE,CBB_FULL_D1_MARKET_MODEL_RELEASE,CBB_FIXTURE_CLOCK_MARKET_MODEL_RELEASE,CBB_COORDINATED_PROVIDER_MARKET_MODEL_RELEASE,CBB_SOURCE_ADMISSION_MARKET_MODEL_RELEASE,CBB_PREVIOUS_FULL_D1_MARKET_MODEL_RELEASE,CBB_CROSS_DIVISION_SCORE_RELEASE].includes(board.modelRelease as typeof CBB_FULL_D1_SCORE_RELEASE))return board.modelRelease!;
   if(board.modelRelease===CBB_SCORE_RESEARCH_RELEASE||board.modelRelease===CBB_CURRENT_SCORE_RELEASE||board.modelRelease===CBB_PREVIOUS_CURRENT_SCORE_RELEASE||board.modelRelease===CBB_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_NATIVE_COUNTERPRESSURE_MODEL_RELEASE||board.modelRelease===CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_JOINT_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_ALIGNED_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_RETAIL_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_PRIOR_MARKET_BEHAVIOR_MODEL_RELEASE||board.modelRelease===CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE)return board.modelRelease;
   if(board.modelRelease!==undefined)throw new Error("CBB locked model release is unknown");
@@ -44,7 +44,7 @@ export function cbbLockedModelRelease(board:{release:string;modelRelease?:string
 
 /** Resolve the release that actually owns the frozen public decision. */
 export function cbbLockedGradeRelease(board: { release: string; gradeRelease?: string }): string {
-  if(board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE||board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE)return board.gradeRelease;
+  if(board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE||board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE||board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE)return board.gradeRelease;
   if(board.gradeRelease===CBB_GAME_FORECAST_GRADE_RELEASE)return board.gradeRelease;
   if (board.gradeRelease === CBB_PROVISIONAL_GRADE_RELEASE || board.gradeRelease === CBB_LEGACY_PROVISIONAL_GRADE_RELEASE || receivedMarketGradeReleases.includes(board.gradeRelease??"")) return board.gradeRelease!;
   if (board.gradeRelease !== undefined) throw new Error("CBB locked grade release is unknown");
@@ -68,9 +68,9 @@ function storedNumberMatches(actual:number|null,expected:number|null,digits:numb
  * Existing locked DTOs remain authoritative; a discrepancy throws rather than
  * replacing any field. No artifact fetch, normal approximation or reforecast. */
 export function assertCbbContextualLockedRecord(record:CbbStoredMemberGame){
- const {snapshot,memberGame}=record;if(snapshot.board.modelRelease!==CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE)return null;
+ const {snapshot,memberGame}=record,release=resolveCbbContextualOutcomeRelease(snapshot.board.modelRelease);if(!release)return null;
  const board=snapshot.board as CbbReleasedOutcomeBoard,stored=readCbbContextualOutcomeEvidence(board);
- if(!stored||board.calibrationRelease!==CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE||!snapshot.lockedAt||memberGame.lockedAt!==snapshot.lockedAt||
+ if(!stored||board.calibrationRelease!==release.calibrationRelease||!snapshot.lockedAt||memberGame.lockedAt!==snapshot.lockedAt||
   memberGame.external_id!==snapshot.gameId||memberGame.gameStartAt!==snapshot.startsAt||memberGame.projected?.home!==board.score.home||memberGame.projected?.away!==board.score.away)
   throw Error("CBB contextual frozen DTO/score/calibration mismatch");
  const d=stored.decision,law=d.numericalTrace.law,score=board.score,near=(a:number,b:number)=>Number.isFinite(a)&&Number.isFinite(b)&&Math.abs(a-b)<=1e-10;
@@ -103,7 +103,8 @@ export async function writeLockedCbbTracking(record: CbbStoredMemberGame, db?: t
   const gradeRelease = cbbLockedGradeRelease(snapshot.board);
   const modelRelease = cbbLockedModelRelease(snapshot.board);
   const contextual=assertCbbContextualLockedRecord(record);
-  const calibrationRelease=contextual?CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE:gradeRelease;
+  const contextualRelease=resolveCbbContextualOutcomeRelease(modelRelease);
+  const calibrationRelease=contextualRelease?contextualRelease.calibrationRelease:gradeRelease;
   if(modelRelease===CBB_FULL_D1_MARKET_MODEL_RELEASE||modelRelease===CBB_FIXTURE_CLOCK_MARKET_MODEL_RELEASE||modelRelease===CBB_COORDINATED_PROVIDER_MARKET_MODEL_RELEASE||modelRelease===CBB_SOURCE_ADMISSION_MARKET_MODEL_RELEASE||modelRelease===CBB_PREVIOUS_FULL_D1_MARKET_MODEL_RELEASE||modelRelease===CBB_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_NATIVE_COUNTERPRESSURE_MODEL_RELEASE||modelRelease===CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_CONTINUITY_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_JOINT_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_ALIGNED_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_RETAIL_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_EPISODE_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_PRIOR_MARKET_BEHAVIOR_MODEL_RELEASE||modelRelease===CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE){
     const read=snapshot.board.marketContext.verifiedMarketRead;
     if(!read||read.modelRelease!==modelRelease||read.anchors.gameId!==snapshot.gameId||
@@ -178,7 +179,7 @@ export async function writeLockedCbbTracking(record: CbbStoredMemberGame, db?: t
       slate_date: fixture.slate_date, game_date: snapshot.startsAt,
       matchup: `${memberGame.awayTeamDisplayName} @ ${memberGame.homeTeamDisplayName}`,
       market: row.market, pick: side, side, line_value: line, odds_american: row.price,
-      odds_decimal: null, model_used: contextual?"cbb_contextual_outcome_r1":modelRelease===CBB_FULL_D1_MARKET_MODEL_RELEASE?"cbb_r23_albany_source_identity":
+      odds_decimal: null, model_used: contextualRelease?contextualRelease.modelUsed:modelRelease===CBB_FULL_D1_MARKET_MODEL_RELEASE?"cbb_r23_albany_source_identity":
         modelRelease===CBB_FIXTURE_CLOCK_MARKET_MODEL_RELEASE?"cbb_r22_fixture_clock_epoch":
         modelRelease===CBB_COORDINATED_PROVIDER_MARKET_MODEL_RELEASE?"cbb_r21_coordinated_provider_capture":
         modelRelease===CBB_SOURCE_ADMISSION_MARKET_MODEL_RELEASE?"cbb_r20_complete_source_admission":
