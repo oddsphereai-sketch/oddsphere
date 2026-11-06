@@ -1,16 +1,54 @@
-# NBA price boundary and market-read publication integrity
+# Moneyline wager boundaries and NBA market-read publication integrity
 
 Starting production base: `9c9ba4db585044f5a0867dc6040fc1ac2ecf667c`.
 Dedicated branch/worktree: `codex/nba-best-angle-price-boundary-20261106`.
 
-The owner explicitly rejected NBA Moneyline Best Angles at -300 and -235,
-while allowing independently qualified Spread Best Angles. R31 requires an
-offered Moneyline price of -200 or better for Best Angle, inclusive at -200.
-An otherwise actionable expensive winner stays Lean; genuine opposing evidence
-can still make it Watch. No Watch/No Play is forced to Lean. Other markets keep
-their existing confidence, value, source and uncertainty rules. Improvement
-to -200 can restore Best eligibility at the same forecast; causal support and
-legacy audit flags cannot waive the current price ceiling.
+## November 6 owner-selected moneyline wager limits
+
+The owner selected -500 or better as the inclusive Lean price limit after
+identifying Ohio State -8000, Georgia -9000 and Xavier -8000 as inappropriate
+Leans. Moneyline prices worse than -500 become complete priced No Plays, even
+when the predicted winner is very likely or nominal EV is positive. Best Angle
+requires -200 or better; -235/-300 can qualify as Lean. These boundaries only
+restrict the otherwise evidence/risk-qualified tier. A better real price may
+restore eligibility, while resistance can still make a pick Watch. No quota,
+forced side flip or compensating promotion is introduced.
+
+Native current paths: NBA grade `nba_grade_policy_2026_11_06_r31_moneyline_wager_price_boundaries`;
+CBB decision/interpreted R13, grade R12, publisher R53, adapter R36, tracking R39;
+CFB decision R62, grade R33, production R44, writer R153. The shared pure
+`moneyline_price_policy_2026_11_06_r1_owner_boundaries` is qualification only.
+Numerical models, calibrations, probabilities, chosen sides, exact contracts,
+source tapes and provider budgets/cadence stay unchanged. CBB numerical R7 and
+its private artifact remain active; the separate numerical candidate stays held.
+NBA model R36/marriage R38 and CFB model R28/probability R30/calibration R34 stay
+unchanged. Existing sport-scoped leased writers remain the only writers.
+
+A No Play retains raw confidence, winner prediction and actual price, but has
+null recommendation confidence and no wager eligibility in member/tracking
+contracts. CBB old decision R12/grade R11 and every earlier released family,
+NBA R30/R29/R28, and CFB R61/grade R32/production R43 retain exact stored reader,
+writer and official-tracking semantics. No current price rule is applied to a
+locked payload. A game that locks before rollout keeps its old grade.
+
+Frozen 21:13/21:02/21:10 snapshots show CBB today 177 markets:
+54 Lean/86 Watch/37 No Play -> 38/81/58 (16 actionable removals, five Watch ->
+No Play). NBA today 27: 1 Best/6 Lean/20 Watch -> 0/7/19/1 No Play; Atlanta
+-300 Best -> Lean, and one already nonactionable steep Watch -> No Play.
+CFB rolling 300: 72 Lean/105 Watch/22 Best/101 No Play -> 69/94/22/115:
+three future actionable removals and eleven Watch -> No Play. Today's five
+CFB games retain all 15 grades. All other captured sports have zero actionable
+violations; they are audited only, with no unversioned reader override.
+Forecast/price/selection changes are zero. Locked state at actual deployment
+may reduce the applicable scope. The owner-directed contraction is explicit;
+paired same-forecast improved-price recovery is tested rather than invented
+plays. This is product-policy qualification, not holdout accuracy evidence.
+
+Evidence: `docs/audits/2026-11-06-moneyline-wager-price-boundaries-impact.json`.
+Full model gate, affected focused/legacy lock tests, types/build, fresh-main
+protected PR and actual normal-writer/release/source/reader/immutable-lock proof
+remain mandatory before completion. The prior NBA source-read failure repair
+below remains in the same pending release.
 
 ## The two board extremes
 
@@ -69,9 +107,9 @@ its default production path and all non-NBA snapshot rules stay the same.
 
 ## Same-input impact and locks
 
-The captured healthy21:13 board has one Best, six Leans and twenty Watches.
-The exact final price-tier function changes only Atlanta ML at-300 to Lean:
-zero Best, seven Leans, twenty Watches; zero actionable promotions/demotions.
+The original Best-only21:13 replay changed only Atlanta ML at-300 to Lean.
+The owner subsequently selected the additional -500 wager limit; the complete
+final counts and explicit CBB/CFB actionable removals are recorded above.
 Scores, probabilities and prices stay exact. This is an explicit owner product
 boundary, not a holdout-derived accuracy improvement. Source failure/recovery
 controls pair zero-write retention with successful qualified re-publication;
@@ -80,8 +118,8 @@ no compensating picks are manufactured. Audit JSONs retain capture hashes.
 R30/R29/R28 and older frozen audits keep their previous -400 economics and
 causal rules. Stored locks keep exact reader/writer precedence, including a
 legacy R30 Best at-300. No historical locked grade is corrected or suppressed.
-The previously deployed CBB R12/R11 policy and its locked release families are
-unchanged. Separate CBB numerical research remains held.
+The previously deployed CBB R12/R11 locked release family stays exact.
+Only new unlocked/future decisions use R13/R12. Separate CBB numerical research remains held.
 
 Required publication proof: focused both-side price/recovery, source fault,
 zero-write freshness/lock preservation, full model gate, types/build, clean

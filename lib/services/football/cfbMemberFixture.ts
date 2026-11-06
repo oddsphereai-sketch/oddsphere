@@ -1,3 +1,6 @@
+import {MONEYLINE_PRICE_NO_PLAY_REASON,MONEYLINE_PRICE_NO_PLAY_EXPLANATION} from "../dailyEdge/moneylinePricePolicy";
+import {CFB_V1_PRICE_BOUNDARY_PREVIOUS_DECISION_RELEASE,CFB_V1_PRICE_BOUNDARY_PREVIOUS_GRADE_POLICY_RELEASE} from "./cfbV1Decision";
+import {CFB_MARKET_SHARP_AWARE_PRICE_BOUNDARY_PREVIOUS_PRODUCTION_RELEASE} from "./cfbMarketSharpAwareShadow";
 import { cfbMemberAvailabilityReport, CFB_MEMBER_AVAILABILITY_RELEASE } from "./cfbMemberAvailability";
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -1120,6 +1123,8 @@ export function selectLatestCfbMemberEvidenceRows(
     CFB_FORWARD_PRESSURE_REACTION_PREVIOUS_MEMBER_RELEASE,
     CFB_V1_PRESSURE_REACTION_PREVIOUS_DECISION_RELEASE,
   );
+  const priceBoundaryPreviousRows=rows.filter(row=>String(row.payload.decisions.decisionRelease)===CFB_V1_PRICE_BOUNDARY_PREVIOUS_DECISION_RELEASE);
+  const priceBoundaryPrevious=completeRowsForRelease(priceBoundaryPreviousRows,CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,CFB_FORWARD_MEMBER_RELEASE,CFB_V1_PRICE_BOUNDARY_PREVIOUS_DECISION_RELEASE);
   const currentDecisionRows = rows.filter((row) =>
     row.payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE);
   const current = completeRowsForRelease(currentDecisionRows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
@@ -1150,7 +1155,7 @@ export function selectLatestCfbMemberEvidenceRows(
   const resistancePrevious = completeRowsForRelease(resistancePreviousRows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE) ??
     (resistancePriorAuthority ? immutableBoundaryTransitionRows(resistancePreviousRows, now, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE, resistancePriorAuthority) ??
       immutableLockOverlayRows(resistancePreviousRows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE, resistancePriorAuthority) : null);
-  const coordinatorIntegrationPreviousAuthority = pressureReactionPrevious ?? resistancePrevious ?? marketEvidencePrevious ?? priceContextPrevious ?? normalizedPmfPrevious ?? owlsGradePrevious ?? pmfCoherencePrevious ?? parlayLeanPrevious ?? coordinatorIntegrationPrevious ?? finalWinnerPrevious ??
+  const coordinatorIntegrationPreviousAuthority = priceBoundaryPrevious ?? pressureReactionPrevious ?? resistancePrevious ?? marketEvidencePrevious ?? priceContextPrevious ?? normalizedPmfPrevious ?? owlsGradePrevious ?? pmfCoherencePrevious ?? parlayLeanPrevious ?? coordinatorIntegrationPrevious ?? finalWinnerPrevious ??
     exactPriceActionabilityPrevious ?? marketReaderPreviousAuthority;
   const immutableBoundaryTransition = coordinatorIntegrationPreviousAuthority
     ? immutableBoundaryTransitionRows(
@@ -1163,6 +1168,7 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (priceBoundaryPrevious) return priceBoundaryPrevious;
   if (pressureReactionPrevious) return pressureReactionPrevious;
   if (marketEvidencePrevious) return marketEvidencePrevious;
   if (priceContextPrevious) return priceContextPrevious;
@@ -1357,7 +1363,7 @@ function latestValidRowsForRelease(
   const pmfCoherencePrevious = decisionRelease === CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE;
   const priorCompatibilityFamily = pmfCoherencePrevious ||
     decisionRelease === CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE;
-  const expectedProductionRelease = priorCompatibilityFamily
+  const expectedProductionRelease = decisionRelease===CFB_V1_PRICE_BOUNDARY_PREVIOUS_DECISION_RELEASE?CFB_MARKET_SHARP_AWARE_PRICE_BOUNDARY_PREVIOUS_PRODUCTION_RELEASE:priorCompatibilityFamily
     ? CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE
     : coordinatorIntegrationPrevious
     ? CFB_MARKET_SHARP_AWARE_COORDINATOR_INTEGRATION_PREVIOUS_PRODUCTION_RELEASE
@@ -1368,7 +1374,7 @@ function latestValidRowsForRelease(
         : decisionRelease === CFB_V1_PRESSURE_REACTION_PREVIOUS_DECISION_RELEASE
           ? CFB_MARKET_SHARP_AWARE_PRESSURE_REACTION_PREVIOUS_PRODUCTION_RELEASE
           : CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE;
-  const expectedPolicyRelease = exactPricePrevious
+  const expectedPolicyRelease = decisionRelease===CFB_V1_PRICE_BOUNDARY_PREVIOUS_DECISION_RELEASE?CFB_V1_PRICE_BOUNDARY_PREVIOUS_GRADE_POLICY_RELEASE:exactPricePrevious
     ? CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_GRADE_POLICY_RELEASE
     : decisionRelease === CFB_V1_DECISION_RELEASE ? CFB_V1_GRADE_POLICY_RELEASE
     : decisionRelease === CFB_V1_PRESSURE_REACTION_PREVIOUS_DECISION_RELEASE ? CFB_V1_PRESSURE_REACTION_PREVIOUS_GRADE_POLICY_RELEASE
@@ -1393,7 +1399,7 @@ function latestValidRowsForRelease(
     : decisionRelease === CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE ? CFB_V1_MARKET_EVIDENCE_PREVIOUS_CALIBRATION_RELEASE
     : decisionRelease === CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE ? CFB_V1_RESISTANCE_PREVIOUS_CALIBRATION_RELEASE
     : decisionRelease === CFB_V1_PRESSURE_REACTION_PREVIOUS_DECISION_RELEASE ? CFB_V1_PRESSURE_REACTION_PREVIOUS_CALIBRATION_RELEASE
-    : decisionRelease === CFB_V1_DECISION_RELEASE ? CFB_V1_CALIBRATION_RELEASE : CFB_V1_OWLS_PREVIOUS_CALIBRATION_RELEASE;
+    : decisionRelease === CFB_V1_DECISION_RELEASE || decisionRelease === CFB_V1_PRICE_BOUNDARY_PREVIOUS_DECISION_RELEASE ? CFB_V1_CALIBRATION_RELEASE : CFB_V1_OWLS_PREVIOUS_CALIBRATION_RELEASE;
   const latest = new Map<string, CfbForwardStoredEvidence>();
   for (const row of rows) {
     if (row.payload.schemaRelease !== schemaRelease || row.payload.memberRelease !== memberRelease) continue;
@@ -1867,7 +1873,8 @@ function buildMarket(
   const isBest = decision?.grade === "Best Angle";
   const isLean = decision?.grade === "Lean";
   const isWatch = decision?.grade === "Watchlist";
-  const actionability = isBest ? 82 : isLean ? 62 : isWatch ? 45 : decision ? 30 : null;
+  const pricePass=decision?.gradeAdjustment?.reasonCodes.includes(MONEYLINE_PRICE_NO_PLAY_REASON)===true || decision?.decisionRelease===CFB_V1_DECISION_RELEASE&&market==="moneyline"&&decision.evaluatedQuote.price<-500;
+  const actionability = pricePass?null:isBest ? 82 : isLean ? 62 : isWatch ? 45 : decision ? 30 : null;
   const label = market === "moneyline" ? "moneyline" : market;
   const unavailable = payload.decisions.heldMarkets.find((value) => value.market === market);
   const unavailableReason = unavailable
@@ -1903,7 +1910,7 @@ function buildMarket(
     parlayProfile: decision?.parlayProfile ?? null,
     guidedGuide: reason,
     guidedWatchOut: "Prices, projected quarterback context, and verified kickoff weather refresh until T-60. Injury-report context remains labeled unavailable when no timestamped source exists.",
-    whyLine: reason,
+    whyLine: pricePass?MONEYLINE_PRICE_NO_PLAY_EXPLANATION:reason,
     riskLine: decision?.evaluatedQuote.marketSelection === "coherent_paired_alternate"
       ? "The sportsbook labels this as an alternate offer. It is evaluated only because at least two other trusted named books carry the identical line; no line interpolation or consensus price is used."
       : "The authoritative forecast and exact-price Bet grade share one coherent PMF. Playbook public money-versus-ticket divergence is a bounded lower-strength model input; it remains separately labeled and is never relabeled as strictly matched Circa sharp evidence.",
@@ -1962,7 +1969,8 @@ function buildMarket(
     recommendationConfidence: actionability,
     marketSource: decision?.evaluatedQuote.sportsbook ?? currentQuote?.book.sportsbook ?? contextOnlyQuote?.book.sportsbook ?? null,
     marketDataQuality: decision ? "two_sided_consensus" : currentQuote || contextOnlyQuote ? "single_book" : payload.market.playbookLine ? "single_book" : "unavailable",
-    reviewFlags: [...new Set([
+    reviewFlags: [
+      ...(pricePass?["informational_non_actionable_price"]:[]),...new Set([
       ...(decision?.gradeAdjustment?.reasonCodes ?? []),
       ...payload.coverage.availabilityWarnings,
     ])],

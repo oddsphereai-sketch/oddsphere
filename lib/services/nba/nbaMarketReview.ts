@@ -182,11 +182,14 @@ export function classifyTotalConflict(opts: {
 
 // ─── Recommendation grades (NBA-tuned) ─────────────────────────────
 
+import {qualifyMoneylinePrice,MONEYLINE_PRICE_NO_PLAY_EXPLANATION} from "../dailyEdge/moneylinePricePolicy";
+
 export type RecommendationGrade =
   | "best_angle"        // confident model + supportive/neutral market + strong edge
   | "lean"              // confident model + supportive/neutral market + moderate edge
   | "watch"             // thin edge or weak market data — informational only
   | "caution"           // model picks something but market strongly disagrees
+  | "no_play"           // complete priced prediction, no wager eligibility
   | "no_market"         // market unavailable — model emits pick, no edge
   | "held";             // model itself didn't emit a pick (e.g. tier=fallback);
 
@@ -366,8 +369,10 @@ function memberBandPhrase(band: MarketConflictBand): string {
  * side, erase source opposition or promote a non-actionable recommendation.
  * The legacy audit override cannot waive this current member-policy boundary. */
 export function applyNbaMoneylineBestPriceTier(input: Pick<GradeInput, "market" | "currentPriceAmerican">, incumbent: GradeOutput): GradeOutput {
-  if (incumbent.grade !== "best_angle" || input.market !== "moneyline" ||
-      input.currentPriceAmerican == null || input.currentPriceAmerican >= NBA_ML_BEST_ANGLE_MAX_FAVORITE_PRICE) return incumbent;
+  const sourceGrade=incumbent.grade==="best_angle"?"Best Angle":incumbent.grade==="lean"?"Lean":incumbent.grade==="watch"||incumbent.grade==="caution"?"Watchlist":incumbent.grade==="held"||incumbent.grade==="no_market"?"Held":"No Play";
+  const qualified=qualifyMoneylinePrice(input.market??"",input.currentPriceAmerican??null,sourceGrade);
+  if(qualified==="No Play"&&sourceGrade!=="Held")return {...incumbent,grade:"no_play",bestAngleEligible:false,rationale:[...incumbent.rationale,MONEYLINE_PRICE_NO_PLAY_EXPLANATION]};
+  if(incumbent.grade!=="best_angle"||qualified!=="Lean")return incumbent;
   return { ...incumbent, grade: "lean", bestAngleEligible: false, rationale: [...incumbent.rationale,
     "The forecast supports this winner, but the moneyline price is too expensive for Best Angle; this remains a Lean."] };
 }

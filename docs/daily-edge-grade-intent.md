@@ -1,5 +1,53 @@
 # Daily Edge play-grade intent
 
+## November 6 owner-selected moneyline wager limits
+
+The owner selected -500 or better as the inclusive Lean price limit after
+identifying Ohio State -8000, Georgia -9000 and Xavier -8000 as inappropriate
+Leans. Moneyline prices worse than -500 become complete priced No Plays, even
+when the predicted winner is very likely or nominal EV is positive. Best Angle
+requires -200 or better; -235/-300 can qualify as Lean. These boundaries only
+restrict the otherwise evidence/risk-qualified tier. A better real price may
+restore eligibility, while resistance can still make a pick Watch. No quota,
+forced side flip or compensating promotion is introduced.
+
+Native current paths: NBA grade `nba_grade_policy_2026_11_06_r31_moneyline_wager_price_boundaries`;
+CBB decision/interpreted R13, grade R12, publisher R53, adapter R36, tracking R39;
+CFB decision R62, grade R33, production R44, writer R153. The shared pure
+`moneyline_price_policy_2026_11_06_r1_owner_boundaries` is qualification only.
+Numerical models, calibrations, probabilities, chosen sides, exact contracts,
+source tapes and provider budgets/cadence stay unchanged. CBB numerical R7 and
+its private artifact remain active; the separate numerical candidate stays held.
+NBA model R36/marriage R38 and CFB model R28/probability R30/calibration R34 stay
+unchanged. Existing sport-scoped leased writers remain the only writers.
+
+A No Play retains raw confidence, winner prediction and actual price, but has
+null recommendation confidence and no wager eligibility in member/tracking
+contracts. CBB old decision R12/grade R11 and every earlier released family,
+NBA R30/R29/R28, and CFB R61/grade R32/production R43 retain exact stored reader,
+writer and official-tracking semantics. No current price rule is applied to a
+locked payload. A game that locks before rollout keeps its old grade.
+
+Frozen 21:13/21:02/21:10 snapshots show CBB today 177 markets:
+54 Lean/86 Watch/37 No Play -> 38/81/58 (16 actionable removals, five Watch ->
+No Play). NBA today 27: 1 Best/6 Lean/20 Watch -> 0/7/19/1 No Play; Atlanta
+-300 Best -> Lean, and one already nonactionable steep Watch -> No Play.
+CFB rolling 300: 72 Lean/105 Watch/22 Best/101 No Play -> 69/94/22/115:
+three future actionable removals and eleven Watch -> No Play. Today's five
+CFB games retain all 15 grades. All other captured sports have zero actionable
+violations; they are audited only, with no unversioned reader override.
+Forecast/price/selection changes are zero. Locked state at actual deployment
+may reduce the applicable scope. The owner-directed contraction is explicit;
+paired same-forecast improved-price recovery is tested rather than invented
+plays. This is product-policy qualification, not holdout accuracy evidence.
+
+Evidence: `docs/audits/2026-11-06-moneyline-wager-price-boundaries-impact.json`.
+Full model gate, affected focused/legacy lock tests, types/build, fresh-main
+protected PR and actual normal-writer/release/source/reader/immutable-lock proof
+remain mandatory before completion. The prior NBA source-read failure repair
+below remains in the same pending release.
+
+
 ## November 6 NBA Best Moneyline prices and source-read integrity
 
 Owner-directed NBA grade R31 requires a Moneyline price of -200 or better for
@@ -21,8 +69,9 @@ sport-scoped prediction pipeline, calls/cadence/lease remain exact.
 
 The crowded19:46 board is reproduced27/27 under a failed price read using1724
 historical split rows; exact prior SQL failure is inferred, not directly logged.
-The healthy27-market price replay changes one Best to Lean and removes no
-actives. Paired source recovery/price promotion, lock precedence, focused/full
+The original Best-only27-market replay changed one Best to Lean with no
+actionable removals. The final -500 policy and complete NBA/CBB/CFB count
+impact are declared above. Paired source recovery/price promotion, lock precedence, focused/full
 checks, protected current-main PR and natural live proof are mandatory.
 See `docs/model-audits/2026-11-06-nba-price-boundary-source-publication.md`.
 

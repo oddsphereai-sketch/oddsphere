@@ -1,3 +1,6 @@
+import {qualifyMoneylinePrice} from "../dailyEdge/moneylinePricePolicy";
+import {CFB_V1_PRICE_BOUNDARY_PREVIOUS_DECISION_RELEASE} from "./cfbV1Decision";
+import {CFB_MARKET_SHARP_AWARE_PRICE_BOUNDARY_PREVIOUS_PRODUCTION_RELEASE} from "./cfbMarketSharpAwareShadow";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createHash } from "node:crypto";
 import type { IWeatherProvider } from "@/lib/providers/interfaces/IWeatherProvider";
@@ -188,7 +191,7 @@ import { fetchCfbOwlsProvider } from "./cfbOwlsProvider";
 import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_11_05_r152_professional_pressure_reaction" as const;
+  "cfb_forward_evidence_writer_2026_11_06_r153_moneyline_wager_price_boundaries" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -1168,7 +1171,7 @@ export async function runCfbForwardEvidenceWriter(args: {
         verifiedInjuryReport: injuryReport !== null,
         healthHolds: publishedHealthHolds,
       });
-      return { fullDecisionBundle, publishedHealthHolds };
+      return { fullDecisionBundle:{...fullDecisionBundle,evaluatedBets:fullDecisionBundle.evaluatedBets.map(decision=>({...decision,grade:qualifyMoneylinePrice(decision.market,decision.evaluatedQuote.price,decision.grade)}))}, publishedHealthHolds };
     };
     const { fullDecisionBundle, publishedHealthHolds } = finalizeGrades(decisionBundle);
     if (args.auditIncumbentCausalReader && args.auditCausalReaderComparison) {
@@ -2239,9 +2242,9 @@ function isEligiblePublishedPregameRecoveryPayload(payload: CfbForwardEvidencePa
     (String(payload.schemaRelease) === CFB_FORWARD_RELEASE_WAVE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_RELEASE_WAVE_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_FCS_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE)) &&
-    (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_PRESSURE_REACTION_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE) &&
+    (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE || String(payload.decisions.decisionRelease)===CFB_V1_PRICE_BOUNDARY_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_PRESSURE_REACTION_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE) &&
     payload.decisions.publicationEnabled &&
-    (release === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PRESSURE_REACTION_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_COORDINATOR_INTEGRATION_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_COMPLETE_READER_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_FCS_PRICE_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE) &&
+    (release === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE || release===CFB_MARKET_SHARP_AWARE_PRICE_BOUNDARY_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PRESSURE_REACTION_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_COORDINATOR_INTEGRATION_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_COMPLETE_READER_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_FCS_PRICE_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE) &&
     Boolean(payload.decisions.marketOutlooks);
 }
 

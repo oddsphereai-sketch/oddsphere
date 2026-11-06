@@ -13,7 +13,7 @@ for(const g of board.games.filter((g:any)=>g.gameStartAt&&et.format(new Date(g.g
  const m=g.markets[slot],old=m.verdict.key,market=slot==="first_inning"?"spread":slot;
  const incumbent:GradeOutput={grade:old==="best_angle"?"best_angle":old==="lean"?"lean":"watch",effectiveConfidence:m.recommendationConfidence??0,bestAngleEligible:old==="best_angle",rationale:[m.whyLine]};
  const next=applyNbaMoneylineBestPriceTier({market,currentPriceAmerican:m.currentPriceAmerican??m.priceAmerican},incumbent);
- rows.push({game:g.awayTeam+"@"+g.homeTeam,market,previous:old,next:next.grade!==incumbent.grade?"lean":old,price:m.currentPriceAmerican??m.priceAmerican,probability:m.modelProb,locked:g.lockedAt!=null});
+ rows.push({game:g.awayTeam+"@"+g.homeTeam,market,previous:old,next:g.lockedAt!=null?old:next.grade!==incumbent.grade?next.grade:old,price:m.currentPriceAmerican??m.priceAmerican,probability:m.modelProb,locked:g.lockedAt!=null});
 }
 assert.equal(JSON.stringify(board),before,"Final-tier replay must not mutate a stored board");
 const count=(a:string[])=>a.reduce<Record<string,number>>((r,x)=>(r[x]=(r[x]??0)+1,r),{}),action=(x:string)=>x==="best_angle"||x==="lean";

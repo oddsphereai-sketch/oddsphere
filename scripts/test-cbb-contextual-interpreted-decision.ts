@@ -139,3 +139,15 @@ console.log("PASS contextual No Play/Watch split: expensive negative-value favor
 
 for(const [price,expected] of [[-400,"No Play"],[-300,"Watchlist"],[-250,"Lean"],[-200,"Best Angle"]] as const)
  assert.equal(grade(.75,price).grade,expected,"The same 75% forecast has paired promotion paths as the actual offer improves, without changing its predicted side");
+
+for(const price of [-501,-8000,-9000]){
+ const offers=[{...targets[0],firstPrice:price,secondPrice:Math.round(-price*.8)},...targets.slice(1)];
+ const capped=make(input(offers),offers,{...latent,marginMean:30});
+ const ml=capped.marketDecisions[0];assert.equal(ml.grade,"No Play");assert.equal(ml.reason,"moneyline_price_below_owner_actionable_limit");
+ assert.equal(ml.selection,"first");assert.equal(ml.price,price);assert(ml.probability!>.95);
+ const recoveredOffers=[{...offers[0],firstPrice:-500,secondPrice:400},...offers.slice(1)];
+ const recovered=make(input(recoveredOffers),recoveredOffers,{...latent,marginMean:30});
+ assert.equal(recovered.marketDecisions[0].grade,"Lean","same forecast regains Lean at an executable -500 price");
+ assert.deepEqual(capped.finalScore,recovered.finalScore);
+ assert.deepEqual(capped.marketDecisions.slice(1),recovered.marketDecisions.slice(1),"Spread/Total remain independent");
+}

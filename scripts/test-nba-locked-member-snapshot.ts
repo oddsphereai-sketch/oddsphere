@@ -124,7 +124,7 @@ r30PriceMember.markets.moneyline.priceAmerican=-300;
 r30PriceMember.markets.moneyline.currentPriceAmerican=-300;
 const r30PriceCapture=buildNbaLockedMemberCapture({gameDto:r30PriceLocked,memberGame:r30PriceMember});
 const r30PriceRows=rows.map(row=>({...row,snapshot_json:r30PriceCapture})),r30PriceBytes=JSON.stringify(r30PriceRows);
-const r31Dynamic=structuredClone(r29Dynamic);r31Dynamic.intelligence.grade_policy_release="nba_grade_policy_2026_11_06_r31_moneyline_best_price_boundary";
+const r31Dynamic=structuredClone(r29Dynamic);r31Dynamic.intelligence.grade_policy_release="nba_grade_policy_2026_11_06_r31_moneyline_wager_price_boundaries";
 const r30PriceRestored=applyNbaLockedMemberSnapshotPrecedence({games:[r31Dynamic],dbIdByExternalId:map,rows:r30PriceRows});
 assert.equal(r30PriceRestored.games[0].intelligence.ml.grade,"best_angle");assert.equal(r30PriceRestored.games[0].intelligence.ml.current_price.odds_american,-300);
 const r30PriceResponse=adaptNbaToDailyEdgeResponse({as_of:"2026-11-06T21:00:00Z",slate_date_et:"2026-10-20",market_signals_capability:"available",games:r30PriceRestored.games} as NbaDailyEdgeDto,

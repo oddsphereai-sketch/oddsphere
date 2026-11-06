@@ -72,6 +72,7 @@ function gradeToVerdict(grade: RecommendationGrade): Verdict {
     case "lean":       return "lean";
     case "watch":      return "watchlist";
     case "caution":    return "caution";
+    case "no_play":    return "no_play";
     case "no_market":  return "no_play";
     case "held":       return "no_play";
   }
@@ -79,12 +80,13 @@ function gradeToVerdict(grade: RecommendationGrade): Verdict {
 
 // MLB Grade union: best_signal | sharp_confirmed | market_led | model_only |
 // market_watch | public_smoke | sharp_conflict
-function gradeToMlbGrade(grade: RecommendationGrade): Grade {
+function gradeToMlbGrade(grade: RecommendationGrade): Grade | null {
   switch (grade) {
     case "best_angle": return "best_signal";
     case "lean":       return "model_only";
     case "watch":      return "market_watch";
     case "caution":    return "sharp_conflict";
+    case "no_play":    return null;
     case "no_market":  return "model_only";
     case "held":       return "market_watch";
   }
@@ -398,7 +400,7 @@ function buildMarketEdgeDto(opts: {
       held || modelProb === null || noVigImplied === null
         ? null
         : (modelProb - noVigImplied) * 100,
-    recommendationConfidence: held ? null : intel.effective_confidence,
+    recommendationConfidence: held || intel.grade === "no_play" ? null : intel.effective_confidence,
     marketSource: intel.current_price.sportsbook,
     marketDataQuality:
       noVigImplied !== null && intel.current_price.odds_american !== null && intel.other_side_price.odds_american !== null
@@ -406,7 +408,7 @@ function buildMarketEdgeDto(opts: {
         : intel.current_price.odds_american !== null
           ? "single_book"
           : "unavailable",
-    reviewFlags: memberEvidence?.evidenceRecoveryRelease
+    reviewFlags: intel.grade === "no_play" ? ["informational_non_actionable_price"] : memberEvidence?.evidenceRecoveryRelease
       ? [`legacy_locked_evidence_recovery:${memberEvidence.evidenceRecoveryRelease}`]
       : [],
     reviewActionSummary: "keep",

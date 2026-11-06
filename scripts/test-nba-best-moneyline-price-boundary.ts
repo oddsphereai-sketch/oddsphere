@@ -15,6 +15,12 @@ for(const pick of ["home","away"] as const){
   assert.equal(gradeNbaMarket(input).effectiveConfidence,gradeNbaR30MarketForAudit(input).effectiveConfidence);
   assert.equal(JSON.stringify(input),bytes);
  }
+ for(const price of [-501,-8000,-9000]){
+  const input={...base,currentPriceAmerican:price,modelProbabilityOnPick:.999};
+  assert.equal(gradeNbaMarket(input).grade,"no_play");
+  assert.equal(gradeNbaMarket({...input,namedBookPosture:support,enforceSteepMoneylineBestAngleTier:false}).grade,"no_play");
+ }
+ assert.equal(gradeNbaMarket({...base,currentPriceAmerican:-500,modelProbabilityOnPick:.99}).grade,"lean","inclusive Lean ceiling");
  for(const price of [-200,-199,-110,110])assert.equal(gradeNbaMarket({...base,currentPriceAmerican:price}).grade,"best_angle","improved price restores strongest-tier eligibility at the same forecast");
  assert.equal(gradeNbaMarket({...base,market:"spread",currentPriceAmerican:-110,confidence:68,modelProbabilityOnPick:.68}).grade,"best_angle","the game's Spread remains independently Best-eligible");
  assert.equal(gradeNbaMarket({...base,namedBookPosture:{...support,supportingSources:[],opposingSources:["circa","pinnacle"]}}).grade,"watch","price policy does not erase genuine opposition or force Lean");

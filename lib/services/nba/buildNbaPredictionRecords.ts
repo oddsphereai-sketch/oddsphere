@@ -171,6 +171,7 @@ function gradeToPlayGrade(g: RecommendationGrade): string {
     case "lean":       return "lean";
     case "watch":      return "market_aligned";
     case "caution":    return "market_aligned";
+    case "no_play":    return "no_play";
     case "no_market":  return "provisional";
     case "held":       return "provisional";
   }
@@ -527,8 +528,8 @@ export async function createNbaPredictionRecords(
             ? "game_spread"
             : "game_total",
         best_angle: intel.grade === "best_angle",
-        no_bet: false,
-        no_bet_reason: null,
+        no_bet: intel.grade === "no_play",
+        no_bet_reason: intel.grade === "no_play" ? "moneyline_price_below_owner_actionable_limit" : null,
         market_aligned: intel.grade === "lean" || intel.grade === "best_angle",
         data_quality_tier: dataQualityTier,
         source_quality: perGameSources.has_lines ? "live_book" : null,

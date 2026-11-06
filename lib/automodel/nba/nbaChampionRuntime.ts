@@ -8,7 +8,7 @@ export const NBA_COMPATIBLE_KNOWLEDGE_MODEL_RELEASES = [NBA_PREVIOUS_MODEL_RELEA
 export const NBA_MARKET_MARRIAGE_RELEASE =
   "nba_market_marriage_2026_11_04_r38_paid_consumer_book_coverage" as const;
 export const NBA_GRADE_POLICY_RELEASE =
-  "nba_grade_policy_2026_11_06_r31_moneyline_best_price_boundary" as const;
+  "nba_grade_policy_2026_11_06_r31_moneyline_wager_price_boundaries" as const;
 export const NBA_PREDICTION_RECORD_RELEASE = NBA_MODEL_RELEASE;
 
 export function assertNbaChampionRuntime(): void {

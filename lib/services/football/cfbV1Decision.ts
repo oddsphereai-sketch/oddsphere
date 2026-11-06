@@ -64,16 +64,20 @@ export const CFB_V1_PMF_COHERENCE_PREVIOUS_CALIBRATION_RELEASE =
   "cfb_v1_exact_price_calibration_2026_10_15_r26_full_product_coordinator_compatibility" as const;
 export const CFB_V1_RESISTANCE_PREVIOUS_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_11_04_r30_moneyline_resistance_guard" as const;
-export const CFB_V1_GRADE_POLICY_RELEASE =
+export const CFB_V1_PRICE_BOUNDARY_PREVIOUS_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_11_05_r32_professional_pressure_reaction" as const;
+export const CFB_V1_GRADE_POLICY_RELEASE =
+  "cfb_v1_composite_grade_policy_2026_11_06_r33_moneyline_wager_price_boundaries" as const;
 export const CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_10_13_r28_exact_price_actionability" as const;
 export const CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_10_12_r27_provider_team_identity_consensus_authority_split_specialization" as const;
 export const CFB_V1_RESISTANCE_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_11_04_r59_moneyline_resistance_guard" as const;
-export const CFB_V1_DECISION_RELEASE =
+export const CFB_V1_PRICE_BOUNDARY_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_11_05_r61_professional_pressure_reaction" as const;
+export const CFB_V1_DECISION_RELEASE =
+  "cfb_v1_daily_edge_decision_2026_11_06_r62_moneyline_wager_price_boundaries" as const;
 export const CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_10_30_r57_paired_price_context" as const;
 export const CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE =
