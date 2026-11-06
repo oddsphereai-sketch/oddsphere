@@ -27,8 +27,8 @@ const strongFavorite = {
 assert.equal(NBA_ML_BEST_ANGLE_MAX_FAVORITE_PRICE, -200);
 assert.equal(
   gradeNbaMarket(strongFavorite).grade,
-  "lean",
-  "a favorite beyond the owner Best price boundary must remain below Best Angle",
+  "no_play",
+  "a favorite beyond the owner -500 wager limit remains a forecast without a wager",
 );
 assert.equal(
   gradeNbaMarket({
@@ -39,8 +39,8 @@ assert.equal(
       directReadSide: "home" as const,
     },
   }).grade,
-  "lean",
-  "market confirmation cannot turn a very steep favorite into a Best Angle",
+  "no_play",
+  "market confirmation cannot waive the owner wager limit",
 );
 assert.equal(
   gradeNbaR30MarketForAudit({ ...strongFavorite, enforceSteepMoneylineBestAngleTier: false }).grade,
