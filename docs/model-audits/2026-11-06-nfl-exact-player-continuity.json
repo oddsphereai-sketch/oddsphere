@@ -1,0 +1,60 @@
+{
+  "scope": "NFL exact-player source continuity only; current market inference is not certified",
+  "startingBase": "e78f002c93464a9dc21254fc99f8f10bbc83d70b",
+  "providerCalls": 0,
+  "productionWrites": 0,
+  "fault": "A non-empty team update omitting an injured QB erased his prior Out status.",
+  "controls": [
+    "retain omitted player with original timestamp",
+    "new exact-player clearance permits return",
+    "new injury supersedes clearance",
+    "older injury cannot resurrect after clearance",
+    "older status cannot replace newer injury",
+    "older whole-game clear cannot erase newer injury",
+    "unrelated healthy teammates cannot clear omitted player",
+    "different exact game cannot inherit prior injuries",
+    "original saved R71 member payload reader precedence",
+    "reject newest conflicting statuses independent of row order",
+    "later unique status resolves older conflict",
+    "same-response and first-capture unknown cannot erase known Out",
+    "malformed practice row cannot crash slate",
+    "new exact-player clearance overrides stale depth Out, not newer depth Out"
+  ],
+  "frozenCurrentBoard": {
+    "games": 14,
+    "markets": 42,
+    "injuryInputsExact": 14,
+    "starterInputsExact": 28,
+    "actionablesBefore": 18,
+    "actionablesAfter": 18,
+    "promotions": 0,
+    "demotions": 0
+  },
+  "semanticOpenFinding": {
+    "game": "DAL@IND",
+    "classification": "UNRESOLVED_METHOD",
+    "retail": "FanDuel DAL -3 Oct27 to -5.5 Nov6",
+    "professional": "Retained Circa Nov3 DAL -6.5 to Nov6 -4.5, still a Dallas favorite",
+    "statisticalBaseHomeMargin": 1.3605316147637012,
+    "playerProjectionHomeMargin": -6.006049,
+    "finalHomeMargin": 2.4259123796080075,
+    "conclusion": "Later relative buyback supports a closer game; it does not independently establish the Indianapolis winner or justify the complete 73.09% cover forecast. No change to market method in this repair."
+  },
+  "publication": "candidate, not deployed",
+  "retiredUnusedDiagnostic": {
+    "field": "availabilityArbitrationShadow",
+    "reason": "The targetExcludedProfessionalMoneylineWinner field describes movement direction, not current book favorite. Future writer no longer persists this unused shadow; all legacy payload fields remain untouched.",
+    "numericDecisionEffect": false
+  },
+  "review": {
+    "scope": "source and lock continuity only",
+    "result": "No remaining P1/P2 blocker found after final independent read-only recheck",
+    "resolvedFindings": [
+      "conflicting newest same-clock statuses previously depended on page order",
+      "positive clearance previously failed to override older depth Out tag",
+      "malformed practice row could crash collection",
+      "missing designation previously erased known availability",
+      "same-response newer unknown previously discarded older known Out"
+    ]
+  }
+}

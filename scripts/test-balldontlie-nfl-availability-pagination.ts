@@ -349,8 +349,39 @@ async function main(): Promise<void> {
   );
   const merged = mergeNflAvailabilityWithPrior(partial, prior);
   assert.equal(merged?.teams[0]?.players[0]?.name, "Current Buc");
+  assert.equal(merged?.teams[0]?.players.find(player => player.name === "Prior Buc")?.status, "Out",
+    "another teammate's fresh injury must not erase an omitted player from a non-empty team report");
   assert.equal(merged?.teams[1]?.players[0]?.name, "Prior Cowboy", "a partial team omission retains that team's prior unit");
   assert.equal(merged?.reportUpdatedAt, "2026-10-08T13:00:00.000Z");
+  assert.deepEqual(mergeNflAvailabilityWithPrior({ ...verifiedClear, reportUpdatedAt: "2026-10-08T09:00:00.000Z" }, prior), prior,
+    "an older whole-game clear cannot erase newer injuries");
+  assert.equal(mergeNflAvailabilityWithPrior(prior, verifiedClear)?.teams.flatMap(team => team.players).length, 0,
+    "older injury rows cannot resurrect after a newer verified legacy whole-game clear");
+  const afterLegacyClear = mergeNflAvailabilityWithPrior(prior, verifiedClear)!;
+  assert.equal(mergeNflAvailabilityWithPrior(prior, afterLegacyClear)?.teams.flatMap(team => team.players).length, 0,
+    "the original legacy clearance clock must survive repeated stale refreshes");
+  const staleStatus = { ...partial, teams: [{ ...partial.teams[0]!, players: [{ ...prior.teams[0]!.players[0]!,
+    status: "Questionable", reportedAt: "2026-10-08T09:00:00.000Z" }] }, partial.teams[1]!] };
+  assert.equal(mergeNflAvailabilityWithPrior(staleStatus, prior)?.teams[0]?.players[0]?.status, "Out",
+    "a later fetch cannot replace a player's newer native report with an older status");
+  const clearOnePlayer: DailyEdgeGameAvailability = {
+    ...partial,
+    playerClearances: [{ teamAbbreviation: "TB", name: "Prior Buc", reportedAt: "2026-10-08T14:00:00.000Z" }],
+  };
+  const individuallyCleared = mergeNflAvailabilityWithPrior(clearOnePlayer, prior)!;
+  assert.equal(individuallyCleared.teams[0]?.players.some(player => player.name === "Prior Buc"), false,
+    "a newer exact-player clearance releases that player's prior injury without pinning it forever");
+  assert.equal(individuallyCleared.teams[1]?.players[0]?.name, "Prior Cowboy",
+    "one clearance cannot clear a different team or player");
+  assert.equal(mergeNflAvailabilityWithPrior(staleStatus, individuallyCleared)?.teams[0]?.players.some(player => player.name === "Prior Buc"), false,
+    "an old injury cannot reappear after a newer stored exact-player clearance");
+  const newOut = { ...staleStatus, teams: [{ ...staleStatus.teams[0]!, players: [{ ...staleStatus.teams[0]!.players[0]!,
+    status: "Out", reportedAt: "2026-10-08T15:00:00.000Z" }] }, staleStatus.teams[1]!] };
+  assert.equal(mergeNflAvailabilityWithPrior(newOut, individuallyCleared)?.teams[0]?.players[0]?.status, "Out",
+    "a genuine later injury supersedes an earlier clearance");
+  const unrelatedClear = { ...verifiedClear, playerClearances: clearReport[0]!.playerClearances };
+  assert.equal(mergeNflAvailabilityWithPrior(unrelatedClear, prior)?.teams.flatMap(team => team.players).length, 2,
+    "healthy rows for unrelated teammates do not clear omitted previously injured players");
   assert.equal(
     mergeNflAvailabilityWithPrior({ ...partial, eventId: "different" }, prior)?.eventId,
     "different",

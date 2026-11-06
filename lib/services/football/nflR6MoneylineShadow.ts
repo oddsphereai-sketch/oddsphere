@@ -21,7 +21,7 @@ export const NFL_R6_MONEYLINE_MODEL_RELEASE =
 export const NFL_R6_MONEYLINE_CALIBRATION_RELEASE =
   "nfl_market_led_price_calibration_shadow_2026_08_22_r6" as const;
 export const NFL_R6_MONEYLINE_DECISION_RELEASE =
-  "nfl_market_led_moneyline_lean_shadow_2026_11_05_r8_current_game_starter_authority" as const;
+  "nfl_market_led_moneyline_lean_shadow_2026_11_06_r9_exact_player_clearance" as const;
 export const NFL_R6_ARTIFACT_DECISION_RELEASE =
   "nfl_market_led_moneyline_lean_shadow_2026_08_22_r6" as const;
 export const NFL_R6_SOURCE_POINT_MODEL_RELEASE =
@@ -406,6 +406,22 @@ export function resolveNflAvailabilityAdjustedQuarterbackDepth(
       hasCurrentDesignation: player.status.trim().toLowerCase() !== "status unavailable",
     },
   ]));
+  const applyClearance = (name: string, reportedAt: string) => {
+    const at = Date.parse(reportedAt);
+    const existing = reportStatuses.get(playerKey(name));
+    const existingAt = Date.parse(existing?.reportedAt ?? "");
+    if (Number.isFinite(at) && (!existing || !Number.isFinite(existingAt) || at > existingAt)) {
+      reportStatuses.set(playerKey(name), { status: "available", reportedAt, hasCurrentDesignation: true });
+    }
+  };
+  for (const clearance of injuries?.playerClearances ?? []) {
+    if (normalizeTeam(clearance.teamAbbreviation) === normalizeTeam(depth.team)) {
+      applyClearance(clearance.name, clearance.reportedAt);
+    }
+  }
+  if (injuries?.wholeGameClearanceAt) {
+    for (const player of depth.quarterbackDepth) applyClearance(player.name, injuries.wholeGameClearanceAt);
+  }
   const starterStatus = currentExactGameInjuryStatus(
     injuryStatus(depth.expectedStartingQuarterback?.injuryStatus),
     reportStatuses.get(playerKey(starter)),
