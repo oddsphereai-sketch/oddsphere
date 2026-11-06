@@ -18,6 +18,27 @@ export const CBB_CONTEXTUAL_RECOMMENDATION_RISK_POLICY=Object.freeze({
  evidenceMeaning:"full_market_context_already_shapes_forecast_and_fitted_uncertainty;no_source_votes_confirmation_gate_or_opposition_veto",
 });
 export type CbbRecommendationRiskContext={marginLocationSd:number;totalLocationSd:number;calibrationGames:number};
+
+/** Reuse the already evaluated location scenarios to assess outcome conviction.
+ * Net win-minus-loss, rather than payout EV, owns this confidence assessment.
+ * No extra score law, probability integration, provider or inference call. */
+export function assessCbbOutcomeConfidenceRisk(args:{risk:ReturnType<ReturnType<typeof createCbbRecommendationRiskEvaluator>>;
+ winProbability:number;loseProbability:number}){
+ const {risk,winProbability:p,loseProbability:loss}=args;
+ const nominal=p-loss,observations=risk.scenarios.map(s=>({...s,value:s.winProbability-s.loseProbability}));
+ const axis=(coordinate:"margin"|"total",sign:1|-1)=>observations.find(s=>coordinate==="margin"?
+  Math.sign(s.marginShift)===sign&&s.totalShift===0:Math.sign(s.totalShift)===sign&&s.marginShift===0)?.value??nominal;
+ const marginSensitivity=(axis("margin",1)-axis("margin",-1))/2,totalSensitivity=(axis("total",1)-axis("total",-1))/2;
+ const workingSensitivityScale=Math.abs(marginSensitivity)+Math.abs(totalSensitivity);
+ const expectedDownside=cbbWorkingNormalExpectedDownside(nominal,workingSensitivityScale);
+ const assessedNetWinProbability=nominal-expectedDownside,N=risk.context.calibrationGames;
+ const stressedNetWinProbability=(N*assessedNetWinProbability-(p+loss))/(N+1);
+ const numericalErrorEstimate=4*risk.numericalErrorEstimate;
+ return {basis:"win_minus_loss_location_sensitivity_with_one_adverse_resolved_case" as const,
+  nominalNetWinProbability:nominal,marginSensitivity,totalSensitivity,workingSensitivityScale,expectedDownside,
+  assessedNetWinProbability,stressedNetWinProbability,numericalErrorEstimate,
+  supported:risk.priceCanSupportRecommendation&&stressedNetWinProbability>numericalErrorEstimate};
+}
 export function createCbbRecommendationRiskEvaluator(args:{latent:CbbContextualLatentGaussian;context:CbbRecommendationRiskContext;numerics?:CbbScoreLawNumerics;assessmentTier?:"lean"|"best"}){
  const {context:c}=args;
  const assessmentTier=args.assessmentTier??"lean",radius=CBB_CONTEXTUAL_RECOMMENDATION_RISK_POLICY.locationRadiiMarginalStandardErrors[assessmentTier];

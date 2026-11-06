@@ -1,5 +1,71 @@
 # Current production model releases and qualified research candidates
 
+## November 6 evidence collection runtime contract
+
+The sole V2 capture path becomes
+`market_intelligence_v2_capture_2026_11_06_r29_response_clocks_bounded_writes`.
+Owls response completion and Playbook local broker-read completion stamp future
+availability, separately from unchanged native source clocks. Write release
+`market_observation_write_batch_2026_11_06_r1_bounded_bytes` keeps each sequential
+price/split upsert within 240,000 UTF-8 JSON bytes/500 rows with all observations
+and conflict keys preserved. Per-batch T-60 deadline checks retain the existing
+lease/sole writer. No provider requests, cadence, source qualification, numerical
+forecast, calibration, grade or stake rule is added. No historical clock,
+locked payload or missing provenance is reconstructed. The existing immutable
+split archive remains authoritative; this is not a second archival writer.
+Read-only coverage, honest provenance limits and multi-year disk sizing are in
+`docs/model-audits/2026-11-06-market-evidence-durability.md`.
+
+## November 6 confidence-led Lean runtime contract
+
+The owner clarified that a strong outcome prediction can be Lean despite poor
+offered value. Price remains part of the grade; it must not be a blanket veto.
+Shared qualification is `daily_edge_confidence_lean_price_2026_11_06_r1_paired_margin`.
+It uses the actual same-book/contract/capture opposing quote, not another book's
+best price or an invented complementary price. A 55% selected-win floor is an
+explicit product boundary, not a new accuracy-validation claim. Actual negative
+EV remains stored and disclosed. Scores, final probabilities, selected sides,
+pushes, quotes, stakes and all source interpretation remain unchanged.
+
+NBA grade becomes `nba_grade_policy_2026_11_06_r29_confidence_led_lean`; model R36
+and marriage R38 stay exact. Data quality and corroborated opposition still
+apply after confidence qualification. A confidence-only Lean cannot inherit a
+positive-value Best promotion. New intelligence and tracking snapshots stamp
+their actual grade policy; old captures are not restamped.
+
+CBB decision/interpreted R11, grade R10, publisher R51, adapter R34 and tracking
+R37 end in `confidence_led_lean`. The merged economic Total / retained Margin
+R7 model, covariance, private artifact and complete market reader remain exact. The new confidence assessment reuses existing shifted-law
+win/loss results, rather than evaluating another model or another score law.
+Its net win-minus-loss sensitivity retains the one-adverse-resolved-case policy
+and push refunds; the actual quote must still support the declared return risk.
+The actual-price EV assessment stays separate and may honestly fail on a Lean.
+Best retains its existing stronger actual-value and uncertainty assessment.
+The preceding R10/R9 (R7 model), R8/R7 and R7/R6 (R1 model) decision/grade pairs remain explicitly readable;
+their locked member and tracking payloads stay exact.
+
+The original R1-model outcome-blind frozen-input comparison covers 58 CBB games/174 markets and
+nine NBA games/27 markets, captured separately from the earlier member-board
+coverage inventory. CBB moves 36 Lean/1 Best/99 Watch/38 No Play to
+63/1/79/31 through 27 actionable promotions and zero demotions. NBA moves
+5 Lean/1 Best/21 Watch to 6/1/20, one promotion and zero demotions. No score,
+side, probability, push, price, nominal EV or stored payload changes. These
+are policy effects, not improved-accuracy evidence or promises of live counts.
+
+The final post-merge R7 cohort replay contains 58 games/174 markets captured
+at 19:05 UTC: 23 Lean/117 Watch/34 No Play become 54/89/31, through 31
+promotions (21 ML, one Spread, nine Totals), zero demotions and zero new Bests.
+R7 numerical forecasts, sides, probabilities, quotes and nominal EV remain exact.
+The current R7 law and original R1-law replay are separate cohorts; neither is
+an accuracy claim. Proof: `audits/2026-11-06-confidence-led-r7-impact.json`.
+Activation still requires protected merge and actual writer/reader verification.
+
+Other current-day grades are reviewed in the accompanying audit; this candidate
+does not blanket-rewrite their sport-specific authorities or the concurrent CBB
+Total-head development. The existing sport leases, single writers, provider
+budgets, schedules and T-60 locks remain. Required verification and production
+status: `model-audits/2026-11-06-confidence-led-market-grades.md`.
+
 ## CBB economic Total / retained raw Margin R7
 
 Production remains R1/R44 until the protected R7 release and normal writer are

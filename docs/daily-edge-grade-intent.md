@@ -1,5 +1,33 @@
 # Daily Edge play-grade intent
 
+## November 6 owner clarification — confidence leads the recommendation
+
+The owner explicitly clarified that Lean can be a confident outcome prediction
+at an unattractive or nonpositive-value offered price. Price contributes to the
+tier; it does not unconditionally override outcome confidence. Best Angle can
+reflect stronger outcome confidence and/or better price quality after the full
+market interpretation. This supersedes the universal positive-EV Lean meaning
+in the November 5 text below, which remains historical release documentation.
+
+The first scoped repair is CBB R11 decision/R10 grade and NBA grade R29. Both
+retain their actual final model probability and exact nominal price EV. They
+permit a confidence-led Lean inside the actual same-book paired-price margin;
+price disagreement beyond that envelope still matters. CBB also checks its
+fitted location uncertainty and declared adverse-case risk. NBA retains the
+existing opposing-evidence composition. These are explicit product policies,
+not outcome calibration or a promised higher hit rate. Existing value-led
+qualification and stronger Best criteria remain; no desired board count is used.
+
+The final joint forecast already incorporates qualified market evidence. Do
+not add a second probability, score correction or split bonus at grading.
+Keep bad-price EV honestly negative on a confidence Lean; never relabel it as
+positive value or invent professional confirmation. Existing locked records
+retain every original field and their original grade semantics.
+
+Sport-specific active-path checks and frozen-input board impact are recorded in
+`model-audits/2026-11-06-confidence-led-market-grades.md`. No uniform numerical
+policy is implied for historical or inactive sports.
+
 November 5 Lean-quality amendment: the owner subsequently rejected treating
 every positive point-estimate EV as an adequate Lean. For the scoped CBB R8/R7
 candidate, Lean/Best eligibility additionally uses an explicit fitted-location

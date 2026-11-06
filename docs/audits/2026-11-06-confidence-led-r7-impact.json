@@ -1,0 +1,143 @@
+{
+  "generatedAt": "2026-11-06T19:06:58.286Z",
+  "date": "2026-11-06",
+  "productionWrites": 0,
+  "providerCalls": 0,
+  "fits": 0,
+  "cbbGradingMs": 39319,
+  "cbbModelReleases": [
+    "cbb_contextual_outcome_2026_11_06_r7_economic_total_retained_margin"
+  ],
+  "inputHashes": {
+    "nba": "cd05d8d6c510fd72841b8f4ca854f30a6d638226883eb0665b47f227a661e6bf",
+    "cbb": "317bfa2d228b396191ab84c9fbbf06ff24df38cfa5571505c0d2edaca7246651"
+  },
+  "unchanged": [
+    "score",
+    "selected_side",
+    "probability",
+    "push",
+    "price",
+    "nominal_expected_value",
+    "stored_payloads"
+  ],
+  "limits": "Functional, outcome-blind policy replay; no claim of improved future hit rate. Already locked records are excluded from regrading.",
+  "productionBase": "6b129bb07c7ae1d5dc64d1f8718b65b3a3fee416",
+  "auditedHead": "541cb91e20bce3ba44625448e0501c27e47d5d8d",
+  "cbb": {
+    "markets": 174,
+    "before": {
+      "No Play": 34,
+      "Watchlist": 117,
+      "Lean": 23
+    },
+    "after": {
+      "No Play": 31,
+      "Watchlist": 89,
+      "Lean": 54
+    },
+    "promotions": 31,
+    "demotions": 0,
+    "byMarket": {
+      "moneyline": {
+        "before": {
+          "No Play": 31,
+          "Watchlist": 25,
+          "Lean": 2
+        },
+        "after": {
+          "No Play": 28,
+          "Watchlist": 7,
+          "Lean": 23
+        }
+      },
+      "spread": {
+        "before": {
+          "Watchlist": 47,
+          "No Play": 3,
+          "Lean": 8
+        },
+        "after": {
+          "Watchlist": 46,
+          "No Play": 3,
+          "Lean": 9
+        }
+      },
+      "total": {
+        "before": {
+          "Watchlist": 45,
+          "Lean": 13
+        },
+        "after": {
+          "Lean": 22,
+          "Watchlist": 36
+        }
+      }
+    },
+    "promotionsByMarket": {
+      "moneyline": 21,
+      "spread": 1,
+      "total": 9
+    },
+    "newBestAngles": 0
+  },
+  "nba": {
+    "markets": 27,
+    "before": {
+      "watch": 21,
+      "lean": 5,
+      "best_angle": 1
+    },
+    "after": {
+      "watch": 20,
+      "lean": 6,
+      "best_angle": 1
+    },
+    "promotions": 1,
+    "demotions": 0,
+    "byMarket": {
+      "moneyline": {
+        "before": {
+          "watch": 6,
+          "lean": 2,
+          "best_angle": 1
+        },
+        "after": {
+          "watch": 5,
+          "lean": 3,
+          "best_angle": 1
+        }
+      },
+      "spread": {
+        "before": {
+          "watch": 8,
+          "lean": 1
+        },
+        "after": {
+          "watch": 8,
+          "lean": 1
+        }
+      },
+      "total": {
+        "before": {
+          "watch": 7,
+          "lean": 2
+        },
+        "after": {
+          "watch": 7,
+          "lean": 2
+        }
+      }
+    }
+  },
+  "sourceClockBounds": {
+    "nba": {
+      "first": "2026-11-06T17:33:39.605Z",
+      "last": "2026-11-06T17:33:39.605Z"
+    },
+    "cbb": {
+      "first": "2026-11-06T19:05:16.014Z",
+      "last": "2026-11-06T19:05:37.397Z"
+    }
+  }
+}

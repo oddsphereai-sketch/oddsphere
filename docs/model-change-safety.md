@@ -1,5 +1,43 @@
 # Model change safety protocol
 
+## Owner-directed November 6 collection chronology and memory repair
+
+The owner requested durable odds/split evidence and correct arrival timestamps
+without unbounded site memory. Capture R29 records future response completion
+instead of routine job-start availability and writes the same observations in
+bounded sequential batches. Native clocks, hashes, missing/unverified provenance,
+poll identity and all historical/locked records stay exact. The existing single
+capture path, sport leases, provider calls/budgets and cadence remain unchanged.
+No numerical model, calibration, grade threshold or stake changes in this scope;
+correct future point-in-time admission can differ without historical backdating.
+Full model/focused verification, release registry, fresh-main protected PR and
+natural live collection proof remain mandatory. No archival data is deleted or
+downsampled and no multi-year fixed-storage guarantee is inferred from RAM
+improvements. Evidence and limits:
+`docs/model-audits/2026-11-06-market-evidence-durability.md`.
+
+## Owner-directed confidence-led Lean semantics — November 6
+
+The owner explicitly clarified in the Daily Edge market-grading chat that price
+is one input to the grade and that some confident Leans may have bad prices.
+The scoped CBB R11/R10 and NBA R29 policy therefore adds an outcome-confidence
+Lean path while retaining the exact final forecast, selected quote and nominal
+EV. This supersedes a universal positive-EV Lean requirement for these new
+unlocked releases. It does not authorize changes to historical locked grades,
+an automatic side flip, a play quota, invented sharp confirmation, another
+writer, new provider calls, or untested numerical forecast changes.
+
+Same-book paired pricing bounds the allowed price contribution; CBB retains
+fitted-location sensitivity and the declared adverse-resolved-case risk, and
+NBA retains source opposition composition. Best retains stronger actual-price
+qualification. This is owner-directed product-policy qualification with forward
+outcome monitoring, not a holdout-derived accuracy improvement. The frozen
+same-input replay must show actual promotions/demotions and preserved numeric
+forecasts/prices, and test both stronger-context promotion and adverse-context
+demotion. Mandatory focused/full verification, clean latest-main protected PR,
+integration overlap checks and natural live writer/reader/lock proof still
+apply. Scope, current counts and rollback are in
+`docs/model-audits/2026-11-06-confidence-led-market-grades.md`.
 ## Owner-directed CBB economic Total contract correction R7 — November 6
 
 The owner requested delivery of actual market-reading corrections and the same

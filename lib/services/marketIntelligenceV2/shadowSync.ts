@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {observationWriteBatches,MARKET_OBSERVATION_WRITE_BATCH_RELEASE} from "./observationWriteBatches";
 import { assertNbaPrelockCaptureBudget, selectNbaPrelockCaptureGames, NBA_PRELOCK_MARKET_CAPTURE_RELEASE, type NbaPrelockCaptureScope } from "../nba/nbaPrelockMarketCapture";
 import {
   PlaybookReadBroker,
@@ -84,7 +85,7 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_capture_2026_11_05_r28_cbb_albany_source_identity";
+  "market_intelligence_v2_capture_2026_11_06_r29_response_clocks_bounded_writes";
 
 type CbbSourceMatch = { game: GameRef; reversed: boolean };
 const cbbSide = (side: MarketIntelligenceSelectionSide, reversed: boolean): MarketIntelligenceSelectionSide =>
@@ -706,6 +707,7 @@ async function collectPlaybookSplits(opts: {
     timeoutMs: opts.prelockTimeoutMs,
   });
   const readMode = playbookSplitsReadMode(opts.slateDate, opts.todayUtc);
+  const requestStartedAt = new Date().toISOString();
   const res = readMode === "current"
     ? await client.splits(opts.sport)
     : await client.splitsHistory(opts.sport, opts.slateDate);
@@ -719,7 +721,9 @@ async function collectPlaybookSplits(opts: {
     }
   }
   const rows = (((res.body as { data?: unknown[] }).data) ?? []) as PlaybookSplitGame[];
-  const capturedNow = opts.prelockTimeoutMs === undefined ? opts.now : new Date();
+  // Availability belongs to the completed reads, never the start of a job.
+  // Source/provider clocks remain distinct in their original fields.
+  const capturedNow = new Date();
   const gamesByKey = new Map<string, GameRef[]>();
   for (const game of opts.games) {
     const key = opts.sport === "mlb"
@@ -767,7 +771,8 @@ async function collectPlaybookSplits(opts: {
     observations.push(...built.observations);
     rejected.push(...built.rejected);
   }
-  return { fetchedRows: rows.length, observations, rejected, errors: [] };
+  return { fetchedRows: rows.length, observations, rejected, errors: [], details:{
+    requestStartedAt,receivedAt:capturedNow.toISOString(),clockMeaning:"local_broker_read_bounds_cache_possible_provider_clock_unverified"} };
 }
 
 const OWLS_SPORT_BY_INTERNAL: Partial<Record<Sport, Exclude<OwlsSport, "soccer">>> = {
@@ -797,7 +802,7 @@ export function findOwlsSplitGameMatch(
   return exactUtcDate.length === 1 ? exactUtcDate[0]! : null;
 }
 
-async function collectOwlsSplits(opts: {
+export async function collectOwlsSplits(opts: {
   sport: Sport;
   games: readonly GameRef[];
   apiKey: string | undefined;
@@ -818,6 +823,7 @@ async function collectOwlsSplits(opts: {
   }
 
   let response: RawOwlsSplitsResponse;
+  const requestStartedAt = new Date().toISOString();
   try {
     response = (await new OwlsInsightClient(opts.apiKey, { timeoutMs: opts.prelockTimeoutMs }).splits<RawOwlsSplitsResponse>(owlsSport)).body;
   } catch (error) {
@@ -829,7 +835,7 @@ async function collectOwlsSplits(opts: {
     };
   }
 
-  const capturedNow = opts.prelockTimeoutMs === undefined ? opts.now : new Date();
+  const capturedNow = new Date();
   const coverage = normalizeOwlsSharpBookSplits(response, owlsSport);
   const gamesByKey = new Map<string, GameRef[]>();
   for (const game of opts.games) {
@@ -893,6 +899,7 @@ async function collectOwlsSplits(opts: {
     rejected,
     errors: [],
     details: {
+      requestStartedAt,receivedAt:capturedNow.toISOString(),clockMeaning:"local_response_completion_separate_from_provider_as_of",
       feed_status: coverage.feedStatus,
       partial_reason: coverage.partialReason,
       advertised_books: coverage.advertisedBooks,
@@ -1004,7 +1011,7 @@ export function buildOwlsSharpPriceObservations(opts: {
   return { observations, rejected };
 }
 
-async function collectOwlsPrices(opts: {
+export async function collectOwlsPrices(opts: {
   sport: Sport;
   games: readonly GameRef[];
   apiKey: string | undefined;
@@ -1024,6 +1031,7 @@ async function collectOwlsPrices(opts: {
     return { fetchedRows: 0, observations: [], rejected: [], errors: ["OWLS_INSIGHT_API_KEY missing; skipped Owls v2 sharp-book prices"] };
   }
   let response: RawOwlsOddsResponse;
+  const requestStartedAt = new Date().toISOString();
   try {
     response = (await new OwlsInsightClient(opts.apiKey, { timeoutMs: opts.prelockTimeoutMs }).odds<RawOwlsOddsResponse>(owlsSport)).body;
   } catch (error) {
@@ -1043,7 +1051,7 @@ async function collectOwlsPrices(opts: {
     games: opts.games,
     rows: coverage.prices,
     ...(opts.sport === "cbb" ? {retailFetchedAt} : {}),
-    fetchedAt: opts.prelockTimeoutMs === undefined ? opts.now : new Date(),
+    fetchedAt: retailFetchedAt,
     ingestionRunId: opts.ingestionRunId,
   });
   return {
@@ -1061,6 +1069,7 @@ async function collectOwlsPrices(opts: {
     ],
     errors: [],
     details: {
+      requestStartedAt,receivedAt:retailFetchedAt.toISOString(),clockMeaning:"local_response_completion_separate_from_provider_last_update",
       events_returned: coverage.eventsReturned,
       matched_book_events: coverage.matchedBookEvents,
       normalized_prices: coverage.prices.length,
@@ -1662,11 +1671,12 @@ type SplitUpsertResult = {
   error: string | null;
 };
 
-async function upsertSplitObservationsWithHistoryRetry(opts: {
+async function upsertSplitObservationBatchWithHistoryRetry(opts: {
   supabase: SupabaseClient;
   rows: readonly MarketSplitObservationV2[];
   onConflict: string;
   legacyColumns: boolean;
+  beforeWrite?:()=>void;
 }): Promise<SplitUpsertResult> {
   let pendingRows = [...opts.rows];
   const maximumAttempts = 3;
@@ -1674,6 +1684,7 @@ async function upsertSplitObservationsWithHistoryRetry(opts: {
     const payload = opts.legacyColumns
       ? pendingRows.map(stripV27SplitColumns)
       : pendingRows;
+    opts.beforeWrite?.();
     const { error } = await opts.supabase
       .from("market_split_observations_v2")
       .upsert(payload, {
@@ -1711,10 +1722,23 @@ async function upsertSplitObservationsWithHistoryRetry(opts: {
   return { written: 0, tableMissing: false, error: "split upsert retry exhausted" };
 }
 
+async function upsertSplitObservationsWithHistoryRetry(opts: {
+  supabase: SupabaseClient; rows: readonly MarketSplitObservationV2[]; onConflict: string; legacyColumns: boolean;beforeWrite?:()=>void;
+}): Promise<SplitUpsertResult> {
+  let written = 0;
+  for (const rows of observationWriteBatches(opts.rows)) {
+    const result = await upsertSplitObservationBatchWithHistoryRetry({...opts,rows});
+    written += result.written;
+    if (result.error || result.tableMissing) return {...result,written};
+  }
+  return {written,tableMissing:false,error:null};
+}
+
 export async function writeRows(opts: {
   supabase: SupabaseClient;
   splitObservations: readonly MarketSplitObservationV2[];
   priceObservations: readonly MarketPriceObservationV2[];
+  beforeWrite?:()=>void;
 }): Promise<{ splitWritten: number; priceWritten: number; tableMissing: boolean; errors: string[] }> {
   const errors: string[] = [];
   let tableMissing = false;
@@ -1733,7 +1757,9 @@ export async function writeRows(opts: {
       rows: splitObservationsForWrite,
       onConflict: "provider,source_book,canonical_event_id,canonical_market_id,selection_key,raw_payload_hash,fetched_at",
       legacyColumns: false,
+      beforeWrite:opts.beforeWrite,
     });
+    splitWritten=primary.written;
     if (primary.tableMissing) tableMissing = true;
     if (primary.error === null && !primary.tableMissing) {
       splitWritten = primary.written;
@@ -1743,6 +1769,7 @@ export async function writeRows(opts: {
         rows: splitObservationsForWrite,
         onConflict: "provider,source_book,canonical_event_id,canonical_market_id,selection_key,raw_payload_hash",
         legacyColumns: true,
+        beforeWrite:opts.beforeWrite,
       });
       if (retry.tableMissing) tableMissing = true;
       if (retry.error) errors.push(`split upsert legacy retry: ${retry.error}`);
@@ -1753,6 +1780,7 @@ export async function writeRows(opts: {
         rows: splitObservationsForWrite,
         onConflict: "provider,source_book,canonical_event_id,canonical_market_id,selection_key,raw_payload_hash",
         legacyColumns: false,
+        beforeWrite:opts.beforeWrite,
       });
       if (retry.tableMissing) tableMissing = true;
       if (retry.error) errors.push(`split upsert legacy conflict retry: ${retry.error}`);
@@ -1764,18 +1792,20 @@ export async function writeRows(opts: {
     }
   }
 
-  if (opts.priceObservations.length > 0) {
+  for (const priceBatch of observationWriteBatches(opts.priceObservations)) {
+    opts.beforeWrite?.();
     const { error } = await opts.supabase
       .from("market_price_observations_v2")
-      .upsert(opts.priceObservations, {
+      .upsert(priceBatch, {
         onConflict: "provider,canonical_market_id,sportsbook,selection_key,line,american_price,provider_timestamp",
         ignoreDuplicates: true,
       });
     if (error) {
       if (isTableMissing(error.message)) tableMissing = true;
       else errors.push(`price upsert: ${error.message}`);
+      break;
     } else {
-      priceWritten = opts.priceObservations.length;
+      priceWritten += priceBatch.length;
     }
   }
 
@@ -1822,7 +1852,7 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
     rejected: [],
     skippedTableMissing: false,
     errors: [],
-    details: { capture_release: MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE },
+    details: { capture_release: MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE,write_batch_release:MARKET_OBSERVATION_WRITE_BATCH_RELEASE },
   };
 
   const nflSlateRead: NflForwardSlateReadTelemetry = { dbQueries: 0, dbRows: 0, dbBytes: 0 };
@@ -1967,6 +1997,7 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
     price_observations: prices.length,
   };
   result.details.owls = { splits: owls.details ?? {}, prices: owlsPrices.details ?? {} };
+  result.details.playbook = "details" in playbook ? playbook.details ?? {} : {};
   result.details.sharpapi = sharpapi.details ?? {};
 
   // Keep bounded, non-secret identity diagnostics in the existing job log.
@@ -2005,6 +2036,7 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
     supabase: opts.supabase,
     splitObservations,
     priceObservations: prices,
+    beforeWrite:opts.nbaPrelockScope?()=>assertNbaPrelockCaptureBudget(opts.nbaPrelockScope!):undefined,
   });
   result.splitObservationsWritten = write.splitWritten;
   result.priceObservationsWritten = write.priceWritten;
