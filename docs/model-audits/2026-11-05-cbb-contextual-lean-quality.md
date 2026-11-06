@@ -133,3 +133,45 @@ Independent Python expected-downside arithmetic agrees within6.20e-17.
 Private audit SHA256:
 `6bfdd5b065574df04a24b8ee847678609c1869889bacb5d2bb1763263ff2b948`.
 The actual production job's elapsed time and completed lifecycle remain required.
+
+## Completed production verification
+
+Protected PR 1041 merged as `f93a6b9a5b1ac096fc3a1c35dfbe58d10e803279`, with the
+remote/local verified tree `464f7c4d70b192860686b07c8898fd6961c50d44`. Full
+model-change verification, focused risk/lock/tracking tests, types/lint/build,
+independent reviews, strict current-main integration and PostgreSQL CI passed.
+The actual authenticated production readiness endpoint confirmed that commit
+and the unchanged R1 private artifact before activation.
+
+The single normal leased invocation started 23:40:25.612Z, published the R43
+snapshot 23:44:52.680Z and completed 23:45:19.888Z (294 seconds). The following
+scheduled invocation completed 23:52:28.946Z (295 seconds). Both report only the
+three previously known future incomplete evaluations, with no timeout or new
+grade-path failure. Provider budgets, cadence and the shared lease are unchanged.
+
+At 23:50:59Z, 312 contextual games decoded; all 83 priced game laws and 68 new
+positive-value risk assessments passed independent numerical/DTO/price checks.
+Today's 15 unlocked R7-grade games contain 10 Lean, 3 Best,23 Watch and 9 No Play;
+the 27 locked R6 contextual games retain their original grades. The older first
+game remains separate. Current displayed totals must not be confused with the
+earlier same-input candidate comparison or UI per-game filter counts.
+
+Both initial 173 locked members/516 tracking rows and activation 176/525 baselines
+remain exact. New-grade tracking had not naturally locked a game at that capture;
+no early lock or synthetic production record was created. Future R30 behavior
+is covered by focused writer/reader/tracking controls, including positive-EV
+priced passes and actual legacy R6 record idempotence.
+
+Eight raw-first cases preserve price paths, latest buybacks, observed composition
+clocks and counterevidence. Rice +3.5 remains Lean; USF +6.5 becomes Watch on a thin
+uncertainty-adjusted advantage; Duke -100000 and Creighton -20000 moneylines are
+No Play while their predicted winners/probabilities remain available. The live
+member page was checked directly, including Duke's explanation that the payout
+is too small for an actionable recommendation. No new concrete wiring or
+grade-application defect was identified in this bounded review. Quantitative
+forecast strength and the working downside approximation are not certified.
+
+Private live-coherence audit SHA256:
+`8fde6310928eeff2839e7496969fcc7ba83245ebb8e7bb5fa4573462461d934b`.
+Private eight-case semantic audit SHA256:
+`56cb0f8b4279ec36b9832ffc61f5e521004aa39ba850747ea6f5f8b539ac7586`.

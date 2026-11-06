@@ -1,8 +1,8 @@
 # Current production model releases and qualified research candidates
 
-## CBB contextual Lean quality — November 5 candidate
+## CBB contextual Lean quality — deployed and verified November 5
 
-The owner requested a correction to any-positive-EV Lean eligibility. Candidate
+The owner requested a correction to any-positive-EV Lean eligibility. Active
 decision `cbb_outcome_decision_2026_11_05_r8_contextual_recommendation_risk`,
 interpreted R8, grade `cbb_contextual_outcome_grade_2026_11_05_r7_contextual_recommendation_risk`,
 publisher R43, adapter R27 and tracking R30 preserve model R1/covariance R1 and
@@ -21,7 +21,25 @@ The R7 legacy codec/mapping remains available for their exact interpretation;
 unlocked future publications alone adopt the new grade family. Existing source,
 fixture, DraftKings display, sole-writer/lease and runtime-limit repairs remain.
 
-## CBB contextual outcome reader — deployed, first refresh runtime repair
+Production commit `f93a6b9a5b1ac096fc3a1c35dfbe58d10e803279` was verified serving
+the exact private R1 artifact by 23:40:15Z. The normal R43 writer published at
+23:44:52Z and completed 23:45:19Z; the following scheduled cycle completed
+23:52:28Z. Both stayed within the 540-second route budget. Their only partial
+finding is the same three later incomplete fixtures 10882890/10882948/10882999,
+which remain internal; this is not a new grading failure.
+
+The 23:50:59Z capture has 15 unlocked new-policy games today: 10 Lean, 3 Best,
+23 Watch and 9 No Play across 45 markets. Twenty-seven already locked contextual
+games retain their exact R6 grades, with one older locked game separate. These
+are release-separated market counts, not additive UI game-filter counts or a
+promise that subsequent market inputs will produce the same board. All 68 new
+positive-value risk traces and 83 priced score laws passed bounded coherence
+checks. Both immutable baselines 173 locks/516 tracking rows and 176/525 remained
+exact. Live Duke: moneyline -100000 No Play, total Lean, spread Watch; Rice +3.5
+remains Lean. Eight raw-first cases found no concrete wiring or grade defect.
+This does not certify predictive accuracy or the working risk approximation.
+
+## Prior CBB R7/R6 contextual reader — preserved locked-record predecessor
 
 Deployed release identifiers for the owner-directed unified contextual reader:
 
