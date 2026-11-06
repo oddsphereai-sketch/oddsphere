@@ -59,6 +59,16 @@ lifecycle, lease release, member/market coverage and191 immutable lock hashes.
 The numerical Margin chat agreed to keep its shared docs clean and hold model
 publication; it will integrate this operational merge before its own release.
 
+The same nine-sport live audit found one diagnostic false positive: KU ML had
+the explicit visible whyLine/riskLine "The payout is too small for an actionable
+recommendation." at -20000, but the auditor's existing CBB reason list admitted
+only older machine phrases. The exact already-released sentence is now recognized
+as an explanation; no price, grade, reason, payload or reader is changed. The
+captured KU case, unexplained/generic-copy controls and exact locked/unlocked
+payload preservation are tested. On the same frozen491-game/1501-market reader
+capture, this corrects one false critical to zero while retaining126 future-price
+warnings. It is not a blanket exemption or a promise of good prediction accuracy.
+
 ## Limits and rollback
 
 Longer future inference or slow settlement can still reach the ceiling. Do not

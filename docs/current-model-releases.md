@@ -15,6 +15,10 @@ cron execution contract, not a numerical release or another writer. A larger
 ceiling is not a completion guarantee: preview/platform acceptance and an actual
 completed normal writer/settlement cycle remain required. Evidence:
 `model-audits/2026-11-06-cbb-writer-deadline.md`.
+The diagnostic audit also recognizes the exact already-displayed CBB payout
+hold explanation; it changes no card, grade or locked payload and still rejects
+unexplained No Plays. The same captured491-game audit changes one false critical
+to zero with all126 future-price warnings retained.
 
 ## November 6 evidence collection runtime contract
 

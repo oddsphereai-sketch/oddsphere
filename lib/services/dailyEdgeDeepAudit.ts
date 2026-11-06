@@ -674,6 +674,7 @@ export function auditDailyEdgeBoards(
             "non positive exact price value", "price too steep for actionable",
             "edge below actionable reserve", "professional opposition",
             "professional reference neutral", "professional reference mixed",
+            "the payout is too small for an actionable recommendation.",
           ].includes(String(market.whyLine ?? "").trim().toLowerCase());
           if (!neutralFirstInningDecision && !hasExplicitCapReason && !hasExplicitEconomicExplanation && !cbbEconomicExplanation) {
             push("no_play_positive_edge_needs_explanation", sport, game, slot, market, {
