@@ -39,3 +39,9 @@ The additive v61 migration must pass real PostgreSQL parity, invoker/RLS/role
 checks and locked-row immutability before protected publication and application.
 Live proof requires the current and future scoped frontiers, successful full
 rolling builder, normal publication R2/cron health and original locked hashes.
+
+Final integration base:4d061375974a2fa110dfe75298c4e3086268e84a (protected
+CBB R55 source handoff restoration). Both release declarations are retained.
+Actual old absent-future read returned57014 after8365ms; production read-only
+EXPLAIN of the replacement used the existing event index in1.54ms. The dedicated
+hosted PostgreSQL frontier proof passed. No production DDL before merge.

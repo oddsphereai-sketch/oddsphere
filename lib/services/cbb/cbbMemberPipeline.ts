@@ -1,3 +1,4 @@
+import {cbbProviderStoredSchoolMatches} from "@/lib/cbb/providerInstitutionIdentity";
 import {fetchCbbTheOddsApiCurrent,type CbbTheOddsApiReceipt} from "./cbbTheOddsApiCurrent";
 import {mergeCbbCurrentSourceQuotes} from "@/lib/cbb/currentSourceQuotes";
 import type { supabase } from "@/lib/db/supabase";
@@ -41,7 +42,7 @@ import {forecastCbbFullDivisionOneBatch} from "@/lib/cbb/fullDivisionOneForecast
 import {buildCbbGameForecastBoard} from "@/lib/cbb/gameForecastBoard";
 import type {CbbProvisionalBoard} from "@/lib/cbb/provisionalLifecycle";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_06_r54_verified_school_identity" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_06_r55_verified_school_pipeline_handoff" as const;
 /** Book/contract choice only. No prior projection, probability or grade runs. */
 export function selectCbbContextualPipelineTargets(quotes:CbbQuote[]):CbbQuote[]{
   const boardBook=chooseCbbSupportedTargetBook(quotes);
@@ -103,7 +104,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     const changed=games.filter(game=>{
       const prior=indexed.get(game.id);
       return !prior||Date.parse(prior.gameStartAt)!==Date.parse(game.date)||prior.status!==cbbCanonicalStatus(game)||
-        prior.homeTeamDisplayName!==game.home_team.full_name||prior.awayTeamDisplayName!==game.visitor_team.full_name;
+        !cbbProviderStoredSchoolMatches(prior.homeTeamDisplayName,game.home_team)||!cbbProviderStoredSchoolMatches(prior.awayTeamDisplayName,game.visitor_team);
     });
     if(changed.length){await args.syncFixtures(changed);schedule=await (args.loadSchedule??loadCbbRollingSchedule)(args.anchorDate);}
   }
@@ -114,7 +115,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   }).map(game=>{
     const canonical=scheduled.get(game.id);
     if(!expandedFixture(game)||!canonical||Date.parse(canonical.gameStartAt)!==Date.parse(game.date)||
-      canonical.homeTeamDisplayName!==game.home_team.full_name||canonical.awayTeamDisplayName!==game.visitor_team.full_name)return game;
+      !cbbProviderStoredSchoolMatches(canonical.homeTeamDisplayName,game.home_team)||!cbbProviderStoredSchoolMatches(canonical.awayTeamDisplayName,game.visitor_team))return game;
     return {...game,home_team:game.home_team.abbreviation?.trim()?game.home_team:{...game.home_team,abbreviation:canonical.homeTeam},
       visitor_team:game.visitor_team.abbreviation?.trim()?game.visitor_team:{...game.visitor_team,abbreviation:canonical.awayTeam}};
   });
@@ -353,8 +354,8 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     const seededStart=identity?Date.parse(identity.gameStartAt):NaN;
     const providerStart=Date.parse(game.date);
     if(!identity||!Number.isFinite(seededStart)||!Number.isFinite(providerStart)||seededStart!==providerStart||
-      identity.homeTeamDisplayName!==game.home_team.full_name||
-      identity.awayTeamDisplayName!==game.visitor_team.full_name){
+      !cbbProviderStoredSchoolMatches(identity.homeTeamDisplayName,game.home_team)||
+      !cbbProviderStoredSchoolMatches(identity.awayTeamDisplayName,game.visitor_team)){
       if(previous?.snapshot.lockedAt){
         memberGames.push(structuredClone(previous.memberGame));locked++;
         problems.push(`${game.id}:locked_provider_conflict_preserved`);continue;

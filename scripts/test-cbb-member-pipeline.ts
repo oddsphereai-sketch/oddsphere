@@ -213,4 +213,39 @@ async function main(){
   assert.deepEqual((published as DailyEdgeResponse).games[0],lockedMember,"the exact stored locked reader wins over new provider orientation");
   console.log("CBB member pipeline: exact fixture, pending-to-analyzed card, source price, coherent score, published snapshot and honest split absence passed.");
 }
-void main();
+async function verifiedWestFloridaHandoff(){
+  const anchorDate="2026-11-06",now="2026-11-06T20:00:00.000Z",date="2026-11-13T00:00:00.000Z";
+  // Freeze receipt completion as well as decision time; this fixture stays
+  // causal and deterministic after the real calendar passes November 2026.
+  const realDate=Date;
+  globalThis.Date=new Proxy(realDate,{construct:(target,args,newTarget)=>Reflect.construct(target,args.length?args:[now],newTarget),
+    get:(target,key,receiver)=>key==="now"?()=>realDate.parse(now):Reflect.get(target,key,receiver)});
+  try{
+  const fixture:CbbGame={...game,id:10883068,date,home_team:{...home,id:156,full_name:"Florida International Panthers",college:"Florida International",abbreviation:"FIU"},
+    visitor_team:{...away,id:732,full_name:"Argonauts",college:null,abbreviation:"WEST "}};
+  const canonical=buildCbbRollingSchedule({anchorDate,games:[{external_id:fixture.id,slate_date:"2026-11-12",game_date:date,status:"STATUS_SCHEDULED",home_team_id:156,away_team_id:732,venue:null}],
+    teams:[{id:156,external_id:156,abbreviation:"FIU",display_name:fixture.home_team.full_name,logo_url:null},
+      {id:732,external_id:732,abbreviation:"WEST",display_name:"Argonauts",logo_url:null}]});
+  assert.equal(canonical.games[0].awayTeamDisplayName,"West Florida Argonauts");
+  const provider={calls:0,gamesForDates:async()=>[fixture]} as unknown as CbbBallDontLieClient;
+  const noOdds={odds:async()=>({body:{success:true,data:[]},status:200}),splits:async()=>({body:splits,status:200})} as unknown as OwlsInsightClient;
+  let syncs=0;
+  const official={id:"west-florida-fiu-venue",date,competitions:[{neutralSite:false,timeValid:true,competitors:[
+    {homeAway:"home",team:{id:"2229",displayName:"Florida International Panthers",location:"Florida International"}},
+    {homeAway:"away",team:{id:"2697",displayName:"West Florida Argonauts",location:"West Florida"}}]}]};
+  const fixtureFetcher=(async()=>new Response(JSON.stringify({events:[official]}),{status:200})) as typeof fetch;
+  const args={loadContextualRuntime,anchorDate,season:2026,now,bdlKey:"test",owlsKey:"test",trainingGames:[],provider,owls:noOdds,db,fetcher:fixtureFetcher,
+    loadSchedule:async()=>canonical,saveSnapshot,syncFixtures:async()=>{syncs++;}};
+  const result=await refreshCbbMemberBoard(args);
+  assert.equal(result.published,1,"The complete publisher accepts raw school732 and its resolved schedule institution");
+  assert.equal(syncs,0,"An exact verified institution label needs no fixture resync");
+  assert.equal((published as DailyEdgeResponse|null)?.games[0].awayTeamDisplayName,"West Florida Argonauts");
+  assert(!result.problems.some(p=>p.includes("seed_identity_missing_or_changed")));
+  const before=JSON.stringify([...stored]);
+  const wrong={...canonical,games:canonical.games.map(g=>({...g,awayTeamDisplayName:"Other Argonauts"}))};
+  await assert.rejects(refreshCbbMemberBoard({...args,loadSchedule:async()=>wrong}),/lost exact games/);
+  assert.equal(JSON.stringify([...stored]),before,"Unverified labels cannot write or publish a mismatched game");
+  console.log("PASS full West Florida pipeline: corrected schedule/raw provider school732, no unnecessary sync, complete publication, wrong-school refusal and no mismatched writes");
+  }finally{globalThis.Date=realDate;}
+}
+void main().then(verifiedWestFloridaHandoff).catch(error=>{console.error(error);process.exitCode=1;});
