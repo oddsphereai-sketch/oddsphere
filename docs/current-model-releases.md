@@ -1,5 +1,33 @@
 # Current production model releases and qualified research candidates
 
+## November 6 current-contract resistance in CBB grades
+
+Owner-directed decision R12 / grade R11 / publisher R52 / adapter R35 / tracking
+R38 add a current own-book opposition caution after the exact final law.
+An ordered professional response against the selected side, aligned opposing
+composition and negative direct same-contract reference economics may move an
+otherwise actionable pick to Watchlist without changing its prediction.
+Cleared resistance restores the existing eligibility; no quota or mandatory
+support gate is added. Numerical model/calibration/evidence R7 and its pinned
+artifact stay exact, with the existing sole leased writer and provider cadence.
+R11/grade R10 confidence Leans, older R10/grade R9 and R1 locked families keep
+stored reader/writer/tracking precedence. This is a recommendation-policy
+repair, not validation of the retained raw Margin inference or a win-rate claim.
+Paired qualification/recovery tests, frozen board-count impact, full model gate,
+fresh-main protected PR and actual live writer/reader/lock proof are mandatory.
+NBA grade `nba_grade_policy_2026_11_06_r30_causal_best_qualification`
+also repairs an actual published Best Angle at55.5% recommendation confidence.
+The named-book causal promotion path must retain the existing62% confidence,
+high data quality, known injuries, real positive-value price, Moneyline steep
+price and direct-opposition boundaries. Strong qualified causal support can
+still promote a smaller economic-edge Lean; confidence Leans and all stored
+R29/R28 locks keep their own semantics. Numerical model R36 and marriage R38
+stay exact, with no new source, forecast, calibration, writer or provider call.
+Frozen R29 audit and paired strongest-tier demotion/qualified promotion controls
+are required along with current stored-input impact and actual live proof.
+
+See `docs/model-audits/2026-11-06-current-contract-market-resistance.md`.
+
 ## November 6 CBB writer runtime headroom
 
 Cron execution identifier

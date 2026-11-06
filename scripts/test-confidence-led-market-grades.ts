@@ -28,7 +28,7 @@ for (const market of ["moneyline", "spread", "total"] as const) {
   assert.equal(gradeNbaMarket({ ...x, namedBookPosture: posture }).grade, "lean", "confirmation cannot call a confidence-only Lean a positive-value Best");
   assert.equal(gradeNbaMarket({ ...x, namedBookPosture: { ...posture, supportingSources: [], opposingSources: ["circa", "pinnacle"] } }).grade, "watch", "real corroborated opposition still tempers confidence");
   const betterPrice = { ...x, band: "support" as const, currentPriceAmerican: -110, pairedOpposingPriceAmerican: -110, edge: .08 };
-  assert.equal(gradeNbaMarket({ ...betterPrice, namedBookPosture: posture }).grade, "best_angle");
+  assert.equal(gradeNbaMarket({ ...betterPrice, namedBookPosture: posture }).grade, "lean", "market confirmation cannot waive Best confidence");
   assert.equal(gradeNbaMarket({ ...betterPrice, confidence: 65, modelProbabilityOnPick: .65 }).grade, "best_angle", "stronger confidence can reach Best at the same sound price");
 }
 const first: NbaLineRow = { market_type: "spread", side: "home", line_value: -3.5, sportsbook: "draftkings", odds_american: -150, fetched_at: "2026-11-06T18:00:00Z" };
