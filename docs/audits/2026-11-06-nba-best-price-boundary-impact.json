@@ -1,0 +1,33 @@
+{
+  "at": "2026-11-06T21:36:46.369Z",
+  "asOf": "2026-11-06T21:13:50.545Z",
+  "captureSha256": "c26efa975862f2e0e917d2a0ce035ed574dce903cf67022c323379683236aba3",
+  "markets": 27,
+  "before": {
+    "best_angle": 1,
+    "lean": 6,
+    "watchlist": 20
+  },
+  "after": {
+    "lean": 7,
+    "watchlist": 20
+  },
+  "bestToLean": 1,
+  "actionablePromotions": 0,
+  "actionableDemotions": 0,
+  "changed": [
+    {
+      "game": "WSH@ATL",
+      "market": "moneyline",
+      "previous": "best_angle",
+      "next": "lean",
+      "price": -300,
+      "probability": 0.8136049439645139,
+      "locked": false
+    }
+  ],
+  "unchangedCapturedPayload": true,
+  "providerCalls": 0,
+  "productionWrites": 0,
+  "limits": "Frozen final price-tier policy only. A counterfactual never replaces a locked payload or establishes accuracy; source-read failure qualification is tested separately."
+}

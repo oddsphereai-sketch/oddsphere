@@ -85,11 +85,13 @@ export const NBA_BEST_ANGLE_MIN_EDGE_PROB = 0.04;
 export const NBA_BEST_ANGLE_MIN_CONFIDENCE = 62;
 
 /**
- * Best Angle is the board's strongest straight-bet tier. A favorite priced
- * at -400 or shorter requires risking at least four units to win one, so it
- * may remain an actionable Lean but cannot be promoted as a Best Angle.
+ * Best Angle is the board's strongest straight-bet tier. The owner requires
+ * Moneyline prices of -200 or better. More expensive winners can remain
+ * actionable Leans; Spread and Total qualification stay independent.
  */
-export const NBA_ML_BEST_ANGLE_MAX_FAVORITE_PRICE = -400;
+export const NBA_ML_BEST_ANGLE_MAX_FAVORITE_PRICE = -200;
+/** Frozen base economics; current publication applies its stricter final tier below. */
+const NBA_R30_ML_BEST_ANGLE_MAX_FAVORITE_PRICE = -400;
 
 export type MarketConflictBand =
   | "support"           // compatibility token: model has positive value versus the no-vig price
@@ -360,7 +362,22 @@ function memberBandPhrase(band: MarketConflictBand): string {
   }
 }
 
+/** Final strongest-tier price qualification; does not reforecast, flip a
+ * side, erase source opposition or promote a non-actionable recommendation.
+ * The legacy audit override cannot waive this current member-policy boundary. */
+export function applyNbaMoneylineBestPriceTier(input: Pick<GradeInput, "market" | "currentPriceAmerican">, incumbent: GradeOutput): GradeOutput {
+  if (incumbent.grade !== "best_angle" || input.market !== "moneyline" ||
+      input.currentPriceAmerican == null || input.currentPriceAmerican >= NBA_ML_BEST_ANGLE_MAX_FAVORITE_PRICE) return incumbent;
+  return { ...incumbent, grade: "lean", bestAngleEligible: false, rationale: [...incumbent.rationale,
+    "The forecast supports this winner, but the moneyline price is too expensive for Best Angle; this remains a Lean."] };
+}
+
 export function gradeNbaMarket(input: GradeInput): GradeOutput {
+  return applyNbaMoneylineBestPriceTier(input, applyNbaPostureToGrade(input, gradeNbaMarketEconomics(input)));
+}
+
+/** Exact pre-R31 current policy, including its -400 tier and R30 causal guard. */
+export function gradeNbaR30MarketForAudit(input: GradeInput): GradeOutput {
   return applyNbaPostureToGrade(input, gradeNbaMarketEconomics(input));
 }
 
@@ -469,7 +486,7 @@ function nbaCausalBestQualification(input: GradeInput): boolean {
       p < NBA_BEST_ANGLE_MIN_CONFIDENCE / 100 || p > 1 || !input.injuriesKnown || input.dataQualityTier !== "high" ||
       price == null || !Number.isFinite(price) || Math.abs(price) < 100 || (expectedReturn(p, price) ?? 0) <= 0) return false;
   if (input.market !== "moneyline") return true;
-  if (input.enforceSteepMoneylineBestAngleTier !== false && price <= NBA_ML_BEST_ANGLE_MAX_FAVORITE_PRICE) return false;
+  if (input.enforceSteepMoneylineBestAngleTier !== false && price <= NBA_R30_ML_BEST_ANGLE_MAX_FAVORITE_PRICE) return false;
   const evidence = input.moneylineEvidence;
   const directOpposes = evidence?.directReadQualified === true && evidence.directReadSide !== null && evidence.directReadSide !== input.pick;
   const spreadOpposes = evidence?.directReadQualified !== true && evidence?.spreadReadQualified === true &&
@@ -612,7 +629,7 @@ function gradeNbaMarketEconomics(input: GradeInput, legacyAudit = false, allowCo
     const pickedSide = input.pick === "home" || input.pick === "away" ? input.pick : null;
     const steepFavorite = input.market === "moneyline" &&
       input.currentPriceAmerican !== null && input.currentPriceAmerican !== undefined &&
-      input.currentPriceAmerican <= NBA_ML_BEST_ANGLE_MAX_FAVORITE_PRICE;
+      input.currentPriceAmerican <= NBA_R30_ML_BEST_ANGLE_MAX_FAVORITE_PRICE;
     if (input.enforceSteepMoneylineBestAngleTier !== false && steepFavorite) {
       rationale.push(
         "The model still projects a likely winner with positive value, but the current favorite price is too steep for Best Angle status.",

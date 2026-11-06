@@ -1,5 +1,31 @@
 # Current production model releases and qualified research candidates
 
+## November 6 NBA Best Moneyline prices and source-read integrity
+
+Owner-directed NBA grade R31 requires a Moneyline price of -200 or better for
+Best Angle; -235/-300 can remain Lean, with Spread qualification independent.
+The exact prior R30/R29/R28 audits and all stored locks keep their old policy.
+Model R36 and marriage R38 remain unchanged. No board quota is introduced.
+
+Publication `nba_reader_publication_2026_11_06_r1_complete_reads` rejects explicit
+price/split lookup failures before new decisions. Scoped high-water completion
+is required across short backend pages; malformed frontiers or premature empty
+pages are failed reads, not neutral markets. Future private captures include
+the compact range/count proof. NBA rebuild failures return
+503, retaining the previous published payload/as-of instead of independent-only
+or empty fresh replacements. Successful empty reads remain legitimate absence,
+with no supporting-book gate. A successful later read restores normal publishing.
+Safe phase codes enter the existing cron log; successful NBA snapshots carry
+this publication identifier. Healthy numerical forecasts/prices and the sole
+sport-scoped prediction pipeline, calls/cadence/lease remain exact.
+
+The crowded19:46 board is reproduced27/27 under a failed price read using1724
+historical split rows; exact prior SQL failure is inferred, not directly logged.
+The healthy27-market price replay changes one Best to Lean and removes no
+actives. Paired source recovery/price promotion, lock precedence, focused/full
+checks, protected current-main PR and natural live proof are mandatory.
+See `docs/model-audits/2026-11-06-nba-price-boundary-source-publication.md`.
+
 ## November 6 current-contract resistance in CBB grades
 
 Owner-directed decision R12 / grade R11 / publisher R52 / adapter R35 / tracking

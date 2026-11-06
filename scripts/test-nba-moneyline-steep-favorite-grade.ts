@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   gradeNbaMarket,
+  gradeNbaR30MarketForAudit,
   NBA_ML_BEST_ANGLE_MAX_FAVORITE_PRICE,
 } from "../lib/services/nba/nbaMarketReview";
 
@@ -23,11 +24,11 @@ const strongFavorite = {
   },
 };
 
-assert.equal(NBA_ML_BEST_ANGLE_MAX_FAVORITE_PRICE, -400);
+assert.equal(NBA_ML_BEST_ANGLE_MAX_FAVORITE_PRICE, -200);
 assert.equal(
   gradeNbaMarket(strongFavorite).grade,
   "lean",
-  "a favorite requiring at least four units of risk must remain below Best Angle",
+  "a favorite beyond the owner Best price boundary must remain below Best Angle",
 );
 assert.equal(
   gradeNbaMarket({
@@ -42,12 +43,12 @@ assert.equal(
   "market confirmation cannot turn a very steep favorite into a Best Angle",
 );
 assert.equal(
-  gradeNbaMarket({ ...strongFavorite, enforceSteepMoneylineBestAngleTier: false }).grade,
+  gradeNbaR30MarketForAudit({ ...strongFavorite, enforceSteepMoneylineBestAngleTier: false }).grade,
   "best_angle",
   "the audit hook must reproduce the superseded steep-favorite Best Angle",
 );
 assert.equal(
-  gradeNbaMarket({ ...strongFavorite, currentPriceAmerican: -399 }).grade,
+  gradeNbaMarket({ ...strongFavorite, currentPriceAmerican: -200 }).grade,
   "best_angle",
   "a favorite below the risk boundary remains eligible under the existing value gates",
 );

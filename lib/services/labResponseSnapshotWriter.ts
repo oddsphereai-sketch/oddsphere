@@ -1,3 +1,4 @@
+import {NBA_READER_PUBLICATION_RELEASE,nbaReaderFailureReceipt} from "./nba/nbaReaderPublication";
 import type { DailyEdgeResponse, TrackingResponse } from "@/app/lab/lib/labTypes";
 import type { Sport } from "@/lib/types/domain/Sport";
 import {
@@ -35,6 +36,7 @@ const TRACKING_SNAPSHOT_STALE_MS = Number(
 );
 
 type SnapshotWriteResult = {
+  sourceReadFailure?: ReturnType<typeof nbaReaderFailureReceipt>;
   ok: boolean;
   snapshotKey: string;
   status?: number;
@@ -163,7 +165,11 @@ export async function refreshDailyEdgeResponseSnapshot(input: {
   source?: string;
   /** Fail closed before persistence when a caller requires an exact slate state. */
   requiredSlateState?: DailyEdgeResponse["slateState"];
-}): Promise<SnapshotWriteResult> {
+}, dependencies: {
+  buildResponse?: (request:Request)=>Promise<Response>;
+  saveSnapshot?: typeof upsertLabResponseSnapshot;
+  expireMemberCache?: ()=>Promise<void>;
+} = {}): Promise<SnapshotWriteResult> {
   const allowStale = input.allowStale ?? false;
   const copyPreview = input.copyPreview ?? false;
   const snapshotKey = dailyEdgeSnapshotKey({
@@ -180,7 +186,7 @@ export async function refreshDailyEdgeResponseSnapshot(input: {
   }
 
   try {
-    const { GET } = await import("@/app/api/lab/daily-edge/route");
+    const GET = dependencies.buildResponse ?? (await import("@/app/api/lab/daily-edge/route")).GET;
     const url = new URL("https://oddsphere.internal/api/lab/daily-edge");
     url.searchParams.set("sport", input.sport);
     url.searchParams.set("date", input.date);
@@ -195,6 +201,7 @@ export async function refreshDailyEdgeResponseSnapshot(input: {
         ok: false,
         snapshotKey,
         status: response.status,
+        ...(input.sport === "nba" ? {sourceReadFailure:nbaReaderFailureReceipt(response)} : {}),
         error: body.error ?? `daily-edge snapshot build returned HTTP ${response.status}`,
       };
     }
@@ -208,7 +215,7 @@ export async function refreshDailyEdgeResponseSnapshot(input: {
       };
     }
 
-    const write = await upsertLabResponseSnapshot({
+    const write = await (dependencies.saveSnapshot ?? upsertLabResponseSnapshot)({
       snapshotKey,
       kind: "daily_edge",
       sport: input.sport,
@@ -217,10 +224,11 @@ export async function refreshDailyEdgeResponseSnapshot(input: {
       ttlMs: DAILY_EDGE_SNAPSHOT_TTL_MS,
       staleMs: DAILY_EDGE_SNAPSHOT_STALE_MS,
       source: input.source ?? "cron",
+      ...(input.sport === "nba" ? {payloadVersion:NBA_READER_PUBLICATION_RELEASE} : {}),
     });
 
     if (!write.ok) return { ok: false, snapshotKey, games: body.games?.length ?? 0, error: write.error };
-    await expirePublishedDailyEdgeMemberCache();
+    await (dependencies.expireMemberCache ?? expirePublishedDailyEdgeMemberCache)();
     return {
       ok: true,
       snapshotKey,

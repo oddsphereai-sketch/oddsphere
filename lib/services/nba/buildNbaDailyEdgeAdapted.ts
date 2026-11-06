@@ -1,3 +1,4 @@
+import {assertNbaReaderEvidenceComplete,advanceNbaEvidencePage,nbaEvidenceHighWaterError,NBA_READER_PUBLICATION_RELEASE} from "./nbaReaderPublication";
 /**
  * Phase 7G (launch prep) — NBA → adapted Daily Edge response builder.
  *
@@ -340,6 +341,7 @@ export async function buildNbaDailyEdgePipeline(
   // member-card adapter: the pipeline reads the market; the adapter only
   // renders the forecast that the pipeline has already produced.
   const readerEvidenceErrors: string[] = [];
+  const readerReadCoverage={release:NBA_READER_PUBLICATION_RELEASE,prices:{highWater:0,lastRead:0,rows:0},splits:{highWater:0,lastRead:0,rows:0}};
   const readerSplitRowsByGame = new Map<number, NbaReaderSplitRow[]>();
   if (gameExternalIds.length > 0) {
     type ReaderSplitDbRow = {
@@ -368,6 +370,8 @@ export async function buildNbaDailyEdgePipeline(
       .maybeSingle();
     if (splitHighWaterRead.error) readerEvidenceErrors.push("split_observation_high_water_failed");
     const splitHighWaterId = Number(splitHighWaterRead.data?.id ?? 0);
+    const splitFrontierError=nbaEvidenceHighWaterError("split",splitHighWaterId);
+    if(splitFrontierError)readerEvidenceErrors.push(splitFrontierError);
     while (lastSplitId < splitHighWaterId) {
       const page = await supabase
         .from("market_split_observations_v2")
@@ -383,14 +387,12 @@ export async function buildNbaDailyEdgePipeline(
         break;
       }
       const data = (page.data ?? []) as ReaderSplitDbRow[];
-      if (data.some((row, index) => !Number.isInteger(row.id) || row.id <= (index === 0 ? lastSplitId : data[index - 1]!.id))) {
-        readerEvidenceErrors.push("split_observation_id_order_invalid");
-        break;
-      }
+      const progress=advanceNbaEvidencePage({family:"split",cursor:lastSplitId,highWater:splitHighWaterId,rows:data});
+      if(progress.error){readerEvidenceErrors.push(progress.error);break;}
       rows.push(...data);
-      if (data.length < NBA_READER_EVIDENCE_PAGE_SIZE) break;
-      lastSplitId = data.at(-1)!.id;
+      lastSplitId=progress.cursor;
     }
+    readerReadCoverage.splits={highWater:splitHighWaterId,lastRead:lastSplitId,rows:rows.length};
     for (const row of rows) {
       const externalId = Number(row.canonical_event_id);
       if (!Number.isFinite(externalId) || !["moneyline", "spread", "total"].includes(row.market_type)) continue;
@@ -433,6 +435,9 @@ export async function buildNbaDailyEdgePipeline(
     const priceHighWaterRead = await readMarketPriceHighWater(supabase, "nba", gameExternalIds.map(String));
     if (priceHighWaterRead.error) readerEvidenceErrors.push("price_observation_high_water_failed");
     const priceHighWaterId = priceHighWaterRead.id;
+    const knownPriceHistory=[...priorKnowledgeByExternalId.values()].some(state=>Object.keys(state.anchors).length>0);
+    const priceFrontierError=nbaEvidenceHighWaterError("price",priceHighWaterId,knownPriceHistory);
+    if(priceFrontierError)readerEvidenceErrors.push(priceFrontierError);
     while (lastPriceId < priceHighWaterId) {
       const page = await supabase
         .from("market_price_observations_v2")
@@ -448,14 +453,12 @@ export async function buildNbaDailyEdgePipeline(
         break;
       }
       const data = (page.data ?? []) as ReaderPriceDbRow[];
-      if (data.some((row, index) => !Number.isInteger(row.id) || row.id <= (index === 0 ? lastPriceId : data[index - 1]!.id))) {
-        readerEvidenceErrors.push("price_observation_id_order_invalid");
-        break;
-      }
+      const progress=advanceNbaEvidencePage({family:"price",cursor:lastPriceId,highWater:priceHighWaterId,rows:data});
+      if(progress.error){readerEvidenceErrors.push(progress.error);break;}
       rows.push(...data);
-      if (data.length < NBA_READER_EVIDENCE_PAGE_SIZE) break;
-      lastPriceId = data.at(-1)!.id;
+      lastPriceId=progress.cursor;
     }
+    readerReadCoverage.prices={highWater:priceHighWaterId,lastRead:lastPriceId,rows:rows.length};
     for (const row of rows) {
       const externalId = Number(row.canonical_event_id);
       if (
@@ -480,6 +483,10 @@ export async function buildNbaDailyEdgePipeline(
       readerPriceRowsByGame.set(externalId, gameReaderRows);
     }
   }
+
+  // Preserve the prior complete publication/records on a failed evidence read.
+  // Successful empty reads remain valid; no supporting-source gate is added.
+  assertNbaReaderEvidenceComplete(readerEvidenceErrors);
 
   // Use the same fully paginated canonical chronology as the professional
   // reader. A direct line_history query silently stopped at 1,000 rows and
@@ -610,6 +617,8 @@ export async function buildNbaDailyEdgePipeline(
     });
     dto.grounding_audit = {
       release: NBA_MARKET_MARRIAGE_RELEASE,
+      source_read_release: NBA_READER_PUBLICATION_RELEASE,
+      reader_read_coverage: readerReadCoverage,
       independent_primary: false,
       independent_role: "pristine_forecast_input_to_joint_market_decision",
       ...(options.prelockMarketCapture?.externalIds.includes(s.game_external_id)

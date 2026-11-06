@@ -114,6 +114,23 @@ const r29Response=adaptNbaToDailyEdgeResponse({as_of:"2026-11-06T20:30:00Z",slat
 assert.equal(r29Response.games[0].markets.moneyline.verdict.key,"best_angle");
 assert.equal(r29Response.games[0].markets.moneyline.recommendationConfidence,55.5);
 assert.equal(JSON.stringify(r29Rows),r29Bytes,"R29 grades, confidence and source payloads remain exact");
+const r30PriceLocked=structuredClone(locked);
+r30PriceLocked.intelligence.grade_policy_release="nba_grade_policy_2026_11_06_r30_causal_best_qualification";
+r30PriceLocked.intelligence.ml.grade="best_angle";
+r30PriceLocked.intelligence.ml.current_price={odds_american:-300,odds_decimal:4/3,sportsbook:"draftkings",fetched_at:"2026-10-20T21:59:00Z"};
+const r30PriceMember=structuredClone(lockedMemberGame);
+r30PriceMember.markets.moneyline.verdict={key:"best_angle",label:"Best Angle"};
+r30PriceMember.markets.moneyline.priceAmerican=-300;
+r30PriceMember.markets.moneyline.currentPriceAmerican=-300;
+const r30PriceCapture=buildNbaLockedMemberCapture({gameDto:r30PriceLocked,memberGame:r30PriceMember});
+const r30PriceRows=rows.map(row=>({...row,snapshot_json:r30PriceCapture})),r30PriceBytes=JSON.stringify(r30PriceRows);
+const r31Dynamic=structuredClone(r29Dynamic);r31Dynamic.intelligence.grade_policy_release="nba_grade_policy_2026_11_06_r31_moneyline_best_price_boundary";
+const r30PriceRestored=applyNbaLockedMemberSnapshotPrecedence({games:[r31Dynamic],dbIdByExternalId:map,rows:r30PriceRows});
+assert.equal(r30PriceRestored.games[0].intelligence.ml.grade,"best_angle");assert.equal(r30PriceRestored.games[0].intelligence.ml.current_price.odds_american,-300);
+const r30PriceResponse=adaptNbaToDailyEdgeResponse({as_of:"2026-11-06T21:00:00Z",slate_date_et:"2026-10-20",market_signals_capability:"available",games:r30PriceRestored.games} as NbaDailyEdgeDto,
+ {lockedMemberGamesByExternalId:r30PriceRestored.memberGamesByExternalId});
+assert.equal(r30PriceResponse.games[0].markets.moneyline.verdict.key,"best_angle");assert.equal(r30PriceResponse.games[0].markets.moneyline.priceAmerican,-300);
+assert.equal(JSON.stringify(r30PriceRows),r30PriceBytes,"R31 price ceiling cannot retroactively regrade an R30 locked Best");
 assert.equal(capture.nba_locked_member_snapshot_release, NBA_LOCKED_MEMBER_SNAPSHOT_RELEASE);
 assert.deepEqual(restored.memberGamesByExternalId.get(9001), {
   ...lockedMemberGame,
