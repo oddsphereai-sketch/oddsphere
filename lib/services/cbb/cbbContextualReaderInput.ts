@@ -12,7 +12,7 @@ import {cbbCanonicalBehaviorInputs} from "./cbbCanonicalBehaviorInputs";
 import type {pairCbbCanonicalMarketEvidence} from "./cbbCanonicalMarketEvidence";
 import {CBB_PROVIDER_IDENTITY_RELEASE} from "../../cbb/providerInstitutionIdentity";
 
-export const CBB_CONTEXTUAL_READER_INPUT_RELEASE="cbb_contextual_reader_input_2026_11_06_r5_current_source_identity" as const;
+export const CBB_CONTEXTUAL_READER_INPUT_RELEASE="cbb_contextual_reader_input_2026_11_06_r6_verified_provider_school_identity" as const;
 const professional=(book:string)=>["circa","pinnacle","bookmaker"].includes(cbbPathBookFamily(book));
 // The journal query uses its actual producer roster. A directly normalized
 // provider quote may be another physical consumer book (e.g. Caesars); it must

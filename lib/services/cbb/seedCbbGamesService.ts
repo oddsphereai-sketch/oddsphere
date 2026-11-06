@@ -1,3 +1,4 @@
+import {cbbProviderStoredSchoolMatches} from "../../cbb/providerInstitutionIdentity";
 import type { supabase as SupabaseClient } from "../../db/supabase";
 import { CbbBallDontLieClient } from "../../cbb/ballDontLie";
 import { assertCbbFixtureRefreshSafe, cbbFixtureIdentityWouldChange, cbbLockedTerminalScore, cbbCanonicalGamePayload, cbbCanonicalStatus,
@@ -106,7 +107,7 @@ export async function seedCbbGames(options: SeedOptions) {
     const existing = new Map((before.data ?? []).map(row => [Number(row.external_id), row]));
     for (const team of batch) {
       const prior = existing.get(team.external_id);
-      if (prior && prior.display_name !== team.display_name) {
+      if (prior && !cbbProviderStoredSchoolMatches(prior.display_name,{id:team.external_id,full_name:team.display_name,college:team.location})) {
         throw new Error(`CBB team ${team.external_id} has a conflicting stored identity`);
       }
     }
@@ -123,7 +124,7 @@ export async function seedCbbGames(options: SeedOptions) {
     }
     for (const row of after.data) {
       const expected = batch.find(team => team.external_id === Number(row.external_id));
-      if (!expected || row.display_name !== expected.display_name) {
+      if (!expected || !cbbProviderStoredSchoolMatches(row.display_name,{id:Number(row.external_id),full_name:expected.display_name,college:expected.location})) {
         throw new Error(`CBB team ${row.external_id} changed identity during seed`);
       }
       teamDbIds.set(Number(row.external_id), Number(row.id));
@@ -186,7 +187,7 @@ export async function seedCbbGames(options: SeedOptions) {
       const originalHome=[...teams.values()].find(team=>teamDbIds.get(team.id)===previous.home_team_id);
       const originalAway=[...teams.values()].find(team=>teamDbIds.get(team.id)===previous.away_team_id);
       const memberIdentityVerified=member&&Date.parse(member.start)===Date.parse(previous.game_date)
-        &&member.home===originalHome?.full_name&&member.away===originalAway?.full_name;
+        &&originalHome&&originalAway&&cbbProviderStoredSchoolMatches(member.home,originalHome)&&cbbProviderStoredSchoolMatches(member.away,originalAway);
       const terminal = memberIdentityVerified?cbbLockedTerminalScore(previous,payload):null;
       if(terminal){
         terminalScoresMappedToLockedIdentity.push(game.id);

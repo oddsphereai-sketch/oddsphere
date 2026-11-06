@@ -1,3 +1,4 @@
+import {cbbProviderStoredSchoolMatches} from "@/lib/cbb/providerInstitutionIdentity";
 import {resolveCbbContextualOutcomeRelease,readCbbContextualOutcomeEvidence,type CbbReleasedOutcomeBoard} from "./cbbContextualOutcomeRuntime";
 import {CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_RESISTANCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE} from "@/lib/cbb/contextualOutcomeBoard";
 import {CBB_NATIVE_COUNTERPRESSURE_MODEL_RELEASE,CBB_NATIVE_COUNTERPRESSURE_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
@@ -21,7 +22,7 @@ import {CBB_CROSS_DIVISION_SCORE_RELEASE,CBB_FULL_D1_COVERAGE_START} from "@/lib
 import {CBB_GAME_FORECAST_GRADE_RELEASE,CBB_GAME_OUTCOME_RELEASE} from "@/lib/cbb/gameForecastBoard";
 import {normalCdf} from "@/lib/cbb/model";
 
-export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_06_r39_moneyline_wager_price_boundaries" as const;
+export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_06_r40_verified_school_identity" as const;
 /** Hash stored JSON independently of PostgreSQL jsonb object-key ordering. */
 export function cbbTrackingEvidenceSha256(record:CbbStoredMemberGame):string {
   const sorted=(value:unknown):unknown=>Array.isArray(value)?value.map(sorted)
@@ -142,7 +143,7 @@ export async function writeLockedCbbTracking(record: CbbStoredMemberGame, db?: t
     const zero=contextual?0:normalCdf((.5-margin)/sd)-normalCdf((-.5-margin)/sd);
     const probability=contextual?contextual.decision.finalScore.homeWinProbability:(1-normalCdf((.5-margin)/sd))/(1-zero);
     if(!home||!away||Number(home.external_id)!==outcome.homeId||Number(away.external_id)!==outcome.awayId||
-      home.display_name!==memberGame.homeTeamDisplayName||away.display_name!==memberGame.awayTeamDisplayName||
+      !cbbProviderStoredSchoolMatches(memberGame.homeTeamDisplayName,{id:Number(home.external_id),full_name:home.display_name,college:null})||!cbbProviderStoredSchoolMatches(memberGame.awayTeamDisplayName,{id:Number(away.external_id),full_name:away.display_name,college:null})||
       !Number.isFinite(sd)||sd<=0||!Number.isFinite(probability)||Math.abs(probability-outcome.homeWinProbability)>1e-10)
       throw Error("CBB frozen game winner has invalid school identity or score law");
   }

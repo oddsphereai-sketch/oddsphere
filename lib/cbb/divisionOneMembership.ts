@@ -1,5 +1,6 @@
 import membership from "./artifacts/division-one-membership-2026-r1.json";
 import type { CbbTeam } from "./types";
+import {cbbProviderStoredSchoolMatches} from "./providerInstitutionIdentity";
 
 export const CBB_DIVISION_ONE_MEMBERSHIP_RELEASE=membership.release;
 const members=new Map(membership.members.map(row=>[row.bdl,row]));
@@ -14,7 +15,7 @@ export function cbbDivisionOneTeamIds(season:number):ReadonlySet<number>{
 export function isCbbDivisionOneTeam(team:Pick<CbbTeam,"id"|"full_name">,season:number):boolean{
   if(season!==membership.season)throw Error("CBB Division I membership season needs renewal");
   const row=members.get(team.id);
-  if(row&&row.bdlName!==team.full_name)throw Error(`CBB Division I school identity changed: ${team.id}`);
+  if(row&&!cbbProviderStoredSchoolMatches(row.bdlName,{...team,college:null}))throw Error(`CBB Division I school identity changed: ${team.id}`);
   return !!row;
 }
 export function cbbDivisionOneFixture(game:{season:number;home_team:CbbTeam;visitor_team:CbbTeam}){

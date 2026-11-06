@@ -1,3 +1,4 @@
+import {cbbProviderStoredSchoolMatches} from "@/lib/cbb/providerInstitutionIdentity";
 import type { supabase } from "@/lib/db/supabase";
 import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import { CbbFixtureClockError,advanceCbbProvisionalSnapshot, type CbbProvisionalBoard, type CbbProvisionalSnapshot } from "@/lib/cbb/provisionalLifecycle";
@@ -67,8 +68,8 @@ export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisi
   const client=db??(await import("@/lib/db/supabase")).supabase;
   const existing=await readCbbMemberGame(args.game.id,client);
   if(existing&&existing.snapshot.lockedAt!==null)return {record:existing,written:false};
-  if(existing&&(existing.memberGame.homeTeamDisplayName!==args.game.home_team.full_name||
-    existing.memberGame.awayTeamDisplayName!==args.game.visitor_team.full_name||
+  if(existing&&(!cbbProviderStoredSchoolMatches(existing.memberGame.homeTeamDisplayName,args.game.home_team)||
+    !cbbProviderStoredSchoolMatches(existing.memberGame.awayTeamDisplayName,args.game.visitor_team)||
     existing.snapshot.board.gameForecast&&(existing.snapshot.board.gameForecast.homeId!==args.game.home_team.id||
       existing.snapshot.board.gameForecast.awayId!==args.game.visitor_team.id)))
     throw new Error("CBB stored school identity changed; fixture-clock repair is not a matchup migration");
