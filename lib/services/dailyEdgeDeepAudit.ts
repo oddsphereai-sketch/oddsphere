@@ -670,11 +670,12 @@ export function auditDailyEdgeBoards(
             displayReason.includes("doesn't leave enough value");
           // CBB serializes its released grade reason in whyLine. A positive
           // no-vig gap can still have negative EV at the actual payout.
-          const cbbEconomicExplanation = sport === "cbb" && [
+          const cbbEconomicExplanation = displayReason.includes("the moneyline is more expensive than -500; the winner prediction remains visible, but this wager is no play.") || sport === "cbb" && [
             "non positive exact price value", "price too steep for actionable",
             "edge below actionable reserve", "professional opposition",
             "professional reference neutral", "professional reference mixed",
             "the payout is too small for an actionable recommendation.",
+            "the moneyline is more expensive than -500; the winner prediction remains visible, but this wager is no play.",
           ].includes(String(market.whyLine ?? "").trim().toLowerCase());
           if (!neutralFirstInningDecision && !hasExplicitCapReason && !hasExplicitEconomicExplanation && !cbbEconomicExplanation) {
             push("no_play_positive_edge_needs_explanation", sport, game, slot, market, {

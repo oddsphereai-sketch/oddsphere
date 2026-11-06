@@ -23,6 +23,7 @@ export const GRADE_LABEL: Record<RecommendationGrade, string> = {
   lean: "Lean",
   watch: "Watchlist",
   caution: "Caution",
+  no_play: "No Play",
   no_market: "No Market",
   held: "Held",
 };
@@ -32,6 +33,7 @@ export const GRADE_GLYPH: Record<RecommendationGrade, string> = {
   lean: "↗",
   watch: "◐",
   caution: "⚠",
+  no_play: "·",
   no_market: "·",
   held: "○",
 };
@@ -41,6 +43,7 @@ export const GRADE_TEXT_COLOR: Record<RecommendationGrade, string> = {
   lean: "text-sky-300",
   watch: "text-indigo-300",
   caution: "text-amber-300",
+  no_play: "text-gray-400",
   no_market: "text-gray-400",
   held: "text-gray-500",
 };
@@ -53,6 +56,7 @@ export const GRADE_BAND_TINT: Record<RecommendationGrade, string> = {
     "from-white/[0.04] via-white/[0.015] to-transparent border-white/[0.08]",
   caution:
     "from-amber-500/[0.12] via-amber-500/[0.04] to-transparent border-amber-500/30",
+  no_play: "from-gray-800/40 via-gray-800/15 to-transparent border-gray-700/40",
   no_market: "from-gray-800/40 via-gray-800/15 to-transparent border-gray-700/40",
   held: "from-gray-800/40 via-gray-800/15 to-transparent border-gray-700/40",
 };
@@ -65,6 +69,7 @@ export const GRADE_PILL_TINT: Record<RecommendationGrade, string> = {
     "bg-indigo-500/[0.08] border-indigo-500/25 hover:bg-indigo-500/[0.14] hover:border-indigo-400/45",
   caution:
     "bg-amber-500/[0.10] border-amber-500/30 hover:bg-amber-500/[0.16] hover:border-amber-400/45",
+  no_play: "bg-gray-900/40 border-gray-700/40",
   no_market: "bg-gray-900/40 border-gray-700/40",
   held: "bg-gray-900/40 border-gray-700/40",
 };
@@ -74,6 +79,7 @@ export const GRADE_GLOW: Record<RecommendationGrade, string> = {
   lean: "",
   watch: "",
   caution: "drop-shadow-[0_0_5px_rgba(251,191,36,0.50)]",
+  no_play: "",
   no_market: "",
   held: "",
 };

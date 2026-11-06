@@ -4806,6 +4806,25 @@ function splitSetAt(capturedAt: string) {
   return result;
 }
 
+// Immediately preceding R61 records stay readable without current price requalification.
+const legacyPricePayload=structuredClone(payload);
+legacyPricePayload.decisions.decisionRelease="cfb_v1_daily_edge_decision_2026_11_05_r61_professional_pressure_reaction" as typeof legacyPricePayload.decisions.decisionRelease;
+legacyPricePayload.decisions.policyRelease="cfb_v1_composite_grade_policy_2026_11_05_r32_professional_pressure_reaction" as typeof legacyPricePayload.decisions.policyRelease;
+legacyPricePayload.authoritativeForecast!.release="cfb_market_sharp_aware_production_2026_11_05_r43_professional_pressure_reaction" as NonNullable<typeof legacyPricePayload.authoritativeForecast>["release"];
+for(const d of legacyPricePayload.decisions.evaluatedBets){
+ d.decisionRelease=legacyPricePayload.decisions.decisionRelease;d.policyRelease=legacyPricePayload.decisions.policyRelease;
+ if(d.gradeAdjustment)d.gradeAdjustment.release=legacyPricePayload.authoritativeForecast!.release;
+}
+const legacyPriceRow={...evidence,id:"r61-price-legacy",payload:legacyPricePayload,payloadSha256:hashCfbForwardEvidencePayload(legacyPricePayload)},legacyPriceBytes=JSON.stringify(legacyPriceRow);
+const legacyPriceMember=buildCfbMemberFixtureAtTime([legacyPriceRow],lockedAt);
+assert.equal(legacyPriceMember.snapshot.games.length,1);assert.equal(legacyPriceMember.snapshot.games[0]!.lockedAt,lockedAt);
+for(const kind of ["moneyline","spread","total"] as const){const d=legacyPricePayload.decisions.evaluatedBets.find(d=>d.market===kind)!;
+ const m=legacyPriceMember.snapshot.games[0]!.markets[kind==="spread"?"first_inning":kind];assert.equal(m.priceAmerican,d.evaluatedQuote.price);}
+const legacyPriceTracking=buildCfbOfficialTrackingRecords({payload:legacyPricePayload,gameId:9001});
+assert.equal(legacyPriceTracking.length,legacyPricePayload.decisions.evaluatedBets.length);
+for(const r of legacyPriceTracking){assert.equal(r.model_version,legacyPricePayload.decisions.decisionRelease);const d=legacyPricePayload.decisions.evaluatedBets.find(d=>d.market===r.market)!;assert.equal(r.odds_american,d.evaluatedQuote.price);assert.equal(r.calibration_version,d.calibrationRelease);}
+assert.equal(cfbLockPlanningEvidence([legacyPriceRow]).length,1);assert.equal(JSON.stringify(legacyPriceRow),legacyPriceBytes);
+
 function normalizeSportsbook(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }

@@ -1,0 +1,588 @@
+{
+  "release": "moneyline_price_policy_2026_11_06_r1_owner_boundaries",
+  "captureSha256": "c26efa975862f2e0e917d2a0ce035ed574dce903cf67022c323379683236aba3",
+  "sports": [
+    {
+      "sport": "soccer",
+      "asOf": "2026-11-06T21:07:45.446Z",
+      "markets": 30,
+      "before": {
+        "no_play": 9,
+        "lean": 7,
+        "watchlist": 14
+      },
+      "after": {
+        "no_play": 9,
+        "lean": 7,
+        "watchlist": 14
+      },
+      "today": {
+        "markets": 3,
+        "before": {
+          "no_play": 2,
+          "lean": 1
+        },
+        "after": {
+          "no_play": 2,
+          "lean": 1
+        }
+      },
+      "actionablePromotions": 0,
+      "actionableDemotions": 0,
+      "changed": [],
+      "legacyLocksPreserved": []
+    },
+    {
+      "sport": "wnba",
+      "asOf": "2026-11-06T20:53:41.787Z",
+      "markets": 0,
+      "before": {},
+      "after": {},
+      "today": {
+        "markets": 0,
+        "before": {},
+        "after": {}
+      },
+      "actionablePromotions": 0,
+      "actionableDemotions": 0,
+      "changed": [],
+      "legacyLocksPreserved": []
+    },
+    {
+      "sport": "mlb",
+      "asOf": "2026-11-06T08:05:49.349Z",
+      "markets": 0,
+      "before": {},
+      "after": {},
+      "today": {
+        "markets": 0,
+        "before": {},
+        "after": {}
+      },
+      "actionablePromotions": 0,
+      "actionableDemotions": 0,
+      "changed": [],
+      "legacyLocksPreserved": []
+    },
+    {
+      "sport": "ucl",
+      "asOf": "2026-11-05T22:17:37.876Z",
+      "markets": 54,
+      "before": {
+        "lean": 17,
+        "watchlist": 32,
+        "no_play": 5
+      },
+      "after": {
+        "lean": 17,
+        "watchlist": 32,
+        "no_play": 5
+      },
+      "today": {
+        "markets": 0,
+        "before": {},
+        "after": {}
+      },
+      "actionablePromotions": 0,
+      "actionableDemotions": 0,
+      "changed": [],
+      "legacyLocksPreserved": []
+    },
+    {
+      "sport": "nhl",
+      "asOf": "2026-11-06T21:00:56.859Z",
+      "markets": 9,
+      "before": {
+        "lean": 4,
+        "watchlist": 5
+      },
+      "after": {
+        "lean": 4,
+        "watchlist": 5
+      },
+      "today": {
+        "markets": 9,
+        "before": {
+          "lean": 4,
+          "watchlist": 5
+        },
+        "after": {
+          "lean": 4,
+          "watchlist": 5
+        }
+      },
+      "actionablePromotions": 0,
+      "actionableDemotions": 0,
+      "changed": [],
+      "legacyLocksPreserved": []
+    },
+    {
+      "sport": "nfl",
+      "asOf": "2026-11-06T20:06:52.603Z",
+      "markets": 42,
+      "before": {
+        "lean": 13,
+        "watchlist": 7,
+        "best_angle": 5,
+        "no_play": 17
+      },
+      "after": {
+        "lean": 13,
+        "watchlist": 7,
+        "best_angle": 5,
+        "no_play": 17
+      },
+      "today": {
+        "markets": 0,
+        "before": {},
+        "after": {}
+      },
+      "actionablePromotions": 0,
+      "actionableDemotions": 0,
+      "changed": [],
+      "legacyLocksPreserved": []
+    },
+    {
+      "sport": "nba",
+      "asOf": "2026-11-06T21:13:50.545Z",
+      "markets": 153,
+      "before": {
+        "best_angle": 1,
+        "lean": 6,
+        "watchlist": 20,
+        "no_play": 126
+      },
+      "after": {
+        "lean": 7,
+        "watchlist": 19,
+        "no_play": 127
+      },
+      "today": {
+        "markets": 27,
+        "before": {
+          "best_angle": 1,
+          "lean": 6,
+          "watchlist": 20
+        },
+        "after": {
+          "lean": 7,
+          "watchlist": 19,
+          "no_play": 1
+        }
+      },
+      "actionablePromotions": 0,
+      "actionableDemotions": 0,
+      "changed": [
+        {
+          "gameId": 401909287,
+          "matchup": "WSH@ATL",
+          "market": "moneyline",
+          "price": -300,
+          "probability": 0.8136049439645139,
+          "previous": "best_angle",
+          "next": "lean"
+        },
+        {
+          "gameId": 401909295,
+          "matchup": "SA@SAC",
+          "market": "moneyline",
+          "price": -1300,
+          "probability": 0.9103605514876862,
+          "previous": "watchlist",
+          "next": "no_play"
+        }
+      ],
+      "legacyLocksPreserved": []
+    },
+    {
+      "sport": "cfb",
+      "asOf": "2026-11-06T21:10:45.045Z",
+      "markets": 300,
+      "before": {
+        "lean": 72,
+        "watchlist": 105,
+        "best_angle": 22,
+        "no_play": 101
+      },
+      "after": {
+        "lean": 69,
+        "watchlist": 94,
+        "best_angle": 22,
+        "no_play": 115
+      },
+      "today": {
+        "markets": 15,
+        "before": {
+          "lean": 5,
+          "watchlist": 7,
+          "best_angle": 1,
+          "no_play": 2
+        },
+        "after": {
+          "lean": 5,
+          "watchlist": 7,
+          "best_angle": 1,
+          "no_play": 2
+        }
+      },
+      "actionablePromotions": 0,
+      "actionableDemotions": 3,
+      "changed": [
+        {
+          "gameId": 459644,
+          "matchup": "SAM@ETSU",
+          "market": "moneyline",
+          "price": -620,
+          "probability": 0.6770606793911524,
+          "previous": "watchlist",
+          "next": "no_play"
+        },
+        {
+          "gameId": 459034,
+          "matchup": "SDST@UNI",
+          "market": "moneyline",
+          "price": -650,
+          "probability": 0.7584125264912922,
+          "previous": "watchlist",
+          "next": "no_play"
+        },
+        {
+          "gameId": 458477,
+          "matchup": "ULM@ARST",
+          "market": "moneyline",
+          "price": -650,
+          "probability": 0.8778466388738455,
+          "previous": "lean",
+          "next": "no_play"
+        },
+        {
+          "gameId": 459315,
+          "matchup": "SEMO@TNST",
+          "market": "moneyline",
+          "price": -520,
+          "probability": 0.7962530433208422,
+          "previous": "watchlist",
+          "next": "no_play"
+        },
+        {
+          "gameId": 457432,
+          "matchup": "RICE@UNT",
+          "market": "moneyline",
+          "price": -750,
+          "probability": 0.9439803798118591,
+          "previous": "watchlist",
+          "next": "no_play"
+        },
+        {
+          "gameId": 457781,
+          "matchup": "RUTG@WIS",
+          "market": "moneyline",
+          "price": -950,
+          "probability": 0.7484831343121332,
+          "previous": "watchlist",
+          "next": "no_play"
+        },
+        {
+          "gameId": 459819,
+          "matchup": "EKU@APSU",
+          "market": "moneyline",
+          "price": -1100,
+          "probability": 0.8926725408371365,
+          "previous": "watchlist",
+          "next": "no_play"
+        },
+        {
+          "gameId": 458089,
+          "matchup": "BOIS@CSU",
+          "market": "moneyline",
+          "price": -880,
+          "probability": 0.7943289244500662,
+          "previous": "watchlist",
+          "next": "no_play"
+        },
+        {
+          "gameId": 458498,
+          "matchup": "UTU@UCD",
+          "market": "moneyline",
+          "price": -800,
+          "probability": 0.7326195038976127,
+          "previous": "watchlist",
+          "next": "no_play"
+        },
+        {
+          "gameId": 457786,
+          "matchup": "SHSU@JXST",
+          "market": "moneyline",
+          "price": -750,
+          "probability": 0.9382263391071527,
+          "previous": "watchlist",
+          "next": "no_play"
+        },
+        {
+          "gameId": 457775,
+          "matchup": "MSU@MICH",
+          "market": "moneyline",
+          "price": -575,
+          "probability": 0.8608228662644223,
+          "previous": "lean",
+          "next": "no_play"
+        },
+        {
+          "gameId": 457439,
+          "matchup": "LOU@GT",
+          "market": "moneyline",
+          "price": -650,
+          "probability": 0.6773545296879568,
+          "previous": "watchlist",
+          "next": "no_play"
+        },
+        {
+          "gameId": 457785,
+          "matchup": "LIB@NMSU",
+          "market": "moneyline",
+          "price": -800,
+          "probability": 0.7432751619552023,
+          "previous": "watchlist",
+          "next": "no_play"
+        },
+        {
+          "gameId": 457428,
+          "matchup": "WVU@TTU",
+          "market": "moneyline",
+          "price": -700,
+          "probability": 0.915669678596131,
+          "previous": "lean",
+          "next": "no_play"
+        }
+      ],
+      "legacyLocksPreserved": []
+    },
+    {
+      "sport": "cbb",
+      "asOf": "2026-11-06T21:02:48.314Z",
+      "markets": 885,
+      "before": {
+        "no_play": 719,
+        "watchlist": 104,
+        "lean": 62
+      },
+      "after": {
+        "no_play": 740,
+        "watchlist": 99,
+        "lean": 46
+      },
+      "today": {
+        "markets": 177,
+        "before": {
+          "no_play": 37,
+          "watchlist": 86,
+          "lean": 54
+        },
+        "after": {
+          "no_play": 58,
+          "watchlist": 81,
+          "lean": 38
+        }
+      },
+      "actionablePromotions": 0,
+      "actionableDemotions": 16,
+      "changed": [
+        {
+          "gameId": 10882737,
+          "matchup": "YSU@OSU",
+          "market": "moneyline",
+          "price": -8000,
+          "probability": 0.9812776908760146,
+          "previous": "lean",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882747,
+          "matchup": "VAL@PUR",
+          "market": "moneyline",
+          "price": -3200,
+          "probability": 0.9464534593351115,
+          "previous": "lean",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882718,
+          "matchup": "STET@WVU",
+          "market": "moneyline",
+          "price": -20000,
+          "probability": 0.9914490378633974,
+          "previous": "watchlist",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882730,
+          "matchup": "GASO@GT",
+          "market": "moneyline",
+          "price": -2100,
+          "probability": 0.9284112981770688,
+          "previous": "lean",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882734,
+          "matchup": "ETSU@NCSU",
+          "market": "moneyline",
+          "price": -2100,
+          "probability": 0.9318207575557056,
+          "previous": "lean",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882739,
+          "matchup": "TROY@FSU",
+          "market": "moneyline",
+          "price": -6500,
+          "probability": 0.9795638106051507,
+          "previous": "lean",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882741,
+          "matchup": "PRES@UGA",
+          "market": "moneyline",
+          "price": -9000,
+          "probability": 0.9814691773080372,
+          "previous": "lean",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882751,
+          "matchup": "NHVN@RUTG",
+          "market": "moneyline",
+          "price": -9000,
+          "probability": 0.977822632512497,
+          "previous": "lean",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882753,
+          "matchup": "JMU@UK",
+          "market": "moneyline",
+          "price": -9000,
+          "probability": 0.9713785655153201,
+          "previous": "lean",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882758,
+          "matchup": "COPP@GMU",
+          "market": "moneyline",
+          "price": -50000,
+          "probability": 0.9923362261427972,
+          "previous": "watchlist",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882759,
+          "matchup": "WOF@UNC",
+          "market": "moneyline",
+          "price": -5000,
+          "probability": 0.9531484309441419,
+          "previous": "lean",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882764,
+          "matchup": "EMU@XAV",
+          "market": "moneyline",
+          "price": -8000,
+          "probability": 0.9783513452339042,
+          "previous": "lean",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882725,
+          "matchup": "DEL@WIS",
+          "market": "moneyline",
+          "price": -8000,
+          "probability": 0.9831044690292424,
+          "previous": "lean",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882742,
+          "matchup": "ARST@ALA",
+          "market": "moneyline",
+          "price": -8000,
+          "probability": 0.9824035124505738,
+          "previous": "lean",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882726,
+          "matchup": "NKU@TA&M",
+          "market": "moneyline",
+          "price": -20000,
+          "probability": 0.9927799177005647,
+          "previous": "watchlist",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882731,
+          "matchup": "SOU@TCU",
+          "market": "moneyline",
+          "price": -9000,
+          "probability": 0.9921809168552472,
+          "previous": "lean",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882772,
+          "matchup": "USM@ISU",
+          "market": "moneyline",
+          "price": -100000,
+          "probability": 0.9961367472190478,
+          "previous": "watchlist",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882719,
+          "matchup": "OMA@BYU",
+          "market": "moneyline",
+          "price": -10000,
+          "probability": 0.998085233903278,
+          "previous": "lean",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882720,
+          "matchup": "UNCO@ASU",
+          "market": "moneyline",
+          "price": -3200,
+          "probability": 0.9402689388499463,
+          "previous": "lean",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882777,
+          "matchup": "MTSU@KU",
+          "market": "moneyline",
+          "price": -20000,
+          "probability": 0.9930984556457139,
+          "previous": "watchlist",
+          "next": "no_play"
+        },
+        {
+          "gameId": 10882729,
+          "matchup": "CBU@ORST",
+          "market": "moneyline",
+          "price": -4000,
+          "probability": 0.9559719281459127,
+          "previous": "lean",
+          "next": "no_play"
+        }
+      ],
+      "legacyLocksPreserved": []
+    }
+  ],
+  "scope": "Native qualification integrated for NBA, CBB and CFB. Other six captured boards audited only; no unversioned reader override. Current policy never applies to historical locked payloads.",
+  "forecastPriceSelectionChanges": 0,
+  "providerCalls": 0,
+  "productionWrites": 0,
+  "limits": "Same stored-input counterfactual, not new forecasts or historical accuracy. Actual live scope depends on unlocked state at publication."
+}

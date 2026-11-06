@@ -1146,7 +1146,7 @@ export function buildNbaGameIntelligence(opts: {
   };
 
   // Top grade across the three markets — for Quick Read.
-  const order: GradeOutput["grade"][] = ["best_angle", "lean", "watch", "caution", "no_market", "held"];
+  const order: GradeOutput["grade"][] = ["best_angle", "lean", "watch", "caution", "no_play", "no_market", "held"];
   const rankedMarkets = [ml, spread, total].sort((a, b) => order.indexOf(a.grade) - order.indexOf(b.grade));
   const topMarketIntel = rankedMarkets[0];
   return {
