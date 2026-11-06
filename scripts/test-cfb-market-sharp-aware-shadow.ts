@@ -695,6 +695,6 @@ for(const price of [-501,-8000,-9000]){
  assert.equal(pass.grade,"No Play");assert(pass.gradeAdjustment?.reasonCodes.includes("moneyline_price_below_owner_actionable_limit"));
  assert.equal(pass.modelProbability,one.modelProbability);assert.deepEqual(pass.evaluatedQuote,one.evaluatedQuote);assert.equal(JSON.stringify(args),before);
  const recovery=applyCfbMarketSharpAwareGrades({...args,bundle:{...args.bundle,evaluatedBets:[{...one,evaluatedQuote:{...one.evaluatedQuote,price:-500}}]}}).evaluatedBets[0]!;
- assert.notEqual(recovery.grade,"No Play","a real improved price restores the unchanged evidence-based tier");
+ assert.equal(recovery.grade,"Lean","the same strong forecast regains actionable Lean at the inclusive -500 price");
  assert.notEqual(recovery.grade,"Best Angle","-500 cannot be Best Angle");
 }

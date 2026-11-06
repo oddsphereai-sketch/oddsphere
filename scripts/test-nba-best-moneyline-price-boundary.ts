@@ -18,6 +18,7 @@ for(const pick of ["home","away"] as const){
  for(const price of [-501,-8000,-9000]){
   const input={...base,currentPriceAmerican:price,modelProbabilityOnPick:.999};
   assert.equal(gradeNbaMarket(input).grade,"no_play");
+  assert.equal(gradeNbaMarket({...input,currentPriceAmerican:-500}).grade,"lean","same forecast regains an actionable Lean at the better real price");
   assert.equal(gradeNbaMarket({...input,namedBookPosture:support,enforceSteepMoneylineBestAngleTier:false}).grade,"no_play");
  }
  assert.equal(gradeNbaMarket({...base,currentPriceAmerican:-500,modelProbabilityOnPick:.99}).grade,"lean","inclusive Lean ceiling");
