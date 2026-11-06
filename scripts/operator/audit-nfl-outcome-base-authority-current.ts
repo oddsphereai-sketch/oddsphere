@@ -65,6 +65,9 @@ async function main(): Promise<void> {
       playerAwareScore: payload.paidProjectionShadow!,
       providerDepth: payload.providerStartersAndDepth!,
       availabilityAdjustedDepth: payload.startersAndDepth,
+      capturedAt: row.capturedAt,
+      gameStartAt: row.gameStartAt,
+      previousStates: stored.filter(item => item.providerGameId === row.providerGameId).map(item => item.payload),
     });
     const history = [
       ...(owls.historyByGame[row.providerGameId] ?? []).flatMap(receipt => receipt.books),
@@ -186,7 +189,7 @@ async function main(): Promise<void> {
     after: row.candidateGrades[market],
   })));
   console.log(JSON.stringify({
-    release: "nfl_outcome_base_authority_current_audit_2026_11_05_r1",
+    release: "nfl_outcome_base_authority_current_audit_2026_11_06_r2_quarterback_regime_continuity",
     readOnly: true,
     writes: 0,
     season,

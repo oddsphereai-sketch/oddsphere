@@ -1,0 +1,215 @@
+{
+  "scope": "source continuity functional repair, no outcome-based tuning",
+  "baseSha": "b90da4d94c91948821dc72894fd741f181dae92d",
+  "priorOutcomeExposure": true,
+  "currentUnlockedGames": 14,
+  "unchangedBaseCount": 14,
+  "currentActionablesBefore": 18,
+  "currentActionablesAfter": 18,
+  "promotions": 0,
+  "demotions": 0,
+  "lockedProductionWrites": 0,
+  "providerRequests": 0,
+  "rows": [
+    {
+      "id": "1392344",
+      "matchup": "LAR@WSH",
+      "sourceBefore": "exact_provider_state",
+      "sourceAfter": "exact_provider_state",
+      "baseUnchanged": true,
+      "grades": [
+        "No Play",
+        "No Play",
+        "No Play"
+      ]
+    },
+    {
+      "id": "1392342",
+      "matchup": "CLE@NO",
+      "sourceBefore": "exact_provider_state",
+      "sourceAfter": "exact_provider_state",
+      "baseUnchanged": true,
+      "grades": [
+        "No Play",
+        "Watchlist",
+        "Lean"
+      ]
+    },
+    {
+      "id": "1392351",
+      "matchup": "BUF@MIN",
+      "sourceBefore": "exact_provider_state",
+      "sourceAfter": "exact_provider_state",
+      "baseUnchanged": true,
+      "grades": [
+        "Lean",
+        "Lean",
+        "Lean"
+      ]
+    },
+    {
+      "id": "1392346",
+      "matchup": "HOU@LAC",
+      "sourceBefore": "exact_provider_state",
+      "sourceAfter": "exact_provider_state",
+      "baseUnchanged": true,
+      "grades": [
+        "No Play",
+        "Lean",
+        "Lean"
+      ]
+    },
+    {
+      "id": "1392343",
+      "matchup": "NYG@PHI",
+      "sourceBefore": "exact_provider_state",
+      "sourceAfter": "exact_provider_state",
+      "baseUnchanged": true,
+      "grades": [
+        "No Play",
+        "Watchlist",
+        "Lean"
+      ]
+    },
+    {
+      "id": "1392349",
+      "matchup": "ARI@SEA",
+      "sourceBefore": "player_aware_availability_regime",
+      "sourceAfter": "player_aware_availability_regime",
+      "baseUnchanged": true,
+      "grades": [
+        "No Play",
+        "No Play",
+        "No Play"
+      ]
+    },
+    {
+      "id": "1392340",
+      "matchup": "NYJ@KC",
+      "sourceBefore": "exact_provider_state",
+      "sourceAfter": "exact_provider_state",
+      "baseUnchanged": true,
+      "grades": [
+        "No Play",
+        "Lean",
+        "Lean"
+      ]
+    },
+    {
+      "id": "1392347",
+      "matchup": "LV@SF",
+      "sourceBefore": "exact_provider_state",
+      "sourceAfter": "exact_provider_state",
+      "baseUnchanged": true,
+      "grades": [
+        "No Play",
+        "Watchlist",
+        "Lean"
+      ]
+    },
+    {
+      "id": "1392339",
+      "matchup": "DAL@IND",
+      "sourceBefore": "exact_provider_state",
+      "sourceAfter": "exact_provider_state",
+      "baseUnchanged": true,
+      "grades": [
+        "Lean",
+        "Best Angle",
+        "No Play"
+      ]
+    },
+    {
+      "id": "1392345",
+      "matchup": "DEN@CAR",
+      "sourceBefore": "exact_provider_state",
+      "sourceAfter": "exact_provider_state",
+      "baseUnchanged": true,
+      "grades": [
+        "Lean",
+        "Watchlist",
+        "No Play"
+      ]
+    },
+    {
+      "id": "1392338",
+      "matchup": "CIN@ATL",
+      "sourceBefore": "exact_provider_state",
+      "sourceAfter": "exact_provider_state",
+      "baseUnchanged": true,
+      "grades": [
+        "No Play",
+        "Watchlist",
+        "Best Angle"
+      ]
+    },
+    {
+      "id": "1392348",
+      "matchup": "GB@NE",
+      "sourceBefore": "exact_provider_state",
+      "sourceAfter": "exact_provider_state",
+      "baseUnchanged": true,
+      "grades": [
+        "Lean",
+        "Lean",
+        "Best Angle"
+      ]
+    },
+    {
+      "id": "1392350",
+      "matchup": "TB@CHI",
+      "sourceBefore": "exact_provider_state",
+      "sourceAfter": "exact_provider_state",
+      "baseUnchanged": true,
+      "grades": [
+        "No Play",
+        "Watchlist",
+        "No Play"
+      ]
+    },
+    {
+      "id": "1392341",
+      "matchup": "DET@MIA",
+      "sourceBefore": "exact_provider_state",
+      "sourceAfter": "exact_provider_state",
+      "baseUnchanged": true,
+      "grades": [
+        "No Play",
+        "Watchlist",
+        "Lean"
+      ]
+    }
+  ],
+  "knownIncidentOfflineOnly": {
+    "id": "1392337",
+    "starterBefore": {
+      "name": "Joe Fagnano",
+      "depth": "2",
+      "playerId": "33936794",
+      "position": "QB",
+      "depthRank": 2,
+      "injuryStatus": "Q",
+      "explicitStarter": false
+    },
+    "starterAtLock": {
+      "name": "Joe Fagnano",
+      "depth": "1",
+      "playerId": "33936794",
+      "position": "QB",
+      "depthRank": 1,
+      "injuryStatus": null,
+      "explicitStarter": false
+    },
+    "oldSource": "exact_provider_state",
+    "newSource": "player_aware_availability_regime",
+    "oldBase": {
+      "away": 24.90911635021754,
+      "home": 23.016590520718186
+    },
+    "correctedBase": {
+      "away": 27.27986522019976,
+      "home": 13.33595122019976
+    },
+    "storedLockedPayloadUnchanged": true
+  }
+}
