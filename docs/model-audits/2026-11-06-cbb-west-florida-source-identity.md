@@ -29,7 +29,7 @@ contextual inputR6 and shared V2 captureR30. Every future contextual input alrea
 stores its actual provider-identity release in compressed evidence. The numerical
 R7 economic-Total/retained-Margin model and pinned private artifact remain exact;
 this is a versioned input-contract correction, not another fit or inference engine.
-Publisher, adapter, reader and tracking identifiers must identify this cutover;
+PublisherR54, adapterR37, readerR3 and trackingR40 identify this cutover;
 previous model/grade/input eras retain their exact stored lock semantics.
 
 The historical locked FIU game10882715 keeps its exact payload SHA
@@ -54,3 +54,18 @@ must verify the source contract, regular leased collector/writer health, origina
 lock SHA and unchanged historical recovery in the actual member handler. Do not
 mistake provider absence on a not-yet-priced future fixture for a repaired-price
 claim.
+
+The locked-card portion was independently verified on actual production commit
+`4af12298586c2f4896a8e58c5d5fb9231c0155cc` at 22:36 UTC: readiness HTTP200
+and correct R7 artifact hash; authorized internal audit invoked the actual member
+handler and returned West Florida Argonauts plus all three recovered market pairs.
+Original projected/predictions/markets remain deeply equal to the original lock and
+the original full record SHA remains exact. Public unauthenticated API access was
+HTTP401 as intended; operator authorization was HTTP200. The internal all-sport
+reader can perform its existing fallback/cache work; this verification does not
+claim zero side effects for unrelated sport reader internals.
+
+Final independent read-only source review found no blocker and separately reran
+both focused recovery/identity suites. It confirmed the old-name/new-official-name
+regression and rejection of wrong school733. No provider call, database write or
+model fit was used by that review.
