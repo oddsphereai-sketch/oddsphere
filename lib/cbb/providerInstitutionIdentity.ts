@@ -21,6 +21,7 @@ for (const [source, institution] of [
   // Exact labels and matching native school IDs in the November 6 Owls receipt.
   ["N Colorado", "Northern Colorado"], ["SC State", "South Carolina State"],
   ["Miss Valley St", "Mississippi Valley State"], ["MTSU", "Middle Tennessee"],
+  ["S Illinois", "Southern Illinois"], ["Tarleton St", "Tarleton State"],
   // Exact participant names in the 2026-11-05 current Owls receipt.
   ["Jax State", "Jacksonville State"], ["N Illinois", "Northern Illinois"],
   ["Penn", "Pennsylvania"],

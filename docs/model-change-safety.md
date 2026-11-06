@@ -4,7 +4,7 @@
 
 The owner explicitly requested an audit of every Daily Edge sport with games
 today, current stats/markets and actual forecast/grade interpretation, with
-confirmed gaps repaired. This scoped correction restores four exact observed
+confirmed gaps repaired. This scoped correction restores six exact observed
 CBB provider institution aliases, versions the source input contract and stamps
 it in future receipts. The current fitted R1 forecast and R8/R7 decision/grade
 method remain unchanged; only genuinely available newly matched inputs may

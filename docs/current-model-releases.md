@@ -4,8 +4,11 @@
 
 The owner requested a whole-product audit of today's inputs, pipelines and
 market-to-forecast/grade behavior, followed by repairs of demonstrated gaps.
-The implementation is prepared from production base
-`b90da4d94c91948821dc72894fd741f181dae92d`; production verification is required.
+Starting base is `b90da4d94c91948821dc72894fd741f181dae92d`; the subsequent
+NFL continuity production merge `74103b8c69c4e3e9073fc2afa86210cc84dcfeb8`
+is integrated with both release entries preserved. The runtime/source versions
+below identify this cutover; the normal live publication must be checked
+separately from a successful branch build.
 
 CBB provider identity advances to
 `cbb_provider_identity_2026_11_06_r7_current_board_source_aliases`, input assembly
@@ -13,8 +16,9 @@ to `cbb_contextual_reader_input_2026_11_06_r5_current_source_identity`, and the
 sole publisher to `cbb_member_pipeline_2026_11_06_r44_current_source_identity`.
 Every newly assembled input stores the provider-identity release in its
 compressed source-state evidence; earlier receipts and locks are not restamped.
-The exact observed N Colorado, SC State, Miss Valley St and MTSU institution
-aliases restore available Circa/retail context. Tennessee remains a different
+The exact observed N Colorado, SC State, Miss Valley St, MTSU, S Illinois
+and Tarleton St institution aliases restore available Circa/Pinnacle and
+retail context. Tennessee remains a different
 school. Fitted model R1/covariance R1, decision R8, grade R7, adapter R27 and
 tracking R30 are unchanged; corrected inputs can change future forecasts and
 recommendations through that existing model. This is an input-contract repair,

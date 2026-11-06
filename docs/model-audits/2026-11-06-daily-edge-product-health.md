@@ -1,6 +1,9 @@
 # Daily Edge product health — November 6, 2026
 
 Starting production base: `b90da4d94c91948821dc72894fd741f181dae92d`.
+The NFL continuity merge `74103b8c69c4e3e9073fc2afa86210cc84dcfeb8` was
+subsequently integrated; both release-document additions were preserved and
+affected verification was rerun against that production base.
 Scope: every Daily Edge sport with a game on November 6 in America/New_York,
 including the separate football and soccer weekly publications. Read-only
 captures precede the repair. Provider reads are bounded; there is no fitting,
@@ -93,12 +96,16 @@ or remains unresolved/context-only.
 
 One concrete source-admission defect and two presentation defects are repaired:
 
-1. The exact current provider spellings N Colorado, SC State, Miss Valley St
-   and MTSU failed institution identity. A single bounded Owls response at
+1. The exact current provider spellings N Colorado, SC State, Miss Valley St,
+   MTSU, S Illinois and Tarleton St failed institution identity. A single bounded Owls response at
    12:59:52 UTC proves fresh Circa Moneyline/Spread/Total pairs for Northern
    Colorado at Arizona State, plus valid retail context on the other three
-   games. Exact aliases restore those inputs; Colorado State, South Carolina,
-   Mississippi State and Tennessee remain distinct institutions. The input
+   games. The full 59-fixture join sweep additionally finds fresh Circa and
+   Pinnacle contracts for Southern Illinois at Kansas City and Tarleton State
+   at San Diego that an absent-source-only audit would miss because older
+   professional observations survived. Exact aliases restore those inputs; Colorado State, South Carolina,
+   Mississippi State, Illinois State, San Diego State and Tennessee remain
+   distinct institutions. The input
    contract advances to source R7 / assembly R5 / publisher R44. Fitted model
    coefficients and the recommendation method are unchanged; corrected actual
    inputs may change future scores, probabilities, predictions and grades.
@@ -115,6 +122,39 @@ One concrete source-admission defect and two presentation defects are repaired:
    and source clocks, describes older context explicitly and interprets current
    price response independently. Legacy/locked interpretation remains exact.
 
+## Controlled source-repair effect
+
+The final whole-day provider join improves 52/59 to 58/59 fixture matches in
+the same 533-event response. The remaining FIU/newcomer card has the existing
+unsupported program metadata and no-wager policy. Fresh professional-price
+coverage in that response improves 32 to 35 games; it is not interchangeable
+with the 36 games retaining professional observations at the earlier 12:32
+forecast cutoff. Some later provider books have removed their offers.
+
+Independent raw comparison verifies 17 distinct game/market contracts and 23
+physical book/market pairs across the six repaired fixtures, including both
+Circa and Pinnacle on Southern Illinois and Tarleton. All original native
+prices, lines, event identities and clocks match. Wrong institutions,
+orientations, dates and duplicate conflicting pairs remain rejected.
+
+The controlled six-game comparison prices all 18 contracts at the same genuine
+current offers in both controls. Those execution observations are supplied to
+both controls; only the additional restored context differs. Original
+independent forecasts and their knowledge clocks are retained. This isolates
+input influence, not the complete former writer's book selection and not an
+anachronistic replay of the 12:32 board. Twelve accepted GP predictions and
+zero fits/providers/writes produce 4 Lean /8 Watch /6 No Play before versus
+4 Lean /6 Watch /8 No Play after, with zero actionable promotions/demotions,
+zero side changes and zero Held contracts. Source-conditioned score and
+probability changes are real; no arbitrary score correction was added.
+
+Private controlled-comparison SHA256 values:
+
+- Four-fixture subset: `8904e3a9b55a08cc8efa703002f5fc3a1f8a3a4c3163b6a6689718aef0064208`.
+- Additional two: `be2dc2df0d831342fbd282b50762e1fbc6c6291864ecbe0ae6627794634bffcd`.
+- Independent 23-pair review: `6a7d196f69058b47ea9aba87bed17e982dd3b858689dbed169fdd336a3d987f9`.
+- Exact 15-market CFB comparison: `a4060efe7db2478902bdcf916ba4af7c0e9c709b37a5443b3f2c1576d174f0de`.
+
 ## Explicit limits and follow-up findings
 
 CBB's captured mix is 53 Under selections and five Over selections, with all
@@ -127,7 +167,9 @@ The actual provider response is reconciled against the 22 current-day games
 without admitted professional prices. One has the identity defect above;
 three further alias failures have retail-only context, and the remaining
 18 have matched retail events without Circa/Pinnacle quotes in that capture.
-This is bounded source-specific evidence, not proof that no other provider
+The full 59-game sweep also checks retained professional coverage rather than
+only empty inputs; this reveals the Southern Illinois and Tarleton failures
+above. This is bounded source-specific evidence, not proof that no other provider
 could have a market. Four older admitted professional streams also lack fresh
 same-market pairs in that response. Their original timestamps and last-known
 status remain; receipt freshness cannot substitute for new economic movement.
@@ -138,8 +180,14 @@ off-day operational findings; no all-sport green-health claim is made.
 
 ## Publication and immutable-record verification
 
-Before publication, focused CBB/NBA/CFB/current-split tests, full model verification,
-type checking, lint, build and latest-main integration safety must pass. The
+The integrated-base `npm run verify:model-change` passes, including its pre/post
+checks. After the last two exact aliases, both complete CBB suites pass again;
+the final webpack production build, fresh full TypeScript check and scoped
+lint pass. NBA, CFB and shared split-reader focused checks also pass. Local
+PostgreSQL proof is explicitly skipped because its optional connection is not
+configured; no local PostgreSQL execution is claimed. Latest-main integration
+safety passes against `74103b8c69c4e3e9073fc2afa86210cc84dcfeb8` and must be
+repeated from the final clean commit before publication. The
 NBA/CFB same-input explanation comparison must show zero promotions, demotions,
 score, probability or executable-price changes; the CBB input repair reports
 its actual effects separately. Pre-repair baselines contain 48 locked NBA
