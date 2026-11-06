@@ -1,3 +1,4 @@
+import {cbbProviderStoredSchoolMatches} from "../../cbb/providerInstitutionIdentity";
 import type { supabase as SupabaseClient } from "../../db/supabase";
 import { CbbBallDontLieClient } from "../../cbb/ballDontLie";
 import { assertCbbFixtureRefreshSafe, cbbFixtureIdentityWouldChange, cbbLockedTerminalScore, cbbCanonicalGamePayload, cbbCanonicalStatus,
@@ -186,7 +187,7 @@ export async function seedCbbGames(options: SeedOptions) {
       const originalHome=[...teams.values()].find(team=>teamDbIds.get(team.id)===previous.home_team_id);
       const originalAway=[...teams.values()].find(team=>teamDbIds.get(team.id)===previous.away_team_id);
       const memberIdentityVerified=member&&Date.parse(member.start)===Date.parse(previous.game_date)
-        &&member.home===originalHome?.full_name&&member.away===originalAway?.full_name;
+        &&originalHome&&originalAway&&cbbProviderStoredSchoolMatches(member.home,originalHome)&&cbbProviderStoredSchoolMatches(member.away,originalAway);
       const terminal = memberIdentityVerified?cbbLockedTerminalScore(previous,payload):null;
       if(terminal){
         terminalScoresMappedToLockedIdentity.push(game.id);

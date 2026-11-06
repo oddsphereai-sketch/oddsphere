@@ -1,6 +1,7 @@
 import { canonicalCbbTeamName } from "./dataset";
+import type {CbbGame,CbbTeam} from "./types";
 
-export const CBB_PROVIDER_IDENTITY_RELEASE = "cbb_provider_identity_2026_11_06_r7_current_board_source_aliases" as const;
+export const CBB_PROVIDER_IDENTITY_RELEASE = "cbb_provider_identity_2026_11_06_r8_verified_west_florida_fiu" as const;
 
 // Provider spellings of named institutions, never mascot or substring guesses.
 // Keep State and Saint distinct and preserve ambiguous schools (USC, Miami).
@@ -18,6 +19,8 @@ const stateInstitutions = [
 ];
 const aliases = new Map<string,string>(stateInstitutions.map(name => [canonicalCbbTeamName(name.replace(/State$/, "St")), canonicalCbbTeamName(name)]));
 for (const [source, institution] of [
+  // Exact named participant in the retained West Florida–FIU Owls event.
+  ["FIU", "Florida International"],
   // Exact labels and matching native school IDs in the November 6 Owls receipt.
   ["N Colorado", "Northern Colorado"], ["SC State", "South Carolina State"],
   ["Miss Valley St", "Mississippi Valley State"], ["MTSU", "Middle Tennessee"],
@@ -63,4 +66,21 @@ for (const [source, institution] of [
 export function cbbProviderInstitutionName(value:string):string {
   const normalized=canonicalCbbTeamName(value);
   return aliases.get(normalized)??normalized;
+}
+
+/** The NCAA census and paired official fixture bind this provider's truncated
+ * name to school 732 / ESPN 2697. Never make Argonauts a global mascot alias. */
+export function cbbProviderSchoolIdentity(team:Pick<CbbTeam,"id"|"full_name"|"college">){
+  const verified=team.id===732&&["Argonauts","West Florida","West Florida Argonauts"].includes(team.full_name)&&
+    (!team.college||cbbProviderInstitutionName(team.college)==="westflorida");
+  return {displayName:verified?"West Florida Argonauts":team.full_name,
+    college:verified?"West Florida":team.college};
+}
+export function cbbProviderFixtureIdentity(game:Pick<CbbGame,"home_team"|"visitor_team">){
+  const home=cbbProviderSchoolIdentity(game.home_team),away=cbbProviderSchoolIdentity(game.visitor_team);
+  return {homeTeamDisplayName:home.displayName,awayTeamDisplayName:away.displayName,
+    cbbHomeCollege:home.college,cbbAwayCollege:away.college};
+}
+export function cbbProviderStoredSchoolMatches(stored:string|null|undefined,team:Pick<CbbTeam,"id"|"full_name"|"college">){
+  return stored===team.full_name||stored===cbbProviderSchoolIdentity(team).displayName;
 }

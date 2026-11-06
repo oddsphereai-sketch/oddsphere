@@ -1,3 +1,4 @@
+import {cbbProviderFixtureIdentity} from "../../cbb/providerInstitutionIdentity";
 import { cbbSplitOrientation } from "../../cbb/exactSplitIdentity";
 import { cbbImpliedProbability } from "../../cbb/marketEvidence";
 import { cbbAvailabilityUpperBoundMs } from "../../cbb/marketReceiptTime";
@@ -95,7 +96,7 @@ const validHash = (hash: string | null | undefined): hash is string => typeof ha
 const validPrice = (price: number | null): price is number => typeof price === "number" && Number.isSafeInteger(price) && Math.abs(price) >= 100;
 const ownSides = (market: CbbMarket) => market === "total" ? ["over", "under"] : ["home", "away"];
 function identity(game: CbbGame, eventId: string, attestations: CbbCanonicalEventAttestation[]): SourceIdentity | null {
-  const own={homeTeamDisplayName:game.home_team.full_name,awayTeamDisplayName:game.visitor_team.full_name,cbbHomeCollege:game.home_team.college,cbbAwayCollege:game.visitor_team.college};
+  const own=cbbProviderFixtureIdentity(game);
   const orientation=(h:string,a:string):SourceIdentity["orientation"]|null=>cbbSplitOrientation(a,h,own);
   const named = eventId.match(/^ncaab:(.+)@(.+)-(\d{8})$/i);
   if (named) {

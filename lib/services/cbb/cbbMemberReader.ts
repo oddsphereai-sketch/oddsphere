@@ -1,9 +1,11 @@
+import {appendCbbLockedMarketRecovery} from "./cbbLockedMarketRecovery";
+import {cbbProviderStoredSchoolMatches} from "@/lib/cbb/providerInstitutionIdentity";
 import type { supabase } from "@/lib/db/supabase";
 import type { DailyEdgeResponse } from "@/app/lab/lib/labTypes";
 import { cbbOfficialGameResultFromScores } from "./adaptCbbProvisionalToDailyEdge";
 import { readCbbMemberGames,CBB_COMPATIBLE_MEMBER_STORE_RELEASES } from "./cbbMemberGameStore";
 
-export const CBB_MEMBER_READER_RELEASE="cbb_member_reader_2026_11_05_r1_cached_fixture_clock_handoff" as const;
+export const CBB_MEMBER_READER_RELEASE="cbb_member_reader_2026_11_06_r2_verified_market_recovery" as const;
 
 type OfficialSchool={external_id:number|string;display_name:string};
 type OfficialResult={status:string|null;home_score:number|null;away_score:number|null;game_date:string;
@@ -69,8 +71,11 @@ export async function overlayCbbLockedMemberGames(board:DailyEdgeResponse,db?:ty
   const games=board.games.map(game=>{
     if(!stored.has(game.external_id))return game;
     const record=stored.get(game.external_id)!;
-    if(record.memberGame.id!==game.id||record.memberGame.homeTeamDisplayName!==game.homeTeamDisplayName||
-      record.memberGame.awayTeamDisplayName!==game.awayTeamDisplayName||
+    const outcomeIdentity=record.snapshot.board.gameForecast;
+    const sameName=(stored:string|null|undefined,visible:string|null|undefined,id:number|undefined)=>stored===visible||
+      id!==undefined&&typeof stored==="string"&&cbbProviderStoredSchoolMatches(visible,{id,full_name:stored,college:null});
+    if(record.memberGame.id!==game.id||!sameName(record.memberGame.homeTeamDisplayName,game.homeTeamDisplayName,outcomeIdentity?.homeId)||
+      !sameName(record.memberGame.awayTeamDisplayName,game.awayTeamDisplayName,outcomeIdentity?.awayId)||
       Date.parse(record.snapshot.startsAt)!==Date.parse(index.get(game.external_id)!.startsAt)||
       index.get(game.external_id)!.lockedAt!==null&&record.snapshot.lockedAt!==index.get(game.external_id)!.lockedAt)
       throw new Error("CBB authoritative reader identity mismatch");
@@ -80,12 +85,12 @@ export async function overlayCbbLockedMemberGames(board:DailyEdgeResponse,db?:ty
     const away=Array.isArray(official?.away_team)?official.away_team[0]:official?.away_team;
     const outcome=record.snapshot.board.gameForecast;
     if(!official||!Number.isFinite(Date.parse(official.game_date))||!home||!away||
-      home.display_name!==record.memberGame.homeTeamDisplayName||away.display_name!==record.memberGame.awayTeamDisplayName||
+      !cbbProviderStoredSchoolMatches(record.memberGame.homeTeamDisplayName,{id:Number(home.external_id),full_name:home.display_name,college:null})||!cbbProviderStoredSchoolMatches(record.memberGame.awayTeamDisplayName,{id:Number(away.external_id),full_name:away.display_name,college:null})||
       outcome&&(Number(home.external_id)!==outcome.homeId||Number(away.external_id)!==outcome.awayId))
       throw new Error("CBB locked result identity missing or school changed");
-    return {...structuredClone(record.memberGame),result:cbbOfficialGameResultFromScores(record.snapshot,{
+    return appendCbbLockedMarketRecovery(record,{...structuredClone(record.memberGame),result:cbbOfficialGameResultFromScores(record.snapshot,{
       status:official.status,statusState:official.status==="STATUS_FINAL"?"final":null,
-      homeScore:official.home_score,awayScore:official.away_score})};
+      homeScore:official.home_score,awayScore:official.away_score})});
   });
   return {...board,games};
 }

@@ -1,3 +1,4 @@
+import {cbbProviderSchoolIdentity} from "../../cbb/providerInstitutionIdentity";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {observationWriteBatches,MARKET_OBSERVATION_WRITE_BATCH_RELEASE} from "./observationWriteBatches";
 import { assertNbaPrelockCaptureBudget, selectNbaPrelockCaptureGames, NBA_PRELOCK_MARKET_CAPTURE_RELEASE, type NbaPrelockCaptureScope } from "../nba/nbaPrelockMarketCapture";
@@ -85,7 +86,7 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_capture_2026_11_06_r29_response_clocks_bounded_writes";
+  "market_intelligence_v2_capture_2026_11_06_r30_verified_cbb_school_identity";
 
 type CbbSourceMatch = { game: GameRef; reversed: boolean };
 const cbbSide = (side: MarketIntelligenceSelectionSide, reversed: boolean): MarketIntelligenceSelectionSide =>
@@ -563,7 +564,7 @@ async function loadGamesForSlateWindow(
 ): Promise<GameRef[]> {
   const { data: teams, error: teamsErr } = await supabase
     .from("teams")
-    .select("id, abbreviation, name, display_name, location")
+    .select("id, external_id, abbreviation, name, display_name, location")
     .eq("sport", sport);
   if (teamsErr) throw new Error(`teams fetch failed: ${teamsErr.message}`);
   const abbr = new Map<number, string>();
@@ -571,8 +572,9 @@ async function loadGamesForSlateWindow(
   const location = new Map<number, string>();
   for (const t of teams ?? []) {
     abbr.set(t.id as number, String(t.abbreviation ?? ""));
-    name.set(t.id as number, String(sport === "cbb" ? t.display_name ?? "" : t.name ?? ""));
-    if (sport === "cbb") location.set(t.id as number, String(t.location ?? ""));
+    const school=sport==="cbb"?cbbProviderSchoolIdentity({id:Number(t.external_id),full_name:String(t.display_name??""),college:String(t.location??"")}):null;
+    name.set(t.id as number, String(school?.displayName ?? t.name ?? ""));
+    if (sport === "cbb") location.set(t.id as number, school?.college??"");
   }
 
   const { data: games, error: gamesErr } = await supabase

@@ -1,3 +1,4 @@
+import {cbbProviderFixtureIdentity} from "@/lib/cbb/providerInstitutionIdentity";
 import {resolveCbbContextualOutcomeRelease,readCbbContextualOutcomeEvidence,type CbbReleasedOutcomeBoard} from "./cbbContextualOutcomeRuntime";
 import {CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE} from "@/lib/cbb/contextualOutcomeBoard";
 import {CBB_NATIVE_COUNTERPRESSURE_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
@@ -248,8 +249,8 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
   const prediction=(market:MarketEdgeDto)=>({pick:market.pick,confidence:market.confidence,sharpStatus:market.sharpStatus,
     grade:market.grade,signalType:market.signalType,marketSignal:market.marketSignal});
   return {id:`cbb-${game.id}`,sport:"cbb",external_id:game.id,
-    awayTeam:game.visitor_team.abbreviation,awayTeamDisplayName:game.visitor_team.full_name,cbbAwayCollege:game.visitor_team.college,
-    awayTeamLogo:args.awayLogo,homeTeam:game.home_team.abbreviation,homeTeamDisplayName:game.home_team.full_name,cbbHomeCollege:game.home_team.college,
+    awayTeam:game.visitor_team.abbreviation,awayTeamLogo:args.awayLogo,homeTeam:game.home_team.abbreviation,
+    ...cbbProviderFixtureIdentity(game),
     homeTeamLogo:args.homeLogo,...cbbFixtureChronology(game.date),lockState:locked?"locked":Date.parse(now)>=cutoff?"locking":"open",
     lockedAt:snapshot.lockedAt,updatedAt:snapshot.capturedAt,generatedAt:snapshot.capturedAt,holdReason:null,
     homeStarter:null,awayStarter:null,predictions:{ml:prediction(ml),total:{...prediction(total),line:total.line},nrfi:prediction(spread)},
