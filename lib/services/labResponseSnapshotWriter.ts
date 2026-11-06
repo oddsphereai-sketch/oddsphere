@@ -1,4 +1,4 @@
-import {NBA_READER_PUBLICATION_RELEASE,nbaReaderFailureReceipt} from "./nba/nbaReaderPublication";
+import {NBA_READER_PUBLICATION_RELEASE,nbaReaderFailureReceipt,nbaReaderFailureLogSuffix} from "./nba/nbaReaderPublication";
 import type { DailyEdgeResponse, TrackingResponse } from "@/app/lab/lib/labTypes";
 import type { Sport } from "@/lib/types/domain/Sport";
 import {
@@ -197,12 +197,13 @@ export async function refreshDailyEdgeResponseSnapshot(input: {
     const response = await GET(new Request(url));
     const body = (await response.json()) as DailyEdgeResponse & { error?: string };
     if (!response.ok) {
+      const sourceReadFailure=input.sport === "nba"?nbaReaderFailureReceipt(response):undefined;
       return {
         ok: false,
         snapshotKey,
         status: response.status,
-        ...(input.sport === "nba" ? {sourceReadFailure:nbaReaderFailureReceipt(response)} : {}),
-        error: body.error ?? `daily-edge snapshot build returned HTTP ${response.status}`,
+        ...(input.sport === "nba" ? {sourceReadFailure} : {}),
+        error: (body.error ?? `daily-edge snapshot build returned HTTP ${response.status}`)+nbaReaderFailureLogSuffix(sourceReadFailure),
       };
     }
     if (input.requiredSlateState && body.slateState !== input.requiredSlateState) {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {assertNbaReaderEvidenceComplete,advanceNbaEvidencePage,nbaEvidenceHighWaterError,nbaReaderUnavailableResponse,NBA_READER_PUBLICATION_RELEASE,nbaReaderFailureReceipt} from "../lib/services/nba/nbaReaderPublication";
+import {assertNbaReaderEvidenceComplete,advanceNbaEvidencePage,nbaEvidenceHighWaterError,nbaReaderUnavailableResponse,NBA_READER_PUBLICATION_RELEASE,NBA_READER_FAILURE_LOG_RELEASE,nbaReaderFailureLogSuffix,nbaReaderFailureReceipt} from "../lib/services/nba/nbaReaderPublication";
 import {refreshDailyEdgeResponseSnapshot} from "../lib/services/labResponseSnapshotWriter";
 import {reconcileNbaMarketConsequence} from "../lib/services/nba/nbaMarketConsequence";
 import {gradeNbaR30MarketForAudit} from "../lib/services/nba/nbaMarketReview";
@@ -35,12 +35,15 @@ async function main(){
    const buildResponse=async()=>{try{assertNbaReaderEvidenceComplete([code]);throw Error("guard did not run");}catch(error){return nbaReaderUnavailableResponse({date:"2026-11-06",now:"2026-11-06T19:46:00Z",error});}};
    const result=await refreshDailyEdgeResponseSnapshot({sport:"nba",date:"2026-11-06"},{buildResponse,saveSnapshot,expireMemberCache:async()=>{expirations++;}});
    assert.equal(result.ok,false);assert.equal(result.status,503);assert.deepEqual(result.sourceReadFailure,{release:NBA_READER_PUBLICATION_RELEASE,codes:[code]});
+   assert(result.error?.includes(NBA_READER_FAILURE_LOG_RELEASE));assert(result.error?.includes(code),"the actual existing cron error string must carry the safe phase, not just transient HTTP details");
    assert.equal(JSON.stringify(stored),bytes,"source failure preserves every old payload/locked field and its original as-of");
    assert.equal(writes,0);assert.equal(expirations,0,"a failed rebuild cannot extend freshness or invalidate the good cache");
   }
   const redacted=nbaReaderUnavailableResponse({date:"2026-11-06",now:"2026-11-06T19:46:00Z",error:new Error("private SQL / API token")});
   assert(!(await redacted.text()).includes("private SQL"));
   assert.equal(nbaReaderFailureReceipt(new Response(null,{headers:{"X-Oddsphere-Nba-Reader-Failure":"private SQL / token"}})),undefined);
+  assert.equal(nbaReaderFailureLogSuffix(undefined),"");
+  assert(!nbaReaderFailureLogSuffix({release:NBA_READER_PUBLICATION_RELEASE,codes:["private SQL / API token"]}).includes("private SQL"));
   const recovered={...old,as_of:"2026-11-06T20:00:00Z",games:[...old.games,{id:"fresh",grade:"lean",price:-300}]};
   const good=await refreshDailyEdgeResponseSnapshot({sport:"nba",date:"2026-11-06"},{buildResponse:async()=>{assertNbaReaderEvidenceComplete([]);return Response.json(recovered);},saveSnapshot,expireMemberCache:async()=>{expirations++;}});
   assert.equal(good.ok,true);assert.deepEqual(stored,recovered);assert.equal(version,NBA_READER_PUBLICATION_RELEASE);
