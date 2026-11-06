@@ -1,5 +1,23 @@
 # Current production model releases and qualified research candidates
 
+## November 6 CBB verified-school pipeline handoff R55
+
+Publisher `cbb_member_pipeline_2026_11_06_r55_verified_school_pipeline_handoff`
+supersedesR54. The first natural R54 cycle correctly retained the old published
+board after a remaining raw-name check rejected future10883068: rolling schedule
+resolved school732 to West Florida but the provider still supplied Argonauts.
+R55 uses the same exact verified school helper at all three publisher identity
+handoffs: fixture resync detection, canonical abbreviation recovery and final
+write eligibility. Wrong schools and changed clocks still reject; the complete
+board guard remains unchanged. An actual full publisher regression covers raw
+school732/corrected schedule, no unnecessary resync, complete publication and
+wrong-school refusal without writes. No source/grade/forecast formula changes.
+ProviderR8/inputR6/splitR7/captureR30/adapterR37/readerR3/trackingR40, numerical
+R7/covariance/private artifact and decisionR13/gradeR12 remain exact. Prior locks
+and the separate historical recovery remain authoritative and immutable.
+See `model-audits/2026-11-06-cbb-school-pipeline-handoff.md`.
+
+
 ## November 6 verified West Florida / FIU source identity
 
 CBB provider identity is `cbb_provider_identity_2026_11_06_r8_verified_west_florida_fiu`,
