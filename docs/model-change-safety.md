@@ -1,5 +1,24 @@
 # Model change safety protocol
 
+## Owner-directed CBB live writer closure — November 6
+
+Live verification of the confidence-led grade release found a completed R51
+board publication at approximately 515 seconds with its lifecycle still open
+beyond the route's 540-second deadline. The same existing writer performs seven
+settlement dates after publication; the preceding normal run used approximately
+32 seconds for that postlude. Cron execution R2 permits 570 seconds beneath the
+unchanged 600-second sport lease. No writer, provider call, retry, schedule,
+settlement date, prediction, probability, grade threshold, stake, calibration or
+model artifact is added or changed. Same-input board impact is zero promotions
+and zero demotions. All stored locks retain exact precedence.
+
+The full model gate, existing focused lease/lock checks, actual Next build
+duration manifest, fresh-main protected PR and live application/normal-cycle
+closure proof remain mandatory. Do not interpret a higher ceiling or a published
+board alone as a completed healthy cycle, or extend the lease to conceal a
+failure. Keep the numerical Margin candidate held independently until this
+operational verification is complete.
+
 ## Owner-directed November 6 collection chronology and memory repair
 
 The owner requested durable odds/split evidence and correct arrival timestamps

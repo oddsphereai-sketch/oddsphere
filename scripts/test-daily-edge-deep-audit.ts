@@ -78,6 +78,20 @@ function board(market: Record<string, unknown>) {
   check("CBB released exact-price explanation is recognized", auditDailyEdgeBoards({ cbb }).ok);
   Object.assign(cbb.games[0]!.markets.moneyline, { whyLine: "" });
   check("unexplained CBB No Play still fails", !auditDailyEdgeBoards({ cbb }).ok);
+  for (const lockState of ["unlocked", "locked"]) {
+    const current = board({ pick: "KU ML", grade: null, priceAmerican: -20_000,
+      verdict: { key: "no_play", label: "No Play" }, modelProb: .9953648845346388,
+      marketFairProb: .9728415079043372, modelMarketGapPct: 2.2523376630301573,
+      whyLine: "The payout is too small for an actionable recommendation.",
+      riskLine: "The payout is too small for an actionable recommendation.",
+      guidedGuide: "Model projects KU ML.", recommendationConfidence: null });
+    current.games[0]!.lockState = lockState;
+    const original = JSON.stringify(current);
+    check(`actual KU payout explanation is recognized (${lockState})`, auditDailyEdgeBoards({ cbb: current }).ok);
+    check(`KU audit never alters a stored decision (${lockState})`, JSON.stringify(current) === original);
+    Object.assign(current.games[0]!.markets.moneyline, { whyLine: "Model projects KU ML.", riskLine: "" });
+    check(`generic CBB projection copy remains unexplained (${lockState})`, !auditDailyEdgeBoards({ cbb: current }).ok);
+  }
   check("CBB out-of-range winner prices still fail", !auditDailyEdgeBoards({ cbb: board({ priceAmerican: -100_001 }) }).ok);
   const soccer = { games: [{ markets: {}, soccerDoubleChanceMarket: { priceAmerican: -2226 } }] };
   check("real heavy-favorite Double Chance prices remain audit-visible", auditDailyEdgeBoards({ soccer }).ok);
