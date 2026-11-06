@@ -13,13 +13,21 @@ export function cbbRecoveryPayloadSha256(record:CbbStoredMemberGame){
 /** Owner-requested identity correction and append-only historical context.
  * The exact original record is checked first and is never written or regraded.
  * Historical retrieval occurred after lock; it is not original decision evidence. */
-export function appendCbbLockedMarketRecovery(record:CbbStoredMemberGame,game:DailyEdgeGameDto):DailyEdgeGameDto{
+function approvedRecovery(record:CbbStoredMemberGame){
   const f=record.snapshot.board.gameForecast;
-  if(game.sport!=="cbb"||game.external_id!==recovery.gameId||record.snapshot.gameId!==recovery.gameId||
+  if(record.memberGame.sport!=="cbb"||record.memberGame.external_id!==recovery.gameId||record.snapshot.gameId!==recovery.gameId||
     record.snapshot.startsAt!==recovery.startsAt||record.snapshot.lockedAt!==recovery.lockedAt||
     f?.homeId!==recovery.homeProviderId||f.awayId!==recovery.awayProviderId||
     record.memberGame.awayTeamDisplayName!==recovery.originalAwayDisplayName||
-    cbbRecoveryPayloadSha256(record)!==recovery.originalPayloadSha256)return game;
+    cbbRecoveryPayloadSha256(record)!==recovery.originalPayloadSha256)return null;
+  return recovery;
+}
+export function cbbLockedRecoveryNamesMatch(record:CbbStoredMemberGame,game:DailyEdgeGameDto){
+  if(record.memberGame.homeTeamDisplayName===game.homeTeamDisplayName&&record.memberGame.awayTeamDisplayName===game.awayTeamDisplayName)return true;
+  return !!approvedRecovery(record)&&game.homeTeamDisplayName===record.memberGame.homeTeamDisplayName&&game.awayTeamDisplayName===recovery.awayDisplayName;
+}
+export function appendCbbLockedMarketRecovery(record:CbbStoredMemberGame,game:DailyEdgeGameDto):DailyEdgeGameDto{
+  if(game.sport!=="cbb"||game.external_id!==record.snapshot.gameId||!approvedRecovery(record))return game;
   return {...game,awayTeamDisplayName:recovery.awayDisplayName,cbbAwayCollege:recovery.awayCollege,
     cbbRecoveredMarketData:{release:recovery.release,originalPayloadSha256:recovery.originalPayloadSha256,
       book:recovery.book,asOf:recovery.asOf,retrievedAfterLock:true,

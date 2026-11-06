@@ -67,13 +67,18 @@ const result=await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLog
 assert.equal(result.written,false);assert.equal(writes,0);assert.equal(JSON.stringify(record),exact);
 const index={snapshot_key:"cbb::member-game::10882715",storeRelease:record.release,gameId:"10882715",startsAt:record.snapshot.startsAt,lockedAt:record.snapshot.lockedAt,
   memberId:record.memberGame.id,memberExternalId:"10882715",memberStart:record.snapshot.startsAt,memberLock:record.snapshot.lockedAt};
+let officialAwayName="Argonauts",officialAwayId=732;
 const readerDb={from:(table:string)=>table==="lab_response_snapshots"?{select:(fields:string)=>({in:async()=>({data:fields.includes("storeRelease:")?[index]:[{snapshot_key:index.snapshot_key,payload:record}],error:null})})}:
   {select:()=>({eq:()=>({in:async()=>({data:[{external_id:game.id,status:"STATUS_SCHEDULED",home_score:null,away_score:null,game_date:game.date,
-    home_team:{external_id:156,display_name:game.home_team.full_name},away_team:{external_id:732,display_name:"Argonauts"}}],error:null})})})}} as unknown as Parameters<typeof overlayCbbLockedMemberGames>[1];
+    home_team:{external_id:156,display_name:game.home_team.full_name},away_team:{external_id:officialAwayId,display_name:officialAwayName}}],error:null})})})}} as unknown as Parameters<typeof overlayCbbLockedMemberGames>[1];
 const board=cbbDailyEdgeResponse("2026-11-06",[record.memberGame],at);
 const corrected=await overlayCbbLockedMemberGames(board,readerDb);
 assert.equal(corrected.games[0].awayTeamDisplayName,"West Florida Argonauts");
 assert.deepEqual((await overlayCbbLockedMemberGames(corrected,readerDb)).games,corrected.games,"Already corrected cached view keeps exact stored precedence");
+officialAwayName="West Florida Argonauts";
+assert.equal((await overlayCbbLockedMemberGames(corrected,readerDb)).games[0].awayTeamDisplayName,"West Florida Argonauts","Later verified official school spelling never breaks an older locked name");
+officialAwayId=733;
+await assert.rejects(overlayCbbLockedMemberGames(corrected,readerDb),/school changed/);
 assert.equal(JSON.stringify(record),exact);assert.equal(writes,0);
 console.log("PASS West Florida exact-ID/FIU joins, all-three-market source recovery, immutable locked writer/reader precedence, hash rejection and explicit historical UI context; zero real IO");
 
