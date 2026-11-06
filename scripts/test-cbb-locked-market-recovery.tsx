@@ -10,6 +10,7 @@ import {writeCbbMemberGame,type CbbStoredMemberGame} from "../lib/services/cbb/c
 import {overlayCbbLockedMemberGames} from "../lib/services/cbb/cbbMemberReader";
 import {cbbDailyEdgeResponse} from "../lib/services/cbb/adaptCbbProvisionalToDailyEdge";
 import {CbbRecoveredMarketContext} from "../app/lab/components/daily-edge/CbbRecoveredMarketContext";
+import {QuickRead as MemberQuickRead} from "../app/dev/experience-preview/ActualDailyEdgePreview";
 import type {CbbGame} from "../lib/cbb/types";
 
 async function main(){
@@ -54,6 +55,9 @@ assert.equal(appendCbbLockedMarketRecovery(changed,changed.memberGame),changed.m
 for(const market of ["moneyline","first_inning","total"] as const){
   const html=renderToStaticMarkup(<CbbRecoveredMarketContext game={view} market={market}/>);
   assert.match(html,/Recovered pre-lock odds/);assert.match(html,/retrieved after lock/);
+  const actual=renderToStaticMarkup(<MemberQuickRead game={view} market={view.markets[market]} marketKey={market} sport="cbb"/>);
+  assert.match(actual,/Recovered pre-lock odds/,"The active member layout, not just the isolated panel, must render the recovery");
+  assert.match(actual,/retrieved after lock/);assert.match(actual,/West Florida Argonauts/);
   assert.match(html,market==="moneyline"?/-1989/:market==="first_inning"?/-16.5/:/162.5/);
 }
 assert.equal(renderToStaticMarkup(<CbbRecoveredMarketContext game={record.memberGame} market="total"/>),"");
