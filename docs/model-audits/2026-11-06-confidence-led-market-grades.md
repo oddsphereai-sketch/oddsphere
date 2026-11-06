@@ -160,10 +160,7 @@ are pending; this document must not be read as a deployment claim.
 PR #1048 merged as `6b129bb07c7ae1d5dc64d1f8718b65b3a3fee416`. Its tree
 `be9837e20a3517e3fbd387d2a8c6128c858b385c` is exactly the reviewed CBB
 PR head. Every overlapping code/document hunk was reconciled, retaining the
-economic Total, raw Margin and R7 covariance/private-artifact bindings. The
-first local conflict-resolution helper had an overbroad marker match; affected
-files were restored from unchanged committed merge stages before reconciliation
-and verification. No production or shared worktree was touched.
+economic Total, raw Margin and R7 covariance/private-artifact bindings. No production or shared worktree was touched.
 
 The candidate identifiers advance beyond the merged release: CBB decision and
 interpreted decision R11, grade R10, publisher R51, adapter R34, tracking R37.
@@ -178,3 +175,36 @@ a forecast of the R7 board; a new R7 same-input comparison and natural-writer
 verification are required before the final deployment claim. Full model gate,
 affected focused tests, build/types and integration safety are rerun against
 the actual merged production base.
+
+## Final R7 same-input result
+
+After the 18:58 UTC existing leased refresh completed, all 58 unlocked current
+contextual game records contained the genuine R7 model and R10/R9 decision/grade
+family. Captured member clocks span 19:05:16–19:05:37 UTC. The exact replay at
+19:06:58 uses their stored final law, interpretation, target prices and declared
+risk context. No GP model prediction, fit, provider call or production write
+is made. A release guard rejects mixed-model cohorts; a full input hash and
+source-clock bounds identify this comparison independently from the earlier R1
+cohort. Total variance compatibility uses its native trend posterior, never an
+invented legacy source-location variance.
+
+| R7 core market | Before Lean / Watch / No Play | After | Promotions / demotions |
+| --- | --- | --- | --- |
+| Moneyline | 2 / 25 / 31 | 23 / 7 / 28 | 21 / 0 |
+| Spread | 8 / 47 / 3 | 9 / 46 / 3 | 1 / 0 |
+| Total | 13 / 45 / 0 | 22 / 36 / 0 | 9 / 0 |
+| All 174 | 23 / 117 / 34 | 54 / 89 / 31 | 31 / 0 |
+
+There are zero new Best Angles. Scores, sides, probabilities, push refunds, exact
+prices and nominal EV match, and the original stored input payloads remain exact.
+The NBA frozen R28 comparison independently remains one promotion/zero demotions
+over 27 markets. A 39.3-second local R7 grading replay includes every three-market
+law and risk assessment; it is not a hosted writer-duration guarantee.
+`docs/audits/2026-11-06-confidence-led-r7-impact.json` records these counts, release
+and input hashes. No count target selected the rule or changed any forecast.
+
+The latest-main full model gate, isolated production build and TypeScript pass.
+Focused collector tests remain 148/148, lossless batching/response-clock tests
+pass, and the real captured 42 R1 locks/126 tracking rows remain exact in the
+no-IO reader/writer replay. Clean integration safety passes against 6b129bb0.
+Protected PR checks and actual production/normal-writer proof remain required.

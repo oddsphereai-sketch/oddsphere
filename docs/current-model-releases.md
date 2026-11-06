@@ -1,6 +1,6 @@
 # Current production model releases and qualified research candidates
 
-## November 6 evidence collection — candidate, not yet live
+## November 6 evidence collection runtime contract
 
 The sole V2 capture path becomes
 `market_intelligence_v2_capture_2026_11_06_r29_response_clocks_bounded_writes`.
@@ -16,7 +16,7 @@ split archive remains authoritative; this is not a second archival writer.
 Read-only coverage, honest provenance limits and multi-year disk sizing are in
 `docs/model-audits/2026-11-06-market-evidence-durability.md`.
 
-## November 6 confidence-led Lean policy — candidate, not yet live
+## November 6 confidence-led Lean runtime contract
 
 The owner clarified that a strong outcome prediction can be Lean despite poor
 offered value. Price remains part of the grade; it must not be a blanket veto.
@@ -51,6 +51,14 @@ coverage inventory. CBB moves 36 Lean/1 Best/99 Watch/38 No Play to
 5 Lean/1 Best/21 Watch to 6/1/20, one promotion and zero demotions. No score,
 side, probability, push, price, nominal EV or stored payload changes. These
 are policy effects, not improved-accuracy evidence or promises of live counts.
+
+The final post-merge R7 cohort replay contains 58 games/174 markets captured
+at 19:05 UTC: 23 Lean/117 Watch/34 No Play become 54/89/31, through 31
+promotions (21 ML, one Spread, nine Totals), zero demotions and zero new Bests.
+R7 numerical forecasts, sides, probabilities, quotes and nominal EV remain exact.
+The current R7 law and original R1-law replay are separate cohorts; neither is
+an accuracy claim. Proof: `audits/2026-11-06-confidence-led-r7-impact.json`.
+Activation still requires protected merge and actual writer/reader verification.
 
 Other current-day grades are reviewed in the accompanying audit; this candidate
 does not blanket-rewrite their sport-specific authorities or the concurrent CBB
