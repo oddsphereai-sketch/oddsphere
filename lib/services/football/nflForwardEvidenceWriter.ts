@@ -160,7 +160,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_06_r115_exact_player_availability_continuity" as const;
+  "nfl_forward_evidence_writer_2026_11_06_r116_publication_clock" as const;
 
 const NFL_REGULAR_MARKETS = ["moneyline", "spread", "total"] as const;
 const NFL_OWLS_COVERAGE_DIAGNOSTICS = new Set([
@@ -2039,7 +2039,8 @@ function emptyResult(
   };
 }
 
-async function refreshCompactMemberSnapshot(args: {
+/** Existing writer's compact-publication phase; exported for its no-network regression harness. */
+export async function refreshCompactMemberSnapshot(args: {
   client: SupabaseClient;
   existing: NflForwardStoredEvidence[];
   payloads: NflForwardEvidencePayload[];
@@ -2047,6 +2048,8 @@ async function refreshCompactMemberSnapshot(args: {
   week: number;
   now: string;
   apply: boolean;
+  /** Deterministic clock for the publication-phase harness; production reads wall time here. */
+  publicationClock?: () => string;
 }): Promise<NflMemberSnapshotWriteResult> {
   if (!args.apply) {
     return {
@@ -2086,11 +2089,15 @@ async function refreshCompactMemberSnapshot(args: {
       previous: previousSnapshot?.fixture ?? null,
       invalidT60GameIds,
     });
+    const publishedAt = args.publicationClock?.() ?? new Date().toISOString();
+    if (!Number.isFinite(Date.parse(args.now)) || Date.parse(publishedAt) < Date.parse(args.now)) {
+      throw new Error("NFL publication clock cannot precede refresh start.");
+    }
     const snapshot = buildNflForwardMemberSnapshot({
       fixture,
       season: args.season,
       week: args.week,
-      publishedAt: args.now,
+      publishedAt,
     });
     const write = await writeNflForwardMemberSnapshot({ client: args.client, snapshot });
     return {

@@ -178,6 +178,35 @@ and postdeployment checks remain required. Preserve the separate R38/R39/R41 sou
 release declarations when integrating this candidate. Publisher R42 and tracking
 R29 incorporate main 4ebd7a06 without relabeling R23/R22 or older locked records.
 
+## NFL publication clock — November 6
+
+The compact snapshot previously labeled refresh-start time as publication time.
+The saved R72 example reports publication `2026-11-06T15:06:11.235Z` before its
+own source capture `2026-11-06T15:06:48.717Z`. The existing writer now samples
+wall time after source assembly and fixture construction, at the publication
+phase. New publications require a valid clock at or after source capture and
+refresh start; a clock failure retains the previous stored board.
+
+Only the publication family advances:
+
+- `nfl_forward_member_snapshot_2026_11_06_r73_publication_clock`
+- `nfl_forward_evidence_writer_2026_11_06_r116_publication_clock`
+
+Collector R37/model R57/calibration R56/decision-grade R66/member R64/fixture R80
+and all numerical market methods remain unchanged. There is no new source
+request, prediction input, quota, cadence, writer, lease, grade rule or stake.
+The R72 snapshot remains the first exact legacy fallback, ahead of R71, with its
+original publication clock and locked card intact. Historical clock defects
+are not repaired in place. Legacy snapshots cannot be republished under the
+new key; only new R73 publications enforce the chronology guard.
+
+The frozen same-input publication comparison retains 14 unlocked games,
+42 decisions and 18 actionables (3 Best/15 Lean), with zero promotions or
+demotions, and preserves the original JAX@BAL locked DTO. This is timestamp
+correctness, not a market-reading or accuracy improvement. Protected publication
+and actual normal-writer/live verification remain required before calling it
+live. Evidence: `model-audits/2026-11-06-nfl-publication-clock.json`.
+
 ## NFL exact-player availability continuity — November 6
 
 Owner-requested cross-model continuity audit reproduced a second NFL omission

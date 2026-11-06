@@ -10,7 +10,13 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 
 export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "nfl_forward_member_snapshot_2026_11_06_r72_exact_player_availability_continuity" as const;
+  "nfl_forward_member_snapshot_2026_11_06_r73_publication_clock" as const;
+const NFL_PUBLICATION_CLOCK_PREDECESSOR = {
+  snapshot: "nfl_forward_member_snapshot_2026_11_06_r72_exact_player_availability_continuity",
+  fixture: "nfl_weekly_member_fixture_2026_11_06_r80_exact_player_availability_continuity",
+  member: "nfl_v1_member_release_2026_11_06_r64_exact_player_availability_continuity",
+  decision: "nfl_v1_daily_edge_decision_2026_11_06_r66_exact_player_availability_continuity",
+} as const;
 const NFL_EXACT_PLAYER_AVAILABILITY_PREDECESSOR = {
   snapshot: "nfl_forward_member_snapshot_2026_11_06_r71_quarterback_regime_continuity",
   fixture: "nfl_weekly_member_fixture_2026_11_06_r79_quarterback_regime_continuity",
@@ -350,6 +356,7 @@ const NFL_RAW_SIGNAL_PREVIOUS_FIXTURE_RELEASE =
 const NFL_NONPUSH_PREVIOUS_FIXTURE_RELEASE =
   "nfl_weekly_member_fixture_2026_09_21_r26_locked_transition_continuity" as const;
 const NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES = [
+  NFL_PUBLICATION_CLOCK_PREDECESSOR.snapshot,
   NFL_EXACT_PLAYER_AVAILABILITY_PREDECESSOR.snapshot,
   NFL_QUARTERBACK_CONTINUITY_PREDECESSOR.snapshot,
   NFL_OUTCOME_VALUE_PREDECESSOR.snapshot,
@@ -473,6 +480,11 @@ function nflForwardMemberSnapshotKeyForRelease(
   input: { season: number; week: number },
   snapshotRelease: string,
 ): string {
+  if (snapshotRelease === NFL_PUBLICATION_CLOCK_PREDECESSOR.snapshot) {
+    return ["nfl", "daily-edge", input.season, input.week, snapshotRelease,
+      NFL_PUBLICATION_CLOCK_PREDECESSOR.fixture, NFL_PUBLICATION_CLOCK_PREDECESSOR.member,
+      NFL_PUBLICATION_CLOCK_PREDECESSOR.decision].join("::");
+  }
   if (snapshotRelease === NFL_EXACT_PLAYER_AVAILABILITY_PREDECESSOR.snapshot) {
     return ["nfl", "daily-edge", input.season, input.week, snapshotRelease,
       NFL_EXACT_PLAYER_AVAILABILITY_PREDECESSOR.fixture, NFL_EXACT_PLAYER_AVAILABILITY_PREDECESSOR.member,
@@ -812,6 +824,7 @@ export function buildNflForwardMemberSnapshot(input: {
   if (!/^[a-f0-9]{64}$/.test(sourceChecksum)) {
     throw new Error("NFL compact member snapshot source checksum is invalid.");
   }
+  const publishedAt = checkedPublicationClock(input.fixture.capturedAt, input.publishedAt);
 
   return {
     snapshotRelease: NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE,
@@ -822,7 +835,7 @@ export function buildNflForwardMemberSnapshot(input: {
     season: input.season,
     week: input.week,
     sourceCapturedAt: input.fixture.capturedAt,
-    publishedAt: new Date(input.publishedAt).toISOString(),
+    publishedAt,
     sourceChecksum,
     fixture: input.fixture,
   };
@@ -832,6 +845,10 @@ export async function writeNflForwardMemberSnapshot(input: {
   client: SupabaseClient;
   snapshot: NflForwardMemberSnapshot;
 }): Promise<{ ok: true; snapshotKey: string } | { ok: false; snapshotKey: string; error: string }> {
+  if (input.snapshot.snapshotRelease !== NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE) {
+    throw new Error("Only a newly built current NFL snapshot may be published; legacy snapshots are read-only.");
+  }
+  checkedPublicationClock(input.snapshot.sourceCapturedAt, input.snapshot.publishedAt);
   const snapshotKey = nflForwardMemberSnapshotKey(input.snapshot);
   const now = Date.parse(input.snapshot.publishedAt);
   const { error } = await input.client
@@ -863,12 +880,13 @@ export async function readNflForwardMemberSnapshot(input: {
   now?: string;
 }): Promise<NflForwardMemberSnapshot | null> {
   const now = input.now ? new Date(input.now).toISOString() : new Date().toISOString();
-  const snapshotKeys = [
+  const snapshotKeys = [...new Set([
     nflForwardMemberSnapshotKeyForRelease(input, NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE),
+    nflForwardMemberSnapshotKeyForRelease(input, NFL_PUBLICATION_CLOCK_PREDECESSOR.snapshot),
     nflForwardMemberSnapshotKeyForPreviousCurrentDecision(input),
     ...NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES.map((release) =>
       nflForwardMemberSnapshotKeyForRelease(input, release)),
-  ];
+  ])];
   for (const snapshotKey of snapshotKeys) {
     const { data, error } = await input.client
       .from("lab_response_snapshots")
@@ -957,6 +975,15 @@ export function auditNflForwardMemberSnapshot(input: {
       grades,
     },
   };
+}
+
+/** New publications cannot predate their input. Legacy records keep their original clocks. */
+function checkedPublicationClock(sourceCapturedAt: string, publishedAt: string): string {
+  const source = Date.parse(sourceCapturedAt), publication = Date.parse(publishedAt);
+  if (!Number.isFinite(source) || !Number.isFinite(publication) || publication < source) {
+    throw new Error("NFL publication must have a valid clock at or after its source capture.");
+  }
+  return new Date(publication).toISOString();
 }
 
 function validateNflForwardMemberSnapshot(
@@ -1226,6 +1253,8 @@ function validateNflForwardMemberSnapshot(
     snapshot.fixture?.provenance?.sourceChecksum !== snapshot.sourceChecksum ||
     !Number.isFinite(Date.parse(snapshot.sourceCapturedAt ?? "")) ||
     !Number.isFinite(Date.parse(snapshot.publishedAt ?? "")) ||
+    (snapshot.snapshotRelease === NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE &&
+      Date.parse(snapshot.publishedAt!) < Date.parse(snapshot.sourceCapturedAt!)) ||
     !/^[a-f0-9]{64}$/.test(snapshot.sourceChecksum ?? "")
   ) {
     return null;
