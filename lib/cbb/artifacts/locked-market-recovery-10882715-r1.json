@@ -1,0 +1,87 @@
+{
+  "release": "cbb_locked_market_recovery_2026_11_06_r1_west_florida_fiu",
+  "gameId": 10882715,
+  "startsAt": "2026-11-06T22:00:00.000Z",
+  "lockedAt": "2026-11-06T21:09:27.509Z",
+  "originalPayloadSha256": "a0373e093d6bef2377c690463cdbec10aa1a44bdbf2b25c666363864bb8e8df8",
+  "homeProviderId": 156,
+  "awayProviderId": 732,
+  "homeDisplayName": "Florida International Panthers",
+  "awayDisplayName": "West Florida Argonauts",
+  "awayCollege": "West Florida",
+  "originalAwayDisplayName": "Argonauts",
+  "asOf": "2026-11-06T21:00:00.000Z",
+  "book": "pinnacle",
+  "provider": "owls",
+  "providerEventId": "ncaab:West Florida@FIU-20261106",
+  "retrievedAfterLock": true,
+  "meaning": "Recovered historical market context; not used for the original locked prediction. Original stored scores, picks, probabilities, prices, grades, stakes and evidence remain unchanged.",
+  "ownerDirection": "We are missing lines and odds for the locked Florida International game; Argonauts is supposed to be West Florida. Can you fix that?",
+  "markets": [
+    {
+      "market": "moneyline",
+      "observedAt": "2026-11-06T16:39:12.254Z",
+      "line": null,
+      "firstPrice": -1989,
+      "secondPrice": 1058
+    },
+    {
+      "market": "spread",
+      "observedAt": "2026-11-06T19:40:13.039Z",
+      "line": -16.5,
+      "firstPrice": -111,
+      "secondPrice": -105
+    },
+    {
+      "market": "total",
+      "observedAt": "2026-11-06T19:40:13.039Z",
+      "line": 162.5,
+      "firstPrice": -104,
+      "secondPrice": -116
+    }
+  ],
+  "sourceReceipts": [
+    {
+      "market": "h2h",
+      "side": "home",
+      "sha256": "c4655da40b6cf7a23e223705e48b890acdf0ecb256d5b67c4ba18ba97ae874ff",
+      "requestedAt": "2026-11-06T22:11:28.889Z",
+      "availableAt": "2026-11-06T22:11:29.519Z"
+    },
+    {
+      "market": "h2h",
+      "side": "away",
+      "sha256": "7fc8ece2f65c93a05495649c510f354bfbb78469a4420c3693e7db7344b2f283",
+      "requestedAt": "2026-11-06T22:11:52.445Z",
+      "availableAt": "2026-11-06T22:11:52.840Z"
+    },
+    {
+      "market": "spreads",
+      "side": "home",
+      "sha256": "11f518af4e41809685dc625b862b7b83eba7523f1bdd78ed200de553974fab6f",
+      "requestedAt": "2026-11-06T22:11:52.468Z",
+      "availableAt": "2026-11-06T22:11:52.885Z"
+    },
+    {
+      "market": "spreads",
+      "side": "away",
+      "sha256": "3242d7ec8bffedc59fef1856b41b1c7dc3ddde9e5307d3650cf0318074b2c279",
+      "requestedAt": "2026-11-06T22:11:52.469Z",
+      "availableAt": "2026-11-06T22:11:52.890Z"
+    },
+    {
+      "market": "totals",
+      "side": "over",
+      "sha256": "d58447ce471d7fb7fc0608ccc26a27ea2ab931ff0532a47ae51416f89c6cbc86",
+      "requestedAt": "2026-11-06T22:11:52.469Z",
+      "availableAt": "2026-11-06T22:11:52.858Z"
+    },
+    {
+      "market": "totals",
+      "side": "under",
+      "sha256": "6e3841709e16ca6421590f67da43b96ffcbdb382759b1acad205055c2ada64fc",
+      "requestedAt": "2026-11-06T22:11:52.470Z",
+      "availableAt": "2026-11-06T22:11:52.927Z"
+    }
+  ]
+}
