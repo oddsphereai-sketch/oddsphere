@@ -1,3 +1,4 @@
+import {cbbProviderSchoolIdentity} from "../../cbb/providerInstitutionIdentity";
 import { computeSlateDate } from "../../dates/slateDate";
 import { CBB_ROLLING_SLATE_RELEASE, cbbRollingSlateDates } from "../../cbb/rollingSlate";
 
@@ -51,6 +52,7 @@ export type CbbScheduleGameRow = {
 };
 export type CbbScheduleTeamRow = {
   id: number;
+  external_id?:number;
   abbreviation: string;
   display_name: string;
   logo_url: string | null;
@@ -72,7 +74,7 @@ export function buildCbbRollingSchedule(args: {
   for (const team of args.teams) {
     if (!Number.isInteger(team.id) || teams.has(team.id) || !team.abbreviation?.trim() ||
       !team.display_name?.trim()) throw new Error("CBB schedule team identity is incomplete or duplicated");
-    teams.set(team.id, team);
+    teams.set(team.id, {...team,display_name:cbbProviderSchoolIdentity({id:team.external_id??0,full_name:team.display_name,college:null}).displayName});
   }
   const seenGames = new Set<number>();
   const games: CbbRollingScheduleGame[] = [];
@@ -119,7 +121,7 @@ export async function loadCbbRollingSchedule(anchorDate: string): Promise<CbbRol
   const teamRows: CbbScheduleTeamRow[] = [];
   for (let offset = 0; offset < teamIds.length; offset += 100) {
     const { data, error } = await supabase.from("teams")
-      .select("id,abbreviation,display_name,logo_url").eq("sport", "cbb")
+      .select("id,external_id,abbreviation,display_name,logo_url").eq("sport", "cbb")
       .in("id", teamIds.slice(offset, offset + 100));
     if (error) throw new Error(`CBB rolling schedule teams lookup failed: ${error.message}`);
     teamRows.push(...(data ?? []) as CbbScheduleTeamRow[]);

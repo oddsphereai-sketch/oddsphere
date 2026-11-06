@@ -1,3 +1,4 @@
+import {cbbProviderFixtureIdentity} from "./providerInstitutionIdentity";
 import { cbbSplitOrientation } from "./exactSplitIdentity";
 import { computeSlateDate } from "../dates/slateDate";
 import type { CbbGame, CbbMarket } from "./types";
@@ -15,7 +16,7 @@ export function cbbCurrentSplitEvidence(game: CbbGame, odds: RawOwlsOddsResponse
   if (![cutoff, receipt, start].every(Number.isFinite) || receipt > cutoff || cutoff >= start) {
     throw new Error("CBB split evidence invalid pregame cutoff");
   }
-  const own={homeTeamDisplayName:game.home_team.full_name,awayTeamDisplayName:game.visitor_team.full_name,cbbHomeCollege:game.home_team.college,cbbAwayCollege:game.visitor_team.college};
+  const own=cbbProviderFixtureIdentity(game);
   const events = Array.isArray(odds.data) ? odds.data : Object.values(odds.data ?? {}).flatMap(rows => rows ?? []);
   const exact = events.filter(event => event.sport === "ncaab" &&
     cbbSplitOrientation(event.away_team??"",event.home_team??"",own)!==null &&

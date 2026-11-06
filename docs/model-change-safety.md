@@ -1,5 +1,23 @@
 # Model change safety protocol
 
+## Owner-directed correctness repair: CBB verified West Florida / FIU identity
+
+The owner requested the locked FIU–West Florida name/odds repair on November6.
+The protected recovery keeps the original lock exact and appends clearly disclosed
+historical context. The follow-up fixes the exact732/FIU source identity across
+existing collection and unlocked publication. It preserves #1052 decisionR13 /
+gradeR12 and every legacy lock family; versions providerR8/inputR6/splitR7/captureR30,
+publisherR54/adapterR37/readerR3/trackingR40 identify the source cutover. Numerical
+R7/covariance/private artifact remain exact, matching the prior versioned
+input-contract correctness repair pattern. No provider call budget, recurring job,
+writer, lease, grade rule, stake, forecast blend or locked decision is changed.
+See `docs/model-audits/2026-11-06-cbb-west-florida-source-identity.md`.
+Focused all-market source/negative-identity/lock/reader/tracking tests, full model
+gate, current-main integration, protected PR, actual production source/writer and
+lock verification are required. Do not claim future quote coverage absent a real
+provider quote, or combine pre/post input contracts as one performance era.
+
+
 ## November 6 current-contract resistance in CBB grades
 
 Owner-directed decision R12 / grade R11 / publisher R52 / adapter R35 / tracking

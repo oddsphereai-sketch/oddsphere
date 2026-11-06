@@ -34,7 +34,7 @@ const failures: string[] = [];
 check(
   "Market Intelligence V2 versions response completion clocks and bounded writes",
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE ===
-    "market_intelligence_v2_capture_2026_11_06_r29_response_clocks_bounded_writes",
+    "market_intelligence_v2_capture_2026_11_06_r30_verified_cbb_school_identity",
 );
 
 {

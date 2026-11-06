@@ -1,3 +1,4 @@
+import {cbbProviderFixtureIdentity} from "./providerInstitutionIdentity";
 import {cbbAvailabilityUpperBoundMs} from "./marketReceiptTime";
 import {cbbSplitOrientation,cbbSplitTeamMatches} from "./exactSplitIdentity";
 import type {CbbGame,CbbMarket} from "./types";
@@ -48,8 +49,7 @@ const qualified=(r:CbbDecisionSplitContext,at:number)=>{
     (r.firstMoney!==null||r.firstTickets!==null)&&
     (r.market==="moneyline"||r.line===null||Number.isInteger(r.line*2));
 };
-const names=(game:CbbGame)=>({homeTeamDisplayName:game.home_team.full_name,awayTeamDisplayName:game.visitor_team.full_name,
-  cbbHomeCollege:game.home_team.college,cbbAwayCollege:game.visitor_team.college});
+const names=cbbProviderFixtureIdentity;
 // Reuse the immutable ICU formatter. A seven-day board compares every source
 // fixture against the identity context; constructing one per comparison retains
 // gigabytes of native ICU allocations before V8 sees enough heap pressure to GC.

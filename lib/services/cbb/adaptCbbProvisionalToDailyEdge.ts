@@ -1,3 +1,4 @@
+import {cbbProviderFixtureIdentity} from "@/lib/cbb/providerInstitutionIdentity";
 import {resolveCbbContextualOutcomeRelease,readCbbContextualOutcomeEvidence,type CbbReleasedOutcomeBoard} from "./cbbContextualOutcomeRuntime";
 import {CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_RESISTANCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE} from "@/lib/cbb/contextualOutcomeBoard";
 import {CBB_NATIVE_COUNTERPRESSURE_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
@@ -16,7 +17,7 @@ import { buildDailyEdgeMemberPresentation } from "@/app/lab/lib/dailyEdgeRespons
 import { CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INFORMATIONAL_WATCHLIST_GRADE_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE } from "@/lib/cbb/marketBehaviorCandidate";
 import {CBB_CONTINUITY_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_JOINT_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_ALIGNED_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 
-export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_06_r36_moneyline_wager_price_boundaries" as const;
+export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_06_r37_verified_school_identity" as const;
 type GradeLabel="Best Angle"|"Lean"|"Watchlist"|"No Play"|"Held";
 type BoardRow=CbbProvisionalSnapshot["board"]["rows"][number];
 type SplitEvidence=ReturnType<typeof cbbCurrentSplitEvidence>;
@@ -249,8 +250,8 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
   const prediction=(market:MarketEdgeDto)=>({pick:market.pick,confidence:market.confidence,sharpStatus:market.sharpStatus,
     grade:market.grade,signalType:market.signalType,marketSignal:market.marketSignal});
   return {id:`cbb-${game.id}`,sport:"cbb",external_id:game.id,
-    awayTeam:game.visitor_team.abbreviation,awayTeamDisplayName:game.visitor_team.full_name,cbbAwayCollege:game.visitor_team.college,
-    awayTeamLogo:args.awayLogo,homeTeam:game.home_team.abbreviation,homeTeamDisplayName:game.home_team.full_name,cbbHomeCollege:game.home_team.college,
+    awayTeam:game.visitor_team.abbreviation,awayTeamLogo:args.awayLogo,homeTeam:game.home_team.abbreviation,
+    ...cbbProviderFixtureIdentity(game),
     homeTeamLogo:args.homeLogo,...cbbFixtureChronology(game.date),lockState:locked?"locked":Date.parse(now)>=cutoff?"locking":"open",
     lockedAt:snapshot.lockedAt,updatedAt:snapshot.capturedAt,generatedAt:snapshot.capturedAt,holdReason:null,
     homeStarter:null,awayStarter:null,predictions:{ml:prediction(ml),total:{...prediction(total),line:total.line},nrfi:prediction(spread)},

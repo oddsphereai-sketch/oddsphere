@@ -1,5 +1,32 @@
 # Current production model releases and qualified research candidates
 
+## November 6 verified West Florida / FIU source identity
+
+CBB provider identity is `cbb_provider_identity_2026_11_06_r8_verified_west_florida_fiu`,
+input assembly `cbb_contextual_reader_input_2026_11_06_r6_verified_provider_school_identity`,
+split mappingR7 and shared capture `market_intelligence_v2_capture_2026_11_06_r30_verified_cbb_school_identity`.
+Exact BALLDONTLIE school732 resolves the incomplete Argonauts label to West Florida;
+FIU matches Florida International. No global mascot/substring alias is added.
+This same verified identity reaches odds/splits/canonical capture, schedules,
+unlocked DTOs and lock-preserving reader/result/seed/tracking identity guards.
+
+PublisherR54, adapterR37, readerR3 and trackingR40 end in `verified_school_identity`.
+The incoming protected #1052 decisionR13/gradeR12 price policy remains authoritative;
+all prior grade/decision/model families preserve their exact stored lock semantics.
+Numerical model/covarianceR7 and pinned artifact `ba5b5624...ca7f8` remain exact.
+This is an input-contract correction, and comparisons must retain actual input and
+publisher release boundaries. No new fit, refresh path, writer, lease, provider
+budget, grade rule, arbitrary adjustment or independent/market blend is introduced.
+
+The existing hash-bound locked10882715 recovery remains separate historical
+context; its original payload SHA `a0373e09...8df8`, scores, probabilities, prices,
+picks, grades, stakes and evidence remain unchanged. No historical locked regrading.
+The affected future10883068 identity can match when real provider odds exist;
+unavailable future prices are not fabricated. Zero locked promotions/demotions.
+See `model-audits/2026-11-06-cbb-west-florida-source-identity.md` and the separate
+protected locked-card recovery/active-layout audit notes.
+
+
 ## November 6 owner-selected moneyline wager limits
 
 The owner selected -500 or better as the inclusive Lean price limit after

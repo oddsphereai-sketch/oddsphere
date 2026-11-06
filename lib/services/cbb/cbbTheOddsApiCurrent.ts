@@ -1,3 +1,4 @@
+import {cbbProviderFixtureIdentity} from "@/lib/cbb/providerInstitutionIdentity";
 import type {CbbGame,CbbQuote} from "@/lib/cbb/types";
 import {cbbSplitOrientation} from "@/lib/cbb/exactSplitIdentity";
 import {normalizeCbbOwlsCurrent,type CbbCurrentOddsRejection} from "@/lib/cbb/owlsMarketEvidence";
@@ -19,7 +20,7 @@ export function normalizeCbbTheOddsApiCurrent(games:CbbGame[],body:unknown,reque
  const quotes:CbbQuote[]=[],rejections:Array<CbbCurrentOddsRejection&{gameId:number}>=[];
  const used=new Set<string>();
  for(const game of games){
-  const own={homeTeamDisplayName:game.home_team.full_name,awayTeamDisplayName:game.visitor_team.full_name,cbbHomeCollege:game.home_team.college,cbbAwayCollege:game.visitor_team.college};
+  const own=cbbProviderFixtureIdentity(game);
   const participants=events.filter(e=>typeof e.away_team==="string"&&typeof e.home_team==="string"&&cbbSplitOrientation(e.away_team??"",e.home_team??"",own)!==null);
   const matches=participants.filter(e=>typeof e.commence_time==="string"&&Number.isFinite(Date.parse(e.commence_time))&&Math.abs(Date.parse(e.commence_time!)-Date.parse(game.date))<=FIXTURE_TOLERANCE_MS);
   if(matches.length!==1||used.has(matches[0]?.id)){
