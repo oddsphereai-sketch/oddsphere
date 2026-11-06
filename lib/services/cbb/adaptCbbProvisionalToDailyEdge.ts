@@ -1,5 +1,5 @@
-import {CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE,readCbbContextualOutcomeEvidence,type CbbReleasedOutcomeBoard} from "./cbbContextualOutcomeRuntime";
-import {CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE} from "@/lib/cbb/contextualOutcomeBoard";
+import {resolveCbbContextualOutcomeRelease,readCbbContextualOutcomeEvidence,type CbbReleasedOutcomeBoard} from "./cbbContextualOutcomeRuntime";
+import {CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE} from "@/lib/cbb/contextualOutcomeBoard";
 import {CBB_NATIVE_COUNTERPRESSURE_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import {CBB_MONEYLINE_VALUE_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import {CBB_GAME_OUTCOME_RELEASE} from "@/lib/cbb/gameForecastBoard";
@@ -16,7 +16,7 @@ import { buildDailyEdgeMemberPresentation } from "@/app/lab/lib/dailyEdgeRespons
 import { CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INFORMATIONAL_WATCHLIST_GRADE_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE } from "@/lib/cbb/marketBehaviorCandidate";
 import {CBB_CONTINUITY_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_JOINT_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_ALIGNED_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 
-export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_05_r27_contextual_recommendation_risk" as const;
+export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_06_r33_economic_total_retained_margin_family" as const;
 type GradeLabel="Best Angle"|"Lean"|"Watchlist"|"No Play"|"Held";
 type BoardRow=CbbProvisionalSnapshot["board"]["rows"][number];
 type SplitEvidence=ReturnType<typeof cbbCurrentSplitEvidence>;
@@ -110,7 +110,7 @@ export function cbbOfficialGameResultFromScores(snapshot:CbbProvisionalSnapshot,
       const chosen=snapshot.board.gameForecast.selection;
       return {pickResult:((game.homeScore!>game.awayScore!)===(chosen==="first")?"win":"loss") as PickResult,gradeUnits:null};
     }
-    const contextualPass=snapshot.board.modelRelease===CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE&&row.grade==="No Play";
+    const contextualPass=resolveCbbContextualOutcomeRelease(snapshot.board.modelRelease)!==null&&row.grade==="No Play";
     const gradeUnits=contextualPass||outcome===null||row.price===null?null:outcome==="push"?0:outcome==="loss"?-1:row.price>0?row.price/100:100/-row.price;
     return {pickResult:outcome,gradeUnits};};
   return {finalScore:{home:game.homeScore,away:game.awayScore},markets:{moneyline:result("moneyline"),total:result("total"),first_inning:result("spread")}};
@@ -120,7 +120,7 @@ export function cbbOfficialGameResultFromScores(snapshot:CbbProvisionalSnapshot,
 export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvisionalSnapshot;homeLogo:string|null;awayLogo:string|null;now:string;
   splitEvidence?:SplitEvidence|null;marketQuotes?:CbbQuote[]}):DailyEdgeGameDto{
   const {game,snapshot,now}=args;
-  const contextualModel=snapshot.board.modelRelease===CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE;
+  const contextualModel=resolveCbbContextualOutcomeRelease(snapshot.board.modelRelease)!==null;
   // Member-store readers return stored locked DTOs before this adapter. A
   // directly adapted lock must also avoid decoding/reinterpreting its evidence.
   const contextual=!snapshot.lockedAt&&contextualModel?readCbbContextualOutcomeEvidence(snapshot.board as CbbReleasedOutcomeBoard):null;
@@ -129,7 +129,7 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
   if(rows.size!==3||!rows.has("moneyline")||!rows.has("spread")||!rows.has("total"))throw new Error("CBB member three-market board incomplete");
   // Legacy locked payloads retain their original reader semantics. The new
   // reason contract distinguishes path uncertainty from actual opposition.
-  const preciseReason=snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_MARKET_BEHAVIOR_GRADE_RELEASE||
+  const preciseReason=snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_MARKET_BEHAVIOR_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_NATIVE_COUNTERPRESSURE_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_MONEYLINE_VALUE_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_INFORMATIONAL_WATCHLIST_GRADE_RELEASE||
@@ -142,7 +142,7 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
     snapshot.board.gradeRelease===CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE;
-  const informationalWatchlist=snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_MARKET_BEHAVIOR_GRADE_RELEASE||
+  const informationalWatchlist=snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_MARKET_BEHAVIOR_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_NATIVE_COUNTERPRESSURE_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_MONEYLINE_VALUE_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_INFORMATIONAL_WATCHLIST_GRADE_RELEASE;

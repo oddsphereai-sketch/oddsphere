@@ -9,12 +9,22 @@ import {createCbbContextualScoreLaw,CbbScoreLawNumericalError,type CbbContextual
  * posterior function uncertainty. They are not noise-free GP-f uncertainty. */
 export type CbbWorkingLatentLocations=Omit<CbbContextualLatentGaussian,"correlation">;
 export type CbbJointCovarianceParameters={logMarginScale:number;logTotalScale:number;beta:number};
+export type CbbCrossfitAxisFitManifest={
+ axis:"margin"|"total";artifactSha256:string;artifactObjectSha256:string;methodSha256:string;
+ trainingRowsSha256:string;trainingGameIds:readonly number[];normalizerTrainingGameIds:readonly number[];
+ trainingGameIdsSha256:string;normalizerTrainingGameIdsSha256:string;inputSha256:string;
+ foldId:string;predictionMode:"retrospective_development";ownGameExcluded:true;
+ source:"saved_game_excluded_prediction"|"frozen_full_never_trained_game_prediction";
+};
 export type CbbCrossfitScoreRow={
  gameId:number;latentLocationsAndSds:CbbWorkingLatentLocations;actualHome:number;actualAway:number;excludedFromTraining:true;
  scaleSemantics:"predictive_sd_including_observation_noise";
  fitTrainingGameIds:readonly number[];
  fitManifest:{artifactSha256:string;trainingGameIdsSha256:string;normalizerTrainingGameIdsSha256:string;
-  featureSchemaSha256:string;foldId:string;predictionMode:"retrospective_development"};
+  featureSchemaSha256:string;foldId:string;predictionMode:"retrospective_development";
+  provenanceScope?:"per_axis_union_no_shared_fit_or_normalizer"};
+ inputSha256?:string;
+ perAxisFitManifests?:{margin:CbbCrossfitAxisFitManifest;total:CbbCrossfitAxisFitManifest};
 };
 export const CBB_JOINT_COVARIANCE_RESEARCH_METHOD=Object.freeze({
  release:"cbb_joint_covariance_research_2026_11_04_v1",
@@ -34,7 +44,7 @@ const sha=(value:unknown)=>createHash("sha256").update(JSON.stringify(value)).di
 export const cbbScoreCalibrationMethodSha256=()=>sha(CBB_JOINT_COVARIANCE_RESEARCH_METHOD);
 export const cbbScoreCalibrationTrainingIdsSha256=(ids:readonly number[])=>sha([...ids].sort((a,b)=>a-b));
 const isSha=(s:string)=>typeof s==="string"&&/^[a-f0-9]{64}$/.test(s);
-function validateRows(rows:readonly CbbCrossfitScoreRow[]){
+export function validateCbbCrossfitScoreRows(rows:readonly CbbCrossfitScoreRow[]){
  if(!rows.length)throw Error("joint calibration requires game-grouped crossfit rows");
  const seen=new Set<number>();
  for(const row of rows){
@@ -48,6 +58,26 @@ function validateRows(rows:readonly CbbCrossfitScoreRow[]){
   if(!m||!isSha(m.artifactSha256)||!isSha(m.featureSchemaSha256)||!m.foldId?.trim()||
    m.trainingGameIdsSha256!==idHash||m.normalizerTrainingGameIdsSha256!==idHash||m.predictionMode!=="retrospective_development")
    throw Error("crossfit artifact/feature/normalizer provenance mismatch");
+  if(row.perAxisFitManifests!==undefined){
+   const manifests=row.perAxisFitManifests;
+   if(m.provenanceScope!=="per_axis_union_no_shared_fit_or_normalizer"||!isSha(row.inputSha256??"")||
+    Object.keys(manifests).sort().join(",")!=="margin,total")throw Error("per-axis calibration requires explicit union provenance and exact input binding");
+   for(const axis of ["margin","total"] as const){
+    const a=manifests[axis],ids=a?.trainingGameIds,normalIds=a?.normalizerTrainingGameIds;
+    if(!a||a.axis!==axis||!isSha(a.artifactSha256)||!isSha(a.artifactObjectSha256)||!isSha(a.methodSha256)||!isSha(a.trainingRowsSha256)||
+     a.ownGameExcluded!==true||a.inputSha256!==row.inputSha256||!a.foldId?.trim()||a.predictionMode!=="retrospective_development"||
+     !["saved_game_excluded_prediction","frozen_full_never_trained_game_prediction"].includes(a.source)||
+     !Array.isArray(ids)||!ids.length||new Set(ids).size!==ids.length||ids.some(id=>!Number.isSafeInteger(id)||id<=0||id===row.gameId)||
+     !Array.isArray(normalIds)||new Set(normalIds).size!==normalIds.length||normalIds.some(id=>!Number.isSafeInteger(id)||id<=0||id===row.gameId)||
+     cbbScoreCalibrationTrainingIdsSha256(ids)!==a.trainingGameIdsSha256||
+     cbbScoreCalibrationTrainingIdsSha256(normalIds)!==a.normalizerTrainingGameIdsSha256||
+     a.trainingGameIdsSha256!==a.normalizerTrainingGameIdsSha256)throw Error("per-axis fit/input/normalizer own-game exclusion provenance mismatch");
+   }
+   const union=[...new Set([...manifests.margin.trainingGameIds,...manifests.total.trainingGameIds])].sort((a,b)=>a-b);
+   if(sha(union)!==sha([...row.fitTrainingGameIds].sort((a,b)=>a-b))||
+    m.artifactSha256!==sha({marginArtifactSha256:manifests.margin.artifactSha256,totalArtifactSha256:manifests.total.artifactSha256}))
+    throw Error("per-axis calibration union or component artifact summary mismatch");
+  }else if(m.provenanceScope!==undefined)throw Error("per-axis union provenance requires both component manifests");
   const p=row.latentLocationsAndSds;
   if(!p||![p.marginMean,p.totalMean,p.marginSd,p.totalSd].every(Number.isFinite)||!(p.marginSd>0&&p.totalSd>0))
    throw Error("invalid working latent locations/scales");
@@ -55,6 +85,12 @@ function validateRows(rows:readonly CbbCrossfitScoreRow[]){
    throw Error("joint calibration requires an actual nonnegative non-tied integer final score");
  }
  if(new Set(rows.map(row=>row.fitManifest.featureSchemaSha256)).size!==1)throw Error("mixed crossfit feature schemas are not one frozen calibration method");
+ if(rows.some(row=>row.perAxisFitManifests!==undefined)){
+  if(rows.some(row=>row.perAxisFitManifests===undefined))throw Error("mixed legacy and per-axis provenance cannot attest one composite calibration");
+  for(const axis of ["margin","total"] as const)if(new Set(rows.map(row=>row.perAxisFitManifests![axis].methodSha256)).size!==1)
+   throw Error("mixed component methods are not one frozen composite calibration");
+ }
+ return true;
 }
 export function applyCbbJointCovarianceCalibration(input:CbbWorkingLatentLocations,parameters:CbbJointCovarianceParameters):CbbContextualLatentGaussian{
  if(![input.marginMean,input.totalMean,input.marginSd,input.totalSd].every(Number.isFinite)||!(input.marginSd>0&&input.totalSd>0))
@@ -73,7 +109,7 @@ const dot=(a:readonly number[],b:readonly number[])=>a.reduce((s,v,i)=>s+v*b[i],
 
 /** Fixed-parameter audit, useful for objective/parity tests without fitting. */
 export function evaluateCbbJointCovarianceCalibration(rows:readonly CbbCrossfitScoreRow[],p:CbbJointCovarianceParameters,lawNumerics:CbbScoreLawNumerics={}){
- validateRows(rows);
+ validateCbbCrossfitScoreRows(rows);
  let nll=0,evaluations=0;
  for(const row of rows){const law=createCbbContextualScoreLaw(applyCbbJointCovarianceCalibration(row.latentLocationsAndSds,p),lawNumerics);
   nll+=law.cellNll(row.actualHome,row.actualAway);evaluations+=law.diagnostics().evaluations;}
@@ -82,7 +118,7 @@ export function evaluateCbbJointCovarianceCalibration(rows:readonly CbbCrossfitS
 }
 
 export function fitCbbJointCovarianceCalibration(rows:readonly CbbCrossfitScoreRow[],options:Options={}){
- validateRows(rows);
+ validateCbbCrossfitScoreRows(rows);
  const config={maxIterations:60,maxLawEvaluations:50_000,gradientTolerance:1e-4,...options};
  if(!Number.isSafeInteger(config.maxIterations)||config.maxIterations<=0||!Number.isSafeInteger(config.maxLawEvaluations)||config.maxLawEvaluations<=0||
   !(config.gradientTolerance>0&&Number.isFinite(config.gradientTolerance)))throw Error("invalid covariance optimizer computation budget");

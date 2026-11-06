@@ -1,0 +1,228 @@
+{
+  "schema": "cbb_economic_total_r7_result_v1",
+  "at": "2026-11-06T18:41:42.032020+00:00",
+  "status": "reviewed_scoped_release_candidate_not_yet_deployed",
+  "productionBase": "b77b1ed087765f7f9b5ce9ec323c0517d00b5408",
+  "scope": "CBB Total economic representation and downstream one-law consequences; retained R1 raw Margin limitation remains open. No other sport model changes.",
+  "manifest": {
+    "envelopeRelease": "cbb_private_outcome_artifact_2026_11_06_r2_schema_dictionary",
+    "logicalModelJSONBytes": 26563161,
+    "runtimeModelRelease": "cbb_contextual_outcome_2026_11_06_r7_economic_total_retained_margin",
+    "engineRelease": "cbb_contextual_composite_2026_11_06_v2_economic_total_retained_margin",
+    "methodSha256": "cd3be3451a54d24c7e6c0c9a4d6c81e0ecea69098fd1a39ff437a9de7ad6a377",
+    "modelJSONSha256": "6ec3bbea2518f6f3532740ea8cb92eaa6e962a2e36231b2284dea02cbf028dbc",
+    "modelObjectSha256": "ba5b5624b009384b3a90b7c939cde860cd1525d21713bf45da63f840990ca7f8",
+    "calibrationJSONSha256": "99faa07c5013eaa359ac516560881e0e8368253ba4c103ef9a0fd6df566617f7",
+    "calibrationMethodSha256": "c27ab973cb5d3a870940960c25c367060f16b73da6a8e904c5943255bf672d75",
+    "compressedSha256": "9b43a7e8f870b70fdb76e8789d24b8098390e21f5607dee0c4406c8899c56849",
+    "uncompressedSha256": "2563889fa31338c337add7cec333f02717c940b6ef4f5f3bf4416f8ea9dc3cf2",
+    "compressedBytes": 643756,
+    "uncompressedBytes": 5393130,
+    "availableBy": "2026-11-06T18:31:14.885Z"
+  },
+  "fits": {
+    "fullTotal": 1,
+    "excludedGameTotal": 5,
+    "margin": 0,
+    "jointCalibration": 1,
+    "allConverged": true,
+    "sourceRows": 182,
+    "sourceMethodFrozen": true,
+    "accuracyClaim": false,
+    "totalBuildMilliseconds": 178751.793625
+  },
+  "currentSameInput": {
+    "processedGames": 58,
+    "processedMarkets": 174,
+    "counts": {
+      "old": {
+        "moneyline": {
+          "total": 58,
+          "grades": {
+            "Held": 0,
+            "No Play": 35,
+            "Watchlist": 21,
+            "Lean": 2,
+            "Best Angle": 0
+          },
+          "actionables": 2,
+          "first": 57,
+          "second": 1
+        },
+        "spread": {
+          "total": 58,
+          "grades": {
+            "Held": 0,
+            "No Play": 11,
+            "Watchlist": 47,
+            "Lean": 0,
+            "Best Angle": 0
+          },
+          "actionables": 0,
+          "first": 31,
+          "second": 27
+        },
+        "total": {
+          "total": 58,
+          "grades": {
+            "Held": 0,
+            "No Play": 0,
+            "Watchlist": 27,
+            "Lean": 29,
+            "Best Angle": 2
+          },
+          "actionables": 31,
+          "first": 3,
+          "second": 55
+        }
+      },
+      "candidate": {
+        "moneyline": {
+          "total": 58,
+          "grades": {
+            "Held": 0,
+            "No Play": 33,
+            "Watchlist": 23,
+            "Lean": 2,
+            "Best Angle": 0
+          },
+          "actionables": 2,
+          "first": 57,
+          "second": 1
+        },
+        "spread": {
+          "total": 58,
+          "grades": {
+            "Held": 0,
+            "No Play": 10,
+            "Watchlist": 48,
+            "Lean": 0,
+            "Best Angle": 0
+          },
+          "actionables": 0,
+          "first": 31,
+          "second": 27
+        },
+        "total": {
+          "total": 58,
+          "grades": {
+            "Held": 0,
+            "No Play": 1,
+            "Watchlist": 45,
+            "Lean": 11,
+            "Best Angle": 1
+          },
+          "actionables": 12,
+          "first": 7,
+          "second": 51
+        }
+      }
+    },
+    "underConcentration": {
+      "old": {
+        "under": 55,
+        "over": 3,
+        "underActionables": 31,
+        "overActionables": 0,
+        "underBest": 2,
+        "overBest": 0
+      },
+      "candidate": {
+        "under": 51,
+        "over": 7,
+        "underActionables": 12,
+        "overActionables": 0,
+        "underBest": 1,
+        "overBest": 0
+      }
+    },
+    "boardImpact": {
+      "actionablePromotions": 4,
+      "actionableDemotions": 23,
+      "tierPromotions": 9,
+      "tierDemotions": 27,
+      "sideChanges": 10,
+      "changedScoreGames": 58
+    },
+    "meanTotalChange": 0.12407379192372195,
+    "meanMarginChange": -0.004030301563918803,
+    "runtimeMs": {
+      "mean": 1169.2855754310344,
+      "maximum": 2005.9084579999999
+    },
+    "sourceContractAudit": {
+      "quotesChecked": 55926,
+      "currentQuotesChecked": 1911,
+      "rawQuoteMembershipErrors": 0,
+      "clockErrors": 0,
+      "fixtureErrors": 0,
+      "exactInterpretationHashDifferences": 17,
+      "nativeInterpretationErrors": 0,
+      "derivedArithmeticErrors": 0,
+      "inputMutationErrors": 0,
+      "targetMutationErrors": 0
+    },
+    "errors": []
+  },
+  "reviews": {
+    "semantic": "Independent23game review includingall10flips,3failedR6cases,formerBest,newBest,countermarketpositions. ScopedGO; notsharpconfirmation oraccuracy certification.",
+    "mathAndGrades": "Independent174grades,origin/variance/restoration/posterior/priceframe audit passes. All4promotions and23demotions onTotals;20demotions locationuncertainty,3price-margin; N182vs137 changes0supports.",
+    "integration": "Genuine privatebundle/runtime,pipeline,readiness,transport;42storedR1locks126trackingrows remainexact,zero inserts/upgrades."
+  },
+  "requiredChecks": {
+    "npm_run_verify_model_change": "PASS",
+    "focusedNewAndAffectedTests": "PASS",
+    "productionWebpackBuildWithTypes": "PASS",
+    "scopedEslint": "PASS",
+    "localPostgreSQLProof": "Skipped because optional local URL unset; applicableCI still required",
+    "integrationSafety": "pending committed fresh-main candidate",
+    "protectedPR": "pending",
+    "liveVerification": "pending"
+  },
+  "knownLimits": [
+    "R1 Margin source-allocation remains unchanged; CBBML/Spread andothersportsnotcompleted.",
+    "OwnTotalPATH,LEVELRBFandcrossPRESSURE fitted residual contributions negligible on current58. Currentpricechangesmoveobservedorigin; ownpressure/crosspathactive. Do notclaimallhistoryfeaturesmateriallyaffectmean.",
+    "NewTotalforecastuncertainty is larger, andboardmateriallyflatter. No gradecriteria loosened or countsforced.",
+    "Learnedcontrarianforecasts do notidentifysharpbettors or guaranteeaccuracy.",
+    "LegacyrawMargin numeric differences atmost7.1e-15 on2currentcases fromrederivedfloatingreceiptarithmetic; storedlockedvaluesremainbyteexact."
+  ],
+  "resources": {
+    "paidAICalls": 0,
+    "extraOddsProviderRequests": 0,
+    "newWriter": false,
+    "newCadence": false,
+    "existingPredictionPipelineLeasePreserved": true,
+    "privateStoredGzipBytes": 643756,
+    "anonymousArtifactAccess": "blocked400andpublic400"
+  },
+  "evidence": [
+    {
+      "path": "/private/tmp/cbb-economic-total-r7-development_build/release-build-report.json",
+      "sha256": "7223383e2f13c1031e8efc57849f5d106468fd4ed6f2727cedd185fad8212ec5"
+    },
+    {
+      "path": "/private/tmp/cbb-r7-current-58-impact-20261106-summary.json",
+      "sha256": "c8f30c0e7b54c90117c44580c8d164f5ff4942d087026a362ed1ec5038c85261"
+    },
+    {
+      "path": "/private/tmp/cbb-r7-current-whole-market-semantic-review-20261106-v2.json",
+      "sha256": "85000398c2fc2031c2006b41e4241a6d7e88d21eb9fcff95291c42877c883e8c"
+    },
+    {
+      "path": "/private/tmp/cbb-r7-economic-mean-grade-review-v2-20261106.json",
+      "sha256": "7b018873b943361b2d10ffa1439daaf983e156a6678cda5321a3fdbe6823f16e"
+    },
+    {
+      "path": "/private/tmp/cbb-r7-active-legacy-lock-compatibility-proof-20261106.json",
+      "sha256": "829edf85b537f1c7403e59cd72aa4a5387ffe1c80afae281834e6780bff86703"
+    },
+    {
+      "path": "/private/tmp/cbb-r7-actual-private-runtime-proof-20261106.json",
+      "sha256": "ccccf33f690311175d08b242e6d1418be40646f953ade8da327a4d76b651850f"
+    },
+    {
+      "path": "/private/tmp/cbb-r7-private-artifact-proof-20261106.json",
+      "sha256": "32fb0d77a680535435c13eb7fd7e0c87b98607f5fca2efbbc069a13228e90221"
+    }
+  ]
+}

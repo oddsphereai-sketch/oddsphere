@@ -8,8 +8,8 @@ import { seedCbbGames } from "../lib/services/cbb/seedCbbGamesService";
 import { refreshCbbMemberBoard,selectCbbContextualPipelineTargets } from "../lib/services/cbb/cbbMemberPipeline";
 import {readCbbCanonicalReaderHistory} from "../lib/services/cbb/cbbCanonicalReaderHistory";
 import type {CbbCanonicalPriceRow} from "../lib/services/cbb/cbbCanonicalMarketEvidence";
-import {makeCbbPipelineTestRuntime} from "./fixtures/cbb-contextual-pipeline-runtime";
-import {readCbbContextualOutcomeEvidence,CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE} from "../lib/services/cbb/cbbContextualOutcomeRuntime";
+import {makeCbbPipelineTestRuntime,CBB_PIPELINE_FIXTURE_MODEL_RELEASE} from "./fixtures/cbb-contextual-pipeline-runtime";
+import {readCbbContextualOutcomeEvidence} from "../lib/services/cbb/cbbContextualOutcomeRuntime";
 import {CBB_CURRENT_SCORE_RELEASE} from "../lib/cbb/currentScoreRuntime";
 
 
@@ -123,7 +123,7 @@ async function main(){
   assert.equal(unknown.sourceGames,1);assert.equal(unknown.published,1);assert.deepEqual(unknown.unpublishedIncomplete,[],"verified historical venue recovery supplies St Thomas's actual prior");
   assert.notEqual(JSON.stringify([...stored]),beforeUnknown);
   const recoveredRecord=stored.get(`cbb::member-game::${unknownGame.id}`) as {snapshot:{board:{modelRelease:string}}};
-  assert.equal(recoveredRecord.snapshot.board.modelRelease,CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE);
+  assert.equal(recoveredRecord.snapshot.board.modelRelease,CBB_PIPELINE_FIXTURE_MODEL_RELEASE);
   const absentId=999999,unmodeledGame={...unknownGame,id:absentId,home_team:{...unknownGame.home_team,id:absentId}};
   const beforeUnmodeled=JSON.stringify([...stored]);
   const unmodeled=await refreshCbbMemberBoard({loadContextualRuntime,anchorDate:"2026-10-29",season:2026,now:asOf,bdlKey:"test",owlsKey:"test",trainingGames:[],

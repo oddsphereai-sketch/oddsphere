@@ -8,9 +8,7 @@ const handle=createCbbContextualReadinessHandler({adminAuth:validateAdminAuth,ma
   VERCEL_GIT_COMMIT_SHA:process.env.VERCEL_GIT_COMMIT_SHA,GIT_COMMIT_SHA:process.env.GIT_COMMIT_SHA}),
  loadModule:async()=>{
   const m=await import("@/lib/services/cbb/cbbContextualOutcomeRuntime");
-  return{metadata:{model:m.CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE,calibration:m.CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE,
-   engine:m.CBB_CONTEXTUAL_OUTCOME_MANIFEST.engineRelease,objectSha256:m.CBB_CONTEXTUAL_OUTCOME_MANIFEST.modelObjectSha256,
-   availableBy:m.CBB_CONTEXTUAL_OUTCOME_MANIFEST.availableBy},load:m.loadCbbContextualOutcomeRuntime};
+  return{metadata:m.cbbContextualOutcomeReadinessMetadata(),load:m.loadCbbContextualOutcomeRuntime};
  }});
 /** Authenticated asset/DB-binding check only. It never evaluates a game. */
 export async function GET(request:Request){return handle(request);}
