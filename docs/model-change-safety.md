@@ -1,5 +1,29 @@
 # Model change safety protocol
 
+## Owner-directed NFL exact-player source continuity — November 6
+
+The owner requested cross-model checks and repair of injury/starter context
+lost during feed updates, without changing forecasts because a past pick lost.
+A functional fault reproduces an omitted Out quarterback disappearing while
+another injured teammate remains. This scoped source correction merges by
+exact game/team/player and original native time, honors newer explicit
+clearances and statuses, and prevents stale clears or old injury resurrection.
+The unused live availability-arbitration shadow is no longer persisted; its old winner field actually represented movement direction. Legacy stored payloads remain unchanged. It does not tune a predictive coefficient, force a side, alter grade thresholds,
+add a writer/provider call, or add a live shadow model.
+
+CollectorR37/modelR57/calibrationR56/decision-gradeR66/memberR64/fixtureR80/
+snapshotR72/writerR115 version the input behavior. Existing R63/R65/R79/R71 and
+older locked reader/writer precedence remains exact. The frozen 14-game input
+comparison changes no injury or starter input and retains all 42 market
+decisions /18 actionables: 0 promotions and 0 demotions. Tested newer clearance
+and newer injury controls provide both release and retention behavior; no
+compensating picks are invented. This owner-directed correctness scope permits
+the demonstrated continuity correction with prospective evaluation, not a
+reusable waiver for market-method or probability tuning. Required full/focused
+checks, clean fresh-base protected PR and actual live proof still apply.
+Evidence: `model-audits/2026-11-06-nfl-exact-player-continuity.json`.
+
+
 ## Owner-directed November 6 Daily Edge current-source correctness repair
 
 The owner explicitly requested an audit of every Daily Edge sport with games

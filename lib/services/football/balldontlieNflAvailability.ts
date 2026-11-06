@@ -62,6 +62,8 @@ const NFL_INJURIES_ENDPOINT = "https://api.balldontlie.io/nfl/v1/player_injuries
 const NFL_DESIGNATIONS_ENDPOINT = "https://api.balldontlie.io/nfl/v1/player_designations";
 const NFL_TEAMS_ENDPOINT = "https://api.balldontlie.io/nfl/v1/teams";
 const NFL_INJURIES_DOCS = "https://nfl.balldontlie.io/#player-designations";
+export const NFL_AVAILABILITY_CONTINUITY_RELEASE =
+  "nfl_availability_continuity_2026_11_06_r2_exact_player_reports" as const;
 // A full 32-team regular-season slate currently exceeds four 100-row pages
 // (Week 2, 2026 returned 488 rows). Keep the request bounded, but do not turn
 // a valid fifth page into a slate-wide "injuries unavailable" result.
@@ -340,7 +342,10 @@ function normalizeNflDesignationGames(
 
   const output: DailyEdgeGameAvailability[] = [];
   for (const matchup of matchups) {
-    const gameRows = rowsByGame.get(providerGameId(matchup.id)) ?? [];
+    const gameRows = latestUnambiguousDesignationRows(rowsByGame.get(providerGameId(matchup.id)) ?? []);
+    // An ambiguous newest source row is unavailable, not a page-order choice.
+    // The existing bounded legacy fallback / exact-game prior remains eligible.
+    if (gameRows === null) continue;
     const coveredTeams = new Set(gameRows
       .map((row) => stringValue(row.team?.abbreviation)?.toUpperCase() ?? null)
       .filter((abbreviation): abbreviation is string => abbreviation !== null));
@@ -355,6 +360,16 @@ function normalizeNflDesignationGames(
         players,
       };
     });
+    const playerClearances = gameRows.flatMap((row) => {
+      const name = [stringValue(row.player?.first_name), stringValue(row.player?.last_name)].filter(Boolean).join(" ");
+      const reportedAt = isoTimestamp(row.updated_at);
+      // Keep the positive exact-player receipt before filtering healthy rows
+      // out of the injury panel. A missing/malformed player is not cleared.
+      const status = normalizeNflDesignationPlayer(row)?.status.toLowerCase();
+      const explicitClear = designationIsClear(row, status);
+      return name && reportedAt && explicitClear
+        ? [{ teamAbbreviation: stringValue(row.team?.abbreviation)!.toUpperCase(), name, reportedAt }] : [];
+    });
     output.push({
       eventId: matchup.id,
       awayTeam: matchup.awayTeam,
@@ -363,12 +378,46 @@ function normalizeNflDesignationGames(
       sourceLabel: "BALLDONTLIE NFL injury report",
       sourceUrl: NFL_INJURIES_DOCS,
       reportUpdatedAt: latestTimestamp(gameRows.map((row) => isoTimestamp(row.updated_at))),
+      playerClearances,
       verifiedClear: coveredTeams.has(matchup.awayTeam) && coveredTeams.has(matchup.homeTeam) &&
+        [matchup.awayTeam, matchup.homeTeam].every(team => playerClearances.some(row => row.teamAbbreviation === team)) &&
         teams.every((team) => team.players.length === 0),
       teams,
     });
   }
   return output;
+}
+
+function designationIsClear(row: BdlNflDesignationRow, status: string | undefined): boolean {
+  return status === "available" || status === "active" ||
+    status === undefined && (row.active === true || Array.isArray(row.practice_reports) &&
+      row.practice_reports.some((report: unknown) => {
+        if (report === null || typeof report !== "object") return false;
+        const practice = report as BdlNflPracticeReport;
+        return isoDate(practice.date) !== null && stringValue(practice.status)?.toLowerCase() === "full";
+      }));
+}
+
+function latestUnambiguousDesignationRows(rows: BdlNflDesignationRow[]): BdlNflDesignationRow[] | null {
+  const groups = new Map<string, BdlNflDesignationRow[]>();
+  for (const row of rows) {
+    const name = [stringValue(row.player?.first_name), stringValue(row.player?.last_name)].filter(Boolean).join(" ");
+    if (!name) continue;
+    const key = `${stringValue(row.team?.abbreviation)?.toUpperCase()}|${availabilityPlayerKey(name)}`;
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+  const result: BdlNflDesignationRow[] = [];
+  for (const group of groups.values()) {
+    const observations = group.map(row => {
+      const status = normalizeNflDesignationPlayer(row)?.status.toLowerCase();
+      return { row, at: reportClock(isoTimestamp(row.updated_at)),
+        status: designationIsClear(row, status) ? "available" : status ?? "unreported" };
+    });
+    const selected = newestUnambiguousPlayerObservation(observations);
+    if (selected === null) return null;
+    result.push(selected.row);
+  }
+  return result;
 }
 
 function providerGameId(eventId: string): string {
@@ -502,8 +551,9 @@ function reportTime(player: DailyEdgeAvailabilityPlayer): number {
 
 /**
  * A provider omission is not an authoritative healthy/cleared report. Preserve
- * the last verified exact-game team unit until the provider publishes a newer
- * non-empty unit. This is internal continuity only: original timestamps and
+ * each verified exact-game player until a newer status or exact-player
+ * clearance arrives. Another injured teammate does not replace that player's
+ * report. This is internal continuity only: original timestamps and
  * provider provenance are retained and no row is relabeled as fresh.
  */
 export function mergeNflAvailabilityWithPrior(
@@ -511,23 +561,107 @@ export function mergeNflAvailabilityWithPrior(
   prior: DailyEdgeGameAvailability | null,
 ): DailyEdgeGameAvailability | null {
   if (current === null) return prior;
+  if (hasConflictingPlayerReports(current)) return prior && sameAvailabilityGame(current, prior) ? prior : null;
   if (prior === null || !sameAvailabilityGame(current, prior)) {
-    return current.verifiedClear === true || current.teams.some((team) => team.players.length > 0) ? current : null;
+    if (current.verifiedClear === true && current.playerClearances === undefined) return current;
+    if (!current.teams.some(team => team.players.length) && !current.playerClearances?.length) return null;
+    // Use the same row/clearance rules on a first capture or legacy packet;
+    // a missing prior is not permission to trust duplicate provider order.
+    return mergeNflAvailabilityWithPrior(current, { ...current, reportUpdatedAt: null,
+      verifiedClear: false, playerClearances: [], wholeGameClearanceAt: undefined,
+      teams: current.teams.map(team => ({ ...team, players: [] })) });
   }
 
-  if (current.verifiedClear === true) return current;
+  // Legacy reports explicitly asserting a whole-game clear remain readable,
+  // but a stale/undated clear cannot erase newer player evidence. New reports
+  // carry exact-player clearances, so unrelated healthy rows cannot clear an
+  // omitted injured starter.
+  if (current.verifiedClear === true && current.playerClearances === undefined &&
+      reportClock(current.reportUpdatedAt) > Math.max(reportClock(prior.reportUpdatedAt),
+        ...prior.teams.flatMap(team => team.players.map(reportTime)))) return current;
 
   const priorByTeam = new Map(prior.teams.map((team) => [team.abbreviation, team]));
-  const teams = current.teams.map((team) =>
-    team.players.length > 0 ? team : priorByTeam.get(team.abbreviation) ?? team,
-  );
-  if (!teams.some((team) => team.players.length > 0)) return prior;
+  const wholeGameClearanceAt = latestTimestamp([prior.wholeGameClearanceAt ?? null,
+    current.wholeGameClearanceAt ?? null,
+    prior.verifiedClear === true && prior.playerClearances === undefined ? prior.reportUpdatedAt : null]);
+  const clearances = new Map<string, NonNullable<DailyEdgeGameAvailability["playerClearances"]>[number]>();
+  for (const clearance of [...(prior.playerClearances ?? []), ...(current.playerClearances ?? [])]) {
+    if (![current.awayTeam, current.homeTeam].includes(clearance.teamAbbreviation) ||
+        !Number.isFinite(reportClock(clearance.reportedAt))) continue;
+    const key = `${clearance.teamAbbreviation}|${availabilityPlayerKey(clearance.name)}`;
+    if (reportClock(clearance.reportedAt) > reportClock(clearances.get(key)?.reportedAt)) clearances.set(key, clearance);
+  }
+  const teams = current.teams.map((team) => {
+    const players = new Map<string, DailyEdgeAvailabilityPlayer>();
+    for (const player of [...(priorByTeam.get(team.abbreviation)?.players ?? []), ...team.players]) {
+      const key = availabilityPlayerKey(player.name);
+      const priorPlayer = players.get(key);
+      if (!priorPlayer || hasKnownAvailabilityStatus(player.status) && !hasKnownAvailabilityStatus(priorPlayer.status) ||
+          reportTime(player) > reportTime(priorPlayer) &&
+          (hasKnownAvailabilityStatus(player.status) || !hasKnownAvailabilityStatus(priorPlayer.status))) {
+        players.set(key, player);
+      }
+    }
+    return { ...team, players: [...players.values()].filter(player => {
+      const clearedAt = reportClock(clearances.get(`${team.abbreviation}|${availabilityPlayerKey(player.name)}`)?.reportedAt);
+      const legacyClearAt = reportClock(wholeGameClearanceAt);
+      return Math.max(clearedAt, legacyClearAt) <= reportTime(player);
+    }).sort((first, second) => reportTime(second) - reportTime(first)) };
+  });
+  const playerClearances = [...clearances.values()];
+  if (!current.teams.some(team => team.players.length) && !current.playerClearances?.length) return prior;
 
   return {
     ...current,
-    reportUpdatedAt: latestAvailabilityReportTime(teams) ?? prior.reportUpdatedAt,
+    reportUpdatedAt: latestTimestamp([latestAvailabilityReportTime(teams), wholeGameClearanceAt,
+      ...playerClearances.map(row => row.reportedAt)])
+      ?? prior.reportUpdatedAt,
+    ...(playerClearances.length || current.playerClearances !== undefined ? { playerClearances } : {}),
+    ...(wholeGameClearanceAt ? { wholeGameClearanceAt } : {}),
+    verifiedClear: teams.every(team => team.players.length === 0) && (playerClearances.length > 0 || wholeGameClearanceAt !== null),
     teams,
   };
+}
+
+function availabilityPlayerKey(name: string): string {
+  return name.trim().toLowerCase().normalize("NFKD").replace(/[^a-z0-9]/g, "");
+}
+
+function hasKnownAvailabilityStatus(status: string): boolean {
+  return !["", "unknown", "status unavailable", "unavailable", "unspecified", "not reported", "unreported"]
+    .includes(status.trim().toLowerCase());
+}
+
+function newestUnambiguousPlayerObservation<T extends { at: number; status: string }>(rows: T[]): T | null {
+  const latest = (values: T[]) => {
+    const at = Math.max(...values.map(row => row.at));
+    return values.filter(row => row.at === at);
+  };
+  const newest = latest(rows);
+  if (new Set(newest.map(row => row.status)).size > 1) return null;
+  const known = rows.filter(row => hasKnownAvailabilityStatus(row.status));
+  const meaningful = known.length ? latest(known) : newest;
+  return new Set(meaningful.map(row => row.status)).size > 1 ? null : meaningful[0]!;
+}
+
+function hasConflictingPlayerReports(report: DailyEdgeGameAvailability): boolean {
+  const groups = new Map<string, Array<{ at: number; status: string }>>();
+  const add = (team: string, name: string, at: string | null, status: string) => {
+    const key = `${team}|${availabilityPlayerKey(name)}`;
+    const normalized = status.trim().toLowerCase();
+    groups.set(key, [...(groups.get(key) ?? []), { at: reportClock(at),
+      status: normalized === "active" ? "available" : normalized }]);
+  };
+  for (const team of report.teams) for (const player of team.players) {
+    add(team.abbreviation, player.name, player.reportedAt, player.status);
+  }
+  for (const row of report.playerClearances ?? []) add(row.teamAbbreviation, row.name, row.reportedAt, "available");
+  return [...groups.values()].some(rows => newestUnambiguousPlayerObservation(rows) === null);
+}
+
+function reportClock(value: string | null | undefined): number {
+  const parsed = Date.parse(value ?? "");
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
 }
 
 function sameAvailabilityGame(

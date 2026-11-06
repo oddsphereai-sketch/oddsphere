@@ -178,7 +178,51 @@ and postdeployment checks remain required. Preserve the separate R38/R39/R41 sou
 release declarations when integrating this candidate. Publisher R42 and tracking
 R29 incorporate main 4ebd7a06 without relabeling R23/R22 or older locked records.
 
+## NFL exact-player availability continuity — November 6
+
+Owner-requested cross-model continuity audit reproduced a second NFL omission
+path: a non-empty fresh team report replaced the whole previous team unit, so
+another injured teammate could erase an omitted Out quarterback. The scoped
+repair retains each exact-game player using the original native report clock.
+A newer explicit player status or clearance supersedes it; an older update or
+clearance cannot roll it back. Exact-player clearance receipts survive later
+omissions, so old injury rows cannot resurrect after a genuine clearance.
+Healthy unrelated teammates do not clear an omitted previously injured player.
+The R2 quarterback-regime authority and downstream market equations are unchanged. The unused availabilityArbitrationShadow diagnostic is no longer saved on future rows: its legacy `targetExcludedProfessionalMoneylineWinner` field actually described movement direction, not the current book favorite. Existing stored payloads retain that field unchanged; the helper remains offline only.
+
+Runtime identifiers for this release:
+
+- `nfl_availability_continuity_2026_11_06_r2_exact_player_reports`
+- `nfl_market_led_moneyline_lean_shadow_2026_11_06_r9_exact_player_clearance` (existing internal starter-feature kernel; no new live shadow)
+- `nfl_forward_evidence_collector_2026_11_06_r37_exact_player_availability_continuity`
+- `nfl_v1_daily_edge_model_2026_11_06_r57_exact_player_availability_continuity`
+- `nfl_v1_daily_edge_calibration_2026_11_06_r56_exact_player_availability_continuity`
+- `nfl_v1_daily_edge_decision_2026_11_06_r66_exact_player_availability_continuity`
+- `nfl_v1_grade_policy_2026_11_06_r66_exact_player_availability_continuity`
+- `nfl_v1_member_release_2026_11_06_r64_exact_player_availability_continuity`
+- `nfl_weekly_member_fixture_2026_11_06_r80_exact_player_availability_continuity`
+- `nfl_forward_member_snapshot_2026_11_06_r72_exact_player_availability_continuity`
+- `nfl_forward_evidence_writer_2026_11_06_r115_exact_player_availability_continuity`
+
+The R63/R65/R79/R71 family remains explicit predecessor authority. The sole
+existing `prediction_pipeline:nfl` writer and provider budgets are unchanged.
+A saved JAX@BAL packet plus a synthetic partial-report fault proves preservation
+of Fagnano and a newer explicit Huntley clearance proves genuine return. This
+probe is outcome-exposed, not an accuracy experiment. All 14 frozen current
+injury inputs and both starter inputs remain exact; 42 decisions and 18
+actionables are retained (0 promotions /0 demotions). The actual R71 predecessor
+member payload and its original locked row remain exact in the new reader.
+
+This does not resolve the separate DAL@IND semantic-method finding: a later
+Circa Dallas -6.5 to -4.5 buyback does not by itself establish an Indianapolis
+outright win or validate the starting statistical law. The NFL reader still
+uses relative innovations from one selected statistical base. Do not describe
+input continuity or numerical coherence as certification of that market read.
+Source/functional evidence: `model-audits/2026-11-06-nfl-exact-player-continuity.json`.
+
 ## NFL quarterback-regime continuity — November 6
+
+The R2 regime component remains active. Its R36/R56/R55/R65/R63/R79/R71/R114 release family below is the preserved predecessor of the exact-player continuity family above.
 
 The November 6 owner-directed repair corrects a source-selection discontinuity,
 not a loss-based coefficient adjustment. For exact JAX@BAL game 1392337, Joe

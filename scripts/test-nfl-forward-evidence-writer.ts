@@ -468,7 +468,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_11_06_r114_quarterback_regime_continuity/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_11_06_r115_exact_player_availability_continuity/);
 assert.match(writer, /buildNflMarketBrainShadow/);
 assert.match(writer, /readNflOwlsMarketBrainSplitEvidence/,
   "the NFL shadow must consume the canonical Owls evidence lane");
@@ -495,7 +495,8 @@ for (const readerPath of [
     `${readerPath} must not consume the shadow tape`);
 }
 assert.match(writer, /exactProviderScoreShadow: exactProviderScore/);
-assert.match(writer, /availabilityArbitrationShadow/);
+assert.doesNotMatch(writer, /availabilityArbitrationShadow|buildNflAvailabilityArbitrationShadow/,
+  "future rows must not persist an unused shadow that calls movement direction a market winner");
 assert.match(writer, /mergeNflAvailabilityWithPrior/);
 assert.match(
   writer,

@@ -25,6 +25,10 @@ export type DailyEdgeGameAvailability = {
   freshnessStatus?: "current" | "previous_day";
   /** Exact-game source rows were present and verified that no player remains reportable. */
   verifiedClear?: boolean;
+  /** Exact-player source clearances; omission from a later list is not clearance. */
+  playerClearances?: Array<{ teamAbbreviation: string; name: string; reportedAt: string }>;
+  /** Original timestamp of a legacy source's explicit whole-game clearance. */
+  wholeGameClearanceAt?: string;
   reportUpdatedAt: string | null;
   teams: DailyEdgeTeamAvailability[];
 };

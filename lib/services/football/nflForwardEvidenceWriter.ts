@@ -135,7 +135,6 @@ import {
   NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE,
   type NflExactProviderScoreContext,
 } from "./nflExactProviderScoreRuntime";
-import { buildNflAvailabilityArbitrationShadow } from "./nflAvailabilityArbitrationShadow";
 import { buildNflMarketState } from "./nflMarketState";
 import { applyNflFullGameEvidenceRuntime, deriveNflEvaluatedMarketContract, stabilizeNflFullGameEvidenceTargets } from "./nflFullGameEvidenceRuntime";
 import { applyNflMarketInnovationRuntime } from "./nflMarketInnovationRuntime";
@@ -161,7 +160,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_06_r114_quarterback_regime_continuity" as const;
+  "nfl_forward_evidence_writer_2026_11_06_r115_exact_player_availability_continuity" as const;
 
 const NFL_REGULAR_MARKETS = ["moneyline", "spread", "total"] as const;
 const NFL_OWLS_COVERAGE_DIAGNOSTICS = new Set([
@@ -1206,16 +1205,6 @@ export async function runNflForwardEvidenceWriter(args: {
         pairedPriceScore: { margin: marketImpliedMargin, total: marketImpliedTotal },
       }));
     }
-    const availabilityArbitrationShadow = exactProviderScore && paidProjectionShadow
-      ? buildNflAvailabilityArbitrationShadow({
-          providerDepth: { away: providerAwayDepth, home: providerHomeDepth },
-          availabilityAdjustedDepth: { away: awayDepth, home: homeDepth },
-          exactProviderScore,
-          playerAwareScore: paidProjectionShadow,
-          targetExcludedProfessionalAuthority: resolved.diagnosticProfessionalAuthority,
-          targetExclusionStatus: resolved.targetExclusion.status,
-        })
-      : null;
     assertFootballCrossMarketCoherence({
       sport: "nfl",
       providerGameId: plan.game.providerGameId,
@@ -1309,7 +1298,6 @@ export async function runNflForwardEvidenceWriter(args: {
       ...(paidProjectionShadow ? { paidProjectionShadow } : {}),
       ...(exactProviderScore ? { exactProviderScoreShadow: exactProviderScore } : {}),
       outcomeBaseAuthority: baseSelection.receipt,
-      ...(availabilityArbitrationShadow ? { availabilityArbitrationShadow } : {}),
       decisions: {
         evaluatedBets: production.evaluatedBets,
         outcomeConfidence: production.outcomeConfidence,
