@@ -9,16 +9,17 @@ import type {CbbContextualFeatureInput,CbbContextualConsumerQuote} from "./conte
 import {CBB_CONTEXTUAL_MARKET_INTERPRETATION_RELEASE,buildCbbContextualMarketInterpretation,type CbbContextualMarketInterpretation} from "./contextualMarketInterpretation";
 import type {CbbQuote} from "./types";
 import {createCbbRecommendationRiskEvaluator,assessCbbOutcomeConfidenceRisk,CBB_CONTEXTUAL_RECOMMENDATION_RISK_POLICY,type CbbRecommendationRiskContext} from "./contextualRecommendationRisk";
+import {assessCbbMarketResistance} from "./contextualMarketResistanceGrade";
 import {assessConfidenceLeanPrice} from "../services/dailyEdge/confidenceLeanPrice";
 
-export const CBB_INTERPRETED_DECISION_RELEASE="cbb_interpreted_decision_2026_11_06_r11_confidence_led_lean" as const;
+export const CBB_INTERPRETED_DECISION_RELEASE="cbb_interpreted_decision_2026_11_06_r12_current_contract_resistance" as const;
 /** Product label boundaries, not learned accuracy claims or signal activation
  * gates. The forecast has already interpreted the full qualified market.
  * Confidence is the same unconditional win probability stored in the decision;
  * pushes are refunded in EV, never counted as wins toward the confidence bar. */
 export const CBB_INTERPRETED_GRADE_POLICY=Object.freeze({bestMinimumWinProbability:.62,bestMinimumAmericanPrice:-200,confidenceLeanMinimumWinProbability:.55,
  leanMeaning:"price_value_or_supported_final_outcome_confidence_with_declared_fitted_location_and_adverse_case_stress;offered_EV_recorded_separately",
- watchMeaning:"unresolved_break_even_or_forecast_premium_consumed_by_the_actual_pair_margin",
+ watchMeaning:"unresolved_value_or_price_margin_or_current_professional_contract_resistance",
  noPlayMeaning:"negative_offered_value_without_a_resolved_advantage_over_the_paired_fair_price",
  bestMeaning:"strong_final_outcome_confidence_with_positive_value_at_a_suitable_straight_bet_price",
  basis:"owner_confidence_accuracy_price_and_recommendation_uncertainty;no_hand_set_EV_percentage_or_odds_floor_no_required_book_confirmation",
@@ -112,8 +113,8 @@ export function buildCbbInterpretedDecision(args:{input:CbbContextualFeatureInpu
   const bestToLean=bestAngleAssessment&&!bestAngleAssessment.supported;
   const valueGrade=riskWatch?(recommendationRisk.priceCanSupportRecommendation?"Watchlist" as const:"No Play" as const):bestToLean?"Lean" as const:grading.grade;
   const confidenceLedLean=confidenceLeanAssessment.supported&&valueGrade!=="Lean"&&valueGrade!=="Best Angle";
-  const grade=confidenceLedLean?"Lean" as const:valueGrade;
-  const reason=confidenceLedLean?"outcome_confidence_supports_lean_price_value_recorded_separately":riskWatch?recommendationRisk.reason:bestToLean?"positive_value_with_moderate_risk_support_below_best_stability":grading.reason;
+  const baseGrade=confidenceLedLean?"Lean" as const:valueGrade;
+  const baseReason=confidenceLedLean?"outcome_confidence_supports_lean_price_value_recorded_separately":riskWatch?recommendationRisk.reason:bestToLean?"positive_value_with_moderate_risk_support_below_best_stability":grading.reason;
   const sourceEconomics=receipt.streams.filter(s=>s.role==="professional"&&s.market===market&&family(s.book)!==family(target.sportsbook)&&s.currentQuote).flatMap(s=>{
    const raw=s.currentQuote!.rawQuote;if(!("phase" in raw)||!raw.fetchedAt||at-Date.parse(raw.providerObservedAt)>3_600_000)return [];
    return [{book:s.book,source:raw,reference:references.evaluate({source:raw as Quote,target,selection,integerPushAssumption:"borrow_final_joint_push",targetOrientationProof:proof.columnProof})}];
@@ -131,10 +132,12 @@ export function buildCbbInterpretedDecision(args:{input:CbbContextualFeatureInpu
   const counterevidence={professionalNegativeReference:sourceEconomics.filter(x=>x.reference.targetExpectedValue!==null&&x.reference.targetExpectedValue<0),
    opposingCompositions:receipt.streams.filter(s=>(market==="total"?s.market==="total":s.market!=="total")&&s.pressures.at(-1)?.moneyBalance!==null&&Math.sign(s.pressures.at(-1)?.moneyBalance??0)===-direction).map(s=>({book:s.book,market:s.market,role:s.role,pressure:s.pressures.at(-1),meaning:"cumulative composition; wagering-price and new-money volume unknown"})),
    opposingPaths:receipt.streams.filter(s=>(market==="total"?s.market==="total":s.market!=="total")&&(s.net?.direction===-direction||s.latest?.direction===-direction)).map(s=>({book:s.book,market:s.market,role:s.role,net:s.net,latest:s.latest,pathResolution:s.pathResolution,unknowns:s.unknowns}))};
-  return {market,target,selection,probability,loseProbability,pushProbability:p.push,price,expectedValue,grade,stake:0,
+  const marketResistanceAssessment=assessCbbMarketResistance({asOf:input.asOf,interpretation:receipt,target,selection,baseGrade,sourceEconomics});
+  const grade=marketResistanceAssessment.grade,reason=marketResistanceAssessment.applied?marketResistanceAssessment.reason:baseReason;
+  return {market,target,selection,probability,loseProbability,pushProbability:p.push,price,expectedValue,grade,stake:0,marketResistanceAssessment,
    reason,recommendationRisk,confidenceLeanAssessment,recommendationBasis:confidenceLedLean?"outcome_confidence" as const:"price_value" as const,gradingNumerics:{probabilityErrorEstimate:grading.probabilityErrorEstimate,valueErrorEstimate:grading.numericalValueErrorEstimate,valueSignResolvedPositive:grading.valueSignResolvedPositive,fairPremium:grading.fairPremium,fairPremiumErrorEstimate:grading.fairPremiumErrorEstimate,fairPremiumResolvedPositive:grading.fairPremiumResolvedPositive},
    marketFairProbability:implied(price)/(implied(target.firstPrice)+implied(target.secondPrice)),sourceEconomics,positiveProfessionalValue,observedProfessionalBookPriceConfirmation,bookPriceActions,counterevidence,
-   evidenceDisposition:"Full factual receipt informs the final forecast; grades use its exact probability and offered price. Opposing facts remain visible; ancillary references and observed actions are attribution, never mandatory promotion gates.",probabilityNumerics:p};
+   evidenceDisposition:"Full factual receipt informs the final forecast; grades use its exact probability and offered price. A current ordered professional response against the pick, aligned opposing composition and negative direct same-contract reference temper an otherwise actionable recommendation to Watch; recovery restores the original eligibility. References alone and source confirmation are not mandatory promotion gates.",probabilityNumerics:p};
  });
  return {release:CBB_INTERPRETED_DECISION_RELEASE,authority:"offline_research_only" as const,gameId:receipt.gameId,asOf:input.asOf,interpretation:receipt,
   latentDistribution:{...args.latent},finalScore:{home:summary.homeMean,away:summary.awayMean,margin:summary.marginMean,total:summary.totalMean,homeWinProbability:summary.homeWinProbability},

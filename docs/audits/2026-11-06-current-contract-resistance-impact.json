@@ -1,0 +1,72 @@
+{
+  "at": "2026-11-06T20:34:20.062Z",
+  "captureAt": "2026-11-06T19:43:21.081Z",
+  "captureSha256": "56c7697d85ee9833de3eb999ebdef791fce4b86bcfc850b21e5b939da54c18a4",
+  "release": "cbb_market_resistance_grade_2026_11_06_r1_current_contract",
+  "models": [
+    "cbb_contextual_outcome_2026_11_06_r7_economic_total_retained_margin"
+  ],
+  "incumbentGradeReleases": [
+    "cbb_contextual_outcome_grade_2026_11_06_r10_confidence_led_lean"
+  ],
+  "games": 58,
+  "markets": 174,
+  "before": {
+    "No Play": 34,
+    "Watchlist": 86,
+    "Lean": 54
+  },
+  "after": {
+    "No Play": 34,
+    "Watchlist": 87,
+    "Lean": 53
+  },
+  "promotions": 0,
+  "demotions": 1,
+  "changed": [
+    {
+      "gameId": 10882744,
+      "matchup": "NE@UVA",
+      "market": "spread",
+      "locked": false,
+      "previous": "Lean",
+      "next": "Watchlist",
+      "probability": 0.555422216903457,
+      "price": -105,
+      "expectedValue": 0.08439575681150818,
+      "reason": "current_professional_price_response_opposes_pick_at_offered_contract",
+      "assessment": {
+        "release": "cbb_market_resistance_grade_2026_11_06_r1_current_contract",
+        "baseGrade": "Lean",
+        "applied": true,
+        "grade": "Watchlist",
+        "reason": "current_professional_price_response_opposes_pick_at_offered_contract",
+        "evidence": [
+          {
+            "book": "circa",
+            "market": "spread",
+            "continuity": "exact_native",
+            "pressureNativeAt": "2026-11-06T19:04:14.712+00:00",
+            "responseNativeAt": "2026-11-06T19:32:02.021Z",
+            "responseAvailableBy": "2026-11-06T19:32:36.452Z",
+            "sourceObservedAt": "2026-11-06T19:32:02.021Z",
+            "sourceExpectedValue": -0.023809523809523836,
+            "netDirection": -1,
+            "latestDirection": -1,
+            "moneyBalance": -0.43999999999999995,
+            "meaning": "ordered own-book price response and cumulative composition; no new-money or bettor-identity claim"
+          }
+        ]
+      }
+    }
+  ],
+  "unchangedNumericalModel": true,
+  "quotesAndSelectionsExact": true,
+  "maxRehydrationDelta": 2.842170943040401e-14,
+  "unchangedCapturedPayloads": true,
+  "productionWrites": 0,
+  "providerCalls": 0,
+  "modelFits": 0,
+  "elapsedMs": 42221,
+  "limits": "Previously inspected capture, not blind accuracy evidence. Counterfactual grades never replace stored locks. Current R7 Margin inference limitations remain separate."
+}

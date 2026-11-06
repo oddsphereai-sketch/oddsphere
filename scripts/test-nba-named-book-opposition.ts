@@ -63,8 +63,8 @@ const causalSupport = {
   scoreEffectApplied: true,
   consequence: "correct",
 };
-assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: causalSupport }).grade, "best_angle",
-  "a clean causal score consequence supporting the final side can advance an earned Lean");
+assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: causalSupport }).grade, "lean",
+  "causal confirmation cannot waive the existing Best confidence boundary");
 assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: { ...causalSupport, scoreEffectApplied: false } }).grade, "lean");
 assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: { ...causalSupport, consequence: "context_only" } }).grade, "lean");
 assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: { ...causalSupport, supportingSources: [], staticSupportingSources: ["circa"] } }).grade, "lean",
@@ -101,8 +101,8 @@ for (const [market, sides] of [
   const confirming = { ...causalSupport, market, pickedSide: pick };
   assert.equal(gradeNbaMarket({ ...mirroredInput, namedBookPosture: opposing }).grade, "watch",
     `${market}:${pick}:${currentPriceAmerican} corroborated opposition is side/price symmetric`);
-  assert.equal(gradeNbaMarket({ ...mirroredInput, namedBookPosture: confirming }).grade, "best_angle",
-    `${market}:${pick}:${currentPriceAmerican} clean causal promotion is side/price symmetric`);
+  assert.equal(gradeNbaMarket({ ...mirroredInput, namedBookPosture: confirming }).grade, "lean",
+    `${market}:${pick}:${currentPriceAmerican} confidence qualification is side/price symmetric`);
 }
 
 for (const mutate of [

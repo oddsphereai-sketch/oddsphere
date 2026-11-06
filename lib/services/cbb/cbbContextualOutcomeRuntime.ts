@@ -5,7 +5,7 @@ import legacyReleaseManifest from "../../cbb/artifacts/contextual-outcome-r1-man
 import releaseManifest from "../../cbb/artifacts/contextual-outcome-r7-manifest.json";
 import {CBB_CONTEXTUAL_COMPOSITE_OUTCOME_RELEASE as CBB_COMPOSITE_OUTCOME_RELEASE,validateCbbCompositeOutcomeArtifact,type CbbCompositeOutcomeArtifact} from "../../cbb/contextualCompositeOutcomeForecast";
 import {CBB_OUTCOME_DECISION_RELEASE,forecastCbbOutcomeDecision} from "../../cbb/contextualOutcomeDecision";
-import {buildCbbContextualOutcomeBoard,CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE,type CbbOutcomeDecision} from "../../cbb/contextualOutcomeBoard";
+import {buildCbbContextualOutcomeBoard,CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE,type CbbOutcomeDecision} from "../../cbb/contextualOutcomeBoard";
 import {freezeCbbContextualForecastArtifact,cbbContextualForecastObjectSha256,assertCbbContextualForecastCalibrationBinding} from "../../cbb/contextualForecastCalibrationBinding";
 import {CBB_PRIVATE_OUTCOME_ARTIFACT_RELEASE,createCbbPrivateOutcomeArtifactLoader,type decodeCbbPrivateOutcomeArtifact,type CbbPrivateOutcomeManifest} from "./cbbOutcomeArtifactEnvelope";
 import {createCbbOutcomeArtifactDownload} from "./cbbOutcomeArtifactStorage";
@@ -117,7 +117,7 @@ export function readCbbContextualOutcomeEvidence(board:StoredBoard){
  const manifest=release.manifest;
  if(board.calibrationRelease!==release.calibrationRelease)throw Error("CBB contextual evidence calibration release differs");
  const storedGrade=board.gradeRelease;
- if(!storedGrade||![CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE].includes(storedGrade as typeof CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE))throw Error("CBB contextual evidence grade release differs");
+ if(!storedGrade||![CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE].includes(storedGrade as typeof CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE))throw Error("CBB contextual evidence grade release differs");
  const context=board.marketContext as {originalIndependent?:unknown;contextualOutcomeEvidence?:unknown};
  const original=context.originalIndependent as CbbForecast|undefined;
  if(!original)throw Error("CBB contextual evidence lacks original independent identity");
@@ -127,7 +127,7 @@ export function readCbbContextualOutcomeEvidence(board:StoredBoard){
  if(trace.release!==release.evidenceRelease||!same(trace.independent,original)||!same(decoded.finalScore,board.score))throw Error("CBB contextual stored evidence differs from the public score or original input");
  const decision={...trace.decision,interpretation:decoded.interpretation,finalScore:decoded.finalScore,marketDecisions:decoded.marketDecisions} as CbbOutcomeDecision;
  const allowedDecisions:readonly string[]=release.modelRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_MODEL_RELEASE?
-  [CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE]:[CBB_OUTCOME_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE];
+  [CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE]:[CBB_OUTCOME_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE];
  if(!allowedDecisions.includes(decision.release))throw Error("CBB contextual stored decision does not belong to its model release");
  if(decision.artifact.objectSha256!==identity.artifactObjectSha256||decision.artifact.release!==manifest.engineRelease||
   decision.artifact.methodSha256!==manifest.methodSha256||decision.calibration.forecastArtifactObjectSha256!==identity.artifactObjectSha256||

@@ -1,0 +1,47 @@
+{
+  "at": "2026-11-06T20:39:38.995Z",
+  "captureSha256": "cdd19f78fc7bf102af6b08796955048720d30839b46edb66f8aacd0f445005e1",
+  "models": [
+    "nba_professional_unified_2026_11_04_r36_paid_consumer_book_coverage"
+  ],
+  "sourceAsOf": [
+    "2026-11-06T20:33:44.321Z"
+  ],
+  "games": 9,
+  "markets": 27,
+  "before": {
+    "lean": 7,
+    "watch": 19,
+    "best_angle": 1
+  },
+  "after": {
+    "lean": 8,
+    "watch": 19
+  },
+  "promotions": 0,
+  "demotions": 0,
+  "bestToLean": 1,
+  "changed": [
+    {
+      "gameId": 401909288,
+      "matchup": "BOS @ CHA",
+      "market": "spread",
+      "previous": "best_angle",
+      "next": "lean",
+      "probability": 0.5554568519790013,
+      "price": -112,
+      "opposingPrice": -108,
+      "expectedValue": 0.05140046981739532,
+      "qualificationBasis": "existing_value_and_evidence_policy",
+      "rationale": [
+        "Model lean with model value over the current price, but conviction isn't strong enough — held below Best Angle.",
+        "Current market support does not waive Best Angle confidence, data quality, injury certainty or offered-price requirements."
+      ]
+    }
+  ],
+  "providerCalls": 0,
+  "productionWrites": 0,
+  "modelFits": 0,
+  "unchangedSourceInputs": true,
+  "limits": "Stored canonical writer capture only; independently refreshed member snapshots may use different inputs. This is qualification consistency, not accuracy evidence."
+}

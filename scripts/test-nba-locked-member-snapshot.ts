@@ -96,6 +96,24 @@ const r28Response=adaptNbaToDailyEdgeResponse({as_of:"2026-11-06T19:00:00Z",slat
  {lockedMemberGamesByExternalId:r28Restored.memberGamesByExternalId});
 assert.equal(r28Response.games[0].markets.moneyline.verdict.key,"watchlist");
 assert.equal(JSON.stringify(r28Rows),r28Bytes,"Legacy grade and evidence bytes stay unchanged");
+const r29Locked=structuredClone(locked);
+r29Locked.intelligence.grade_policy_release="nba_grade_policy_2026_11_06_r29_confidence_led_lean";
+r29Locked.intelligence.ml.grade="best_angle";
+r29Locked.intelligence.ml.model_confidence=55.5;
+const r29Member=structuredClone(lockedMemberGame);
+r29Member.markets.moneyline.verdict={key:"best_angle",label:"Best Angle"};
+r29Member.markets.moneyline.recommendationConfidence=55.5;
+const r29Capture=buildNbaLockedMemberCapture({gameDto:r29Locked,memberGame:r29Member});
+const r29Rows=rows.map(row=>({...row,snapshot_json:r29Capture})),r29Bytes=JSON.stringify(r29Rows);
+const r30Dynamic=structuredClone(r29Dynamic);r30Dynamic.intelligence.grade_policy_release="nba_grade_policy_2026_11_06_r30_causal_best_qualification";
+const r29Restored=applyNbaLockedMemberSnapshotPrecedence({games:[r30Dynamic],dbIdByExternalId:map,rows:r29Rows});
+assert.equal(r29Restored.games[0].intelligence.ml.grade,"best_angle","R30 must not retroactively correct an R29 locked public grade");
+assert.equal(r29Restored.games[0].intelligence.ml.model_confidence,55.5);
+const r29Response=adaptNbaToDailyEdgeResponse({as_of:"2026-11-06T20:30:00Z",slate_date_et:"2026-10-20",market_signals_capability:"available",games:r29Restored.games} as NbaDailyEdgeDto,
+ {lockedMemberGamesByExternalId:r29Restored.memberGamesByExternalId});
+assert.equal(r29Response.games[0].markets.moneyline.verdict.key,"best_angle");
+assert.equal(r29Response.games[0].markets.moneyline.recommendationConfidence,55.5);
+assert.equal(JSON.stringify(r29Rows),r29Bytes,"R29 grades, confidence and source payloads remain exact");
 assert.equal(capture.nba_locked_member_snapshot_release, NBA_LOCKED_MEMBER_SNAPSHOT_RELEASE);
 assert.deepEqual(restored.memberGamesByExternalId.get(9001), {
   ...lockedMemberGame,

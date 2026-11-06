@@ -366,7 +366,12 @@ export function gradeNbaMarket(input: GradeInput): GradeOutput {
 
 /** Exact prior economics/posture policy for frozen-input comparison only. */
 export function gradeNbaR28MarketForAudit(input: GradeInput): GradeOutput {
-  return applyNbaPostureToGrade(input, gradeNbaMarketEconomics(input, false, false));
+  return applyNbaPostureToGrade(input, gradeNbaMarketEconomics(input, false, false), false);
+}
+
+/** Frozen R29 includes its causal promotion bypass; audit only, never a writer. */
+export function gradeNbaR29MarketForAudit(input: GradeInput): GradeOutput {
+  return applyNbaPostureToGrade(input, gradeNbaMarketEconomics(input), false);
 }
 
 /** Exact prior production posture policy for same-input r22/r23 comparison. */
@@ -392,10 +397,10 @@ export function gradeNbaR21MarketForAudit(input: GradeInput): GradeOutput {
 
 /** Frozen incumbent comparison only. No production writer selects this policy. */
 export function gradeNbaLegacyMarketForAudit(input: GradeInput): GradeOutput {
-  return applyNbaPostureToGrade(input, gradeNbaMarketEconomics(input, true));
+  return applyNbaPostureToGrade(input, gradeNbaMarketEconomics(input, true), false);
 }
 
-function applyNbaPostureToGrade(input: GradeInput, incumbent: GradeOutput): GradeOutput {
+function applyNbaPostureToGrade(input: GradeInput, incumbent: GradeOutput, requireBestQualification = true): GradeOutput {
   const posture = input.namedBookPosture;
   if (posture?.market !== input.market || posture?.pickedSide !== input.pick) return incumbent;
   const opposed = posture.opposingSources.length > 0 || posture.conflictingSources.length > 0 ||
@@ -441,6 +446,10 @@ function applyNbaPostureToGrade(input: GradeInput, incumbent: GradeOutput): Grad
   if (incumbent.grade === "lean" && !opposed && posture.scoreEffectApplied === true &&
       posture.consequence === "correct" && posture.supportingSources.length > 0 &&
       incumbent.qualificationBasis !== "outcome_confidence") {
+    if (requireBestQualification && !nbaCausalBestQualification(input)) {
+      return { ...incumbent, rationale: [...incumbent.rationale,
+        "Current market support does not waive Best Angle confidence, data quality, injury certainty or offered-price requirements."] };
+    }
     return {
       ...incumbent,
       grade: "best_angle",
@@ -450,6 +459,22 @@ function applyNbaPostureToGrade(input: GradeInput, incumbent: GradeOutput): Grad
     };
   }
   return incumbent;
+}
+
+/** Causal support may strengthen a smaller economic edge, but cannot waive
+ * the existing strongest-tier confidence/quality/price boundaries. */
+function nbaCausalBestQualification(input: GradeInput): boolean {
+  const p = input.modelProbabilityOnPick, price = input.currentPriceAmerican;
+  if (input.confidence < NBA_BEST_ANGLE_MIN_CONFIDENCE || p == null || !Number.isFinite(p) ||
+      p < NBA_BEST_ANGLE_MIN_CONFIDENCE / 100 || p > 1 || !input.injuriesKnown || input.dataQualityTier !== "high" ||
+      price == null || !Number.isFinite(price) || Math.abs(price) < 100 || (expectedReturn(p, price) ?? 0) <= 0) return false;
+  if (input.market !== "moneyline") return true;
+  if (input.enforceSteepMoneylineBestAngleTier !== false && price <= NBA_ML_BEST_ANGLE_MAX_FAVORITE_PRICE) return false;
+  const evidence = input.moneylineEvidence;
+  const directOpposes = evidence?.directReadQualified === true && evidence.directReadSide !== null && evidence.directReadSide !== input.pick;
+  const spreadOpposes = evidence?.directReadQualified !== true && evidence?.spreadReadQualified === true &&
+    evidence.spreadReadSide !== null && evidence.spreadReadSide !== input.pick && evidence.spreadCorrectionApplied !== true;
+  return input.enforceMoneylineEvidenceGuard === false || !(directOpposes || spreadOpposes);
 }
 
 function hasCorroboratedNbaOpposition(posture: NbaNamedBookPosture): boolean {

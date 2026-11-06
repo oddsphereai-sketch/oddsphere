@@ -7,7 +7,9 @@ import {CBB_CONTEXTUAL_RECOMMENDATION_RISK_RELEASE,assessCbbOutcomeConfidenceRis
 import {assessConfidenceLeanPrice} from "../services/dailyEdge/confidenceLeanPrice";
 
 export const CBB_CONTEXTUAL_OUTCOME_BOARD_RELEASE="cbb_contextual_outcome_board_2026_11_05_r1_copy_only" as const;
-export const CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE="cbb_contextual_outcome_grade_2026_11_06_r10_confidence_led_lean" as const;
+export const CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE="cbb_contextual_outcome_grade_2026_11_06_r11_current_contract_resistance" as const;
+export const CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE="cbb_contextual_outcome_grade_2026_11_06_r10_confidence_led_lean" as const;
+export const CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_DECISION_RELEASE="cbb_outcome_decision_2026_11_06_r11_confidence_led_lean" as const;
 export const CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE="cbb_contextual_outcome_grade_2026_11_06_r9_economic_total_retained_margin" as const;
 export const CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE="cbb_outcome_decision_2026_11_06_r10_economic_total_retained_margin" as const;
 export const CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE="cbb_contextual_outcome_grade_2026_11_05_r7_contextual_recommendation_risk" as const;
@@ -16,8 +18,8 @@ export const CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE="cbb_contextual_outcome
 export const CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE="cbb_outcome_decision_2026_11_05_r7_noplay_price_lanes" as const;
 export const CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE="cbb_contextual_game_outcome_2026_11_05_r1_stored_joint_law" as const;
 type CurrentOutcomeDecision=ReturnType<typeof forecastCbbOutcomeDecision>;
-export type CbbOutcomeDecision=Omit<CurrentOutcomeDecision,"release">&{release:CurrentOutcomeDecision["release"]|typeof CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE|typeof CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE|typeof CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE};
-export function cbbOutcomeGradeReleaseForDecision(release:CbbOutcomeDecision["release"]){return release===CBB_OUTCOME_DECISION_RELEASE?CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE:release===CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE?CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE:release===CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE?CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE:CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE;}
+export type CbbOutcomeDecision=Omit<CurrentOutcomeDecision,"release">&{release:CurrentOutcomeDecision["release"]|typeof CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_DECISION_RELEASE|typeof CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE|typeof CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE|typeof CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE};
+export function cbbOutcomeGradeReleaseForDecision(release:CbbOutcomeDecision["release"]){return release===CBB_OUTCOME_DECISION_RELEASE?CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE:release===CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_DECISION_RELEASE?CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE:release===CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE?CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE:release===CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE?CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE:CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE;}
 const MARKETS:readonly CbbMarket[]=["moneyline","spread","total"];
 const finite=(v:unknown):v is number=>typeof v==="number"&&Number.isFinite(v);
 const validProbability=(v:unknown):v is number=>finite(v)&&v>=0&&v<=1;
@@ -34,7 +36,7 @@ function referenceState(row:CbbOutcomeDecision["marketDecisions"][number]){
 
 export function buildCbbContextualOutcomeBoard(args:{decision:CbbOutcomeDecision;independent:CbbForecast}){
  const {decision,independent}=args,asOf=Date.parse(decision.asOf),priorAt=Date.parse(independent.asOf);
- if(![CBB_OUTCOME_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE].includes(decision.release)||decision.authority!=="offline_research_only"||
+ if(![CBB_OUTCOME_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE].includes(decision.release)||decision.authority!=="offline_research_only"||
   !["future","retrospective_development"].includes(decision.mode)||!Number.isSafeInteger(decision.gameId)||decision.gameId<=0||
   independent.gameId!==decision.gameId||independent.inputStatus!=="complete"||!Number.isSafeInteger(independent.homeId)||
   !Number.isSafeInteger(independent.awayId)||independent.homeId<=0||independent.awayId<=0||independent.homeId===independent.awayId||
@@ -59,7 +61,7 @@ export function buildCbbContextualOutcomeBoard(args:{decision:CbbOutcomeDecision
    throw Error("CBB outcome board selected market lacks stored economics");
   if(row.grade==="Held"&&(row.selection!==null||row.probability!==null||row.pushProbability!==null||row.loseProbability!==null||row.price!==null||row.expectedValue!==null))
    throw Error("CBB outcome board Held decision has wager economics");
-  const confidenceLean=decision.release===CBB_OUTCOME_DECISION_RELEASE&&row.grade==="Lean"&&row.recommendationBasis==="outcome_confidence"&&
+  const confidenceLean=(decision.release===CBB_OUTCOME_DECISION_RELEASE||decision.release===CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_DECISION_RELEASE)&&row.grade==="Lean"&&row.recommendationBasis==="outcome_confidence"&&
    row.confidenceLeanAssessment?.supported===true&&row.confidenceLeanAssessment.price.qualified&&row.confidenceLeanAssessment.risk?.supported===true;
   if(confidenceLean){
    const priceProof=assessConfidenceLeanPrice({winProbability:row.probability!,loseProbability:row.loseProbability!,price:row.price!,
@@ -102,7 +104,7 @@ export function buildCbbContextualOutcomeBoard(args:{decision:CbbOutcomeDecision
    contextualOutcomeDecision:copied,originalIndependent:structuredClone(independent),
    professionalPriceReferences:rows.reduce((n,r)=>n+r.professionalReferences,0),
    missing:[...new Set(decision.interpretation.streams.flatMap(s=>s.unknowns.map(reason=>`${s.book}:${s.market}:${reason}`)))],
-   provenance:"Scores, exact-price probabilities/pushes/EV, market selections and grades copy one stored contextual decision. Ancillary references never reforecast or regrade. Raw cumulative shares are not bettor identity or new-money volume.",
+   provenance:decision.release===CBB_OUTCOME_DECISION_RELEASE?"Scores, exact-price probabilities/pushes/EV, selections and resistance-qualified grades copy one stored contextual decision. This mapper never reforecasts or regrades. Raw cumulative shares are not bettor identity or new-money volume.":"Scores, exact-price probabilities/pushes/EV, market selections and grades copy one stored contextual decision. Ancillary references never reforecast or regrade. Raw cumulative shares are not bettor identity or new-money volume.",
    publicationPolicy:"Caller preserves cross-division/newcomer no-wager coverage, authoritative execution targets, prelock eligibility and exact locked-reader precedence. This pure mapper neither activates nor writes a model."}};
 }
 export type CbbContextualOutcomeBoard=ReturnType<typeof buildCbbContextualOutcomeBoard>;
