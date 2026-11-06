@@ -10,9 +10,11 @@ import { supabase } from "@/lib/db/supabase";
 import { readCbbSettlementFixtureCatchupDates } from "@/lib/services/cbb/cbbSettlementFixtureCatchup";
 
 export const dynamic = "force-dynamic";
-// The rolling contextual batch needs ~4 minutes of inference before member
-// writes and settlement. Leave a minute below the existing ten-minute lease.
-export const maxDuration = 540;
+const CBB_DAILY_REFRESH_RUNTIME_RELEASE = "cbb_daily_refresh_runtime_2026_11_06_r2_settlement_headroom";
+const CBB_DAILY_REFRESH_LEASE_MINUTES = 10;
+// The observed R51 publication used ~515s before the existing seven-date
+// settlement postlude. Retain 30s below the unchanged ten-minute sport lease.
+export const maxDuration = 570;
 
 export async function GET(request: Request): Promise<Response> {
   return cronHandler(request, "cbb_daily_refresh", async () => {
@@ -73,8 +75,10 @@ export async function GET(request: Request): Promise<Response> {
         + board.written + board.trackingInserted + training.added + graded.reduce((sum,row)=>sum+row.settled,0),
       api_calls_made: seeded.reduce((sum, row) => sum + row.providerCalls + (row.games ? 2 : 0), 0)
         + training.providerCalls + board.providerCalls + board.owlsCalls + board.currentSourceCoverage.theOddsApiRequests,
-      details: { release: board.release, seeded, training:{added:training.added,pending:training.pending,rejected:training.rejected},
+      details: { release: board.release, runtimeRelease:CBB_DAILY_REFRESH_RUNTIME_RELEASE,
+        runtimeBudget:{routeSeconds:maxDuration,leaseSeconds:CBB_DAILY_REFRESH_LEASE_MINUTES*60},
+        seeded, training:{added:training.added,pending:training.pending,rejected:training.rejected},
         board,graded,predictionPublication:true },
     };
-  }, { sport: "cbb", leaseGroup: "prediction_pipeline", requireLease: true, lockMinutes: 10 });
+  }, { sport: "cbb", leaseGroup: "prediction_pipeline", requireLease: true, lockMinutes: CBB_DAILY_REFRESH_LEASE_MINUTES });
 }

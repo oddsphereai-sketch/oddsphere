@@ -1,5 +1,21 @@
 # Current production model releases and qualified research candidates
 
+## November 6 CBB writer runtime headroom
+
+Cron execution identifier
+`cbb_daily_refresh_runtime_2026_11_06_r2_settlement_headroom` sets the existing
+route ceiling to 570 seconds under its unchanged 600-second sport-scoped
+`prediction_pipeline` lease. R51 published the new board after approximately
+515 seconds, leaving too little of the previous 540-second ceiling for its
+existing seven-date settlement postlude. This operational correction changes
+no calls, sources, cadence, settlement dates, numerical forecast, calibration,
+grade rule, price, stake, model artifact or locked record. CBB model/calibration
+R7, decision R11, grade R10 and publisher R51 remain exact; this is a distinct
+cron execution contract, not a numerical release or another writer. A larger
+ceiling is not a completion guarantee: preview/platform acceptance and an actual
+completed normal writer/settlement cycle remain required. Evidence:
+`model-audits/2026-11-06-cbb-writer-deadline.md`.
+
 ## November 6 evidence collection runtime contract
 
 The sole V2 capture path becomes
