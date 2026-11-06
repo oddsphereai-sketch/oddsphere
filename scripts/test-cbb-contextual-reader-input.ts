@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {buildCbbContextualMarketInterpretation} from "../lib/cbb/contextualMarketInterpretation";
-import {assembleCbbContextualReaderInput} from "../lib/services/cbb/cbbContextualReaderInput";
+import {assembleCbbContextualReaderInput,CBB_CONTEXTUAL_READER_INPUT_RELEASE} from "../lib/services/cbb/cbbContextualReaderInput";
+import {CBB_PROVIDER_IDENTITY_RELEASE} from "../lib/cbb/providerInstitutionIdentity";
 import {pairCbbCanonicalMarketEvidence,type CbbCanonicalPriceRow} from "../lib/services/cbb/cbbCanonicalMarketEvidence";
 import type {CbbGame,CbbForecast,CbbQuote} from "../lib/cbb/types";
 const at="2026-11-05T18:00:00Z",startsAt="2026-11-05T23:00:00Z";
@@ -12,6 +13,9 @@ const quote=(sportsbook:string):CbbQuote&{orientationVerified?:boolean}=>({provi
  providerObservedAt:"2026-11-05T17:50:00Z",fetchedAt:"2026-11-05T17:51:00Z",requestedAt:"2026-11-05T17:50:59Z",phase:"current",orientationVerified:true,sourceEventId:"native7"});
 const run=(overrides:Partial<Parameters<typeof assembleCbbContextualReaderInput>[0]>={})=>assembleCbbContextualReaderInput({independent,startsAt,currentQuotes:[quote("circa"),quote("fanduel")],canonical,splitContext:[],historyComplete:{price:true,split:true,consumer:true},...overrides});
 const one=run();assert.equal(one.input.currentQuotes.length,1);assert.equal(one.input.currentQuotes[0].sourceEventId,"native7");
+assert.equal(one.input.sourceStateEvidence.release,CBB_CONTEXTUAL_READER_INPUT_RELEASE);
+assert.equal(one.input.sourceStateEvidence.providerIdentityRelease,CBB_PROVIDER_IDENTITY_RELEASE,
+ "future receipts identify the exact source identity contract independently of unchanged fitted coefficients");
 assert.equal(one.input.consumerCurrentQuotes?.length,1);assert.equal(one.input.consumerCurrentQuotes?.[0].providerObservedAt,"2026-11-05T17:50:00Z");assert.equal(one.input.consumerCurrentQuotes?.[0].availableBy,"2026-11-05T17:51:00Z");
 const frozen=JSON.stringify(one.input),later=run({independent:{...independent,asOf:"2026-11-05T18:10:00Z"},canonical:pairCbbCanonicalMarketEvidence({game,decisionAt:"2026-11-05T18:10:00Z",consumerPriceContext:true}),previousInput:one.input,previousPath:one.pathTape});
 assert.equal(JSON.stringify(one.input),frozen,"retention cannot mutate the earlier raw evidence");assert.equal(later.input.consumerHistoryQuotes?.[0].providerObservedAt,"2026-11-05T17:50:00Z");

@@ -32,6 +32,7 @@ type MarketInput = {
   sharpBookSplitsOverride?: MarketSplitDisplaySection | null;
   lineMovementOverride?: "support" | "resistance" | "neutral" | null;
   allowBestAngleMarketConflict?: boolean;
+  currentSplitEvidenceOnly?: boolean;
 };
 
 export type BuildRecommendationDecisionInput = {
@@ -42,7 +43,12 @@ export type BuildRecommendationDecisionInput = {
   awayTeam: string;
   projectedScore?: { away: number; home: number } | null;
   markets: MarketInput[];
+  /** Presentation opt-in for open cards; existing locked/legacy callers omit it. */
+  currentSplitEvidenceOnly?: boolean;
 };
+
+export const CURRENT_SPLIT_EVIDENCE_READER_RELEASE =
+  "current_split_evidence_reader_2026_11_06_r1_open_cfb_context" as const;
 
 const PLAY_GRADES: PlayGradeLabel[] = ["No Play", "Caution", "Watchlist", "Lean", "Best Angle"];
 const BEST_ANGLE_CONFLICT_OVERRIDE_EDGE_PP = 8;
@@ -127,9 +133,15 @@ function sharpSection(market: MarketInput): MarketSplitDisplaySection | null {
   };
 }
 
-function sideLean(section: MarketSplitDisplaySection | null, side: MarketInput["selectedSide"]): "support" | "resistance" | "mixed" | "none" {
+function currentSplitRow(section: MarketSplitDisplaySection | null, side: MarketInput["selectedSide"]) {
+  return section?.rows.find(row => row.side === side && row.isStale === false) ?? null;
+}
+
+function sideLean(section: MarketSplitDisplaySection | null, side: MarketInput["selectedSide"], currentOnly = false): "support" | "resistance" | "mixed" | "none" {
   if (!section || !side) return "none";
   const row = section.rows.find((r) => r.side === side) ?? null;
+  // A stored signal is not a fresh receipt and cannot resurrect a stale row.
+  if (currentOnly && row?.isStale !== false) return "none";
   if (row) {
     const money = row.moneyPct;
     const bets = row.betsPct;
@@ -141,6 +153,7 @@ function sideLean(section: MarketSplitDisplaySection | null, side: MarketInput["
     const v = money ?? bets;
     if (v !== null) return v >= 50 ? "support" : "resistance";
   }
+  if (currentOnly) return "none";
   const signal = (section.signal ?? "").toLowerCase();
   if (signal.includes("against") || signal.includes("resistance")) return "resistance";
   if (signal.includes("with") || signal.includes("support")) return "support";
@@ -148,13 +161,13 @@ function sideLean(section: MarketSplitDisplaySection | null, side: MarketInput["
   return "none";
 }
 
-function resolveMarketRead(sport: string, market: MarketInput, consensus: MarketSplitDisplaySection | null, sharp: MarketSplitDisplaySection | null): ResolvedMarketRead {
+function resolveMarketReadCore(sport: string, market: MarketInput, consensus: MarketSplitDisplaySection | null, sharp: MarketSplitDisplaySection | null): ResolvedMarketRead {
   const caps = dailyEdgeMarketCapabilities(sport, market.key);
-  const consensusLean = sideLean(consensus, market.selectedSide);
-  const sharpLean = sideLean(sharp, market.selectedSide);
+  const consensusLean = sideLean(consensus, market.selectedSide, market.currentSplitEvidenceOnly);
+  const sharpLean = sideLean(sharp, market.selectedSide, market.currentSplitEvidenceOnly);
   const movement = market.lineMovementOverride ?? market.marketReadV2?.movement?.directionRelativeToPick ?? "neutral";
   const pick = market.pick ?? "the pick";
-  const sharpAvailable = sharp !== null;
+  const sharpAvailable = sharp !== null && (!market.currentSplitEvidenceOnly || currentSplitRow(sharp, market.selectedSide) !== null);
   const hasCoreFirstInningEvidence =
     caps.isFirstInning &&
     (market.price !== null ||
@@ -236,6 +249,14 @@ function resolveMarketRead(sport: string, market: MarketInput, consensus: Market
   if (sharpAvailable && (consensusLean === "support" || sharpLean === "support" || movement === "support")) {
     return { status: "aligned", label: "Market Support", tone: "emerald", copy: `Market signals support ${pick}.` };
   }
+  if (market.currentSplitEvidenceOnly && !sharpAvailable && movement !== "neutral") {
+    if ((consensusLean === "support" && movement === "resistance") || (consensusLean === "resistance" && movement === "support")) {
+      return { status: "mixed", label: "Mixed", tone: "gray", copy: `Current consensus splits and observed price movement disagree on ${pick}.` };
+    }
+    return movement === "support"
+      ? { status: "aligned", label: "Market Support", tone: "emerald", copy: `Observed price movement supports ${pick}.` }
+      : { status: "resistance", label: "Market Resistance", tone: "amber", copy: `Observed price movement resists ${pick}.` };
+  }
   if (!sharpAvailable && consensusLean === "support") {
     return { status: "consensus_support", label: "Consensus Support", tone: "emerald", copy: `Consensus splits support ${pick}.` };
   }
@@ -243,11 +264,32 @@ function resolveMarketRead(sport: string, market: MarketInput, consensus: Market
     return { status: "consensus_resistance", label: "Consensus Resistance", tone: "amber", copy: `Consensus splits show resistance against ${pick}.` };
   }
   return {
-    status: consensus === null && !hasCoreFirstInningEvidence ? "insufficient_data" : "no_clear_signal",
+    status: consensus === null && !(market.currentSplitEvidenceOnly ? hasCoreMarketEvidence : hasCoreFirstInningEvidence) ? "insufficient_data" : "no_clear_signal",
     label: "No Clear Signal",
     tone: "gray",
     copy: "No clear market signal.",
   };
+}
+
+function retainedSplitContext(section: MarketSplitDisplaySection | null, side: MarketInput["selectedSide"]): string | null {
+  if (!section || currentSplitRow(section, side)) return null;
+  const row = section.rows.find(value => value.side === side);
+  const label = section.label === "Consensus Splits" ? "consensus splits"
+    : professionalSplitSource(section) ? "sharp book splits" : namedSplitSourceLabel(section);
+  return row?.isStale === true
+    ? `Older ${label} remain visible as context; they do not establish current pressure.`
+    : `The freshness of ${label} is unverified; they remain visible as context.`;
+}
+
+function resolveMarketRead(sport: string, market: MarketInput, consensus: MarketSplitDisplaySection | null, sharp: MarketSplitDisplaySection | null): ResolvedMarketRead {
+  const read = resolveMarketReadCore(sport, market, consensus, sharp);
+  if (!market.currentSplitEvidenceOnly) return read;
+  const retained = [retainedSplitContext(consensus, market.selectedSide), retainedSplitContext(sharp, market.selectedSide)].filter(Boolean);
+  const copy = sharp && !professionalSplitSource(sharp)
+    ? read.copy.replace(/sharp(?:-| )book pressure/gi, namedSplitSourceLabel(sharp).replace(/splits/i, "split composition"))
+      .replace(/sharp(?:-| )book splits/gi, namedSplitSourceLabel(sharp))
+    : read.copy;
+  return { ...read, copy: [copy, ...retained].join(" ") };
 }
 
 function selectedSideFromSplitSection(
@@ -274,7 +316,12 @@ export function applyNamedBookSplitSectionToDecision(args: {
   marketKey: "moneyline" | "total" | "firstInning";
   decision: MarketDecision;
   section: MarketSplitDisplaySection;
+  currentSplitEvidenceOnly?: boolean;
 }): MarketDecision {
+  // Later stored-source overlays inherit the open-card presentation contract.
+  // An unstamped immutable/legacy decision keeps the existing default.
+  const currentSplitEvidenceOnly = args.currentSplitEvidenceOnly ??
+    args.decision.reasonCodes.includes(CURRENT_SPLIT_EVIDENCE_READER_RELEASE);
   const professional = professionalSplitSource(args.section);
   const sourceLabel = namedSplitSourceLabel(args.section);
   const selectedSide = selectedSideFromSplitSection(args.decision.pick, args.section);
@@ -293,6 +340,7 @@ export function applyNamedBookSplitSectionToDecision(args: {
     marketReadV2: null,
     marketReadV2Enabled: false,
     lineMovementOverride: args.decision.lineMovement,
+    currentSplitEvidenceOnly,
   };
   const read = resolveMarketRead(
     args.sport,
@@ -301,7 +349,9 @@ export function applyNamedBookSplitSectionToDecision(args: {
     args.section,
   );
   const resolvedMarketRead = professional ? read : { ...read,
-    copy: read.copy.replace(/sharp(?:-| )book splits/gi, sourceLabel),
+    copy: currentSplitEvidenceOnly
+      ? read.copy.replace(/sharp(?:-| )book pressure/gi, sourceLabel.replace(/splits/i, "split composition")).replace(/sharp(?:-| )book splits/gi, sourceLabel)
+      : read.copy.replace(/sharp(?:-| )book splits/gi, sourceLabel),
   };
   const sourceConflict = resolvedMarketRead.status === "mixed";
   const reasonCodes = [
@@ -314,10 +364,12 @@ export function applyNamedBookSplitSectionToDecision(args: {
       code !== "source_conflict" &&
       code !== "market_resistance" &&
       !code.startsWith("market_read_")
+      && code !== CURRENT_SPLIT_EVIDENCE_READER_RELEASE
     ),
     professional ? "sharp_book_splits_available" : args.section.sourceBook === "consensus" ? "public_named_splits_available"
       : args.section.sourceBook ? "named_retail_splits_available" : "unclassified_splits_context_only",
     NAMED_SPLIT_SOURCE_AUTHORITY_RELEASE,
+    ...(currentSplitEvidenceOnly ? [CURRENT_SPLIT_EVIDENCE_READER_RELEASE] : []),
     `market_read_${resolvedMarketRead.status}`,
     professional ? "post_decision_sharp_context_only" : "post_decision_named_context_only",
     ...(sourceConflict ? ["source_conflict"] : []),
@@ -387,8 +439,10 @@ function buildMarketDecision(sport: string, market: MarketInput, projectedScore:
       ? consensus ? "consensus_splits_available" : "consensus_splits_unavailable"
       : "consensus_splits_not_required",
     caps.expectsSharpBookContext
-      ? sharp ? "sharp_book_splits_available" : "sharp_book_splits_unavailable"
+      ? sharp && (!market.currentSplitEvidenceOnly || professionalSplitSource(sharp)) ? "sharp_book_splits_available" : "sharp_book_splits_unavailable"
       : "sharp_book_splits_not_required",
+    ...(market.currentSplitEvidenceOnly && sharp && !professionalSplitSource(sharp)
+      ? [sharp.sourceBook === "consensus" ? "public_named_splits_available" : sharp.sourceBook ? "named_retail_splits_available" : "unclassified_splits_context_only"] : []),
     `market_read_${read.status}`,
     `grade_${grade.toLowerCase().replaceAll(" ", "_")}`,
     ...(sourceConflict ? ["source_conflict"] : []),
@@ -402,13 +456,14 @@ function buildMarketDecision(sport: string, market: MarketInput, projectedScore:
               : "best_angle_capped_by_market_conflict",
         ]
       : []),
+    ...(market.currentSplitEvidenceOnly ? [CURRENT_SPLIT_EVIDENCE_READER_RELEASE] : []),
   ];
   const evidence = [
     ...(caps.expectsConsensusSplits
       ? [consensus ? "Consensus splits reviewed." : "Consensus splits unavailable."]
       : []),
     ...(caps.expectsSharpBookContext
-      ? [sharp ? "Sharp book splits reviewed." : "Sharp book splits unavailable."]
+      ? [sharp ? market.currentSplitEvidenceOnly ? `${namedSplitSourceLabel(sharp)} reviewed.` : "Sharp book splits reviewed." : "Sharp book splits unavailable."]
       : []),
     read.copy,
   ];
@@ -419,7 +474,7 @@ function buildMarketDecision(sport: string, market: MarketInput, projectedScore:
         ? `Market resistance: ${read.copy}`
         : hasExplicitOverride
           ? `Model-edge override: ${read.copy}`
-          : market.quickRead || read.copy;
+          : market.currentSplitEvidenceOnly ? read.copy : market.quickRead || read.copy;
   return {
     pick: market.pick,
     modelProbability: market.modelProbability,
@@ -441,13 +496,15 @@ function buildMarketDecision(sport: string, market: MarketInput, projectedScore:
 }
 
 export function buildRecommendationDecision(input: BuildRecommendationDecisionInput): RecommendationDecision {
-  const marketEntries = input.markets.map((m) => [m.key, buildMarketDecision(input.sport, m, input.projectedScore)] as const);
+  const marketEntries = input.markets.map((m) => [m.key, buildMarketDecision(input.sport,
+    input.currentSplitEvidenceOnly === undefined ? m : { ...m, currentSplitEvidenceOnly: input.currentSplitEvidenceOnly }, input.projectedScore)] as const);
   const markets: RecommendationDecision["markets"] = {};
   for (const [key, decision] of marketEntries) markets[key] = decision;
 
   const decisions = marketEntries.map(([, decision]) => decision);
   const consensusSplitsAvailable = decisions.some((d) => d.consensusSplits !== null);
-  const sharpBookSplitsAvailable = decisions.some((d) => d.sharpBookSplits !== null);
+  const sharpBookSplitsAvailable = decisions.some((d) => input.currentSplitEvidenceOnly
+    ? professionalSplitSource(d.sharpBookSplits) : d.sharpBookSplits !== null);
   const sourceConflict = decisions.some((d) => d.sourceConflict);
   const staleSources = decisions.flatMap((d) => [
     ...(d.consensusSplits?.rows.some((r) => r.isStale) ? ["Consensus Splits"] : []),

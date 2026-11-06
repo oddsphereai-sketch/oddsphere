@@ -144,7 +144,7 @@ function buildPickLabel(intel: MarketIntelligence): string | null {
 }
 
 export const NBA_MEMBER_POSTURE_PRESENTATION_RELEASE =
-  "nba_member_posture_presentation_2026_11_04_r1_authoritative_stored_posture" as const;
+  "nba_member_posture_presentation_2026_11_06_r2_consistent_stored_posture" as const;
 
 export function buildNbaMarketPosturePresentation(intel: MarketIntelligence): {
   release: typeof NBA_MEMBER_POSTURE_PRESENTATION_RELEASE;
@@ -344,13 +344,14 @@ function buildMarketEdgeDto(opts: {
   const guidedGuide = held
     ? "Model is not picking a side here tonight."
     : `Model lean: ${intel.pick_label}.`;
-  const guidedWatchOut = intel.rationale.length > 0
+  const baselineWatchOut = intel.rationale.length > 0
     ? intel.rationale[0]!
     : "Tracking opens on tonight's first observed line — line history fills in as the day moves.";
   const baseWhyLine = intel.rationale.length > 1
     ? intel.rationale.slice(1).join(" ")
-    : guidedWatchOut;
+    : baselineWatchOut;
   const posturePresentation = buildNbaMarketPosturePresentation(intel);
+  const guidedWatchOut = posturePresentation.explanation ?? baselineWatchOut;
   const whyLine = posturePresentation.explanation
     ? `${posturePresentation.explanation} ${baseWhyLine}`
     : baseWhyLine;
@@ -484,20 +485,34 @@ function buildSharpSignals(game: NbaDailyEdgeGameDto, capability: NbaMarketSigna
   return out;
 }
 
-// P0-4b 2026-06-10 (mirror of NHL fix in commit 52d0a47):
-// Previously cast a PHANTOM `"wait_no_edge_clean"` SharpReadKey (no such
-// entry exists in SHARP_READ_SENTENCES) and reused the model-derived
-// `quick_read` sentence as the "sharp read" — which falsely implied
-// sharp analysis had been performed. NBA does not yet ingest
-// sharp_signals reliably (see Phase 2 audit §H + SharpAPI NBA Finals
-// coverage gap memo), so the honest default is `"no_data"` with the
-// canonical sentence. When the NBA sharp-signals pipeline lands
-// (P1 follow-up), this should be replaced with a derived
-// selectSharpReadKey(...) call. The `quick_read` model summary still
-// surfaces via the DTO's `decisionLine` field (line 441) — it just no
-// longer masquerades as a sharp read here.
-function buildSharpReadFromQuickRead(_quickRead: string): { key: SharpReadKey; sentence: string } {
-  return { key: "no_data" as SharpReadKey, sentence: SHARP_READ_SENTENCES.no_data };
+/** Summarize stored price posture, never model value or reported bettor identity.
+ * Legacy/empty evidence stays honestly unavailable; exact locked cards bypass
+ * this adapter and retain their original summary. */
+export function buildNbaStoredPostureSummary(
+  intelligence: Pick<NbaDailyEdgeGameDto["intelligence"], "ml" | "spread" | "total">,
+): { key: SharpReadKey; sentence: string } {
+  const matched = [intelligence.ml, intelligence.spread, intelligence.total].filter((intel) => {
+    const posture = intel.named_book_posture;
+    return posture && posture.market === intel.market && posture.pickedSide === intel.pick_side;
+  });
+  const presentations = matched.map(buildNbaMarketPosturePresentation);
+  const supports = presentations.some((read) => read.marketSignal === "market_confirmed");
+  const opposes = presentations.some((read) => read.marketSignal === "market_resistance");
+  const tempered = matched.some((intel) => {
+    const posture = intel.named_book_posture!;
+    return posture.conflictingSources.length > 0 || Boolean(posture.convictionRiskSources?.length)
+      || Boolean(posture.heldResistanceSupportingSources?.length);
+  });
+  if (tempered || (supports && opposes)) return {
+    key: "mixed", sentence: "Stored named-book price reads are mixed or held under pressure; see each market's evidence.",
+  };
+  if (opposes) return {
+    key: "push_against", sentence: "Stored named-book prices oppose at least one forecasted market; see the market details.",
+  };
+  if (supports) return {
+    key: "support", sentence: "Stored named-book movement supports at least one forecasted market; bettor identity is unknown.",
+  };
+  return { key: "no_data", sentence: SHARP_READ_SENTENCES.no_data };
 }
 
 /**
@@ -650,7 +665,7 @@ function adaptGame(
     result: null,
     breakdown: {
       verdict: { key: verdictKey, label: verdictLabel },
-      sharpRead: buildSharpReadFromQuickRead(game.quick_read),
+      sharpRead: buildNbaStoredPostureSummary(intel),
       modelBreakdown,
     },
   };

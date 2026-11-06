@@ -42,8 +42,14 @@ const lockedMemberGame = {
   lockState: "locking",
   lockedAt: null,
   predictions: {},
+  breakdown: {
+    sharpRead: { key: "no_data", sentence: "Exact legacy sharp summary." },
+    modelBreakdown: "Exact legacy model summary.",
+  },
   markets: {
     moneyline: {
+      guidedWatchOut: "Exact legacy caution, even when current posture differs.",
+      whyLine: "Exact legacy explanation.",
       publicSplits: [
         { side: "away", label: "AWY", betsPct: 42, moneyPct: 61 },
         { side: "home", label: "HME", betsPct: 58, moneyPct: 39 },
@@ -98,6 +104,17 @@ assert.equal(
   undefined,
   "new availability evidence cannot be overlaid onto an immutable locked card",
 );
+const roundTrippedCapture = JSON.parse(JSON.stringify(capture));
+const roundTripRows = rows.map((row) => ({ ...row, snapshot_json: roundTrippedCapture }));
+const roundTripRestored = applyNbaLockedMemberSnapshotPrecedence({ games: [dynamic], dbIdByExternalId: map, rows: roundTripRows });
+const roundTripMember = adaptNbaToDailyEdgeResponse({ as_of: "2026-11-06T12:40:00Z", slate_date_et: "2026-10-20",
+  market_signals_capability: "available", games: roundTripRestored.games } as NbaDailyEdgeDto, {
+  lockedMemberGamesByExternalId: roundTripRestored.memberGamesByExternalId,
+}).games[0]!;
+assert.deepEqual(roundTripMember.breakdown, lockedMemberGame.breakdown,
+  "R2 summary must not reinterpret a JSON-round-tripped legacy lock");
+assert.equal(roundTripMember.markets.moneyline.guidedWatchOut, lockedMemberGame.markets.moneyline.guidedWatchOut);
+assert.equal(roundTripMember.markets.moneyline.whyLine, lockedMemberGame.markets.moneyline.whyLine);
 
 assert.throws(() => applyNbaLockedMemberSnapshotPrecedence({
   games: [dynamic],

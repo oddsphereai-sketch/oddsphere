@@ -10,8 +10,9 @@ import type {CbbForecast,CbbQuote} from "../../cbb/types";
 import type {CbbBehaviorFlow} from "../../cbb/marketBehaviorCandidate";
 import {cbbCanonicalBehaviorInputs} from "./cbbCanonicalBehaviorInputs";
 import type {pairCbbCanonicalMarketEvidence} from "./cbbCanonicalMarketEvidence";
+import {CBB_PROVIDER_IDENTITY_RELEASE} from "../../cbb/providerInstitutionIdentity";
 
-export const CBB_CONTEXTUAL_READER_INPUT_RELEASE="cbb_contextual_reader_input_2026_11_05_r4_provider_receipt_contract" as const;
+export const CBB_CONTEXTUAL_READER_INPUT_RELEASE="cbb_contextual_reader_input_2026_11_06_r5_current_source_identity" as const;
 const professional=(book:string)=>["circa","pinnacle","bookmaker"].includes(cbbPathBookFamily(book));
 // The journal query uses its actual producer roster. A directly normalized
 // provider quote may be another physical consumer book (e.g. Caesars); it must
@@ -52,7 +53,7 @@ export type CbbContextualLastKnownState={book:string;market:CbbQuote["market"];s
  * never a new native observation time or provider response completion. */
 type PriceQuarantine={book:string;market:CbbQuote["market"];sourceAt:string;reason:string;knownBy:string};
 export type CbbContextualCurrentSourceProblem={book:string;market:CbbQuote["market"];reason:string;sourceAt?:string};
-export type CbbContextualAssembledInput=CbbContextualFeatureInput&{sourceStateEvidence:{release:typeof CBB_CONTEXTUAL_READER_INPUT_RELEASE;gameId:number;startsAt:string;priceQuarantines:PriceQuarantine[];sourceBaselineQuotes:NonNullable<CbbContextualFeatureInput["sourceBaselineQuotes"]>}};
+export type CbbContextualAssembledInput=CbbContextualFeatureInput&{sourceStateEvidence:{release:typeof CBB_CONTEXTUAL_READER_INPUT_RELEASE;providerIdentityRelease?:string;gameId:number;startsAt:string;priceQuarantines:PriceQuarantine[];sourceBaselineQuotes:NonNullable<CbbContextualFeatureInput["sourceBaselineQuotes"]>}};
 export function assembleCbbContextualReaderInput(args:{independent:CbbForecast;startsAt:string;currentQuotes:readonly Quote[];
  canonical:ReturnType<typeof pairCbbCanonicalMarketEvidence>;splitContext:readonly CbbDecisionSplitContext[];
  currentSourceProblems?:readonly CbbContextualCurrentSourceProblem[];
@@ -137,7 +138,7 @@ export function assembleCbbContextualReaderInput(args:{independent:CbbForecast;s
  const input:CbbContextualAssembledInput={...baseInput(f,args.startsAt),sourceBaselineQuotes,currentQuotes:selectedPro,historyQuotes:proRetention.retained,
   consumerCurrentQuotes:selectedConsumer,consumerHistoryQuotes:consumerRetention.retained,consumerQuarantinedSources:[...(previous?.consumerQuarantinedSources??[]),...native.quarantinedSources.filter(q=>consumer(q.book))],
   consumerTruncatedSources:[...(previous?.consumerTruncatedSources??[]),...consumerRetention.truncated],pathTape:path.tape,splitContext:boundedSplits,
-  sourceStateEvidence:{release:CBB_CONTEXTUAL_READER_INPUT_RELEASE,gameId:f.gameId,startsAt:args.startsAt,priceQuarantines,sourceBaselineQuotes}};
+  sourceStateEvidence:{release:CBB_CONTEXTUAL_READER_INPUT_RELEASE,providerIdentityRelease:CBB_PROVIDER_IDENTITY_RELEASE,gameId:f.gameId,startsAt:args.startsAt,priceQuarantines,sourceBaselineQuotes}};
  return {release:CBB_CONTEXTUAL_READER_INPUT_RELEASE,input,pathTape:path.tape,coverage:{...args.historyComplete,
   historyStart:"bounded_retained_window_not_market_open" as const,consumerRetainedStates:consumerRetention.retained.length,splitRetainedStates:boundedSplits.length,
    nativeQuarantines:native.quarantinedSources,currentSourceProblems,consumerRetentionPerBookMarket:LIMIT,professionalHistoryTruncated:proRetention.truncated,lastKnownStates,sourceStateMeaning:"last_known_not_verified_current_offer" as const,rawQuoteRejections:interpretation.rejected,unqualifiedDirectObservations:unqualifiedDirect},providerRequests:0 as const,databaseWrites:0 as const};

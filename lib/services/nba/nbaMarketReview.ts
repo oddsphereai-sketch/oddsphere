@@ -605,7 +605,9 @@ function gradeNbaMarketEconomics(input: GradeInput, legacyAudit = false): GradeO
     } else if (input.market === "moneyline" && spreadConfirms) {
       rationale.push("Strong model value at the selected price with qualified Spread movement agreeing with the side.");
     } else {
-      rationale.push("Strong independent value at the selected price with no qualified market evidence opposing the side.");
+      rationale.push(legacyAudit
+        ? "Strong independent value at the selected price with no qualified market evidence opposing the side."
+        : "Strong independent value at the selected price.");
     }
     return { grade: "best_angle", effectiveConfidence: input.confidence, bestAngleEligible: true, rationale };
   }
