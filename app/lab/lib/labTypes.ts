@@ -839,6 +839,12 @@ export type DataCompletenessDto = {
 };
 
 export type DailyEdgeGameDto = {
+  /** Explicitly recovered context, separate from an unchanged original lock. */
+  cbbRecoveredMarketData?: {
+    release:string;originalPayloadSha256:string;book:string;asOf:string;retrievedAfterLock:true;
+    markets:Array<{market:"moneyline"|"spread"|"total";observedAt:string;line:number|null;firstPrice:number;secondPrice:number}>;
+    note:string;
+  };
   /** Stable ID for React keys: `${sport}-${external_id}`. */
   id: string;
   sport: Sport;
