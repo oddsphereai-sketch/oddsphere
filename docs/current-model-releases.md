@@ -174,6 +174,52 @@ and postdeployment checks remain required. Preserve the separate R38/R39/R41 sou
 release declarations when integrating this candidate. Publisher R42 and tracking
 R29 incorporate main 4ebd7a06 without relabeling R23/R22 or older locked records.
 
+## NFL quarterback-regime continuity — November 6
+
+The November 6 owner-directed repair corrects a source-selection discontinuity,
+not a loss-based coefficient adjustment. For exact JAX@BAL game 1392337, Joe
+Fagnano remained the verified expected starter while the provider depth moved him
+from rank 2 to rank 1. R1 erased the replacement predicate and switched from the
+player-aware law to the quarterback-blind completed-game law. R2 preserves the
+exact-game, original-displacement/replacement identities across that catch-up;
+it stores no chosen score, side, price or grade in the continuity receipt.
+
+An actual return of the displaced starter clears that regime. A third starter,
+changed school/team identity, changed game start, future evidence, or interrupted
+legacy starter history cannot inherit it. A fresh player projection is evaluated
+again on each run, must be collected at/after the original player-state evidence
+and at/before evaluation; stale/future inputs cannot acquire authority through
+continuity. The downstream chronological market reader and grading equations
+are unchanged. The sole existing writer and prediction_pipeline:nfl lease remain.
+No provider requests, refresh cadence, second writer or live shadow is added.
+
+Active runtime identifiers:
+
+- `nfl_outcome_base_authority_2026_11_06_r2_quarterback_regime_continuity`
+- `nfl_forward_evidence_collector_2026_11_06_r36_quarterback_regime_continuity`
+- `nfl_v1_daily_edge_model_2026_11_06_r56_quarterback_regime_continuity`
+- `nfl_v1_daily_edge_calibration_2026_11_06_r55_quarterback_regime_continuity`
+- `nfl_v1_daily_edge_decision_2026_11_06_r65_quarterback_regime_continuity`
+- `nfl_v1_grade_policy_2026_11_06_r65_quarterback_regime_continuity`
+- `nfl_v1_member_release_2026_11_06_r63_quarterback_regime_continuity`
+- `nfl_weekly_member_fixture_2026_11_06_r79_quarterback_regime_continuity`
+- `nfl_forward_member_snapshot_2026_11_06_r71_quarterback_regime_continuity`
+- `nfl_forward_evidence_writer_2026_11_06_r114_quarterback_regime_continuity`
+
+ The R62/R64/R78/R70
+family is explicit immutable predecessor authority; older predecessors remain.
+Market innovationR7 and full-game market runtimeR20 remain unchanged.
+
+The fixed current 14 unlocked-game /42-market comparison, including 231 stored
+identity receipts, changes zero base laws, sides or existing grades.18 actionables
+remain 18, with 0 promotions and 0 demotions. The known JAX@BAL incident is an
+outcome-exposed offline regression, not an accuracy test. Its locked Baltimore
++9.5 Lean remains unchanged in the member reader and tracking. Evidence:
+`model-audits/2026-11-06-nfl-quarterback-regime-continuity.json` and original
+compressed source fixtures. Publication requires focused functional, real-R62
+reader/writer/lock regressions, full model-change gate, types/lint/build,
+fresh-main integration safety, protected PR and normal-writer/live verification.
+
 ## NFL outcome/value separation and player-state authority — November 5 candidate
 
 The owner clarified the product boundary: the predicted winner, score, margin,
@@ -1256,7 +1302,7 @@ The verified New Orleans prior/venue repair remains prospective; no missed or
 locked historical card is reconstructed. One leased sport-scoped writer,
 provider cadence, bounded reads and stakes are unchanged.
 
-The saved current14-game/42-market functional comparison changes one side,
+The saved current 14-game/42-market functional comparison changes one side,
 with0 actionable promotions and2 demotions (19→17 actionables); paired
 promotion/demotion regression scenarios remain tested without a replacement
 quota. This is an owner-directed functional release for forward evaluation,
