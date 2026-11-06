@@ -25,6 +25,7 @@
  * Visual review with Daniel after this lands, then iterate on detail.
  */
 
+import {CbbRecoveredMarketContext} from "./CbbRecoveredMarketContext";
 import { Fragment, Suspense, createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import ActualDailyEdgePreview from "@/app/dev/experience-preview/ActualDailyEdgePreview";
@@ -1528,6 +1529,7 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
 
       {/* Matchup */}
       <MatchupIdentity game={game} size={32} />
+      <CbbRecoveredMarketContext game={game} market={market} />
 
       {/* Starters (R-10) — surfaced only in the reader, never on the
           slate card. Renders "TBD" when MLB hasn't posted a probable
@@ -3778,6 +3780,7 @@ function SelectedEdgeReader({
            Total height stays compact (no taller than the previous
            layout); the difference is hierarchy, not size. */
         <div className="px-5 py-3.5">
+          <CbbRecoveredMarketContext game={game} market={market} />
           <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 gap-y-2 items-stretch divide-y sm:divide-y-0 sm:divide-x divide-white/[0.05]">
             {/* ── Left: Pick block ────────────────────────────────────── */}
             <div className="pb-2 sm:pb-0 sm:pr-3 min-w-0">
