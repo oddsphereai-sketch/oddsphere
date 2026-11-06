@@ -144,6 +144,8 @@ function composeQuickRead(intel: NbaGameIntelligence, snapshot: NbaGameSnapshot)
       return `${matchup} — Watchlist on ${m.pick_label}. ${m.rationale[0] ?? ""}`.trim();
     case "caution":
       return `${matchup} — Caution on ${m.pick_label}. ${m.rationale[0] ?? ""}`.trim();
+    case "no_play":
+      return `${matchup} — ${m.pick_label} remains the predicted outcome; No Play at this moneyline price.`;
     case "no_market":
       return `${matchup} — model picks ${m.pick_label} but market data unavailable for comparison.`;
     case "held":

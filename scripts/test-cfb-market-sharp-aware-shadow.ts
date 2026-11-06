@@ -686,3 +686,15 @@ function publicSplitSet(args: {
     total: { ...common, homeMoneyPct: null, awayMoneyPct: null, homeBetsPct: null, awayBetsPct: null, overMoneyPct: args.overMoney, underMoneyPct: 100 - args.overMoney, overBetsPct: args.overTickets, underBetsPct: 100 - args.overTickets },
   };
 }
+
+for(const price of [-501,-8000,-9000]){
+ const one: typeof moneyline={...moneyline,market:"moneyline" as const,grade:"Lean" as const,modelProbability:.999,
+  evaluatedQuote:{...moneyline.evaluatedQuote,price}};
+ const args: Parameters<typeof applyCfbMarketSharpAwareGrades>[0]={homeTeam:"TCU",bundle:{...baseBundle,evaluatedBets:[one]},sharpSplits:[],operationalOpening:null};
+ const before=JSON.stringify(args);const pass:typeof moneyline=applyCfbMarketSharpAwareGrades(args).evaluatedBets[0]!;
+ assert.equal(pass.grade,"No Play");assert(pass.gradeAdjustment?.reasonCodes.includes("moneyline_price_below_owner_actionable_limit"));
+ assert.equal(pass.modelProbability,one.modelProbability);assert.deepEqual(pass.evaluatedQuote,one.evaluatedQuote);assert.equal(JSON.stringify(args),before);
+ const recovery=applyCfbMarketSharpAwareGrades({...args,bundle:{...args.bundle,evaluatedBets:[{...one,evaluatedQuote:{...one.evaluatedQuote,price:-500}}]}}).evaluatedBets[0]!;
+ assert.equal(recovery.grade,"Lean","the same strong forecast regains actionable Lean at the inclusive -500 price");
+ assert.notEqual(recovery.grade,"Best Angle","-500 cannot be Best Angle");
+}

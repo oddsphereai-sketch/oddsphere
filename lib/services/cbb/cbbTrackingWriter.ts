@@ -1,6 +1,6 @@
 import {cbbProviderStoredSchoolMatches} from "@/lib/cbb/providerInstitutionIdentity";
 import {resolveCbbContextualOutcomeRelease,readCbbContextualOutcomeEvidence,type CbbReleasedOutcomeBoard} from "./cbbContextualOutcomeRuntime";
-import {CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE} from "@/lib/cbb/contextualOutcomeBoard";
+import {CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_RESISTANCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE} from "@/lib/cbb/contextualOutcomeBoard";
 import {CBB_NATIVE_COUNTERPRESSURE_MODEL_RELEASE,CBB_NATIVE_COUNTERPRESSURE_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import {CBB_CONTEXTUAL_HANDOFF_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_MONEYLINE_VALUE_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import { createHash } from "node:crypto";
@@ -45,7 +45,7 @@ export function cbbLockedModelRelease(board:{release:string;modelRelease?:string
 
 /** Resolve the release that actually owns the frozen public decision. */
 export function cbbLockedGradeRelease(board: { release: string; gradeRelease?: string }): string {
-  if(board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE||board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE||board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE||board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE||board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE)return board.gradeRelease;
+  if(board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE||board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_RESISTANCE_GRADE_RELEASE||board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE||board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE||board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE||board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE)return board.gradeRelease;
   if(board.gradeRelease===CBB_GAME_FORECAST_GRADE_RELEASE)return board.gradeRelease;
   if (board.gradeRelease === CBB_PROVISIONAL_GRADE_RELEASE || board.gradeRelease === CBB_LEGACY_PROVISIONAL_GRADE_RELEASE || receivedMarketGradeReleases.includes(board.gradeRelease??"")) return board.gradeRelease!;
   if (board.gradeRelease !== undefined) throw new Error("CBB locked grade release is unknown");

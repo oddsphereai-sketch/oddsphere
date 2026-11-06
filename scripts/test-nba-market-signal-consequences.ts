@@ -276,3 +276,15 @@ console.log(JSON.stringify({ functionalControls: "passed", finalScoreProbability
   pairedGradeScenarios: grades,
   pairedBoardImpact: { before: 1, after: 2, promotions: 1, demotions: 0 },
   historicalGames: 0, providerCalls: 0, productionWrites: 0 }));
+
+// Exercise the production adapter with a complete real builder fixture.
+import {buildNbaDailyEdgeGameDto} from "../lib/services/nba/buildNbaDailyEdgeDto";
+import {adaptNbaToDailyEdgeResponse} from "../lib/services/nba/adaptNbaToDailyEdgeResponse";
+const passDto=buildNbaDailyEdgeGameDto({snapshot,prediction:baseline,lines,splitsRow:null,opportunities:[],
+ provenance:{injuries_source:"espn"} as Parameters<typeof buildNbaDailyEdgeGameDto>[0]["provenance"]});
+passDto.intelligence.ml.grade="no_play";passDto.intelligence.ml.current_price.odds_american=-8000;
+const passResponse=adaptNbaToDailyEdgeResponse({as_of:evaluatedAt,slate_date_et:snapshot.slate_date,market_signals_capability:"available",games:[passDto]} as Parameters<typeof adaptNbaToDailyEdgeResponse>[0]);
+const passMarket=passResponse.games[0]!.markets.moneyline;
+assert.equal(passMarket.verdict.key,"no_play");assert.equal(passMarket.grade,null);assert.equal(passMarket.recommendationConfidence,null);
+assert.equal(passMarket.held,false);assert.equal(passMarket.modelProb,passDto.intelligence.ml.model_prob_on_pick);
+assert.equal(passMarket.priceAmerican,-8000);assert(passMarket.pick);assert(passMarket.reviewFlags.includes("informational_non_actionable_price"));

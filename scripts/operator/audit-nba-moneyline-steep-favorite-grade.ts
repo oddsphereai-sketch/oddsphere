@@ -9,6 +9,7 @@ import { buildNbaDailyEdgePipeline } from "../../lib/services/nba/buildNbaDailyE
 import type { NbaMoneylineDirectionalSignal } from "../../lib/services/nba/nbaMarketIntelligence";
 import {
   gradeNbaMarket,
+  gradeNbaR30MarketForAudit,
   NBA_ML_BEST_ANGLE_MAX_FAVORITE_PRICE,
   type RecommendationGrade,
 } from "../../lib/services/nba/nbaMarketReview";
@@ -58,7 +59,7 @@ async function main(): Promise<void> {
       } | null;
       const direct = grounding?.market_reader?.reads?.moneyline;
       const spread = grounding?.market_reader?.reads?.spread;
-      const legacy = gradeNbaMarket({
+      const legacy = gradeNbaR30MarketForAudit({
         pick: intel.pick_side,
         confidence: intel.model_confidence,
         band: intel.conflict_band,

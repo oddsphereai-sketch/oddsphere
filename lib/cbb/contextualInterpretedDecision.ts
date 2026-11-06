@@ -12,17 +12,19 @@ import {createCbbRecommendationRiskEvaluator,assessCbbOutcomeConfidenceRisk,CBB_
 import {assessCbbMarketResistance} from "./contextualMarketResistanceGrade";
 import {assessConfidenceLeanPrice} from "../services/dailyEdge/confidenceLeanPrice";
 
-export const CBB_INTERPRETED_DECISION_RELEASE="cbb_interpreted_decision_2026_11_06_r12_current_contract_resistance" as const;
+import {qualifyMoneylinePrice,MONEYLINE_PRICE_NO_PLAY_REASON} from "../services/dailyEdge/moneylinePricePolicy";
+
+export const CBB_INTERPRETED_DECISION_RELEASE="cbb_interpreted_decision_2026_11_06_r13_moneyline_wager_price_boundaries" as const;
 /** Product label boundaries, not learned accuracy claims or signal activation
  * gates. The forecast has already interpreted the full qualified market.
  * Confidence is the same unconditional win probability stored in the decision;
  * pushes are refunded in EV, never counted as wins toward the confidence bar. */
-export const CBB_INTERPRETED_GRADE_POLICY=Object.freeze({bestMinimumWinProbability:.62,bestMinimumAmericanPrice:-200,confidenceLeanMinimumWinProbability:.55,
+export const CBB_INTERPRETED_GRADE_POLICY=Object.freeze({bestMinimumWinProbability:.62,bestMinimumAmericanPrice:-200,leanMinimumAmericanMoneylinePrice:-500,confidenceLeanMinimumWinProbability:.55,
  leanMeaning:"price_value_or_supported_final_outcome_confidence_with_declared_fitted_location_and_adverse_case_stress;offered_EV_recorded_separately",
  watchMeaning:"unresolved_value_or_price_margin_or_current_professional_contract_resistance",
  noPlayMeaning:"negative_offered_value_without_a_resolved_advantage_over_the_paired_fair_price",
  bestMeaning:"strong_final_outcome_confidence_with_positive_value_at_a_suitable_straight_bet_price",
- basis:"owner_confidence_accuracy_price_and_recommendation_uncertainty;no_hand_set_EV_percentage_or_odds_floor_no_required_book_confirmation",
+ basis:"owner_confidence_accuracy_price_and_recommendation_uncertainty;declared_moneyline_wager_price_limits_no_hand_set_EV_percentage_no_required_book_confirmation",
  recommendationRisk:CBB_CONTEXTUAL_RECOMMENDATION_RISK_POLICY,
  sharpMeaning:"qualified_market_evidence_informs_final_forecast;book_context_does_not_identify_bettors_or_guarantee_correctness"});
 export function gradeCbbContextualForecastSide(args:{winProbability:number;loseProbability:number;price:number;opposingPrice:number;probabilityErrorEstimate?:number}){
@@ -133,7 +135,8 @@ export function buildCbbInterpretedDecision(args:{input:CbbContextualFeatureInpu
    opposingCompositions:receipt.streams.filter(s=>(market==="total"?s.market==="total":s.market!=="total")&&s.pressures.at(-1)?.moneyBalance!==null&&Math.sign(s.pressures.at(-1)?.moneyBalance??0)===-direction).map(s=>({book:s.book,market:s.market,role:s.role,pressure:s.pressures.at(-1),meaning:"cumulative composition; wagering-price and new-money volume unknown"})),
    opposingPaths:receipt.streams.filter(s=>(market==="total"?s.market==="total":s.market!=="total")&&(s.net?.direction===-direction||s.latest?.direction===-direction)).map(s=>({book:s.book,market:s.market,role:s.role,net:s.net,latest:s.latest,pathResolution:s.pathResolution,unknowns:s.unknowns}))};
   const marketResistanceAssessment=assessCbbMarketResistance({asOf:input.asOf,interpretation:receipt,target,selection,baseGrade,sourceEconomics});
-  const grade=marketResistanceAssessment.grade,reason=marketResistanceAssessment.applied?marketResistanceAssessment.reason:baseReason;
+  const grade=qualifyMoneylinePrice(market,price,marketResistanceAssessment.grade),
+   reason=grade==="No Play"&&price<-500&&market==="moneyline"?MONEYLINE_PRICE_NO_PLAY_REASON:marketResistanceAssessment.applied?marketResistanceAssessment.reason:baseReason;
   return {market,target,selection,probability,loseProbability,pushProbability:p.push,price,expectedValue,grade,stake:0,marketResistanceAssessment,
    reason,recommendationRisk,confidenceLeanAssessment,recommendationBasis:confidenceLedLean?"outcome_confidence" as const:"price_value" as const,gradingNumerics:{probabilityErrorEstimate:grading.probabilityErrorEstimate,valueErrorEstimate:grading.numericalValueErrorEstimate,valueSignResolvedPositive:grading.valueSignResolvedPositive,fairPremium:grading.fairPremium,fairPremiumErrorEstimate:grading.fairPremiumErrorEstimate,fairPremiumResolvedPositive:grading.fairPremiumResolvedPositive},
    marketFairProbability:implied(price)/(implied(target.firstPrice)+implied(target.secondPrice)),sourceEconomics,positiveProfessionalValue,observedProfessionalBookPriceConfirmation,bookPriceActions,counterevidence,

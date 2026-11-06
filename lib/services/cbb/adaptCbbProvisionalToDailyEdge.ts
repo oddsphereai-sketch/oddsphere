@@ -1,6 +1,6 @@
 import {cbbProviderFixtureIdentity} from "@/lib/cbb/providerInstitutionIdentity";
 import {resolveCbbContextualOutcomeRelease,readCbbContextualOutcomeEvidence,type CbbReleasedOutcomeBoard} from "./cbbContextualOutcomeRuntime";
-import {CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE} from "@/lib/cbb/contextualOutcomeBoard";
+import {CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_RESISTANCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE} from "@/lib/cbb/contextualOutcomeBoard";
 import {CBB_NATIVE_COUNTERPRESSURE_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import {CBB_MONEYLINE_VALUE_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 import {CBB_GAME_OUTCOME_RELEASE} from "@/lib/cbb/gameForecastBoard";
@@ -61,6 +61,7 @@ function marketEdge(game:CbbGame,row:BoardRow,projectedTotal:number,homeWinProba
   const directionalLabel=label??(row.market==="moneyline"?`${homeWinProbability>=.5?game.home_team.abbreviation:game.visitor_team.abbreviation} ML`:null);
   const directionalProbability=probability??(row.market==="moneyline"?Math.max(homeWinProbability,1-homeWinProbability):null);
   const riskExplanation:Record<string,string>={
+    moneyline_price_below_owner_actionable_limit:"The moneyline is more expensive than -500; the winner prediction remains visible, but this wager is No Play.",
     current_professional_price_response_opposes_pick_at_offered_contract:"Current professional book movement opposes this pick at the offered line; watch for the resistance to clear.",
     outcome_confidence_supports_lean_price_value_recorded_separately:"The final forecast supports a Lean on this outcome; the offered price keeps it below Best Angle.",
     price_advantage_sensitive_to_fitted_location_uncertainty:"Small forecast changes could erase the value at this price.",
@@ -132,7 +133,7 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
   if(rows.size!==3||!rows.has("moneyline")||!rows.has("spread")||!rows.has("total"))throw new Error("CBB member three-market board incomplete");
   // Legacy locked payloads retain their original reader semantics. The new
   // reason contract distinguishes path uncertainty from actual opposition.
-  const preciseReason=snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_MARKET_BEHAVIOR_GRADE_RELEASE||
+  const preciseReason=snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_RESISTANCE_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_MARKET_BEHAVIOR_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_NATIVE_COUNTERPRESSURE_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_MONEYLINE_VALUE_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_INFORMATIONAL_WATCHLIST_GRADE_RELEASE||
@@ -145,7 +146,7 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
     snapshot.board.gradeRelease===CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE;
-  const informationalWatchlist=snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_MARKET_BEHAVIOR_GRADE_RELEASE||
+  const informationalWatchlist=snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_RESISTANCE_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE||snapshot.board.gradeRelease===CBB_MARKET_BEHAVIOR_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_NATIVE_COUNTERPRESSURE_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_MONEYLINE_VALUE_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_INFORMATIONAL_WATCHLIST_GRADE_RELEASE;

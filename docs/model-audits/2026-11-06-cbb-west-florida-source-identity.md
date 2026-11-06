@@ -3,8 +3,11 @@
 Starting base: `9c9ba4db585044f5a0867dc6040fc1ac2ecf667c`.
 Protected locked-card recovery #1053 (`4af12298586c2f4896a8e58c5d5fb9231c0155cc`)
 is integrated; its exact archived receipt, locked payload and separate recovered
-context are preserved. The concurrent Daily Edge grading policy must also be
-integrated before this source repair publishes.
+context are preserved. The concurrent protected Daily Edge grading policy #1052 is integrated at
+`eb517c073c7015c3f1937383d6b1015f6a7ecdb7`: decisionR13/gradeR12 remain exact;
+all prior stored grade families retain their own semantics. The only three merge
+conflicts were publisher/adapter/tracking version constants, advanced to the
+reserved R54/R37/R40 while preserving all incoming behavioral hunks.
 
 The failure has two independently necessary identity gaps: BALLDONTLIE school732
 has only `Argonauts` and no college, while the same exact Owls event identifies

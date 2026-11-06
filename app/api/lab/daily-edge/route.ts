@@ -125,6 +125,7 @@ import {
 import { normalizeDailyEdgeActionability } from "@/lib/services/dailyEdgeActionability";
 import { formatKeyStats } from "@/lib/services/keyStatsFormatter";
 import { assertNoBannedTerms } from "@/lib/services/bannedTermsLinter";
+import { nbaReaderUnavailableResponse } from "@/lib/services/nba/nbaReaderPublication";
 import { buildNbaDailyEdgeAdapted } from "@/lib/services/nba/buildNbaDailyEdgeAdapted";
 import {
   loadSplitsHistoryForSlate,
@@ -6939,21 +6940,8 @@ export async function GET(request: Request) {
         headers: DAILY_EDGE_NO_STORE_HEADERS,
       });
     } catch (e) {
-      const body: DailyEdgeResponse = {
-        as_of: new Date().toISOString(),
-        sport,
-        date: requestedDate,
-        requested_date: requestedDate,
-        fallback_used: false,
-        slateState: "no_data",
-        slate_status: null,
-        last_slate_update_at: null,
-        games: [],
-      };
       console.warn(`nba daily-edge: pipeline error: ${(e as Error).message}`);
-      return Response.json(body, {
-        headers: { "Cache-Control": DAILY_EDGE_ERROR_CACHE_CONTROL },
-      });
+      return nbaReaderUnavailableResponse({date:requestedDate,now:new Date().toISOString(),cacheControl:DAILY_EDGE_ERROR_CACHE_CONTROL,error:e});
     }
   }
 
