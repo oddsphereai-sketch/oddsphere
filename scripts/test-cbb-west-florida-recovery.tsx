@@ -1,3 +1,4 @@
+import {isCbbDivisionOneTeam} from "../lib/cbb/divisionOneMembership";
 import assert from "node:assert/strict";
 import React from "react";
 import {renderToStaticMarkup} from "react-dom/server";
@@ -22,6 +23,8 @@ const game:CbbGame={id:10882715,date:recovery.startsAt,season:2026,status:"pre",
   home_team:team(156,"Florida International Panthers","Florida International","FIU"),visitor_team:team(732,"Argonauts",null,"WEST ")};
 const identity=cbbProviderFixtureIdentity(game);
 assert.equal(identity.awayTeamDisplayName,"West Florida Argonauts");
+assert(isCbbDivisionOneTeam({id:732,full_name:"West Florida Argonauts"},2026));
+assert.throws(()=>isCbbDivisionOneTeam({id:732,full_name:"Other Argonauts"},2026),/identity changed/);
 assert.equal(cbbSplitOrientation("West Florida","FIU",identity),"direct");
 assert.equal(cbbSplitOrientation("FIU","West Florida Argonauts",identity),"reversed");
 for(const wrong of ["Florida Atlantic","Florida Gulf Coast","North Florida","Argonauts"])
@@ -29,6 +32,9 @@ for(const wrong of ["Florida Atlantic","Florida Gulf Coast","North Florida","Arg
 assert.equal(cbbProviderSchoolIdentity({...game.visitor_team,id:733}).displayName,"Argonauts");
 assert.equal(cbbProviderSchoolIdentity({...game.visitor_team,college:"Other College"}).college,"Other College");
 assert(cbbProviderStoredSchoolMatches("West Florida Argonauts",game.visitor_team));
+assert(cbbProviderStoredSchoolMatches("Argonauts",{...game.visitor_team,full_name:"West Florida Argonauts"}));
+assert(!cbbProviderStoredSchoolMatches("Argonauts",{...game.visitor_team,full_name:"West Florida Argonauts",college:"Other College"}));
+assert(!cbbProviderStoredSchoolMatches("Argonauts",{...game.visitor_team,id:733,full_name:"West Florida Argonauts"}));
 assert(!cbbProviderStoredSchoolMatches("West Florida Argonauts",{...game.visitor_team,id:733}));
 const update="2026-11-06T19:40:13.039Z",at="2026-11-06T20:00:00Z";
 const event={eventId:recovery.providerEventId,id:"fiu-west-florida",sport:"ncaab",sport_key:"basketball_ncaab",home_team:"FIU",away_team:"West Florida",commence_time:game.date,

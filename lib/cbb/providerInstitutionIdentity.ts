@@ -82,5 +82,8 @@ export function cbbProviderFixtureIdentity(game:Pick<CbbGame,"home_team"|"visito
     cbbHomeCollege:home.college,cbbAwayCollege:away.college};
 }
 export function cbbProviderStoredSchoolMatches(stored:string|null|undefined,team:Pick<CbbTeam,"id"|"full_name"|"college">){
-  return stored===team.full_name||stored===cbbProviderSchoolIdentity(team).displayName;
+  if(stored===team.full_name)return true;
+  const identity=cbbProviderSchoolIdentity(team);
+  return team.id===732&&identity.college==="West Florida"&&identity.displayName==="West Florida Argonauts"&&
+    typeof stored==="string"&&["Argonauts","West Florida","West Florida Argonauts"].includes(stored);
 }
