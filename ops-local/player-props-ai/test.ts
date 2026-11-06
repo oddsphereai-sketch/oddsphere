@@ -18,7 +18,7 @@ const packet: GamePacket = {
   ],
 };
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
-packet.quotes = packet.quotes.map(q => ({ ...q, opening: false }));
+packet.quotes = packet.quotes.map(q => ({ ...q, opening: false, receivedAtProvenance: "provider_response" }));
 const before = digest(packet);
 assert.equal(bill("gpt-6-luna", { input: 1000, output: 0, cacheWrite30m: 1000 }), 0.000125);
 assert.equal(bill("gpt-6-luna", { input: 1000, output: 0, cacheWrite12h: 1000 }), 0.00025);
@@ -129,6 +129,19 @@ for (const p of adapted.packets) validatePacket(p);
 assert.deepEqual(adapted.packets.filter(p => p.sport === "nfl").map(p => p.players[0].evidence.length), [0, 0]);
 assert.ok(coverage(adapted.packets).find(c => c.sport === "nfl")!.missingMarkets.includes("passing_tds"));
 assert.equal(digest(source), originalSource);
+const laterSnapshot = clone(source);
+laterSnapshot.nba = laterSnapshot.nba.map(day => ({ ...day, snapshot: day.snapshot ? { ...day.snapshot, generatedAt: "2026-11-07T12:00:00Z" } : null }));
+assert.ok(fromCachedExport(laterSnapshot).packets.filter(p => p.sport === "nba").every(p => !p.players[0].evidence.some(e => e.kind === "independent_model")));
+const clockSource = { ...clone(source), nba: source.nba.map(day => ({ ...day, market: { updatedAt: "2026-11-06T15:05:00Z", observations: [{
+  canonicalGameId: "nba-synthetic", canonicalPlayerId: "1", playerName: "Synthetic A", playerTeam: "A", market: "points", provider: "synthetic", sportsbook: "reference", side: "over", line: 10.5,
+  americanPrice: -110, fetchedAt: "2026-11-06T15:00:00Z", observedAt: "2026-11-06T15:02:00Z", isOpening: false, isLive: false,
+}] } })) } as unknown as CachedExport;
+const clockDigest = digest(clockSource), clockPackets = fromCachedExport(clockSource).packets.filter(p => p.sport === "nba");
+assert.equal(clockPackets.find(p => p.stage === "early")!.quotes.length, 0); // Start time cannot admit a later response.
+const availableQuote = clockPackets.find(p => p.stage === "final")!.quotes[0];
+assert.equal(availableQuote.receivedAt, "2026-11-06T15:05:00Z");
+assert.equal(availableQuote.receivedAtProvenance, "snapshot_availability");
+assert.equal(digest(clockSource), clockDigest); // Original fetchedAt/source payload remain exact.
 const lateCache = { ...clone(source), currentNba: { games: [{ gameId: 123, startTime: "2026-11-04T23:00:00Z", homeTeam: "A", awayTeam: "B", homeTeamId: 1, awayTeamId: 2 }],
   boxes: [{ gameId: 123, playerId: 1, teamId: 1, points: 20 }], advanced: [], updatedAt: "2026-11-07T12:00:00Z" } } as unknown as CachedExport;
 const unavailable = fromCachedExport(lateCache).packets.filter(p => p.sport === "nba");

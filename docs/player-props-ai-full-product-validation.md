@@ -1,9 +1,27 @@
 # Player-prop AI product: full-scope offline validation
 
-Continuation base: `7f15ca4e8069bc30096633d6ccfe3c90776f82cd`.
+Process-first continuation base: `9c9ba4db585044f5a0867dc6040fc1ac2ecf667c`.
 Packet contract: `player_props_ai_offline_full_product_2026_11_06_r1`.
 Research behavior is exported by `probability-proposals.ts`; receipts preserve each
 original request. This is a manual local evaluation system, not a deployed model.
+
+## Owner's launch standard — November 6
+
+The owner explicitly requires correct processing before launch and forward measurement
+of prediction results afterward. Historical backtesting, a completed outcome cohort or
+proof of beating the independent model is not a launch prerequisite for this product.
+The scoped exception is recorded in `docs/model-change-safety.md`. Confidence estimates
+must have clear model-estimate semantics; they cannot be represented as empirically
+validated simply because the AI expresses certainty.
+
+Launch requires correct player identities, fresh and honestly timestamped source data,
+individual stats/workload and matchup/context review, actual availability facts, market
+chronology, independent book accounting, correct event/price math and coherent outputs.
+Every requested scope must receive a decision or a specific operational exception.
+The two review windows, stronger-model replacement limit, durable spending reservations,
+before-lock completion, source-grounded explanations, safe failure behavior and exact
+locked-record handling must work in the real existing writer/reader path. These process
+gates are not waived. A successful API response alone proves none of them.
 
 ## Intended product
 
@@ -41,7 +59,19 @@ this harness does not create a second sports-data collector or writer.
 `market-report.ts` preserves exact-book/line price pairs, anchor chronologies and observed
 alternate-ladder summaries. Complete raw alternate traces remain in private artifacts.
 Summary compression is lossy and needs quality evaluation. Native last-price-change time
-and our confirmation/receipt time are distinct. Opening prices and legacy rows with an
+and our confirmation/receipt time are distinct. Provider-response time, snapshot/export
+availability and unknown legacy receipt provenance are labelled separately. The compact
+AI input preserves both clocks and their provenance for pairs and unchanged-price runs.
+Snapshot availability cannot masquerade as fresh provider confirmation. Pair construction
+never mixes opening/current/unknown categories or incompatible receipt provenance.
+The existing NBA collector records its legacy `fetchedAt` before sending requests. That
+is not a response-completion timestamp. Its archived quotes therefore use the archive's
+actual availability bound and retain `snapshot_availability` provenance. The original
+collection-start field remains exact in the source export. Future live integration must
+record real response completion through the existing collector; do not reconstruct it
+for legacy records. A retained normalized source timestamp can also contain an older
+normalizer's fetch-time fallback, so it alone cannot establish a native price-change time.
+Opening prices and legacy rows with an
 unknown opening marker are not qualified current references. Multiple feeds for one
 book do not establish independent market breadth. An execution book cannot confirm its
 own edge. Missing money/splits remain missing; price motion does not identify sharp money.
@@ -128,6 +158,7 @@ node --import tsx ops-local/player-props-ai/test.ts
 node --import tsx ops-local/player-props-ai/api-eval.test.ts
 node --import tsx ops-local/player-props-ai/full-product.test.ts
 node --import tsx ops-local/player-props-ai/cost-plan.test.ts
+node --import tsx ops-local/player-props-ai/process.test.ts
 
 # Read-only local build from exported sources; NEW private destination.
 node --import tsx ops-local/player-props-ai/build-full.ts \
@@ -159,12 +190,13 @@ ID, settled/void/push status, actual stat or null, official availability timesta
 source. Do not manufacture outcomes or infer participation from an absent box-score row.
 With no outcome file the report correctly says pending; it does not report accuracy.
 
-## Gate before production
+## Production process gates and forward evaluation
 
-Accuracy improvement requires frozen held-out comparisons against the independent model,
-current member decisions and a qualified market baseline. Report full boards, both sides,
-binary/combination markets, promotions paired with demotions, exact prices and board-count
-impact. Select compression/model policies before the holdout. A flatter board is no proof.
+Results are evaluated forward by release against the independent model, current member
+decisions and a qualified market baseline. Report full boards, both sides, binary/combo
+markets, promotions paired with demotions, exact prices and board-count impact. Freeze the
+issued forecasts; do not retrospectively rewrite them. These measurements are not the
+owner's prelaunch gate. A flatter board is no proof of better accuracy.
 
 Follow `docs/model-change-safety.md`, bump affected production release identifiers, update
 the model registry and retain the shared `prediction_pipeline` lease and sole writer.

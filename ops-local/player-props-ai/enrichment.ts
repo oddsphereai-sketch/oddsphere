@@ -44,16 +44,19 @@ export function enrichCachedPacket(packet: GamePacket, source: EnrichedSource): 
       const assumed = missing.indexOf("historical stat availability timestamps assumed, not proved"); if (assumed >= 0) missing.splice(assumed, 1);
       if (historicalRejected) missing.push("historical stat cache unavailable at this cutoff; later fetch cannot be backdated");
       const context = source.nbaContext?.flatMap(row => row.payload.games.map(game => ({ game, captured: row.generated_at })))
-        .filter(({ game, captured }) => Math.abs(instant(game.gameStartAt) - instant(packet.start)) < 60_000 && instant(captured) <= cutoff && instant(game.generatedAt) <= cutoff && [game.awayTeam, game.homeTeam].some(t => teamKey(t) === teamKey(player.team)))
+        .filter(({ game, captured }) => Math.abs(instant(game.gameStartAt) - instant(packet.start)) < 60_000 && instant(captured) <= cutoff && instant(game.generatedAt) <= cutoff && [player.team, player.opponent].every(team => [game.awayTeam, game.homeTeam].some(t => teamKey(t) === teamKey(team))))
         .sort((a, b) => instant(b.captured) - instant(a.captured))[0];
       if (context?.game.nbaAvailability) {
         const availableAt = latestTime(context.game.nbaAvailability, context.captured);
         if (instant(availableAt) <= cutoff) {
           evidence.push({ id: `${player.id}:availability`, kind: "availability", availableAt, source: "cached NBA exact-game availability; original source preserved", value: { context: context.game.nbaAvailability,
             interpretation: "Unlisted players are not confirmed healthy; starting lineups are not confirmed by this injury report." } });
-          const index = missing.indexOf("separate timestamped injury/lineup feed missing"); if (index >= 0) missing.splice(index, 1);
+          const availability = context.game.nbaAvailability as { away?: { known?: boolean }; home?: { known?: boolean } };
+          if (availability.away?.known === true && availability.home?.known === true) {
+            const index = missing.indexOf("separate timestamped injury/lineup feed missing"); if (index >= 0) missing.splice(index, 1);
+          } else missing.push("NBA availability report has incomplete team coverage; absent/unlisted players are not confirmed healthy");
           missing.push("confirmed NBA starting lineup unavailable in this source before lock");
-        }
+        } else missing.push("future-dated NBA availability rejected at this cutoff");
       }
     }
     if (packet.sport === "nfl") {
@@ -145,9 +148,9 @@ export function mlbPackets(source: EnrichedSource): GamePacket[] {
             evidence.push({ id: `${id}:${row.market}:market-breadth`, kind: "market", availableAt: snapshot.asOfTimestamp, source: snapshot.marketEvidence!.r,
               value: json({ market: row.market, breadth: captured[3], bookSplitSchema: "[side,sourceClass,sourceTimestamp,tickets,money]", verifiedBookSplits: captured[2].filter(b => b[12].length).map(b => ({ book: b[0], provider: b[1], sourceClass: b[2], splits: b[12] })) }) });
             for (const b of captured[2]) for (const [side, current, opening] of [["over", b[8], b[10]], ["under", b[9], b[11]]] as const) {
-              for (const state of [{ line: row.line, price: current, at: b[3] }, ...(b[6] && b[7] !== null ? [{ line: b[7], price: opening, at: b[6] }] : [])]) {
+              for (const state of [{ line: row.line, price: current, at: b[3], opening: false }, ...(b[6] && b[7] !== null ? [{ line: b[7], price: opening, at: b[6], opening: true }] : [])]) {
                 if (state.price === null || !Number.isFinite(state.price) || Math.abs(state.price) < 100 || instant(state.at) > instant(slot.at)) continue;
-                const q = { playerId: id, market: row.market, provider: b[1], book: b[0], line: state.line, side, american: state.price, observedAt: state.at, receivedAt: snapshot.asOfTimestamp, live: false };
+                const q = { playerId: id, market: row.market, provider: b[1], book: b[0], line: state.line, side, american: state.price, observedAt: state.at, receivedAt: snapshot.asOfTimestamp, receivedAtProvenance: "snapshot_availability" as const, opening: state.opening, live: false };
                 if (instant(q.observedAt) > instant(q.receivedAt)) continue;
                 const key = digest(q); quotes.set(key, { ...q, id: key });
               }
@@ -156,7 +159,7 @@ export function mlbPackets(source: EnrichedSource): GamePacket[] {
         }
         for (const row of playerRows) {
           if (!Number.isFinite(row.odds) || Math.abs(row.odds) < 100 || instant(row.lastUpdated) > instant(snapshot.asOfTimestamp)) continue;
-          const q = { playerId: id, market: row.market, provider: "stored_member_quote", book: row.book.toLowerCase().replace(/[^a-z0-9]/g, ""), line: row.line, side: row.side, american: row.odds, observedAt: row.lastUpdated, receivedAt: snapshot.asOfTimestamp, live: false };
+          const q = { playerId: id, market: row.market, provider: "stored_member_quote", book: row.book.toLowerCase().replace(/[^a-z0-9]/g, ""), line: row.line, side: row.side, american: row.odds, observedAt: row.lastUpdated, receivedAt: snapshot.asOfTimestamp, receivedAtProvenance: "snapshot_availability" as const, live: false };
           const key = digest(q); quotes.set(key, { ...q, id: key });
         }
         missing.push("qualified joint outcome law not attached");

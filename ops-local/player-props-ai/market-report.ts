@@ -5,13 +5,36 @@ import { digest, instant, invariant, validatePacket } from "./core";
 const probability = (odds: number) => odds > 0 ? 100 / (odds + 100) : -odds / (-odds + 100);
 const order = (a: Quote, b: Quote) => instant(a.observedAt) - instant(b.observedAt) || instant(a.receivedAt) - instant(b.receivedAt) || a.id.localeCompare(b.id);
 function pair(rows: Quote[], earliest: boolean) {
-  const sorted = [...rows].sort(order), side = (s: string) => earliest ? sorted.find(q => q.side === s) : sorted.filter(q => q.side === s).at(-1);
-  const over = side("over"), under = side("under");
-  // Exact-line/book/provider caller grouping and contemporaneous legs are mandatory.
-  if (!over || !under || Math.abs(instant(over.observedAt) - instant(under.observedAt)) > 5 * 60_000) return null;
-  const o = probability(over.american), u = probability(under.american);
-  return { line: over.line, over: over.american, under: under.american, fairOver: o / (o + u),
-    overObservedAt: over.observedAt, underObservedAt: under.observedAt, evidence: [over.id, under.id] };
+  // Never combine opening/current/unknown states or incompatible receipt clocks.
+  const groups = new Map<string, Quote[]>();
+  for (const q of rows) {
+    const key = JSON.stringify([q.opening ?? null, q.receivedAtProvenance ?? null]);
+    const group = groups.get(key);
+    if (group) group.push(q); else groups.set(key, [q]);
+  }
+  const candidates = [...groups.values()].flatMap(group => {
+    const sorted = [...group].sort(earliest ? order : (a, b) => instant(a.receivedAt) - instant(b.receivedAt) || order(a, b));
+    const side = (s: string) => earliest ? sorted.find(q => q.side === s) : sorted.filter(q => q.side === s).at(-1);
+    const over = side("over"), under = side("under");
+    // Unchanged native prices can have different change times but fresh paired receipts.
+    // Snapshot availability alone does not establish contemporaneous provider confirmation.
+    if (!over || !under || (over.receivedAtProvenance === "provider_response"
+      ? Math.abs(instant(over.receivedAt) - instant(under.receivedAt))
+      : Math.abs(instant(over.observedAt) - instant(under.observedAt))) > 5 * 60_000) return [];
+    const o = probability(over.american), u = probability(under.american);
+    return [{ line: over.line, over: over.american, under: under.american, fairOver: o / (o + u),
+      overObservedAt: over.observedAt, underObservedAt: under.observedAt, overReceivedAt: over.receivedAt, underReceivedAt: under.receivedAt,
+      opening: over.opening ?? null, receivedAtProvenance: over.receivedAtProvenance ?? null,
+      evidence: [over.id, under.id] }];
+  });
+  candidates.sort((a, b) => {
+    if (!earliest) {
+      const rank = (p: typeof a) => (p.opening === false ? 2 : p.opening === null ? 1 : 0) * 2 + Number(p.receivedAtProvenance === "provider_response");
+      const diff = rank(a) - rank(b); if (diff) return diff;
+    }
+    return Math.max(instant(a.overObservedAt), instant(a.underObservedAt)) - Math.max(instant(b.overObservedAt), instant(b.underObservedAt));
+  });
+  return (earliest ? candidates[0] : candidates.at(-1)) ?? null;
 }
 export function compileMarketReport(packet: GamePacket): GamePacket {
   validatePacket(packet);
@@ -45,14 +68,15 @@ export function compileMarketReport(packet: GamePacket): GamePacket {
         return { provider: bookRows[0].provider, book: bookRows[0].book,
           retainedStates: bookRows.length, distinctLines: new Set(bookRows.map(q => q.line)).size,
           earliestObservedAt: [...bookRows].sort(order)[0].observedAt, latestObservedAt: [...bookRows].sort(order).at(-1)!.observedAt,
+          latestReceivedAt: new Date(bookRows.reduce((last, q) => Math.max(last, instant(q.receivedAt)), -Infinity)).toISOString(),
           anchorEarliestRetainedPair: pair(atAnchor, true), anchorLatestRetainedPair: pair(atAnchor, false),
           representativeLadderPoints: [...selected.values()], pairedLadderLines: ladder.length,
           nonMonotonePairs: ladder.slice(1).filter((p, i) => p.fairOver > ladder[i].fairOver + 1e-9).length,
-          oneSidedYes: bookRows.filter(q => q.side === "yes").length ? [...bookRows].sort(order).filter(q => q.side === "yes").map(q => ({ id: q.id, line: q.line, american: q.american, observedAt: q.observedAt })).filter((_, i, a) => i === 0 || i === a.length - 1) : [],
+          oneSidedYes: bookRows.filter(q => q.side === "yes").length ? [...bookRows].sort(order).filter(q => q.side === "yes").map(q => ({ id: q.id, line: q.line, american: q.american, observedAt: q.observedAt, receivedAt: q.receivedAt, opening: q.opening ?? null, receivedAtProvenance: q.receivedAtProvenance ?? null })).filter((_, i, a) => i === 0 || i === a.length - 1) : [],
         };
       });
       const report: Evidence = { id: `market-report:${player.id}:${market}`, kind: "market", availableAt: packet.cutoff,
-        source: "offline deterministic exact-line/book price report r1; not a calibrated forecast",
+        source: "offline deterministic exact-line/book dual-clock price report r2; not a calibrated forecast",
         value: { market, anchorLine: anchor, anchorSource: typeof value?.line === "number" ? "timestamped_independent_model" : "inferred_from_retained_offers",
           rawTraceDigest: digest(rows), rawTraceStates: rows.length, fullAnchorTraceStates: rows.filter(q => q.line === anchor).length,
           books, limitations: ["raw alternate-line histories retained locally; AI sees a deterministic summary of those histories", "nearest ladder samples are observed pairs, not interpolated quantiles", "no money/bet splits inferred from odds", "no attribution of who moved first beyond retained timestamps", "stale leg/age checks still required at execution"] } as unknown as Json };

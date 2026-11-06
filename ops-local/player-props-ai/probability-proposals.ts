@@ -1,7 +1,7 @@
 /** Uncalibrated, offline hypotheses for proper prospective scoring. Never production probabilities. */
 import type { GamePacket } from "./catalog";
 import { etDate, eventTarget, instant, invariant, validateReview, type Review } from "./core";
-export const AI_REVIEW_BEHAVIOR_RELEASE = "player_props_ai_research_2026_11_06_r7_explicit_probabilistic_forecasting";
+export const AI_REVIEW_BEHAVIOR_RELEASE = "player_props_ai_research_2026_11_06_r8_source_clock_process";
 export function probabilityProposals(packet: GamePacket, review: Review, model: string, issuedAt: string) {
   validateReview(packet, review);
   return review.players.flatMap(p => p.markets.map(m => {
