@@ -41,5 +41,16 @@
     "Private whole-picture AI method and its pending paid-call approval remain separate.",
     "Historical locked/raw evidence and historical erroneous outer publication clocks remain unchanged."
   ],
-  "publication": "Candidate only: required full checks, protected current-main PR, deployment and actual live normal-writer verification pending."
+  "verification": {
+    "requiredModelChangeGate": "passed, including postverify; local PostgreSQL proof skipped because MARKET_BRAIN_POSTGRES_URL is unset, so required CI proof remains pending",
+    "focusedPublicationAndSnapshotTests": "passed",
+    "focusedWriterTests": "passed",
+    "typeCheck": "passed",
+    "productionWebpackBuild": "passed",
+    "focusedLint": "zero errors; three existing unused research-field destructure warnings in writer",
+    "independentReview": "exact R72 key, legacy precedence, chronology guards, existing lock, same-input cards and zero numerical/grade changes rechecked; no remaining scoped blocker",
+    "branchProtection": "UI confirmed required PR/current-main-ancestor, strict up-to-date branches, no bypass and no force push",
+    "concurrentWork": "CBB owner committed its own overlapping doc work privately; both additive release sections must be preserved through fresh-main integration before either branch merges."
+  },
+  "publication": "Local verification complete; protected current-main PR checks, deployment and actual live normal-writer verification pending."
 }
