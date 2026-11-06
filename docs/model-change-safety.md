@@ -1,5 +1,26 @@
 # Model change safety protocol
 
+## Owner-directed NFL publication-clock correctness — November 6
+
+The standing owner request covers actual freshness defects across Daily Edge.
+An actual R72 snapshot records publication before its source because the sole
+writer passes refresh-start time to the publication phase. Snapshot R73/writer
+R116 use the actual publication-phase clock and reject new backwards or invalid
+clock tuples without a DB write. Exact R72/R71 and older reads keep their stored
+clocks, fixture/card/grade/evidence values and precedence; no historical record
+is rewritten. No other writer, provider request, schedule, prediction input or
+numerical/grade/stake rule changes, so existing model/calibration releases remain
+authoritative. No live shadow model is introduced.
+
+The same-input fixture/publication harness retains all 42 unlocked market
+decisions and 18 actionables (zero promotions/demotions), the original locked
+JAX@BAL DTO, and every same-tape card field. New-publication chronology failures
+retain the previous board. Full model verification, focused clock/legacy/lock
+tests, current-main protected PR and actual production/normal-writer proof are
+still required. This metadata scope is not authorization to activate the private
+NFL whole-picture forecasting experiment or make new paid inference calls.
+Evidence: `model-audits/2026-11-06-nfl-publication-clock.json`.
+
 ## Owner-directed NFL exact-player source continuity — November 6
 
 The owner requested cross-model checks and repair of injury/starter context

@@ -1,4 +1,5 @@
 import "./test-nfl-pmf-predecessor-continuity";
+import "./test-nfl-publication-clock";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";

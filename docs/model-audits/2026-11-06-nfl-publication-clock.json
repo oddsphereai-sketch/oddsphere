@@ -1,0 +1,45 @@
+{
+  "scope": "NFL compact publication clock only; no numerical market-reader activation or accuracy claim",
+  "startingBase": "7e65d0fdae3a202df52974ad7061e37404e74568",
+  "defect": {
+    "savedSnapshot": "nfl_forward_member_snapshot_2026_11_06_r72_exact_player_availability_continuity",
+    "publishedAt": "2026-11-06T15:06:11.235Z",
+    "sourceCapturedAt": "2026-11-06T15:06:48.717Z",
+    "cause": "Existing compact-publication phase passes run-start args.now after newer source evidence has arrived."
+  },
+  "release": {
+    "snapshot": "nfl_forward_member_snapshot_2026_11_06_r73_publication_clock",
+    "writer": "nfl_forward_evidence_writer_2026_11_06_r116_publication_clock",
+    "unchanged": "CollectorR37/modelR57/calibrationR56/decision-gradeR66/memberR64/fixtureR80; same sole writer and prediction_pipeline:nfl lease."
+  },
+  "repair": [
+    "Use publication-phase wall time after fixture construction, keeping run-start and source clocks separate.",
+    "Reject new invalid/backwards publication tuples before storage and retain prior published board.",
+    "Preserve exact R72 legacy payload and prefer it before R71 during fallback; do not normalize old clock defects.",
+    "Prevent legacy snapshots being written under the new current key."
+  ],
+  "sameInputFunctionalProof": {
+    "test": "scripts/test-nfl-publication-clock.ts",
+    "unlockedGames": 14,
+    "marketDecisions": 42,
+    "actionables": 18,
+    "best": 3,
+    "lean": 15,
+    "watch": 7,
+    "noPlay": 17,
+    "promotions": 0,
+    "demotions": 0,
+    "sameTapeCardFieldsUnchanged": true,
+    "originalLockedCardUnchanged": "JAX@BAL1392337",
+    "legacyReaderPayloadExact": true,
+    "databaseWrites": "mock only",
+    "providerRequests": 0,
+    "productionWrites": 0
+  },
+  "limitations": [
+    "Focused functional proof is not improved predictive accuracy or certification of the NFL whole-picture market inference.",
+    "Private whole-picture AI method and its pending paid-call approval remain separate.",
+    "Historical locked/raw evidence and historical erroneous outer publication clocks remain unchanged."
+  ],
+  "publication": "Candidate only: required full checks, protected current-main PR, deployment and actual live normal-writer verification pending."
+}
