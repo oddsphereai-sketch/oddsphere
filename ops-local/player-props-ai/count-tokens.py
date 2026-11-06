@@ -15,7 +15,7 @@ for row in manifest["packets"]:
     body = json.loads(pathlib.Path(row["payload"]).read_text())
     # Count the whole serialized request conservatively, not just the evidence body.
     tokens = len(encoding.encode(json.dumps(body, separators=(",", ":"), ensure_ascii=False)))
-    results.append({**{k: row[k] for k in ("sport", "gameId", "stage", "model", "maxOutputTokens")}, "proxyInputTokens": tokens})
+    results.append({**{k: row[k] for k in ("sport", "gameId", "stage")}, "model": body["model"], "maxOutputTokens": body["max_output_tokens"], "proxyInputTokens": tokens})
 print(json.dumps({"encoding": "o200k_base", "modelSpecificApiCounts": False,
                   "billedOutputObserved": False, "monthlyBudgetValidated": False,
                   "requests": results}, indent=2))

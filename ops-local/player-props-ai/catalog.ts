@@ -33,6 +33,8 @@ export type Quote = {
   id: string; playerId: string; market: string; provider: string; book: string;
   line: number; side: "over" | "under" | "yes"; american: number;
   observedAt: string; receivedAt: string; live: boolean;
+  /** Missing on legacy local packets: do not infer current-quote eligibility from it. */
+  opening?: boolean;
 };
 export type Player = {
   id: string; name: string; team: string; opponent: string;
@@ -45,6 +47,7 @@ export type GamePacket = {
   release: typeof PRODUCT_RELEASE; sport: Sport; gameId: string; start: string; lock: string;
   stage: Stage; cutoff: string; players: Player[]; quotes: Quote[];
   sourceLimitations: string[];
+  sharedGameContext?: Json;
 };
 
 /** Source-of-truth mathematical definitions; count/event units must be retained by adapters. */

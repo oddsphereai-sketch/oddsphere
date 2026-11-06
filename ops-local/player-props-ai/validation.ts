@@ -7,13 +7,16 @@ export const RATES = {
   "gpt-6.1-terra": { input: 1, output: 5 },
 } as const;
 export type Model = keyof typeof RATES;
-export type Usage = { input: number; output: number };
+export type Usage = { input: number; output: number; cacheWrite30m?: number; cacheWrite12h?: number };
 export function bill(model: Model, usage: Usage) {
   invariant(model in RATES, "Unpriced model");
   invariant([usage.input, usage.output].every(v => Number.isSafeInteger(v) && v >= 0), "Invalid billed usage");
+  const write30 = usage.cacheWrite30m ?? 0, write12 = usage.cacheWrite12h ?? 0;
+  invariant([write30, write12].every(v => Number.isSafeInteger(v) && v >= 0) && write30 + write12 <= usage.input, "Invalid cache-write usage");
   // Conservative at the documented 272K boundary. Output includes invisible reasoning tokens.
   const long = usage.input >= 272_000;
-  return (usage.input * RATES[model].input * (long ? 2 : 1) + usage.output * RATES[model].output * (long ? 1.5 : 1)) / 1_000_000;
+  // Charge reads at uncached rates conservatively; write rates are total 1.25x/2.5x.
+  return ((usage.input + write30 * 0.25 + write12 * 1.5) * RATES[model].input * (long ? 2 : 1) + usage.output * RATES[model].output * (long ? 1.5 : 1)) / 1_000_000;
 }
 export type PlannedGame = { sport: Sport; id: string; start: string; input: Record<Stage, number>; maxOutput: Record<Stage, number>; finalModel?: Model };
 export type Receipt = { jobKey: string; attemptId: string; model: Model; usage: Usage };
