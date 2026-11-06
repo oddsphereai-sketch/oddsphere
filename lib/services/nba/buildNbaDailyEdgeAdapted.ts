@@ -1,3 +1,4 @@
+import {readNbaSplitHighWater} from "./nbaSplitHighWater";
 import {assertNbaReaderEvidenceComplete,advanceNbaEvidencePage,nbaEvidenceHighWaterError,NBA_READER_PUBLICATION_RELEASE} from "./nbaReaderPublication";
 /**
  * Phase 7G (launch prep) — NBA → adapted Daily Edge response builder.
@@ -360,16 +361,9 @@ export async function buildNbaDailyEdgePipeline(
     };
     const rows: ReaderSplitDbRow[] = [];
     let lastSplitId = 0;
-    const splitHighWaterRead = await supabase
-      .from("market_split_observations_v2")
-      .select("id")
-      .eq("league", "nba")
-      .in("canonical_event_id", gameExternalIds.map(String))
-      .order("id", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const splitHighWaterRead = await readNbaSplitHighWater(supabase,gameExternalIds.map(String));
     if (splitHighWaterRead.error) readerEvidenceErrors.push("split_observation_high_water_failed");
-    const splitHighWaterId = Number(splitHighWaterRead.data?.id ?? 0);
+    const splitHighWaterId = splitHighWaterRead.id;
     const splitFrontierError=nbaEvidenceHighWaterError("split",splitHighWaterId);
     if(splitFrontierError)readerEvidenceErrors.push(splitFrontierError);
     while (lastSplitId < splitHighWaterId) {

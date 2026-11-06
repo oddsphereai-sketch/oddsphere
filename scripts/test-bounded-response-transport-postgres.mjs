@@ -56,7 +56,30 @@ try{
   await assert.rejects(db.query('SELECT public.upsert_lab_response_snapshot($1::jsonb)',[JSON.stringify(row)]),/permission denied/);
   await assert.rejects(db.query("SELECT market_price_observation_high_water('nba',ARRAY['a'])"),/permission denied/);
  }
+ await db.exec(`RESET ROLE;
+ CREATE TABLE public.market_split_observations_v2(id bigint PRIMARY KEY,league text NOT NULL,canonical_event_id text NOT NULL);
+ CREATE INDEX split_event_lookup ON public.market_split_observations_v2(canonical_event_id);
+ ALTER TABLE public.market_split_observations_v2 ENABLE ROW LEVEL SECURITY;
+ CREATE POLICY service_splits ON public.market_split_observations_v2 TO service_role USING(true);
+ GRANT SELECT ON public.market_split_observations_v2 TO service_role;
+ INSERT INTO market_split_observations_v2 VALUES(1,'nba','a'),(99,'nba','b'),(200,'nfl','a'),(300,'nba','other');`);
+ const splitMigration=readFileSync('lib/db/schema-migration-v61-nba-split-high-water.sql','utf8');
+ await db.exec(splitMigration);await db.exec(splitMigration);
+ const sig='public.nba_market_split_observation_high_water(text[])';
+ const flags=(await db.query('SELECT prosecdef,proconfig FROM pg_proc WHERE oid=$1::regprocedure',[sig])).rows[0];
+ assert.equal(flags.prosecdef,false);assert(flags.proconfig.includes('search_path=pg_catalog'));
+ await db.exec('SET ROLE service_role');
+ for(const events of [[],['missing'],['a'],['a','a','missing'],['a','b'],['a','b','other']]){
+  const expected=(await db.query("SELECT max(id) AS id FROM market_split_observations_v2 WHERE league='nba' AND canonical_event_id=ANY($1::text[])",[events])).rows[0].id;
+  assert.equal((await db.query('SELECT nba_market_split_observation_high_water($1::text[]) AS id',[events])).rows[0].id,expected);
+ }
+ await db.exec('RESET ROLE;REVOKE SELECT ON market_split_observations_v2 FROM service_role;SET ROLE service_role');
+ await assert.rejects(db.query("SELECT nba_market_split_observation_high_water(ARRAY['a'])"),/permission denied/);
+ await db.exec('RESET ROLE;GRANT SELECT ON market_split_observations_v2 TO service_role;ALTER POLICY service_splits ON market_split_observations_v2 USING(false);SET ROLE service_role');
+ assert.equal((await db.query("SELECT nba_market_split_observation_high_water(ARRAY['a']) AS id")).rows[0].id,null);
+ for(const role of ['anon','authenticated']){await db.exec(`RESET ROLE;SET ROLE ${role}`);await assert.rejects(db.query("SELECT nba_market_split_observation_high_water(ARRAY['a'])"),/permission denied/);}
  await db.exec('RESET ROLE');
+ console.log('PASS NBA scoped split max: exact current/absent/duplicate/mixed-event parity, idempotent migration, invoker grants/RLS and role denial');
  assert.deepEqual((await db.query('SELECT * FROM locked_guard')).rows,guard,'unrelated locked public records remain unchanged');
  console.log('PASS exact legacy eleven-column snapshot parity, locked payload preservation, idempotency, exact high-water predicate, empty/duplicate/mixed events, invoker grants/RLS and anonymous/member denial');
 }finally{await db.close();}
