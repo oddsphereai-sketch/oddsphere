@@ -1,0 +1,517 @@
+{
+  "generatedAt": "2026-11-06T18:46:56.848Z",
+  "productionWrites": 0,
+  "providerCalls": 0,
+  "queries": 38,
+  "maxResponseBytes": 570338,
+  "reports": [
+    {
+      "sport": "cbb",
+      "generatedAt": "2026-11-06T18:46:04.609+00:00",
+      "hotWireBytes": 570279,
+      "hotDecodedBytes": 9425795,
+      "hotRows": 13433,
+      "hotGroups": 331,
+      "archiveInitialized": true,
+      "hotFromDate": "2026-11-03",
+      "coldRowsInHot": 0,
+      "unknownDateHotRows": 0,
+      "metadataGroups": 331,
+      "metadataColdGroups": 0,
+      "clocks": {
+        "missingSourceClock": 0,
+        "missingLocalReceiptClock": 2413,
+        "sourceAfterLocalReceipt": 0
+      },
+      "originalReceipt": {
+        "verified": true,
+        "sha256": "2665656f7a9073c231eb51f14ee4278ba71089307b0d10597572eff1eb898f17",
+        "decodedBytes": 70614,
+        "rows": 98,
+        "kind": "capture",
+        "source": "owls_current_splits",
+        "fetchedAt": "2026-11-06T18:46:03.153Z"
+      },
+      "canonicalSamples": {
+        "market_price_observations_v2": {
+          "sampleRows": 100,
+          "newestFetchedAt": "2026-11-06T18:45:25.875+00:00",
+          "byProvider": {
+            "owls": {
+              "rows": 100,
+              "missingHashes": 0,
+              "nativeClockUnavailable": 0
+            }
+          },
+          "sourceAfterReceipt": 0,
+          "missingHashes": 0,
+          "nativeClockUnavailable": 0,
+          "scope": "latest_100_rows_not_a_whole_history_certificate"
+        },
+        "market_split_observations_v2": {
+          "sampleRows": 100,
+          "newestFetchedAt": "2026-11-06T18:45:25.006+00:00",
+          "byProvider": {
+            "owls": {
+              "rows": 100,
+              "missingHashes": 0,
+              "nativeClockUnavailable": 0
+            }
+          },
+          "sourceAfterReceipt": 0,
+          "missingHashes": 0,
+          "nativeClockUnavailable": 0,
+          "scope": "latest_100_rows_not_a_whole_history_certificate"
+        }
+      },
+      "last24Hours": {
+        "from": "2026-11-05T18:46:46.630Z",
+        "complete": true,
+        "captures": 288,
+        "capturedRows": 22857,
+        "decodedCaptureBytes": 15977549,
+        "earliestAvailableAt": "2026-11-05T18:51:00.875+00:00",
+        "storageMeaning": "decoded_source_bytes_not_database_disk_or_RAM;baseline_captures_excluded"
+      }
+    },
+    {
+      "sport": "nba",
+      "generatedAt": "2026-11-06T18:45:49.465+00:00",
+      "hotWireBytes": 369635,
+      "hotDecodedBytes": 6546961,
+      "hotRows": 8671,
+      "hotGroups": 120,
+      "archiveInitialized": true,
+      "hotFromDate": "2026-11-03",
+      "coldRowsInHot": 0,
+      "unknownDateHotRows": 0,
+      "metadataGroups": 120,
+      "metadataColdGroups": 0,
+      "clocks": {
+        "missingSourceClock": 0,
+        "missingLocalReceiptClock": 3360,
+        "sourceAfterLocalReceipt": 0
+      },
+      "originalReceipt": {
+        "verified": true,
+        "sha256": "d16c33cd9da42fe4f91ebced23da09b2449e9b3aefa63aae1dc824a6e108cb53",
+        "decodedBytes": 21024,
+        "rows": 27,
+        "kind": "capture",
+        "source": "owls_current_splits",
+        "fetchedAt": "2026-11-06T18:45:48.170Z"
+      },
+      "canonicalSamples": {
+        "market_price_observations_v2": {
+          "sampleRows": 100,
+          "newestFetchedAt": "2026-11-06T18:45:36.094+00:00",
+          "byProvider": {
+            "owls": {
+              "rows": 100,
+              "missingHashes": 0,
+              "nativeClockUnavailable": 0
+            }
+          },
+          "sourceAfterReceipt": 0,
+          "missingHashes": 0,
+          "nativeClockUnavailable": 0,
+          "scope": "latest_100_rows_not_a_whole_history_certificate"
+        },
+        "market_split_observations_v2": {
+          "sampleRows": 100,
+          "newestFetchedAt": "2026-11-06T18:45:36.094+00:00",
+          "byProvider": {
+            "owls": {
+              "rows": 100,
+              "missingHashes": 0,
+              "nativeClockUnavailable": 0
+            }
+          },
+          "sourceAfterReceipt": 0,
+          "missingHashes": 0,
+          "nativeClockUnavailable": 0,
+          "scope": "latest_100_rows_not_a_whole_history_certificate"
+        }
+      },
+      "last24Hours": {
+        "from": "2026-11-05T18:46:46.630Z",
+        "complete": true,
+        "captures": 288,
+        "capturedRows": 5911,
+        "decodedCaptureBytes": 4566228,
+        "earliestAvailableAt": "2026-11-05T18:50:48.043+00:00",
+        "storageMeaning": "decoded_source_bytes_not_database_disk_or_RAM;baseline_captures_excluded"
+      }
+    },
+    {
+      "sport": "nhl",
+      "generatedAt": "2026-11-06T18:45:46.898+00:00",
+      "hotWireBytes": 272119,
+      "hotDecodedBytes": 4831648,
+      "hotRows": 7484,
+      "hotGroups": 123,
+      "archiveInitialized": true,
+      "hotFromDate": "2026-11-03",
+      "coldRowsInHot": 0,
+      "unknownDateHotRows": 0,
+      "metadataGroups": 123,
+      "metadataColdGroups": 0,
+      "clocks": {
+        "missingSourceClock": 0,
+        "missingLocalReceiptClock": 3286,
+        "sourceAfterLocalReceipt": 0
+      },
+      "originalReceipt": {
+        "verified": true,
+        "sha256": "29b7141e2a91596aef1b1fe538bb0c2350a5c707c90a4806a24c0b007c7ffab7",
+        "decodedBytes": 21184,
+        "rows": 33,
+        "kind": "capture",
+        "source": "owls_current_splits",
+        "fetchedAt": "2026-11-06T18:45:45.346Z"
+      },
+      "canonicalSamples": {
+        "market_price_observations_v2": {
+          "sampleRows": 100,
+          "newestFetchedAt": "2026-11-06T18:45:31.26+00:00",
+          "byProvider": {
+            "owls": {
+              "rows": 64,
+              "missingHashes": 0,
+              "nativeClockUnavailable": 0
+            },
+            "canonical_lines": {
+              "rows": 36,
+              "missingHashes": 36,
+              "nativeClockUnavailable": 0
+            }
+          },
+          "sourceAfterReceipt": 0,
+          "missingHashes": 36,
+          "nativeClockUnavailable": 0,
+          "scope": "latest_100_rows_not_a_whole_history_certificate"
+        },
+        "market_split_observations_v2": {
+          "sampleRows": 100,
+          "newestFetchedAt": "2026-11-06T18:45:31.26+00:00",
+          "byProvider": {
+            "owls": {
+              "rows": 64,
+              "missingHashes": 0,
+              "nativeClockUnavailable": 0
+            },
+            "playbook": {
+              "rows": 36,
+              "missingHashes": 0,
+              "nativeClockUnavailable": 36
+            }
+          },
+          "sourceAfterReceipt": 0,
+          "missingHashes": 0,
+          "nativeClockUnavailable": 36,
+          "scope": "latest_100_rows_not_a_whole_history_certificate"
+        }
+      },
+      "last24Hours": {
+        "from": "2026-11-05T18:46:46.630Z",
+        "complete": true,
+        "captures": 289,
+        "capturedRows": 5850,
+        "decodedCaptureBytes": 4185166,
+        "earliestAvailableAt": "2026-11-05T18:50:45.692+00:00",
+        "storageMeaning": "decoded_source_bytes_not_database_disk_or_RAM;baseline_captures_excluded"
+      }
+    },
+    {
+      "sport": "cfb",
+      "generatedAt": "2026-11-06T18:45:57.212+00:00",
+      "hotWireBytes": 564395,
+      "hotDecodedBytes": 10482132,
+      "hotRows": 13691,
+      "hotGroups": 186,
+      "archiveInitialized": true,
+      "hotFromDate": "2026-11-03",
+      "coldRowsInHot": 0,
+      "unknownDateHotRows": 0,
+      "metadataGroups": 186,
+      "metadataColdGroups": 0,
+      "clocks": {
+        "missingSourceClock": 0,
+        "missingLocalReceiptClock": 1889,
+        "sourceAfterLocalReceipt": 0
+      },
+      "originalReceipt": {
+        "verified": true,
+        "sha256": "2527573f09b61901bcb97ae9b47a07d37f38c5ab82dac8283565bcee0aa35af9",
+        "decodedBytes": 122242,
+        "rows": 157,
+        "kind": "capture",
+        "source": "owls_current_splits",
+        "fetchedAt": "2026-11-06T18:45:54.247Z"
+      },
+      "canonicalSamples": {
+        "market_price_observations_v2": {
+          "sampleRows": 100,
+          "newestFetchedAt": "2026-11-06T03:46:15.883+00:00",
+          "byProvider": {
+            "owls": {
+              "rows": 100,
+              "missingHashes": 0,
+              "nativeClockUnavailable": 0
+            }
+          },
+          "sourceAfterReceipt": 0,
+          "missingHashes": 0,
+          "nativeClockUnavailable": 0,
+          "scope": "latest_100_rows_not_a_whole_history_certificate"
+        },
+        "market_split_observations_v2": {
+          "sampleRows": 100,
+          "newestFetchedAt": "2026-11-06T04:21:00.284+00:00",
+          "byProvider": {
+            "owls": {
+              "rows": 64,
+              "missingHashes": 0,
+              "nativeClockUnavailable": 0
+            },
+            "playbook": {
+              "rows": 36,
+              "missingHashes": 0,
+              "nativeClockUnavailable": 36
+            }
+          },
+          "sourceAfterReceipt": 0,
+          "missingHashes": 0,
+          "nativeClockUnavailable": 36,
+          "scope": "latest_100_rows_not_a_whole_history_certificate"
+        }
+      },
+      "last24Hours": {
+        "from": "2026-11-05T18:46:46.630Z",
+        "complete": true,
+        "captures": 297,
+        "capturedRows": 47125,
+        "decodedCaptureBytes": 36629464,
+        "earliestAvailableAt": "2026-11-05T18:50:53.811+00:00",
+        "storageMeaning": "decoded_source_bytes_not_database_disk_or_RAM;baseline_captures_excluded"
+      }
+    },
+    {
+      "sport": "nfl",
+      "generatedAt": "2026-11-06T18:45:51.565+00:00",
+      "hotWireBytes": 151871,
+      "hotDecodedBytes": 2778887,
+      "hotRows": 3633,
+      "hotGroups": 49,
+      "archiveInitialized": true,
+      "hotFromDate": "2026-11-03",
+      "coldRowsInHot": 0,
+      "unknownDateHotRows": 0,
+      "metadataGroups": 49,
+      "metadataColdGroups": 0,
+      "clocks": {
+        "missingSourceClock": 0,
+        "missingLocalReceiptClock": 478,
+        "sourceAfterLocalReceipt": 0
+      },
+      "originalReceipt": {
+        "verified": true,
+        "sha256": "3b7e8ecfdd899cbe5cc5002dff6bf21eb059854d5b7e2db2c189590b9e5435db",
+        "decodedBytes": 33297,
+        "rows": 43,
+        "kind": "capture",
+        "source": "owls_current_splits",
+        "fetchedAt": "2026-11-06T18:45:50.918Z"
+      },
+      "canonicalSamples": {
+        "market_price_observations_v2": {
+          "sampleRows": 100,
+          "newestFetchedAt": "2026-11-06T18:46:12.135+00:00",
+          "byProvider": {
+            "owls": {
+              "rows": 100,
+              "missingHashes": 0,
+              "nativeClockUnavailable": 0
+            }
+          },
+          "sourceAfterReceipt": 0,
+          "missingHashes": 0,
+          "nativeClockUnavailable": 0,
+          "scope": "latest_100_rows_not_a_whole_history_certificate"
+        },
+        "market_split_observations_v2": {
+          "sampleRows": 100,
+          "newestFetchedAt": "2026-11-06T18:46:12.135+00:00",
+          "byProvider": {
+            "owls": {
+              "rows": 100,
+              "missingHashes": 0,
+              "nativeClockUnavailable": 0
+            }
+          },
+          "sourceAfterReceipt": 0,
+          "missingHashes": 0,
+          "nativeClockUnavailable": 0,
+          "scope": "latest_100_rows_not_a_whole_history_certificate"
+        }
+      },
+      "last24Hours": {
+        "from": "2026-11-05T18:46:46.630Z",
+        "complete": true,
+        "captures": 288,
+        "capturedRows": 11946,
+        "decodedCaptureBytes": 9259946,
+        "earliestAvailableAt": "2026-11-05T18:50:50.65+00:00",
+        "storageMeaning": "decoded_source_bytes_not_database_disk_or_RAM;baseline_captures_excluded"
+      }
+    },
+    {
+      "sport": "mlb",
+      "generatedAt": "2026-10-29T04:10:44.169+00:00",
+      "hotWireBytes": 72912,
+      "hotDecodedBytes": 72912,
+      "hotRows": 121,
+      "hotGroups": 7,
+      "archiveInitialized": false,
+      "hotFromDate": null,
+      "coldRowsInHot": null,
+      "unknownDateHotRows": 0,
+      "metadataGroups": null,
+      "metadataColdGroups": null,
+      "clocks": {
+        "missingSourceClock": 0,
+        "missingLocalReceiptClock": 121,
+        "sourceAfterLocalReceipt": 0
+      },
+      "originalReceipt": null,
+      "canonicalSamples": {
+        "market_price_observations_v2": {
+          "sampleRows": 100,
+          "newestFetchedAt": "2026-10-29T03:45:26.643+00:00",
+          "byProvider": {
+            "canonical_lines": {
+              "rows": 94,
+              "missingHashes": 94,
+              "nativeClockUnavailable": 0
+            },
+            "owls": {
+              "rows": 6,
+              "missingHashes": 0,
+              "nativeClockUnavailable": 0
+            }
+          },
+          "sourceAfterReceipt": 0,
+          "missingHashes": 94,
+          "nativeClockUnavailable": 0,
+          "scope": "latest_100_rows_not_a_whole_history_certificate"
+        },
+        "market_split_observations_v2": {
+          "sampleRows": 100,
+          "newestFetchedAt": "2026-10-29T03:30:26.276+00:00",
+          "byProvider": {
+            "playbook": {
+              "rows": 52,
+              "missingHashes": 0,
+              "nativeClockUnavailable": 52
+            },
+            "owls": {
+              "rows": 48,
+              "missingHashes": 0,
+              "nativeClockUnavailable": 0
+            }
+          },
+          "sourceAfterReceipt": 0,
+          "missingHashes": 0,
+          "nativeClockUnavailable": 52,
+          "scope": "latest_100_rows_not_a_whole_history_certificate"
+        }
+      },
+      "last24Hours": {
+        "from": "2026-11-05T18:46:46.630Z",
+        "complete": true,
+        "captures": 0,
+        "capturedRows": 0,
+        "decodedCaptureBytes": 0,
+        "earliestAvailableAt": null,
+        "storageMeaning": "decoded_source_bytes_not_database_disk_or_RAM;baseline_captures_excluded"
+      }
+    },
+    {
+      "sport": "wnba",
+      "generatedAt": "2026-11-01T04:10:44.648+00:00",
+      "hotWireBytes": 163764,
+      "hotDecodedBytes": 163764,
+      "hotRows": 225,
+      "hotGroups": 5,
+      "archiveInitialized": false,
+      "hotFromDate": null,
+      "coldRowsInHot": null,
+      "unknownDateHotRows": 0,
+      "metadataGroups": null,
+      "metadataColdGroups": null,
+      "clocks": {
+        "missingSourceClock": 0,
+        "missingLocalReceiptClock": 225,
+        "sourceAfterLocalReceipt": 0
+      },
+      "originalReceipt": null,
+      "canonicalSamples": {
+        "market_price_observations_v2": {
+          "sampleRows": 100,
+          "newestFetchedAt": "2026-11-01T03:53:40.878+00:00",
+          "byProvider": {
+            "canonical_lines": {
+              "rows": 50,
+              "missingHashes": 50,
+              "nativeClockUnavailable": 0
+            },
+            "owls": {
+              "rows": 50,
+              "missingHashes": 0,
+              "nativeClockUnavailable": 0
+            }
+          },
+          "sourceAfterReceipt": 0,
+          "missingHashes": 50,
+          "nativeClockUnavailable": 0,
+          "scope": "latest_100_rows_not_a_whole_history_certificate"
+        },
+        "market_split_observations_v2": {
+          "sampleRows": 100,
+          "newestFetchedAt": "2026-11-01T03:53:40.63+00:00",
+          "byProvider": {
+            "owls": {
+              "rows": 88,
+              "missingHashes": 0,
+              "nativeClockUnavailable": 0
+            },
+            "playbook": {
+              "rows": 12,
+              "missingHashes": 0,
+              "nativeClockUnavailable": 12
+            }
+          },
+          "sourceAfterReceipt": 0,
+          "missingHashes": 0,
+          "nativeClockUnavailable": 12,
+          "scope": "latest_100_rows_not_a_whole_history_certificate"
+        }
+      },
+      "last24Hours": {
+        "from": "2026-11-05T18:46:46.630Z",
+        "complete": true,
+        "captures": 0,
+        "capturedRows": 0,
+        "decodedCaptureBytes": 0,
+        "earliestAvailableAt": null,
+        "storageMeaning": "decoded_source_bytes_not_database_disk_or_RAM;baseline_captures_excluded"
+      }
+    }
+  ],
+  "limits": [
+    "Samples are bounded, not complete chronology certification.",
+    "Archives retain normalized provider payloads; unmapped raw provider fields and events between polls are not claimed.",
+    "RAM and retained disk are different budgets. A bounded hot feed does not make permanent storage growth zero.",
+    "No old evidence or locked record was corrected, compacted away or deleted."
+  ]
+}

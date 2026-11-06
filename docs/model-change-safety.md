@@ -1,5 +1,21 @@
 # Model change safety protocol
 
+## Owner-directed November 6 collection chronology and memory repair
+
+The owner requested durable odds/split evidence and correct arrival timestamps
+without unbounded site memory. Capture R29 records future response completion
+instead of routine job-start availability and writes the same observations in
+bounded sequential batches. Native clocks, hashes, missing/unverified provenance,
+poll identity and all historical/locked records stay exact. The existing single
+capture path, sport leases, provider calls/budgets and cadence remain unchanged.
+No numerical model, calibration, grade threshold or stake changes in this scope;
+correct future point-in-time admission can differ without historical backdating.
+Full model/focused verification, release registry, fresh-main protected PR and
+natural live collection proof remain mandatory. No archival data is deleted or
+downsampled and no multi-year fixed-storage guarantee is inferred from RAM
+improvements. Evidence and limits:
+`docs/model-audits/2026-11-06-market-evidence-durability.md`.
+
 ## Owner-directed confidence-led Lean semantics — November 6
 
 The owner explicitly clarified in the Daily Edge market-grading chat that price

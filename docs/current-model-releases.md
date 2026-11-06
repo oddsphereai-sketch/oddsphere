@@ -1,5 +1,21 @@
 # Current production model releases and qualified research candidates
 
+## November 6 evidence collection — candidate, not yet live
+
+The sole V2 capture path becomes
+`market_intelligence_v2_capture_2026_11_06_r29_response_clocks_bounded_writes`.
+Owls response completion and Playbook local broker-read completion stamp future
+availability, separately from unchanged native source clocks. Write release
+`market_observation_write_batch_2026_11_06_r1_bounded_bytes` keeps each sequential
+price/split upsert within 240,000 UTF-8 JSON bytes/500 rows with all observations
+and conflict keys preserved. Per-batch T-60 deadline checks retain the existing
+lease/sole writer. No provider requests, cadence, source qualification, numerical
+forecast, calibration, grade or stake rule is added. No historical clock,
+locked payload or missing provenance is reconstructed. The existing immutable
+split archive remains authoritative; this is not a second archival writer.
+Read-only coverage, honest provenance limits and multi-year disk sizing are in
+`docs/model-audits/2026-11-06-market-evidence-durability.md`.
+
 ## November 6 confidence-led Lean policy — candidate, not yet live
 
 The owner clarified that a strong outcome prediction can be Lean despite poor
