@@ -161,7 +161,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_05_r113_outcome_value_separation" as const;
+  "nfl_forward_evidence_writer_2026_11_06_r114_quarterback_regime_continuity" as const;
 
 const NFL_REGULAR_MARKETS = ["moneyline", "spread", "total"] as const;
 const NFL_OWLS_COVERAGE_DIAGNOSTICS = new Set([
@@ -876,6 +876,10 @@ export async function runNflForwardEvidenceWriter(args: {
       playerAwareScore: paidProjectionShadow ?? null,
       providerDepth: { away: providerAwayDepth, home: providerHomeDepth },
       availabilityAdjustedDepth: { away: awayDepth, home: homeDepth },
+      capturedAt,
+      gameStartAt: plan.game.scheduledStart,
+      previousStates: historicalExisting.filter((row) => row.providerGameId === plan.game.providerGameId)
+        .map((row) => row.payload),
     });
     const baseOutcome = baseSelection.outcome;
     const incumbentOutcome = shadowMoneyline.footballProjection

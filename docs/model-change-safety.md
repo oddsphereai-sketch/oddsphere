@@ -1,5 +1,30 @@
 # Model change safety protocol
 
+## Owner-directed NFL quarterback-regime continuity — November 6
+
+The owner explicitly requested investigation of the late JAX@BAL base switch and
+a fix only if it was unjustified. Saved pregame packets prove the expected
+starter stayed Joe Fagnano; provider depth caught up from second to first rank,
+which alone erased the replacement condition. The scoped R2 source-continuity
+repair carries only exact-game starter identities and original evidence time.
+It does not preserve a winning score or force a Jacksonville pick. Real starter
+returns/changes, wrong identities, changed clocks, stale/future player inputs and
+missing proof have functional negative/positive controls. Updated player-aware
+projections and the unchanged downstream market reader remain authoritative.
+
+This correctness repair is authorized for future/unlocked decisions under
+collectorR36/modelR56/calibrationR55/decision-gradeR65/memberR63/fixtureR79/
+snapshotR71/writerR114, with the existing sole prediction_pipeline:nfl writer.
+The prior R62 member/R64 decision/R78 fixture/R70 snapshot remains exact locked
+reader/writer/tracking authority. There are no live shadow predictions, provider
+quota increases, thresholds, stakes or manual grades.14 current unlocked games keep
+all 42 market decisions and 18 actionables (0 promotions, 0 demotions). Existing JAX@BAL
+lock stays Baltimore+9.5 Lean even though the incident prompted investigation.
+This exception supports a demonstrated identity-continuity correction, not a
+claim of improved win rate or a reusable waiver for model tuning. Required
+focused/full tests, clean fresh-base protected PR and actual production proof
+still apply. See `model-audits/2026-11-06-nfl-quarterback-regime-continuity.json`.
+
 ## Owner-directed CBB Lean recommendation quality — November 5
 
 The owner explicitly requested repair of overly permissive Leans using market
