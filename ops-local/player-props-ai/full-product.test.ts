@@ -35,6 +35,11 @@ const source = { priorNba: { updatedAt: "2026-11-06T12:00:00Z" }, currentNba: { 
 assert.ok(enrichCachedPacket(packet, source).players[0].evidence.some(e => e.kind === "availability"));
 const future = structuredClone(source); (future.nbaContext![0].payload.games[0].nbaAvailability as { away: { players: { reportedAt: string }[] } }).away.players[0].reportedAt = "2026-11-06T22:00:00Z";
 assert.ok(!enrichCachedPacket(packet, future).players[0].evidence.some(e => e.kind === "availability"));
+const wrongOpponent = structuredClone(source); wrongOpponent.nbaContext![0].payload.games[0].homeTeam = "C";
+assert.ok(!enrichCachedPacket(packet, wrongOpponent).players[0].evidence.some(e => e.kind === "availability"));
+const unknownAvailability = structuredClone(source);
+(unknownAvailability.nbaContext![0].payload.games[0].nbaAvailability as { away: { known: boolean } }).away.known = false;
+assert.ok(enrichCachedPacket(packet, unknownAvailability).players[0].missing.some(m => m.includes("incomplete team coverage")));
 assert.equal(digest(packet), baseline);
 const probabilistic = structuredClone(review); probabilistic.players[0].markets.forEach(m => { m.proposedEventProbability = m.market === "points" ? 0.6 : null; });
 const proposals = probabilityProposals(packet, probabilistic, "synthetic", "2026-11-06T21:56:00Z");

@@ -35,6 +35,8 @@ export type Quote = {
   observedAt: string; receivedAt: string; live: boolean;
   /** Missing on legacy local packets: do not infer current-quote eligibility from it. */
   opening?: boolean;
+  /** An export/snapshot clock is availability evidence, not a fresh provider confirmation. */
+  receivedAtProvenance?: "provider_response" | "collection_start" | "snapshot_availability";
 };
 export type Player = {
   id: string; name: string; team: string; opponent: string;

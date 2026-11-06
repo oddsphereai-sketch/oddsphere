@@ -62,10 +62,10 @@ export function fromCachedExport(source: CachedExport) {
               values.push(evidence(`${id}:${label}:${b.gameId}`, kind, cacheTimes.get(key)!, "cached NBA stat state; actual cache availability timestamp retained", { game: g, box: b, advanced: advancedAt && instant(advancedAt) <= cutoff ? advanced.get(key) ?? null : null }));
             }
           }
-          const valid = rows.filter(r => instant(r.evaluatedAt) <= cutoff);
+          const valid = rows.filter(r => instant(r.evaluatedAt) <= cutoff && instant(snapshot.generatedAt) <= cutoff);
           for (const row of valid) {
-            values.push(evidence(`${id}:model:${row.market}`, "independent_model", row.evaluatedAt, row.modelRelease ?? "unversioned-source",
-              { market: row.market, line: row.line, selectedSide: row.side, independentProjection: row.independentProjection, independentSelectedSideProbability: row.independentProbability, calibrationRelease: row.calibrationRelease, role: row.role, production: row.production, matchup: row.matchup }));
+            values.push(evidence(`${id}:model:${row.market}`, "independent_model", new Date(Math.max(instant(row.evaluatedAt), instant(snapshot.generatedAt))).toISOString(), row.modelRelease ?? "unversioned-source",
+              { market: row.market, line: row.line, selectedSide: row.side, independentProjection: row.independentProjection, independentSelectedSideProbability: row.independentProbability, evaluatedAt: row.evaluatedAt, snapshotAvailableAt: snapshot.generatedAt, calibrationRelease: row.calibrationRelease, role: row.role, production: row.production, matchup: row.matchup }));
           }
           const missing = ["separate timestamped injury/lineup feed missing", "qualified joint outcome law not attached"];
           if (history.length !== knownHistory.length) missing.push("historical stat cache unavailable at this cutoff; later fetch cannot be backdated");
@@ -78,15 +78,19 @@ export function fromCachedExport(source: CachedExport) {
         });
         const quotes = new Map<string, Quote>();
         let rejected = 0;
+        // The NBA collector's legacy fetchedAt is set before collection starts.
+        // The archive write gives a conservative availability bound for its rows;
+        // it does not prove that any given quote was re-confirmed at that time.
+        const quoteAvailableAt = day.market?.updatedAt ?? source.generatedAt;
         for (const q of observations) {
-          if (!q.canonicalPlayerId || q.isLive || !["over", "under", "yes"].includes(q.side) || instant(q.observedAt) > instant(q.fetchedAt) || instant(q.fetchedAt) > cutoff || Math.abs(q.americanPrice) < 100) { rejected++; continue; }
+          if (!q.canonicalPlayerId || q.isLive || !["over", "under", "yes"].includes(q.side) || instant(q.observedAt) > instant(quoteAvailableAt) || instant(q.fetchedAt) > instant(quoteAvailableAt) || instant(quoteAvailableAt) > cutoff || Math.abs(q.americanPrice) < 100) { rejected++; continue; }
           const value = { playerId: q.canonicalPlayerId, market: q.market, provider: q.provider, book: q.sportsbook, line: q.line,
-            side: q.side as Quote["side"], american: q.americanPrice, observedAt: q.observedAt, receivedAt: q.fetchedAt, live: false, ...(typeof q.isOpening === "boolean" ? { opening: q.isOpening } : {}) };
+            side: q.side as Quote["side"], american: q.americanPrice, observedAt: q.observedAt, receivedAt: quoteAvailableAt, receivedAtProvenance: "snapshot_availability" as const, live: false, ...(typeof q.isOpening === "boolean" ? { opening: q.isOpening } : {}) };
           const id = digest(value); quotes.set(id, { id, ...value });
         }
         packets.push({ release: PRODUCT_RELEASE, sport: "nba", gameId: game.gameId, start: game.scheduledStart, lock,
           stage: slot.stage, cutoff: slot.at, players, quotes: [...quotes.values()].map((q, i) => ({ ...q, id: `q${i}` })),
-          sourceLimitations: ["local archive, not complete early/final historical evidence", "source retains opening plus bounded later quote states, not every tick", `source quotes excluded for cutoff/identity/validity: ${rejected}`, ...(locks.length !== 1 ? ["lock assumed start minus 60 minutes; live contract not verified"] : []), ...(cutoff > instant(source.generatedAt) ? ["planned future slot: latest day-of changes unavailable"] : [])] });
+          sourceLimitations: ["local archive, not complete early/final historical evidence", "NBA legacy fetchedAt is collection-start time, not response completion; quote availability uses archive updatedAt, with original source clocks retained in source export", "source retains opening plus bounded later quote states, not every tick", `source quotes excluded for cutoff/identity/validity: ${rejected}`, ...(locks.length !== 1 ? ["lock assumed start minus 60 minutes; live contract not verified"] : []), ...(cutoff > instant(source.generatedAt) ? ["planned future slot: latest day-of changes unavailable"] : [])] });
       }
     }
   }
@@ -123,7 +127,7 @@ export function fromCachedExport(source: CachedExport) {
               if (state.line === undefined || state.american === undefined || Math.abs(state.american) < 100 || instant(state.at) > instant(snapshot.generatedAt)) continue;
               const value = { playerId: id, market: h.market, provider: book.provider, book: book.sportsbook, line: state.line, side: h.side as Quote["side"], american: state.american, observedAt: state.at,
                 // Original receipt missing: use export availability conservatively; do not invent historical receipt.
-                receivedAt: snapshot.generatedAt, live: false, opening: state.opening };
+                receivedAt: snapshot.generatedAt, receivedAtProvenance: "snapshot_availability" as const, live: false, opening: state.opening };
               const qid = digest(value); quotes.set(qid, { id: qid, ...value });
             }
           }

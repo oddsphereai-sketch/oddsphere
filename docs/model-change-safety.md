@@ -35,6 +35,29 @@ gate, current-main integration, protected PR, actual production source/writer an
 lock verification are required. Do not claim future quote coverage absent a real
 provider quote, or combine pre/post input contracts as one performance era.
 
+## Owner-directed player-prop AI process-first launch — November 6
+
+The owner explicitly directed that the full player-prop AI review product must be
+judged before launch on whether it correctly reads individual-player stats, recent
+games, matchup/context, availability, the independent forecast and market evidence.
+Retrospective backtesting or proof of improved win rate is not a prelaunch gate for
+this scoped NBA/NFL/MLB product; prediction performance will be evaluated forward.
+This supersedes the retrospective statistical-superiority requirements of sections
+4 and 6 only for this owner-directed product, not the engineering/process tests.
+
+Required process evidence still includes identity/source correctness, honest missing
+inputs, native versus provider-receipt clocks, opening/current isolation, book/feed
+independence, no invented money/splits, exact event and price contracts, coherent
+numeric outputs, explicit estimated-confidence semantics, full player/market coverage,
+two game-day review windows, bounded spending and reliable lock/failure handling.
+An invalid review is not a completed evaluation or a safe replacement prediction.
+Observed accuracy must not be claimed improved without forward evidence.
+
+This direction does not waive release identifiers, the sole sport-leased writer,
+locked-record immutability/legacy reader precedence, operational fallback labels,
+focused/full verification, latest-main protected PR integration, or live proof.
+Offline scripts or a cost estimate alone do not establish those production gates.
+The process contract is `docs/player-props-ai-full-product-validation.md`.
 
 ## November 6 current-contract resistance in CBB grades
 
