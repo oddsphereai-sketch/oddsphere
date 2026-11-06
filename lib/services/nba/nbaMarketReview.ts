@@ -14,6 +14,7 @@
  */
 
 import type { NbaNamedBookPosture } from "./nbaNamedBookPosture";
+import { assessConfidenceLeanPrice } from "../dailyEdge/confidenceLeanPrice";
 
 // ─── American/decimal/implied probability helpers ──────────────────
 
@@ -216,6 +217,8 @@ export type GradeInput = {
   currentPriceAmerican?: number | null;
   /** Uncapped probability from the same coherent distribution that owns the pick. */
   modelProbabilityOnPick?: number | null;
+  /** Opposing quote at the SAME evaluated book/line/capture, never best-other. */
+  pairedOpposingPriceAmerican?: number | null;
   moneylineEvidence?: NbaMoneylineReaderEvidence;
   /** Fresh target-excluded source observations, independent of flip permission. */
   namedBookPosture?: NbaNamedBookPosture;
@@ -246,6 +249,8 @@ export type GradeOutput = {
   effectiveConfidence: number;
   bestAngleEligible: boolean;
   rationale: string[];
+  qualificationBasis?: "outcome_confidence";
+  confidenceLeanAssessment?: ReturnType<typeof assessConfidenceLeanPrice> & {exactPriceExpectedValue:number};
 };
 
 export const NBA_MARKET_SPECIFIC_GRADE_CALIBRATION = {
@@ -359,14 +364,19 @@ export function gradeNbaMarket(input: GradeInput): GradeOutput {
   return applyNbaPostureToGrade(input, gradeNbaMarketEconomics(input));
 }
 
+/** Exact prior economics/posture policy for frozen-input comparison only. */
+export function gradeNbaR28MarketForAudit(input: GradeInput): GradeOutput {
+  return applyNbaPostureToGrade(input, gradeNbaMarketEconomics(input, false, false));
+}
+
 /** Exact prior production posture policy for same-input r22/r23 comparison. */
 export function gradeNbaR22MarketForAudit(input: GradeInput): GradeOutput {
-  return applyNbaR22PostureToGrade(input, gradeNbaMarketEconomics(input));
+  return applyNbaR22PostureToGrade(input, gradeNbaMarketEconomics(input, false, false));
 }
 
 /** Exact prior production posture policy for same-input release comparison. */
 export function gradeNbaR21MarketForAudit(input: GradeInput): GradeOutput {
-  const incumbent = gradeNbaMarketEconomics(input);
+  const incumbent = gradeNbaMarketEconomics(input, false, false);
   const posture = input.namedBookPosture;
   if (incumbent.grade !== "best_angle" || posture?.market !== input.market || posture?.pickedSide !== input.pick ||
       (posture.opposingSources.length === 0 && posture.conflictingSources.length === 0 && !posture.convictionRiskSources?.length)) return incumbent;
@@ -429,7 +439,8 @@ function applyNbaPostureToGrade(input: GradeInput, incumbent: GradeOutput): Grad
   // supports the same final side. Static market level, a held quote, public
   // pressure, or duplicated follower evidence cannot manufacture Best Angle.
   if (incumbent.grade === "lean" && !opposed && posture.scoreEffectApplied === true &&
-      posture.consequence === "correct" && posture.supportingSources.length > 0) {
+      posture.consequence === "correct" && posture.supportingSources.length > 0 &&
+      incumbent.qualificationBasis !== "outcome_confidence") {
     return {
       ...incumbent,
       grade: "best_angle",
@@ -481,7 +492,7 @@ function applyNbaR22PostureToGrade(input: GradeInput, incumbent: GradeOutput): G
   return incumbent;
 }
 
-function gradeNbaMarketEconomics(input: GradeInput, legacyAudit = false): GradeOutput {
+function gradeNbaMarketEconomics(input: GradeInput, legacyAudit = false, allowConfidenceLean = true): GradeOutput {
   const rationale: string[] = [];
   if (input.pick === null) {
     return {
@@ -515,10 +526,17 @@ function gradeNbaMarketEconomics(input: GradeInput, legacyAudit = false): GradeO
   const modelPriceEv = input.modelProbabilityOnPick === null || input.modelProbabilityOnPick === undefined
     ? null
     : expectedReturn(input.modelProbabilityOnPick, input.currentPriceAmerican);
+  const confidencePrice = assessConfidenceLeanPrice({
+    winProbability: input.modelProbabilityOnPick ?? NaN, loseProbability: 1 - (input.modelProbabilityOnPick ?? NaN),
+    price: input.currentPriceAmerican ?? NaN, opposingPrice: input.pairedOpposingPriceAmerican ?? NaN,
+    minimumWinProbability: .55,
+  });
+  const confidenceLean = allowConfidenceLean && !legacyAudit && input.confidence >= 55 && confidencePrice.qualified &&
+    input.dataQualityTier !== "fallback" && input.dataQualityTier !== "low";
   if (
     input.enforcePositiveModelEv !== false &&
     input.currentPriceAmerican !== undefined &&
-    (modelPriceEv === null || modelPriceEv <= 0)
+    (modelPriceEv === null || modelPriceEv <= 0) && !confidenceLean
   ) {
     return {
       grade: "watch",
@@ -546,6 +564,12 @@ function gradeNbaMarketEconomics(input: GradeInput, legacyAudit = false): GradeO
   if (input.confidence < 55) {
     rationale.push("Thin model edge — worth monitoring, not a top play.");
     return { grade: "watch", effectiveConfidence: input.confidence, bestAngleEligible: false, rationale };
+  }
+  if (confidenceLean && (modelPriceEv === null || modelPriceEv <= 0)) {
+    return { grade: "lean", effectiveConfidence: input.confidence, bestAngleEligible: false,
+      qualificationBasis: "outcome_confidence",
+      confidenceLeanAssessment:{...confidencePrice,exactPriceExpectedValue:modelPriceEv!},
+      rationale: ["The final forecast supports this outcome with Lean-level confidence. The offered price limits the recommendation to Lean; positive expected value is not claimed."] };
   }
   if (input.band === "mild_conflict") {
     rationale.push("The available price is ahead of the model's fair probability — keeping this on the watchlist.");

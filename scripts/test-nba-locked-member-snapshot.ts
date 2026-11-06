@@ -78,6 +78,24 @@ const restored = applyNbaLockedMemberSnapshotPrecedence({
 });
 assert.deepEqual(restored.games, [{ ...locked, locked_at: "2026-10-20T22:00:00.000Z" }]);
 assert.notEqual(restored.games[0], dynamic);
+const r28Locked=structuredClone(locked);
+r28Locked.intelligence.grade_policy_release="nba_grade_policy_2026_11_04_r28_composed_named_book_opposition";
+r28Locked.intelligence.ml.grade="watch";
+const r29Dynamic=structuredClone(dynamic);
+r29Dynamic.intelligence.grade_policy_release="nba_grade_policy_2026_11_06_r29_confidence_led_lean";
+r29Dynamic.intelligence.ml.grade="lean";
+const r28Member=structuredClone(lockedMemberGame);
+r28Member.markets.moneyline.verdict={key:"watchlist",label:"Watchlist"};
+const r28Capture=buildNbaLockedMemberCapture({gameDto:r28Locked,memberGame:r28Member});
+const r28Rows=rows.map(row=>({...row,snapshot_json:r28Capture}));
+const r28Bytes=JSON.stringify(r28Rows);
+const r28Restored=applyNbaLockedMemberSnapshotPrecedence({games:[r29Dynamic],dbIdByExternalId:map,rows:r28Rows});
+assert.equal(r28Restored.games[0].intelligence.ml.grade,"watch","New confidence-led grading cannot relabel a stored R28 Watch");
+assert.equal(r28Restored.games[0].intelligence.grade_policy_release,r28Locked.intelligence.grade_policy_release);
+const r28Response=adaptNbaToDailyEdgeResponse({as_of:"2026-11-06T19:00:00Z",slate_date_et:"2026-10-20",market_signals_capability:"available",games:r28Restored.games} as NbaDailyEdgeDto,
+ {lockedMemberGamesByExternalId:r28Restored.memberGamesByExternalId});
+assert.equal(r28Response.games[0].markets.moneyline.verdict.key,"watchlist");
+assert.equal(JSON.stringify(r28Rows),r28Bytes,"Legacy grade and evidence bytes stay unchanged");
 assert.equal(capture.nba_locked_member_snapshot_release, NBA_LOCKED_MEMBER_SNAPSHOT_RELEASE);
 assert.deepEqual(restored.memberGamesByExternalId.get(9001), {
   ...lockedMemberGame,

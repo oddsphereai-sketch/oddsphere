@@ -1,0 +1,156 @@
+# Confidence-led Daily Edge grade repair
+
+Starting remote main: `b77b1ed087765f7f9b5ce9ec323c0517d00b5408`.
+Branch: `codex/daily-edge-market-grade-audit-20261106`.
+
+On November 6 the owner explicitly clarified that Lean describes confidence
+in the predicted outcome and can carry a poor/nonpositive-value price. Price
+still matters to recommendation strength; it must not be an unconditional
+override of outcome confidence. This supersedes the November 5 document's
+claim that every Lean must have positive exact-price EV. No accuracy guarantee,
+side quota, desired play count or permission to rewrite a lock is implied.
+
+Scope: audit all nine Daily Edge readers and today's CBB, NBA, NHL, CFB and
+EPL. Repair demonstrated active-path mismatches, starting with CBB/NBA. Keep
+every sport's one authoritative final score law, native interpretation, source
+clocks, uncertainty, opposite evidence, writer, lease and schedule. Preserve
+the concurrent CBB Total-head development; no refit or second forecast here.
+
+The confidence-led Lean route uses an explicit 55% selected-win confidence
+floor, already used by NBA and the shared binary confidence contract. It is a
+product boundary, not a newly validated win-rate claim. Actual paired quotes
+bound the price contribution: negative offered value can remain Lean when the
+forecast is inside the same book's observed overround envelope. No hand-set
+negative-EV tolerance or synthetic opposite price is permitted. Unavailable or
+invalid pairs do not qualify. Existing value-led Leans remain eligible.
+
+CBB additionally retains its fitted-location sensitivity and declared
+one-adverse-case policy for the outcome-confidence assessment, with pushes
+refunded rather than counted as wins. The actual quote's return must still
+support the existing declared risk; an impractically tiny payout does not
+acquire a recommendation merely through a near-certain point estimate. Best
+retains the stronger actual-value, uncertainty and price assessment. NBA keeps
+its data-quality and opposition composition; clean confirmation cannot
+misrepresent a confidence-only Lean as positive-value Best.
+
+Version every affected policy and publish same-input board/market counts,
+promotions, demotions, unchanged forecasts and prices, tests and limits. Prior
+stored releases and locked member/tracking tuples remain exact. Complete the
+full model-change verification, focused tests, latest-main integration safety,
+protected PR and natural-writer/reader/next-cycle proof before claiming live.
+
+## Captured audit and controlled effect
+
+The authenticated current-board capture at approximately 18:06 UTC contains
+491 games across the rolling/weekly readers, not 491 games today. Filtering
+actual kickoff instants to November 6 in America/New_York yields:
+
+| Sport | Today's games | Core markets | Best / Lean / Watch / No Play |
+| --- | ---: | ---: | --- |
+| CBB | 59 | 177 | 1 / 30 / 99 / 47 |
+| NBA | 9 | 27 | 1 / 6 / 20 / 0 |
+| NHL | 3 | 9 | 0 / 4 / 5 / 0 |
+| CFB | 5 | 15 | 2 / 5 / 6 / 2 |
+| EPL | 1 | 3 | 0 / 1 / 0 / 2 |
+| MLB, WNBA, NFL, UCL | 0 | 0 | Inactive today |
+
+CBB's newcomer/no-wager card owns the three unpriced slots. EPL Double Chance
+is separately present under its existing monitor-only policy. The generic
+source-chain audit finds zero critical failures; its future-game missing-price
+warnings are not today's missing-price count or a certificate of prediction
+quality. The separate DB audit confirms all nine NBA and all three NHL games
+have all three stored markets, exact current prices and no locked rows at
+capture. NFL/CFB weekly snapshot counts must not be presented as today's count.
+
+The policy replay uses later independently captured **stored decision inputs**,
+not the earlier aggregate board capture. Their counts differ as the normal
+writers advance. It excludes all already locked rows, uses no game outcomes,
+performs no fit, calls no provider and writes no production state. The existing
+CBB latent law, full native receipt and exact offered quotes are reused. NBA's
+R28 grades reproduce on all 27 exact captured inputs before comparison.
+
+| Replay | Markets | Before Best / Lean / Watch / No Play | After | Promotions / demotions |
+| --- | ---: | --- | --- | --- |
+| CBB | 174 | 1 / 36 / 99 / 38 | 1 / 63 / 79 / 31 | 27 / 0 |
+| NBA | 27 | 1 / 5 / 21 / 0 | 1 / 6 / 20 / 0 | 1 / 0 |
+
+CBB promotions comprise 20 Moneylines, three Spreads and four Totals. Its
+existing 37 actionables are retained; one Best remains one Best. NBA's added
+Lean is LAL Moneyline at -146, 56.5438% final probability and **-4.7276%**
+offered EV on this input. That negative EV remains negative in its bound
+confidence-price assessment. Its source posture is preserved, and a synthetic
+same-pick corroborated opposition case still demotes to Watch. Better real price
+and stronger final confidence retain their tested Best promotion paths.
+
+All CBB scores, selections, win/loss/push probabilities, prices and nominal EV
+match the prior decision within 1e-10, with exact selected-side/price identity.
+Stored input payloads remain byte-exact after replay. NBA calls only the pure
+grade policy on captured inputs: it cannot change any forecast or quote.
+Negative-value ordinary Watch/No Play lanes remain exact unless the new
+confidence path itself qualifies. Impractically small CBB returns remain held
+below Lean by the existing declared risk policy. No count or Under/Over target
+was used to select the policy; the Total-side concentration is unchanged and
+belongs to the concurrent forecast investigation.
+
+## Remaining sport review and limits
+
+- CFB has genuine same-book movement resistance and mixed current context on
+  several high-probability Moneylines. USF's positive-EV Watch is therefore not
+  a missing-price or blanket negative-value failure; the Total and Spread remain
+  independently eligible. Current ARIZ/UNM quote disagreement and actual source
+  response remain visible. No generic split bonus or confidence-only overwrite
+  is applied over that sport's released causal/source policy.
+- NHL's three-market final joint law and source receipts remain the authority.
+  The high-probability puck-line watches and mixed-book Moneyline are governed
+  by NHL's separate market-confidence/edge policy. This audit identifies that
+  sport-specific difference; it does not claim the CBB 55% product boundary is
+  newly validated for hockey or erase a conflicting source path.
+- EPL's current Match Result is below 50% and BTTS below its active 53%
+  monitoring floor. Its Total remains Lean. EPL already has a separately
+  qualified nonpositive-value winner-confidence exception; UCL has a paired-vig
+  movement-confirmed confidence lane. Their authorities are not the World Cup
+  compatibility grader.
+- Inactive MLB/WNBA runtime constants match the registry before inspection.
+  Their existing qualified value/confidence exceptions and public-split
+  authority boundaries remain intact. No current-day prediction-performance
+  claim can be made for a sport with no current games.
+
+This functional policy test cannot establish improved future accuracy, complete
+knowledge of every market event, or accuracy of CBB's fitted confidence tails.
+Evaluate future locked results by their actual model, grade release and lock
+time. In particular, do not pool CBB R1 results with the concurrently developed
+Total-head model and describe the blend as the current forecast's accuracy.
+
+## Runtime, locking and rollback
+
+The new CBB confidence arithmetic reuses the existing risk scenario's win/loss
+calculations. It introduces zero GP predictions, fits, calibration passes,
+provider requests or DB loops. Previously negative-EV candidates may now need
+the same bounded eight-scenario assessment already used by value candidates;
+the per-game evaluator still shares its scenarios across all three markets.
+The existing 540-second route and 600-second sport lease remain unchanged.
+
+Tests exercise negative-EV confidence Leans through the real CBB member writer,
+lock, member reader and tracking serializer with in-memory storage. An existing
+R8/R7 or R7/R6 lock cannot be replaced by the new candidate. New confidence
+receipts independently recheck their scalar qualification on publication;
+JSONB key order cannot change it. NBA's old R28 Watch and release remain exact
+when a current R29 dynamic card would be Lean. Missing, stale, future,
+cross-book, cross-line, cross-capture or conflicting exact quotes cannot create
+the new qualification.
+
+Rollback only the complete new grade families, publisher/adapter/tracking
+versions and shared qualifier to their preceding releases. Retain every new
+lock's original payload and release; never recompute it with the rollback
+policy. Publication must stop on a mixed grade tuple, missing current markets,
+unexpected demotion, lock mutation, writer overlap, publication failure or
+unexplained runtime increase. Build and test success alone are not live proof.
+
+## Verification status
+
+The mandatory `npm run verify:model-change` completed successfully on the first
+candidate. The final run includes the new confidence-grade test in preverify.
+The focused CBB/NBA forecast, grading, price-reference, evidence-codec, causal
+market-consequence, member/lock and tracking tests pass. Type checking and the
+isolated production build are checked separately. Publication and live proof
+are pending; this document must not be read as a deployment claim.

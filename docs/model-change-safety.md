@@ -1,5 +1,28 @@
 # Model change safety protocol
 
+## Owner-directed confidence-led Lean semantics — November 6
+
+The owner explicitly clarified in the Daily Edge market-grading chat that price
+is one input to the grade and that some confident Leans may have bad prices.
+The scoped CBB R9/R8 and NBA R29 policy therefore adds an outcome-confidence
+Lean path while retaining the exact final forecast, selected quote and nominal
+EV. This supersedes a universal positive-EV Lean requirement for these new
+unlocked releases. It does not authorize changes to historical locked grades,
+an automatic side flip, a play quota, invented sharp confirmation, another
+writer, new provider calls, or untested numerical forecast changes.
+
+Same-book paired pricing bounds the allowed price contribution; CBB retains
+fitted-location sensitivity and the declared adverse-resolved-case risk, and
+NBA retains source opposition composition. Best retains stronger actual-price
+qualification. This is owner-directed product-policy qualification with forward
+outcome monitoring, not a holdout-derived accuracy improvement. The frozen
+same-input replay must show actual promotions/demotions and preserved numeric
+forecasts/prices, and test both stronger-context promotion and adverse-context
+demotion. Mandatory focused/full verification, clean latest-main protected PR,
+integration overlap checks and natural live writer/reader/lock proof still
+apply. Scope, current counts and rollback are in
+`docs/model-audits/2026-11-06-confidence-led-market-grades.md`.
+
 ## Owner-directed NFL publication-clock correctness — November 6
 
 The standing owner request covers actual freshness defects across Daily Edge.

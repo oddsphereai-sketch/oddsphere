@@ -3,7 +3,7 @@
  * fallback model, provider collection or persistence is introduced here. */
 import releaseManifest from "../../cbb/artifacts/contextual-outcome-r1-manifest.json";
 import {forecastCbbOutcomeDecision} from "../../cbb/contextualOutcomeDecision";
-import {buildCbbContextualOutcomeBoard,CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,type CbbOutcomeDecision} from "../../cbb/contextualOutcomeBoard";
+import {buildCbbContextualOutcomeBoard,CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,type CbbOutcomeDecision} from "../../cbb/contextualOutcomeBoard";
 import {freezeCbbContextualForecastArtifact,cbbContextualForecastObjectSha256,assertCbbContextualForecastCalibrationBinding} from "../../cbb/contextualForecastCalibrationBinding";
 import {validateCbbOutcomeArtifact} from "../../cbb/contextualOutcomeForecast";
 import {createCbbPrivateOutcomeArtifactLoader,type decodeCbbPrivateOutcomeArtifact,type CbbPrivateOutcomeManifest} from "./cbbOutcomeArtifactEnvelope";
@@ -72,7 +72,7 @@ type StoredBoard={modelRelease?:string;gradeRelease?:string;gameId:number;asOf:s
 export function readCbbContextualOutcomeEvidence(board:StoredBoard){
  if(board.modelRelease!==CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE)return null;
  const storedGrade=board.gradeRelease;
- if(!storedGrade||![CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE].includes(storedGrade as typeof CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE))throw Error("CBB contextual evidence grade release differs");
+ if(!storedGrade||![CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE].includes(storedGrade as typeof CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE))throw Error("CBB contextual evidence grade release differs");
  const context=board.marketContext as {originalIndependent?:unknown;contextualOutcomeEvidence?:unknown};
  const original=context.originalIndependent as CbbForecast|undefined;
  if(!original)throw Error("CBB contextual evidence lacks original independent identity");

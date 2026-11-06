@@ -49,6 +49,7 @@ import {
 } from "../../automodel/nba/nbaMarketConsensus";
 import { computeNbaMarketProbabilities, selectNbaSideFromProbability } from "../../automodel/nba/nbaDistribution";
 import type { NbaNamedBookPosture } from "./nbaNamedBookPosture";
+import { NBA_GRADE_POLICY_RELEASE } from "../../automodel/nba/nbaChampionRuntime";
 
 // ─── Raw per-book line row (subset of `lines` table columns) ───────
 
@@ -178,6 +179,8 @@ export type MarketIntelligence = {
   conflict_band: MarketConflictBand;
   grade: GradeOutput["grade"];
   effective_confidence: number;
+  grade_qualification_basis?: "outcome_confidence";
+  confidence_lean_assessment?: GradeOutput["confidenceLeanAssessment"];
   best_angle_eligible: boolean;
   rationale: string[];
   /**
@@ -230,6 +233,8 @@ export function resolveNbaMoneylineDirectionalSignal(
 }
 
 export type NbaGameIntelligence = {
+  /** New unlocked decisions only; legacy captures keep their original shape. */
+  grade_policy_release?: string;
   game_external_id: number;
   ml: MarketIntelligence;
   spread: MarketIntelligence;
@@ -383,6 +388,21 @@ export function resolveNbaFairReference(opts: {
 function expectedReturn(probability: number, american: number): number {
   const profit = american > 0 ? american / 100 : 100 / Math.abs(american);
   return probability * profit - (1 - probability);
+}
+
+/** Confidence-price qualification requires the actual same-capture pair. */
+export function pairedNbaOpposingPrice(lines: readonly NbaLineRow[], pick: NbaLineRow | null): number | null {
+  if (!pick || !Number.isFinite(Date.parse(pick.fetched_at ?? ""))) return null;
+  const side = pick.side === "home" ? "away" : pick.side === "away" ? "home"
+    : pick.side === "over" ? "under" : pick.side === "under" ? "over" : null;
+  if (side === null) return null;
+  const expectedLine = pick.market_type === "spread" && pick.line_value !== null ? -pick.line_value : pick.line_value;
+  const prices = lines.filter(row => row.market_type === pick.market_type && row.side === side &&
+    row.sportsbook.trim().toLowerCase() === pick.sportsbook.trim().toLowerCase() && row.line_value === expectedLine &&
+    Date.parse(row.fetched_at ?? "") === Date.parse(pick.fetched_at!) &&
+    row.odds_american !== null && Number.isFinite(row.odds_american) && Math.abs(row.odds_american) >= 100)
+    .map(row => row.odds_american!);
+  return new Set(prices).size === 1 ? prices[0]! : null;
 }
 
 export function formatNbaSpreadSelection(teamAbbreviation: string, line: number | null): string {
@@ -621,6 +641,7 @@ function buildMl(
     market: "moneyline",
     currentPriceAmerican: pickOdds,
     modelProbabilityOnPick: modelProbOnPick,
+    pairedOpposingPriceAmerican: pairedNbaOpposingPrice(lines, pickBest.row),
     moneylineEvidence: prediction.audit.professional_grade_context?.moneyline,
     continuousMarketDecision: prediction.audit.professional_grade_context?.continuousMarketDecision,
     namedBookPosture: prediction.audit.professional_grade_context?.namedBookPostures?.moneyline,
@@ -682,6 +703,8 @@ function buildMl(
     edge_points: null,
     conflict_band: band,
     grade: grade.grade,
+    grade_qualification_basis: grade.qualificationBasis,
+    confidence_lean_assessment: grade.confidenceLeanAssessment,
     effective_confidence: grade.effectiveConfidence,
     best_angle_eligible: grade.bestAngleEligible,
     rationale: grade.rationale,
@@ -814,6 +837,7 @@ function buildSpread(
     continuousMarketDecision: prediction.audit.professional_grade_context?.continuousMarketDecision,
     currentPriceAmerican: pickOdds,
     modelProbabilityOnPick: modelProb,
+    pairedOpposingPriceAmerican: pairedNbaOpposingPrice(lines, pickBest.row),
     enforcePositiveModelEv,
   });
 
@@ -873,6 +897,8 @@ function buildSpread(
     edge_points: edgePoints,
     conflict_band: band,
     grade: grade.grade,
+    grade_qualification_basis: grade.qualificationBasis,
+    confidence_lean_assessment: grade.confidenceLeanAssessment,
     effective_confidence: grade.effectiveConfidence,
     best_angle_eligible: grade.bestAngleEligible,
     rationale: grade.rationale,
@@ -978,6 +1004,7 @@ function buildTotal(
     continuousMarketDecision: prediction.audit.professional_grade_context?.continuousMarketDecision,
     currentPriceAmerican: pickOdds,
     modelProbabilityOnPick: modelProb,
+    pairedOpposingPriceAmerican: pairedNbaOpposingPrice(lines, pickBest.row),
     enforcePositiveModelEv,
   });
 
@@ -1034,6 +1061,8 @@ function buildTotal(
     edge_points: edgePoints,
     conflict_band: band,
     grade: grade.grade,
+    grade_qualification_basis: grade.qualificationBasis,
+    confidence_lean_assessment: grade.confidenceLeanAssessment,
     effective_confidence: grade.effectiveConfidence,
     best_angle_eligible: grade.bestAngleEligible,
     rationale: grade.rationale,
@@ -1121,6 +1150,7 @@ export function buildNbaGameIntelligence(opts: {
   const rankedMarkets = [ml, spread, total].sort((a, b) => order.indexOf(a.grade) - order.indexOf(b.grade));
   const topMarketIntel = rankedMarkets[0];
   return {
+    grade_policy_release: opts.legacyGradePolicyAudit ? undefined : NBA_GRADE_POLICY_RELEASE,
     game_external_id: opts.snapshot.game_external_id,
     ml,
     spread,

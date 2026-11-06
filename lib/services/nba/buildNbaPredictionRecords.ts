@@ -288,6 +288,7 @@ function buildSnapshot(opts: {
   return {
     sport: "nba",
     model_version: NBA_PREDICTION_RECORD_MODEL_VERSION,
+    grade_policy_release: opts.gameDto.intelligence.grade_policy_release ?? null,
     as_of: opts.dto.as_of,
     matchup: opts.matchup,
     market: opts.market,
