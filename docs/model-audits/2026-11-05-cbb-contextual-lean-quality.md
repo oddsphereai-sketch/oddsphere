@@ -163,7 +163,7 @@ is covered by focused writer/reader/tracking controls, including positive-EV
 priced passes and actual legacy R6 record idempotence.
 
 Eight raw-first cases preserve price paths, latest buybacks, observed composition
-clocks and counterevidence. Rice +3.5 remains Lean; USF +6.5 becomes Watch on a thin
+clocks and counterevidence. East Texas A&M +3.5 (Rice game) remains Lean; USF +6.5 becomes Watch on a thin
 uncertainty-adjusted advantage; Duke -100000 and Creighton -20000 moneylines are
 No Play while their predicted winners/probabilities remain available. The live
 member page was checked directly, including Duke's explanation that the payout
