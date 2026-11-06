@@ -41,7 +41,7 @@ import {forecastCbbFullDivisionOneBatch} from "@/lib/cbb/fullDivisionOneForecast
 import {buildCbbGameForecastBoard} from "@/lib/cbb/gameForecastBoard";
 import type {CbbProvisionalBoard} from "@/lib/cbb/provisionalLifecycle";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_06_r45_confidence_led_lean" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_06_r51_confidence_led_lean" as const;
 /** Book/contract choice only. No prior projection, probability or grade runs. */
 export function selectCbbContextualPipelineTargets(quotes:CbbQuote[]):CbbQuote[]{
   const boardBook=chooseCbbSupportedTargetBook(quotes);

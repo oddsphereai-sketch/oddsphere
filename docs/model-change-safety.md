@@ -38,6 +38,58 @@ demotion. Mandatory focused/full verification, clean latest-main protected PR,
 integration overlap checks and natural live writer/reader/lock proof still
 apply. Scope, current counts and rollback are in
 `docs/model-audits/2026-11-06-confidence-led-market-grades.md`.
+## Owner-directed CBB economic Total contract correction R7 — November 6
+
+The owner requested delivery of actual market-reading corrections and the same
+score/probability/grade design standard for all Daily Edge markets and sports.
+R6 is held for demonstrated unsupported Total magnitudes from duplicated sparse
+alternative-price linear encodings. Its engineering consistency is not approval.
+R7 corrects native-contract economic coordinates: one observed Total origin and
+one relative economic location per source, an unrestricted learned actual-outcome
+residual, and contextual native prices/line/path/pressure. It adds no forecast
+share, arbitrary point bump, variance cap, signal-count gate or play quota.
+
+The immutable182 rows/folds receive exactly six Total-only fits and one fresh
+joint calibration under existing numerical budgets. Per-axis exclusion and
+normalizers remain explicit; R1 raw Margin and its limitations remain unchanged.
+Preserve failedR6 source/artifacts and all legacy public locks. Publication still
+requires all affected/full checks, actual same-input whole-market and grade-count
+review, exact composite/private transport/identity binding, clean fresh-main
+protected PR and normal production writer/coverage/reader/lock proof. No paid AI
+or new odds-provider requests are authorized by this correction. Predeclaration:
+`model-audits/2026-11-06-cbb-economic-total-predeclaration.json`.
+
+
+## Owner-directed CBB direct Total head with retained Margin — November 6
+
+The owner requested a practical CBB totals correction and the same complete
+market-to-score-to-probability-to-grade design standard for every Daily Edge
+sport and market. See `market-inference-contract.md`. The bounded R6 delivery
+reuses the already frozen direct V9 Total head and the exact production R1 raw
+Margin head. It does not activate the rejected R5 Margin head, refit a forecast,
+change grade thresholds, force an Over share or add paid inference/provider calls.
+The retained R1 Margin source-allocation limitation remains explicitly unresolved.
+
+One newly declared joint calibration uses all182 own-game-excluded paired rows,
+with separate truthful component fit/normalizer manifests. Different axis folds
+are not relabeled as a shared fit. The immutable source objects and prepared
+source snapshot precede the single bounded calibration; no existing calibration
+is reused. New joint conditioning can affect all three markets despite preserving
+raw Margin, so score/probability/price/grade impacts and promotion/demotion counts
+must be reported for all of them. Existing risk-policy paired promotion controls
+remain required; count contraction is disclosed rather than hidden or repaired
+by inventing recommendations.
+
+R1 stored decisions, prices, grades, score laws, model identities and tracking
+payloads remain exact with tested writer and reader precedence. R6 has new
+model/calibration/evidence/decision/grade/publisher/adapter/tracking identities,
+one checked private composite bundle, and the existing sole prediction_pipeline:cbb
+writer/lease and cadence. Publication still requires focused/full model checks,
+exact artifact/calibration/transport binding and budgets, clean fresh-main
+protected PR integration, and actual production normal-writer/coverage/reader/lock
+proof plus the following refresh. Implementation correctness is not an accuracy
+or sharp-bettor identity claim. Predeclaration:
+`model-audits/2026-11-06-cbb-total-head-predeclaration.json`.
 
 ## Owner-directed NFL publication-clock correctness — November 6
 

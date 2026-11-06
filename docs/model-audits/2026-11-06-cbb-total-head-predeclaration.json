@@ -1,0 +1,49 @@
+{
+  "schema": "cbb_total_head_predeclaration_v1",
+  "declaredAt": "2026-11-06T17:59:25.214917+00:00",
+  "productionBase": "b77b1ed087765f7f9b5ce9ec323c0517d00b5408",
+  "scope": {
+    "proposedModel": "r6_direct_total_retained_margin",
+    "runtimeModelRelease": "cbb_contextual_outcome_2026_11_06_r6_direct_total_retained_margin",
+    "delivery": "Replace only CBB Total source-allocation forecast with frozen direct V9 Total predictor, preserve exact raw R1 Margin predictor, fit one new coherent joint calibration. Final moneyline/spread probabilities and grades may change through the new joint law and must be reported.",
+    "existingLimitations": "R1 Margin source-allocation collapse remains unresolved. No claim that this finishes all markets/sports. Held R5 Margin must never be executed in this composite.",
+    "sourceArtifactObjectPins": {
+      "legacyMargin": "ff5ec044be02adbd4f82dd6d6d51c57d5524ddcf1c5319f79358f89b03b9c243",
+      "directTotal": "5cb4753217b465d25e863fda4183d1f116cc8995b62c51243dc06960e44cb90b"
+    }
+  },
+  "dataAdmission": {
+    "trainingGames": 182,
+    "original137Exact": true,
+    "all45Added": true,
+    "rawPath": "/private/tmp/cbb-contextual-direct-v8-frozen-raw-rows-20261106.json",
+    "rawSha256": "b80ac7192b14de23f763cb26c8e825fca72ad0648dc9718dc938a383f5c6d269",
+    "trainingCutoff": "2026-11-06T14:27:48.786Z",
+    "gameOutcomeSelection": false,
+    "ownGameExclusion": "Both component axes independently exclude every calibration game.137 old Margin folds and45 genuinely unseen old-full Margin predictions;182 saved directTotal folds. Different axis folds explicitly attested; do not fabricate a shared cohort."
+  },
+  "boundedFitPlan": {
+    "forecastFits": 0,
+    "jointCalibrationFits": 1,
+    "outputDirectory": "/private/tmp/cbb-total-head-r6-development_build",
+    "calibrationMethodSha256": "c27ab973cb5d3a870940960c25c367060f16b73da6a8e904c5943255bf672d75",
+    "existingNumericalBudgetsUnchanged": true,
+    "failedBuildPolicy": "Preserve failure; no automatic retry, side-count tuning, row removal or budget increase."
+  },
+  "productRequirements": {
+    "forecasts": "One joint score law feeds scores,ML,spread,total and probabilities; independent forecast is fallible context. New Total head has no source-forecast allocation or protected independent share.",
+    "marketContext": "Retain native book/market/contracts, source receipt bounds, openings, complete retained net/latest paths, reversals and pressure timing, unknown source quality, all available splits and money/ticket observations. Missing splits do not automatically prevent a price-only interpretation.",
+    "grades": "Exact released probability, uncertainty and offered price; unchanged recommendation policy. Quantify promotions/demotions in all three markets and pairedprice/uncertainty promotion controls; no invented plays or forcedUnder/Over mix.",
+    "sports": "Shared evidence/decision/coherence contract applies all DailyEdge sports and markets; sport-specific law/context/availability retained. This delivery does not activate other sports changes."
+  },
+  "immutableLocks": "Preserve exact stored legacy score/probability/price/pick/grade/evidence/tracking payloads; writer and reader precedence tested. New semantics only unlocked/future locks.",
+  "runtime": "Existing sole prediction_pipeline:cbb writer/lease,cadence,provider budgets; one checked private composite artifact, no per-game artifacts/provider requests/new writer.",
+  "publication": "Newmodel/cal/evidence/decision/grade/publisher/adapter/tracking identities and registry. Full focused/model-change/build; clean fresh-main integration/protected PR only; actuallive normalwriter/readiness/coverage/lock proof plusfollowingrefresh before success.",
+  "resources": {
+    "newPaidAICalls": 0,
+    "newOddsProviderCalls": 0,
+    "newForecastFits": 0,
+    "noRecurringAISpend": true
+  },
+  "claims": "Implementation/source-consistency qualification, not predictive-superiority or guaranteed bettor-intent inference."
+}

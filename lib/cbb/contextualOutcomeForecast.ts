@@ -220,3 +220,9 @@ export function predictCbbContextualOutcomeForecast(artifact:CbbOutcomeArtifact,
 }
 export type CbbOutcomePrediction=ReturnType<typeof predictCbbContextualOutcomeForecast>;
 export type CbbOutcomeFitResult=ReturnType<typeof fitCbbContextualOutcomeForecast>;
+
+/** Scoped incumbent Margin inference. The unused legacy Total GP is never called.
+ * Its factor's other-axis context is retained byte-for-byte in input assembly. */
+export function predictCbbLegacyMarginForecast(artifact:CbbOutcomeArtifact,input:{gameId:number;asOf:string;input:CbbContextualFeatureInput},mode:"future"|"retrospective_development"){
+ validateCbbOutcomeArtifact(artifact);const clocks=[artifact.trainingCutoff,artifact.createdAt,artifact.availableBy,input.asOf].map(clock);if(!clocks.every(finite)||clocks[0]>clocks[1]||clocks[1]>clocks[2]||input.gameId!==input.input.independent.gameId||input.asOf!==input.input.asOf||artifact.trainingGameIds.includes(input.gameId)||!Number.isSafeInteger(input.gameId)||input.gameId<=0)throw Error("Outcome identity/training exclusion/clocks invalid");if(!["future","retrospective_development"].includes(mode)||mode==="future"&&clocks[3]<clocks[2])throw Error("Outcome artifact unavailable at input");const built=buildCbbOutcomeInputs(input.input,artifact.factorArtifact);return{release:artifact.release,authority:artifact.authority,mode,gameId:input.gameId,inputAsOf:input.asOf,artifactAvailableBy:artifact.availableBy,margin:predictAxis(artifact.margin,built.margin),receipt:built.measurementInputs.receipt,outcomeInputs:built,factorObjectSha256:artifact.baseFactorObjectSha256,probabilityClaim:"none_until_component_bound_joint_calibration" as const};
+}

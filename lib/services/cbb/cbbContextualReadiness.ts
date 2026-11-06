@@ -3,9 +3,10 @@
 import {createHash,timingSafeEqual} from "node:crypto";
 import type {AdminAuthResult} from "../../auth/admin";
 
-export const CBB_CONTEXTUAL_READINESS_RELEASE="cbb_contextual_readiness_2026_11_05_r1" as const;
+export const CBB_CONTEXTUAL_READINESS_RELEASE="cbb_contextual_readiness_2026_11_06_r2_pending_candidate" as const;
 type Environment={NEXT_PUBLIC_SUPABASE_URL?:string;VERCEL_ENV?:string;VERCEL_GIT_COMMIT_SHA?:string;GIT_COMMIT_SHA?:string};
-type Metadata={model:string;calibration:string;engine:string;objectSha256:string;availableBy:string};
+type Metadata={model:string;calibration:string;engine:string}&(
+ {status?:"pinned";objectSha256:string;availableBy:string}|{status:"pending";objectSha256:null;availableBy:null});
 type ReadyRuntime={release:string;artifactObjectSha256:string;availableBy:string};
 export type CbbReadinessDependencies={adminAuth:(request:Request)=>AdminAuthResult;machineSecret:()=>string|undefined;
  environment:()=>Environment;loadModule:()=>Promise<{metadata:Metadata;load:()=>Promise<ReadyRuntime>}>};
@@ -26,13 +27,14 @@ export function createCbbContextualReadinessHandler(deps:CbbReadinessDependencie
   const env=deps.environment(),databaseOriginSha256=cbbReadinessDatabaseOriginSha256(env.NEXT_PUBLIC_SUPABASE_URL),candidateCommit=env.VERCEL_GIT_COMMIT_SHA??env.GIT_COMMIT_SHA;
   const deployment={environment:["production","preview","development"].includes(env.VERCEL_ENV??"")?env.VERCEL_ENV:null,
    commit:candidateCommit&&/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(candidateCommit)?candidateCommit:null};
-  let pinned:Partial<Metadata>={};
+  let pinned:{model?:string;calibration?:string;engine?:string;objectSha256?:string|null;availableBy?:string|null}={};
   try{
    if(databaseOriginSha256===null)throw Error("Database binding unavailable");
    const loadedModule=await deps.loadModule(),m=loadedModule.metadata;
    // An explicit allowlist prevents accidental runtime/training fields from
    // leaking if a dependency's shape later expands.
    pinned={model:m.model,calibration:m.calibration,engine:m.engine,objectSha256:m.objectSha256,availableBy:m.availableBy};
+   if(m.status==="pending")return json({ready:false,reason:"candidate_manifest_pending",release:CBB_CONTEXTUAL_READINESS_RELEASE,...pinned,deployment,databaseOriginSha256},503);
    const runtime=await loadedModule.load();
    if(runtime.release!==m.model||runtime.artifactObjectSha256!==m.objectSha256||runtime.availableBy!==m.availableBy)throw Error("Pinned runtime identity differs");
    return json({ready:true,release:CBB_CONTEXTUAL_READINESS_RELEASE,...pinned,deployment,databaseOriginSha256},200);

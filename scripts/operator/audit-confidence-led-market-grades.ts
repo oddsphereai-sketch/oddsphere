@@ -70,8 +70,12 @@ for (const { stored, read } of decoded) {
   const d = read.decision, cal = d.calibration.parameters, f = d.workingForecast;
   const n = sampleCounts.get(d.artifact.objectSha256);
   assert(n, "calibration-game count is unavailable from this exact captured artifact");
-  const risk = { calibrationGames: n, marginLocationSd: Math.sqrt(f.margin.varianceComponents.sourceLocation + f.margin.varianceComponents.functionPosterior) * Math.exp(cal.logMarginScale),
-    totalLocationSd: Math.sqrt(f.total.varianceComponents.sourceLocation + f.total.varianceComponents.functionPosterior) * Math.exp(cal.logTotalScale) };
+  const storedRisk=d.marketDecisions.find(row=>row.recommendationRisk)?.recommendationRisk?.context;
+  const totalComponents=f.total.varianceComponents as {sourceLocation?:number;trendPosterior?:number;functionPosterior:number};
+  const totalLocationVariance=totalComponents.trendPosterior??totalComponents.sourceLocation;
+  assert(typeof totalLocationVariance==="number"&&Number.isFinite(totalLocationVariance));
+  const risk = storedRisk??{ calibrationGames: n, marginLocationSd: Math.sqrt(f.margin.varianceComponents.sourceLocation + f.margin.varianceComponents.functionPosterior) * Math.exp(cal.logMarginScale),
+    totalLocationSd: Math.sqrt(totalLocationVariance + totalComponents.functionPosterior) * Math.exp(cal.logTotalScale) };
   const next = buildCbbInterpretedDecision({ input: read.input, interpretation: d.interpretation,
     latent: d.numericalTrace.finalLatentDistribution, targets: d.marketDecisions.flatMap(r => r.target ? [r.target] : []), recommendationRisk: risk });
   for (const key of ["home", "away", "margin", "total", "homeWinProbability"] as const)

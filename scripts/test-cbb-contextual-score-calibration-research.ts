@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import {createHash} from "node:crypto";
 import {createCbbContextualScoreLaw} from "../lib/cbb/contextualScoreLawResearch";
 import {applyCbbJointCovarianceCalibration,cbbScoreCalibrationMethodSha256,cbbScoreCalibrationTrainingIdsSha256,
- evaluateCbbJointCovarianceCalibration,fitCbbJointCovarianceCalibration,type CbbCrossfitScoreRow} from "../lib/cbb/contextualScoreCalibrationResearch";
+ evaluateCbbJointCovarianceCalibration,fitCbbJointCovarianceCalibration,validateCbbCrossfitScoreRows,type CbbCrossfitScoreRow,type CbbCrossfitAxisFitManifest} from "../lib/cbb/contextualScoreCalibrationResearch";
 
 // Entirely synthetic final scores and GP locations. No actual game, cached
 // outcome file, provider or database is consumed by this method test/benchmark.
@@ -30,6 +31,20 @@ for(const row of rows){
 }
 assert.equal(objective.negativeLogLikelihood,manual,"optimizer objective is the same exact integer-cell joint law used at prediction");
 assert.equal(objective.lawEvaluations,rows.length);
+assert.equal(cbbScoreCalibrationMethodSha256(),"c27ab973cb5d3a870940960c25c367060f16b73da6a8e904c5943255bf672d75","Optional provenance validation cannot relabel the unchanged legacy mathematical calibration method");
+const hash=(x:unknown)=>createHash("sha256").update(JSON.stringify(x)).digest("hex");
+const compositeRows=rows.map(row=>{const inputSha256="f".repeat(64),component=(axis:"margin"|"total",ids:number[]):CbbCrossfitAxisFitManifest=>({axis,artifactSha256:(axis==="margin"?"1":"2").repeat(64),artifactObjectSha256:(axis==="margin"?"3":"4").repeat(64),methodSha256:(axis==="margin"?"5":"6").repeat(64),trainingRowsSha256:"7".repeat(64),trainingGameIds:ids,normalizerTrainingGameIds:ids,trainingGameIdsSha256:cbbScoreCalibrationTrainingIdsSha256(ids),normalizerTrainingGameIdsSha256:cbbScoreCalibrationTrainingIdsSha256(ids),inputSha256,foldId:axis==="margin"?"old-fold":"different-new-fold",predictionMode:"retrospective_development",ownGameExcluded:true,source:axis==="margin"?"frozen_full_never_trained_game_prediction":"saved_game_excluded_prediction"}),perAxisFitManifests={margin:component("margin",[201,202]),total:component("total",[202,203])};return{...row,inputSha256,perAxisFitManifests,fitManifest:{...row.fitManifest,artifactSha256:hash({marginArtifactSha256:perAxisFitManifests.margin.artifactSha256,totalArtifactSha256:perAxisFitManifests.total.artifactSha256}),provenanceScope:"per_axis_union_no_shared_fit_or_normalizer" as const}};});
+assert.equal(validateCbbCrossfitScoreRows(compositeRows),true);
+assert.equal(evaluateCbbJointCovarianceCalibration(compositeRows,parameters).negativeLogLikelihood,objective.negativeLogLikelihood,"Per-axis provenance changes no location, likelihood or covariance math");
+const badComposite=(mutate:(r:CbbCrossfitScoreRow[])=>void,pattern:RegExp)=>{const candidate=structuredClone(compositeRows);mutate(candidate);assert.throws(()=>validateCbbCrossfitScoreRows(candidate),pattern);};
+badComposite(r=>{delete r[0].fitManifest.provenanceScope;},/explicit union/);
+badComposite(r=>{r[0].perAxisFitManifests!.margin.trainingGameIds=[r[0].gameId,201];},/per-axis fit/);
+badComposite(r=>{r[0].perAxisFitManifests!.total.normalizerTrainingGameIds=[r[0].gameId,202];},/per-axis fit/);
+badComposite(r=>{r[0].perAxisFitManifests!.margin.inputSha256="e".repeat(64);},/per-axis fit/);
+badComposite(r=>{const x=r[0];x.fitTrainingGameIds=[201,202];x.fitManifest.trainingGameIdsSha256=x.fitManifest.normalizerTrainingGameIdsSha256=cbbScoreCalibrationTrainingIdsSha256(x.fitTrainingGameIds);},/union or component/);
+badComposite(r=>{r[0].fitManifest.artifactSha256="9".repeat(64);},/union or component/);
+badComposite(r=>{r[1].perAxisFitManifests!.total.methodSha256="8".repeat(64);},/mixed component methods/);
+assert.throws(()=>validateCbbCrossfitScoreRows([compositeRows[0],rows[1]]),/mixed legacy and per-axis/);
 
 const mirrored=rows.map(row=>({...row,latentLocationsAndSds:{...row.latentLocationsAndSds,marginMean:-row.latentLocationsAndSds.marginMean},
  actualHome:row.actualAway,actualAway:row.actualHome}));

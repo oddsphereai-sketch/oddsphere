@@ -11,7 +11,7 @@ import type {CbbQuote} from "./types";
 import {createCbbRecommendationRiskEvaluator,assessCbbOutcomeConfidenceRisk,CBB_CONTEXTUAL_RECOMMENDATION_RISK_POLICY,type CbbRecommendationRiskContext} from "./contextualRecommendationRisk";
 import {assessConfidenceLeanPrice} from "../services/dailyEdge/confidenceLeanPrice";
 
-export const CBB_INTERPRETED_DECISION_RELEASE="cbb_interpreted_decision_2026_11_06_r9_confidence_led_lean" as const;
+export const CBB_INTERPRETED_DECISION_RELEASE="cbb_interpreted_decision_2026_11_06_r11_confidence_led_lean" as const;
 /** Product label boundaries, not learned accuracy claims or signal activation
  * gates. The forecast has already interpreted the full qualified market.
  * Confidence is the same unconditional win probability stored in the decision;

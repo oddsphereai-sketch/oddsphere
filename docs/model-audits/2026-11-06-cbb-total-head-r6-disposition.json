@@ -1,0 +1,39 @@
+{
+  "schema": "cbb_total_head_r6_disposition_v1",
+  "at": "2026-11-06T18:21:33.764121+00:00",
+  "status": "HELD_NOT_LIVE_SEMANTIC_NO_GO",
+  "productionRemains": "R1/R44",
+  "model": "cbb_contextual_outcome_2026_11_06_r6_direct_total_retained_margin",
+  "objectSha256": "15878837307c3bf3ecaefb105fcc13ed33073d3eb9275d1fdd76795cfba66d88",
+  "engineering": "Full model-change checks, production build, all174same-input contract/source/coherence checks, genuineprivatebundle and42legacylocks126tracking rows passed. Engineering consistency is not semantic correctness.",
+  "methodDefect": "Separate duplicated raw fair-logodds/fair-balance and line/center linear encodings extrapolate alternative contract prices far outside sparse fitted support; unsupported Kennesaw and MVSU UnderLeans and WyomingOver magnitude. Current Totallevels can be overwhelmed by those correlated terms.",
+  "gradeImpact": {
+    "totalActionablesBefore": 31,
+    "after": 0,
+    "underBefore": 55,
+    "bestBefore": 2,
+    "allMarketPromotions": 2,
+    "demotions": 23
+  },
+  "uncertainty": "Fitted posterior uncertainty genuinely rises; no variance summation, grade-wiring or clock-unit bug found. Do not cap it or loosen labels to hide this defect.",
+  "nextScope": "Correct native line/price economic representation and total-location geometry, preserving unchanged R1Margin and all182inputs/labels/folds. New immutable declaration,Total-onlyfit/cohort/manifests,jointcalibration, identifiers and functionalreview required.",
+  "paidAICalls": 0,
+  "providerRequests": 0,
+  "uploads": 0,
+  "productionWrites": 0,
+  "sourceArchive": "/private/tmp/cbb-total-head-r6-development_build/source-snapshot",
+  "evidence": [
+    {
+      "path": "/private/tmp/cbb-r6-current-whole-market-semantic-review-20261106.json",
+      "sha256": "c4fe6f24148c8d94d4da6174489d936a345025ec120f0b704f833ccfc22a90f9"
+    },
+    {
+      "path": "/private/tmp/cbb-r6-uncertainty-grade-review-conclusion-20261106.json",
+      "sha256": "9c0199c82c9442a54f908d62ecb2424145fb4cdeed7c8e987b73c4cff632dd13"
+    },
+    {
+      "path": "/private/tmp/cbb-r6-current-58-impact-20261106-summary.json",
+      "sha256": "c64bec2df92a7595f47d71316cc292d6b7c1b2cb11f0d7dcae84227a9e36c32e"
+    }
+  ]
+}
