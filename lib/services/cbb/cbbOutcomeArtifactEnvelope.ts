@@ -4,7 +4,7 @@ import {createHash} from "node:crypto";
 import {gzipSync,gunzipSync} from "node:zlib";
 import {validateCbbOutcomeArtifact,type CbbOutcomeArtifact} from "../../cbb/contextualOutcomeForecast";
 import {validateCbbCompositeOutcomeArtifact,type CbbCompositeOutcomeArtifact} from "../../cbb/contextualCompositeOutcomeForecast";
-import type {CbbOutcomeArtifact as CbbDirectOutcomeArtifact} from "../../cbb/contextualDirectOutcomeForecast";
+import type {CbbOutcomeArtifact as CbbDirectOutcomeArtifact} from "../../cbb/economicTotalForecast";
 type TransportModel=CbbOutcomeArtifact|CbbCompositeOutcomeArtifact;
 function isComposite(model:TransportModel):model is CbbCompositeOutcomeArtifact{return "legacyMarginModel" in model;}
 import {assertCbbContextualForecastCalibrationBinding,freezeCbbContextualForecastArtifact,type CbbContextualForecastCalibrationBinding} from "../../cbb/contextualForecastCalibrationBinding";
@@ -44,7 +44,7 @@ export function decodeCbbOutcomeSchemaDictionary(value:unknown):string{
 function internSchemas(model:CbbOutcomeArtifact|CbbDirectOutcomeArtifact){
  need(model.trainingGames<=CBB_PRIVATE_OUTCOME_LOGICAL_LIMITS.trainingRows,"logical training row budget exceeded");const arrays=new Map<string,readonly unknown[]>();
  const intern=(values:unknown[])=>{const key=JSON.stringify(values),known=arrays.get(key);if(known)return known;const shared=Object.freeze(values);arrays.set(key,shared);return shared;};
- for(const axis of ["margin","total"] as const){const head=model[axis];need(Array.isArray(head?.inputs)&&head.inputs.length<=CBB_PRIVATE_OUTCOME_LOGICAL_LIMITS.trainingRows,"logical input row budget exceeded");for(const input of head.inputs)for(const block of Object.values(input.blocks)){need(Array.isArray(block.names)&&Array.isArray(block.parity)&&block.names.length<=CBB_PRIVATE_OUTCOME_LOGICAL_LIMITS.vectorWidth&&block.values.length===block.names.length&&block.known.length===block.names.length&&block.parity.length===block.names.length,"logical vector schema width mismatch");block.names=intern(block.names) as string[];block.parity=intern(block.parity) as (1|-1)[];}}
+ for(const head of ("margin" in model?[model.margin,model.total]:[model.total])){need(Array.isArray(head?.inputs)&&head.inputs.length<=CBB_PRIVATE_OUTCOME_LOGICAL_LIMITS.trainingRows,"logical input row budget exceeded");for(const input of head.inputs)for(const block of Object.values(input.blocks)){need(Array.isArray(block.names)&&Array.isArray(block.parity)&&block.names.length<=CBB_PRIVATE_OUTCOME_LOGICAL_LIMITS.vectorWidth&&block.values.length===block.names.length&&block.known.length===block.names.length&&block.parity.length===block.names.length,"logical vector schema width mismatch");block.names=intern(block.names) as string[];block.parity=intern(block.parity) as (1|-1)[];}}
 }
 type CalibrationFile={schema:string;availableBy:string;fullModel:{fileSha256:string;objectSha256:string};
  calibration:{status:string;parameters:unknown};binding:CbbContextualForecastCalibrationBinding|null};

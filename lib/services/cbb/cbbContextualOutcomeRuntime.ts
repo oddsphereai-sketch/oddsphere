@@ -2,7 +2,7 @@
  * training artifact is promoted by this exact release manifest; no refresh,
  * fallback model, provider collection or persistence is introduced here. */
 import legacyReleaseManifest from "../../cbb/artifacts/contextual-outcome-r1-manifest.json";
-import releaseManifest from "../../cbb/artifacts/contextual-outcome-r6-manifest.json";
+import releaseManifest from "../../cbb/artifacts/contextual-outcome-r7-manifest.json";
 import {CBB_CONTEXTUAL_COMPOSITE_OUTCOME_RELEASE as CBB_COMPOSITE_OUTCOME_RELEASE,validateCbbCompositeOutcomeArtifact,type CbbCompositeOutcomeArtifact} from "../../cbb/contextualCompositeOutcomeForecast";
 import {CBB_OUTCOME_DECISION_RELEASE,forecastCbbOutcomeDecision} from "../../cbb/contextualOutcomeDecision";
 import {buildCbbContextualOutcomeBoard,CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE,type CbbOutcomeDecision} from "../../cbb/contextualOutcomeBoard";
@@ -13,10 +13,10 @@ import {encodeCbbContextualEvidence,decodeCbbContextualEvidence,type CbbContextu
 import type {CbbContextualAssembledInput,assembleCbbContextualReaderInput} from "./cbbContextualReaderInput";
 import type {CbbForecast,CbbQuote} from "../../cbb/types";
 
-export const CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE="cbb_contextual_outcome_2026_11_06_r6_direct_total_retained_margin" as const;
-export const CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE="cbb_contextual_covariance_2026_11_06_r6_direct_total_retained_margin" as const;
-export const CBB_CONTEXTUAL_OUTCOME_EVIDENCE_RELEASE="cbb_contextual_outcome_evidence_2026_11_06_r6_direct_total_retained_margin" as const;
-/** Genuine component-bound artifact and new joint calibration, pinned exactly. */
+export const CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE="cbb_contextual_outcome_2026_11_06_r7_economic_total_retained_margin" as const;
+export const CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE="cbb_contextual_covariance_2026_11_06_r7_economic_total_retained_margin" as const;
+export const CBB_CONTEXTUAL_OUTCOME_EVIDENCE_RELEASE="cbb_contextual_outcome_evidence_2026_11_06_r7_economic_total_retained_margin" as const;
+/** Genuine economic Total and retained Margin component-bound artifact, pinned exactly. */
 export const CBB_CONTEXTUAL_OUTCOME_MANIFEST=Object.freeze(releaseManifest as CbbPrivateOutcomeManifest);
 function activeManifest():CbbPrivateOutcomeManifest|null{return CBB_CONTEXTUAL_OUTCOME_MANIFEST;}
 export function cbbContextualOutcomeReadinessMetadata(){
@@ -33,7 +33,7 @@ type ContextualRelease={
  readonly modelRelease:typeof CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE|typeof CBB_CONTEXTUAL_OUTCOME_LEGACY_MODEL_RELEASE;
  readonly calibrationRelease:typeof CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE|"cbb_contextual_covariance_2026_11_05_r1";
  readonly evidenceRelease:typeof CBB_CONTEXTUAL_OUTCOME_EVIDENCE_RELEASE|"cbb_contextual_outcome_evidence_2026_11_05_r1";
- readonly modelUsed:"cbb_contextual_outcome_r1"|"cbb_contextual_outcome_r6";readonly manifest:CbbPrivateOutcomeManifest;
+ readonly modelUsed:"cbb_contextual_outcome_r1"|"cbb_contextual_outcome_r7";readonly manifest:CbbPrivateOutcomeManifest;
 };
 const candidateManifest=activeManifest();
 const contextualReleases:readonly ContextualRelease[]=Object.freeze([
@@ -43,7 +43,7 @@ const contextualReleases:readonly ContextualRelease[]=Object.freeze([
   modelUsed:"cbb_contextual_outcome_r1" as const,manifest:Object.freeze(legacyReleaseManifest as CbbPrivateOutcomeManifest)}),
  ...(candidateManifest?[Object.freeze({modelRelease:CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE,
   calibrationRelease:CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE,evidenceRelease:CBB_CONTEXTUAL_OUTCOME_EVIDENCE_RELEASE,
-  modelUsed:"cbb_contextual_outcome_r6" as const,manifest:candidateManifest})]:[]),
+  modelUsed:"cbb_contextual_outcome_r7" as const,manifest:candidateManifest})]:[]),
 ]);
 export function resolveCbbContextualOutcomeRelease(modelRelease:string|undefined){
  return contextualReleases.find(release=>release.modelRelease===modelRelease)??null;

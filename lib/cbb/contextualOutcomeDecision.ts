@@ -8,7 +8,7 @@ import {buildCbbInterpretedDecision} from "./contextualInterpretedDecision";
 import type {CbbContextualFeatureInput} from "./contextualForecastFeatures";
 import type {CbbScoreLawNumerics} from "./contextualScoreLawResearch";
 import type {CbbQuote} from "./types";
-export const CBB_OUTCOME_DECISION_RELEASE="cbb_outcome_decision_2026_11_06_r9_direct_total_retained_margin" as const;
+export const CBB_OUTCOME_DECISION_RELEASE="cbb_outcome_decision_2026_11_06_r10_economic_total_retained_margin" as const;
 function canonical(v:unknown):unknown{if(Array.isArray(v))return v.map(canonical);if(v&&typeof v==="object")return Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>[k,canonical(x)]));return v;}
 export function cbbOutcomeIndependentInputSha256(independent:CbbContextualFeatureInput["independent"]){
  return createHash("sha256").update(JSON.stringify(canonical({gameId:independent.gameId,asOf:independent.asOf,release:independent.release,inputStatus:independent.inputStatus,
@@ -36,6 +36,6 @@ export function forecastCbbOutcomeDecision(args:{artifact:CbbCompositeOutcomeArt
   marketDecisions:decision.marketDecisions,gradePolicy:decision.policy,
   numericalTrace:{workingLatentLocations,finalLatentDistribution:latent,law:decision.lawNumerics,reference:decision.sourceReferenceNumerics,
    ...(forecast.outcomeInputs.contextTraces.length?{wholeMarketContext:forecast.outcomeInputs.contextTraces}:{})},
-  interpretationMeaning:"Retained R1 raw Margin predictor and direct contextual Total learner supply one freshly calibrated joint score law. New Total inference uses native market and original independent evidence without source-forecast allocation; exact-price probabilities and grades follow the same law.",
+  interpretationMeaning:"Retained R1 raw Margin and an economic Total residual learner supply one freshly calibrated joint score law. Total uses an explicit observed economic coordinate plus an unbounded learned residual, with original independent evidence and no forecast source allocation. Exact-price probabilities and grades follow the same law.",
   limits:"Working probabilistic inference conditional on empirical parameters. It does not identify bettor identities, guarantee accuracy, certify all possible signals, or turn unavailable quotes into verified current offers."};
 }

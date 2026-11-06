@@ -28,6 +28,12 @@ runtime already implements it.
 
 ## Numerical decision and publication
 
+Native line and paired price describe one economic contract. Equivalent locations
+must not become several independently extrapolated point drivers merely because
+line, log-odds and probability encode the same quote. Relative-coordinate methods
+must make their observed origin and missing-source behavior explicit.
+
+
 - The inference method must turn admitted evidence into a justified outcome
   distribution, including uncertainty. Storing a signal or describing it is not
   evidence that it changed or was correctly considered by the forecast.
@@ -62,9 +68,9 @@ runtime already implements it.
   remain separated by release and lock time; do not claim all possible signals or
   all future edge cases have been certified.
 
-## Current scoped CBB exception and remaining work
+## Current scoped CBB delivery and remaining work
 
-The proposed R6 release replaces the Total inference head only. It preserves the
+The proposed R7 release replaces the Total inference head only. It preserves the
 exact existing R1 raw Margin head; that head's source-allocation limitation remains
 an open moneyline/spread repair. A fresh joint calibration can still change final
 conditioned margin probabilities, so all three markets require impact checks.

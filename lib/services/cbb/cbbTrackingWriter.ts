@@ -21,7 +21,7 @@ import {CBB_CROSS_DIVISION_SCORE_RELEASE,CBB_FULL_D1_COVERAGE_START} from "@/lib
 import {CBB_GAME_FORECAST_GRADE_RELEASE,CBB_GAME_OUTCOME_RELEASE} from "@/lib/cbb/gameForecastBoard";
 import {normalCdf} from "@/lib/cbb/model";
 
-export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_06_r35_direct_total_retained_margin_family" as const;
+export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_06_r36_economic_total_retained_margin_family" as const;
 /** Hash stored JSON independently of PostgreSQL jsonb object-key ordering. */
 export function cbbTrackingEvidenceSha256(record:CbbStoredMemberGame):string {
   const sorted=(value:unknown):unknown=>Array.isArray(value)?value.map(sorted)

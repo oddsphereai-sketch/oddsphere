@@ -55,11 +55,12 @@ export async function testCbbContextualOutcomeLocks(){
   assert.throws(()=>cbbLockedModelRelease({release:"private_rejected_candidate",modelRelease:"cbb_contextual_outcome_2026_11_06_r2_whole_market_context"}),/locked model release is unknown/);
   assert.equal(legacyRelease.manifest.runtimeModelRelease,CBB_CONTEXTUAL_OUTCOME_LEGACY_MODEL_RELEASE);
   assert.equal(legacyRelease.calibrationRelease,"cbb_contextual_covariance_2026_11_05_r1");assert.equal(legacyRelease.modelUsed,"cbb_contextual_outcome_r1");
-  if(CBB_CONTEXTUAL_OUTCOME_MANIFEST){assert.equal(currentRelease.manifest.runtimeModelRelease,CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE);assert.equal(currentRelease.modelUsed,"cbb_contextual_outcome_r6");assert.notEqual(currentRelease.manifest.modelObjectSha256,legacyRelease.manifest.modelObjectSha256);}
+  if(CBB_CONTEXTUAL_OUTCOME_MANIFEST){assert.equal(currentRelease.manifest.runtimeModelRelease,CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE);assert.equal(currentRelease.modelUsed,"cbb_contextual_outcome_r7");assert.notEqual(currentRelease.manifest.modelObjectSha256,legacyRelease.manifest.modelObjectSha256);}
   else{assert.equal(resolveCbbContextualOutcomeRelease(CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE),null);await assert.rejects(loadCbbContextualOutcomeRuntime(),/manifest pending/);}
   assert.equal(resolveCbbContextualOutcomeRelease("cbb_contextual_outcome_2026_11_06_r3_independent_evidence_components"),null,"Unreleased held R3 is not a production legacy");
   assert.equal(resolveCbbContextualOutcomeRelease("cbb_contextual_outcome_2026_11_06_r4_direct_outcome"),null,"Failed unpublished R4 is not a production legacy");
   assert.equal(resolveCbbContextualOutcomeRelease("cbb_contextual_outcome_2026_11_06_r5_direct_outcome_clock_units"),null,"Held unpublished R5 is not a production legacy");
+  assert.equal(resolveCbbContextualOutcomeRelease("cbb_contextual_outcome_2026_11_06_r6_direct_total_retained_margin"),null,"Held unpublished R6 is not a production legacy");
   const board=releasedBoard(),read=readCbbContextualOutcomeEvidence(board);assert(read);assert.deepEqual(readCbbContextualOutcomeEvidence(reversed(board) as CbbReleasedOutcomeBoard)?.decision.finalScore,read.decision.finalScore,"JSONB key reordering changes no stored law identity");
   const snapshot={release:"cbb_candidate_2026_10_29_r1_locked_board_contract" as const,gameId:game.id,startsAt:start,capturedAt:at,lockedAt:null,board},dto=adaptCbbProvisionalGame({game,snapshot,homeLogo:null,awayLogo:null,now:at,marketQuotes:targets});
   const ml=board.rows[0];assert.equal(ml.grade,"No Play");assert(ml.expectedValue!<0);assert.equal(dto.markets.moneyline.modelProb,ml.probability);assert.equal(dto.markets.moneyline.confidence,ml.probability);assert.equal(dto.markets.moneyline.recommendationConfidence,null);assert(dto.markets.moneyline.reviewFlags.includes("informational_non_actionable_price"));assert.equal(dto.markets.moneyline.held,false);assert.equal(dto.markets.moneyline.marketPrediction?.status,"available");assert(!dto.breakdown?.modelBreakdown?.startsWith("Independent projection"));
@@ -105,7 +106,7 @@ export async function testCbbContextualOutcomeLocks(){
   const legacy=buildCbbProvisionalBoard(independent,targets);stored=null;await writeCbbMemberGame({game,candidate:legacy,homeLogo:null,awayLogo:null,now:at},db);const old=(await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:lock},db)).record;tracked.length=0;await writeLockedCbbTracking(old,tracking);for(const r of tracked)(r.snapshot_json as Record<string,unknown>).release="cbb_tracking_writer_2026_11_05_r24_coordinated_source_lineage";const oldRecords=JSON.stringify(tracked),oldBytes=JSON.stringify(old);assert.equal(await writeLockedCbbTracking(old,tracking),0);assert.equal(JSON.stringify(tracked),oldRecords);assert.equal(JSON.stringify(old),oldBytes);assert.equal(assertCbbContextualLockedRecord(old),null);
   const legacyNoQuote=buildCbbGameForecastBoard(independent,{kind:"cross_division"});stored=null;await writeCbbMemberGame({game,candidate:legacyNoQuote,homeLogo:null,awayLogo:null,now:at},db);const oldWinner=(await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:lock},db)).record;tracked.length=0;assert.equal(await writeLockedCbbTracking(oldWinner,tracking),1,"Old R1 normal-law winner retains its own verifier and no wager");assert.equal(tracked[0].odds_american,null);
   // A genuine R1 manifest identity continues to own its stored receipt and
-  // calibration when R6 becomes active. No old input is sent to the new engine.
+  // calibration when R7 becomes active. No old input is sent to the new engine.
   const legacyContextualBoard=releasedBoard(true,passTargets,{marginMean:16,totalMean:146,marginSd:11,totalSd:15,correlation:.1},false,CBB_CONTEXTUAL_OUTCOME_LEGACY_MODEL_RELEASE);
   const legacyBoardBytes=JSON.stringify(legacyContextualBoard),legacyEnvelope=legacyContextualBoard.marketContext.contextualOutcomeEvidence;
   const legacyOriginalJSON=decodeCbbContextualEvidence(legacyEnvelope,legacyEnvelope.identity).originalJSON;
@@ -120,12 +121,12 @@ export async function testCbbContextualOutcomeLocks(){
   const relabeled=structuredClone(legacyContextualBoard);relabeled.modelRelease=CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE;
   assert.throws(()=>readCbbContextualOutcomeEvidence(relabeled),/calibration release differs/);
   relabeled.calibrationRelease=CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE;
-  assert.throws(()=>readCbbContextualOutcomeEvidence(relabeled),/identity mismatch/,"R1 envelope cannot acquire R6 identity by relabeling its board");
+  assert.throws(()=>readCbbContextualOutcomeEvidence(relabeled),/identity mismatch/,"R1 envelope cannot acquire R7 identity by relabeling its board");
   const upgradedBody=structuredClone(decodeCbbContextualEvidence(legacyEnvelope,legacyEnvelope.identity).evidence);
   upgradedBody.identity.modelRelease=currentRelease.modelRelease;upgradedBody.identity.artifactObjectSha256=currentRelease.manifest.modelObjectSha256;
   (upgradedBody.trace as {release:string}).release=currentRelease.evidenceRelease;
   relabeled.marketContext.contextualOutcomeEvidence=encodeCbbContextualEvidence(upgradedBody);
-  assert.throws(()=>readCbbContextualOutcomeEvidence(relabeled),/stored artifact or calibration differs|decision does not belong/,"Re-encoding identity cannot transplant an R1 decision into R6");
+  assert.throws(()=>readCbbContextualOutcomeEvidence(relabeled),/stored artifact or calibration differs|decision does not belong/,"Re-encoding identity cannot transplant an R1 decision into R7");
   }
   stored=null;await writeCbbMemberGame({game,candidate:legacyContextualBoard,homeLogo:null,awayLogo:null,now:at,marketQuotes:passTargets},db);
   const r1Lock=(await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:lock},db)).record,r1Bytes=JSON.stringify(r1Lock);
@@ -139,7 +140,7 @@ export async function testCbbContextualOutcomeLocks(){
    assert.deepEqual(result.markets,r1Lock.memberGame.markets);assert.equal(result.result?.markets.moneyline.gradeUnits,null);assert.equal(result.result?.markets.first_inning.gradeUnits,null);assert.equal(result.result?.markets.total.gradeUnits,null);
   }
   assert.equal((await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:lock},db)).written,false);
-  assert.equal(JSON.stringify(r1Lock),r1Bytes,"Active R6 writer cannot replace any R1 frozen score, probability, grade, price or evidence");
+  assert.equal(JSON.stringify(r1Lock),r1Bytes,"Active R7 writer cannot replace any R1 frozen score, probability, grade, price or evidence");
   // New risk-based priced passes can retain positive nominal EV. They remain
   // complete forecasts without recommendation confidence or wager exposure.
   const extremeTargets=[{...targets[0],firstPrice:-100000,secondPrice:5000},...targets.slice(1)];
@@ -157,7 +158,7 @@ export async function testCbbContextualOutcomeLocks(){
   const extremeBytes=JSON.stringify(extremeLock),extremeTracking=JSON.stringify(tracked);
   assert.equal(await writeLockedCbbTracking(extremeLock,tracking),0);
   assert.equal(JSON.stringify(extremeLock),extremeBytes);assert.equal(JSON.stringify(tracked),extremeTracking);
-  // The preceding contextual R7/R6 family shares model R1, but retains its
+  // The preceding decision R7 / grade R6 family shares model R1, but retains its
   // original grades and tracking evidence when the new grade family ships.
   const priorContextual=releasedBoard(true,targets,undefined,true,CBB_CONTEXTUAL_OUTCOME_LEGACY_MODEL_RELEASE);
   assert.equal(priorContextual.gradeRelease,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE);
@@ -173,6 +174,6 @@ export async function testCbbContextualOutcomeLocks(){
   assert.equal(JSON.stringify(priorLock),priorBytes,"New risk grading cannot replace a legacy contextual lock");
   assert.equal(network,0,"No artifact fetch/provider path was used for adapter, locking, reading or tracking");
  }finally{globalThis.fetch=previousFetch;}
- console.log(`PASS contextual outcome lock integration: ${CBB_CONTEXTUAL_OUTCOME_MANIFEST?"active R6 plus legacy R1":"pending R6 fails closed; genuine R1 only"}, exact own-manifest/codec/DTO/tracking identities, priced pass and Watch boundaries, lock writer+reader precedence, no tracking reforecast or upgrade, zero real IO`);
+ console.log(`PASS contextual outcome lock integration: ${CBB_CONTEXTUAL_OUTCOME_MANIFEST?"active R7 plus legacy R1":"pending R7 fails closed; genuine R1 only"}, exact own-manifest/codec/DTO/tracking identities, priced pass and Watch boundaries, lock writer+reader precedence, no tracking reforecast or upgrade, zero real IO`);
 }
 if(process.argv[1]?.endsWith("test-cbb-contextual-outcome-locks.ts"))testCbbContextualOutcomeLocks().catch(e=>{console.error(e);process.exitCode=1;});

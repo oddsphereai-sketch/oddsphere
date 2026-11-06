@@ -1,5 +1,27 @@
 # Model change safety protocol
 
+## Owner-directed CBB economic Total contract correction R7 — November 6
+
+The owner requested delivery of actual market-reading corrections and the same
+score/probability/grade design standard for all Daily Edge markets and sports.
+R6 is held for demonstrated unsupported Total magnitudes from duplicated sparse
+alternative-price linear encodings. Its engineering consistency is not approval.
+R7 corrects native-contract economic coordinates: one observed Total origin and
+one relative economic location per source, an unrestricted learned actual-outcome
+residual, and contextual native prices/line/path/pressure. It adds no forecast
+share, arbitrary point bump, variance cap, signal-count gate or play quota.
+
+The immutable182 rows/folds receive exactly six Total-only fits and one fresh
+joint calibration under existing numerical budgets. Per-axis exclusion and
+normalizers remain explicit; R1 raw Margin and its limitations remain unchanged.
+Preserve failedR6 source/artifacts and all legacy public locks. Publication still
+requires all affected/full checks, actual same-input whole-market and grade-count
+review, exact composite/private transport/identity binding, clean fresh-main
+protected PR and normal production writer/coverage/reader/lock proof. No paid AI
+or new odds-provider requests are authorized by this correction. Predeclaration:
+`model-audits/2026-11-06-cbb-economic-total-predeclaration.json`.
+
+
 ## Owner-directed CBB direct Total head with retained Margin — November 6
 
 The owner requested a practical CBB totals correction and the same complete

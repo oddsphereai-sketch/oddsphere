@@ -1,0 +1,67 @@
+{
+  "schema": "cbb_economic_total_predeclaration_v1",
+  "declaredAt": "2026-11-06T18:22:22.140364+00:00",
+  "productionBase": "b77b1ed087765f7f9b5ce9ec323c0517d00b5408",
+  "scope": {
+    "proposedModel": "r7_economic_total_retained_margin",
+    "runtimeModelRelease": "cbb_contextual_outcome_2026_11_06_r7_economic_total_retained_margin",
+    "delivery": "A Total-only learned actual-outcome residual in economically coherent market coordinates, retaining exact R1 raw Margin and one new joint calibration.",
+    "productionStill": "R1/R44. R6 was held, not uploaded or live.",
+    "methodReason": "Correct demonstrated duplicated alternative-contract price extrapolation and unsupported absolute Total geometry. Preserve complete source facts. No new candidate chosen by realized test-game outcomes.",
+    "economicCoordinates": "Use observed median physical professional Total economic centers as coordinate origin; if none, consumer centers; if no market centers, the independent point. This explicit location coordinate is not a convex forecast allocation or protected forecast. Target actualTotal minus origin; restore origin plus unbounded learned residual.",
+    "linearCoordinates": "Only independentTotal−origin and one Total economicCenter−origin per admitted physical book. No separate line, fair balance or log-odds linear term; cross-market Margin/ML remain contextual.",
+    "context": "Retain complete native line/paired prices/timing/roles in receipt; represent contextual contract geometry jointly rather than extrapolating sparse raw juice as duplicate point drivers. Retain own/cross paths, pressure responses and availability context without signal-vote gates.",
+    "translation": "Working Total prediction respects integer scoring-coordinate translations of all applicable Total lines and independent point; final rounded/nonnegative/no-tie law remains honestly conditioned. Contract-equivalent economiccenter tests distinguish linear level equality from genuinely different contextual evidence.",
+    "retainedMarginObjectSha256": "ff5ec044be02adbd4f82dd6d6d51c57d5524ddcf1c5319f79358f89b03b9c243",
+    "existingLimitation": "Retained R1 Margin source-allocation limitation remains open; all3marketprobabilities/grades may change through new joint law. No claim that this completes all models."
+  },
+  "dataAdmission": {
+    "trainingGames": 182,
+    "original137Exact": true,
+    "all45Added": true,
+    "rawPath": "/private/tmp/cbb-contextual-direct-v8-frozen-raw-rows-20261106.json",
+    "rawSha256": "b80ac7192b14de23f763cb26c8e825fca72ad0648dc9718dc938a383f5c6d269",
+    "trainingCutoff": "2026-11-06T14:27:48.786Z",
+    "gameOutcomeSelection": false,
+    "ownGameExclusion": "Both component axes independently exclude every calibration game.137 old Margin folds and45 genuinely unseen old-full Margin predictions;182 saved directTotal folds. Different axis folds explicitly attested; do not fabricate a shared cohort."
+  },
+  "boundedFitPlan": {
+    "fullTotalFits": 1,
+    "outerTotalFits": 5,
+    "totalForecastFits": 6,
+    "marginFits": 0,
+    "jointCalibrationFits": 1,
+    "forecastMaxIterations": 250,
+    "forecastStarts": [
+      0,
+      -0.7,
+      0.7
+    ],
+    "outputDirectory": "/private/tmp/cbb-economic-total-r7-development_build",
+    "calibrationMethodSha256": "c27ab973cb5d3a870940960c25c367060f16b73da6a8e904c5943255bf672d75",
+    "existingNumericalBudgetsUnchanged": true,
+    "newFeatureTournament": false,
+    "rowSelection": false,
+    "postResultSideCountTuning": false,
+    "failedBuildPolicy": "Preserve failures. No automatic retry, case deletion, uncertainty cap, grade relaxation, outcome-based selection or budget increase."
+  },
+  "productRequirements": {
+    "forecasts": "One joint score law feeds scores,ML,spread,total and probabilities; independent forecast is fallible context. New Total head has no source-forecast allocation or protected independent share.",
+    "marketContext": "Retain native book/market/contracts, source receipt bounds, openings, complete retained net/latest paths, reversals and pressure timing, unknown source quality, all available splits and money/ticket observations. Missing splits do not automatically prevent a price-only interpretation.",
+    "grades": "Exact released probability, uncertainty and offered price; unchanged recommendation policy. Quantify promotions/demotions in all three markets and pairedprice/uncertainty promotion controls; no invented plays or forcedUnder/Over mix.",
+    "sports": "Shared evidence/decision/coherence contract applies all DailyEdge sports and markets; sport-specific law/context/availability retained. This delivery does not activate other sports changes."
+  },
+  "immutableLocks": "Preserve exact stored legacy score/probability/price/pick/grade/evidence/tracking payloads; writer and reader precedence tested. New semantics only unlocked/future locks.",
+  "runtime": "Existing sole prediction_pipeline:cbb writer/lease,cadence,provider budgets; one checked private composite artifact, no per-game artifacts/provider requests/new writer.",
+  "publication": "Newmodel/cal/evidence/decision/grade/publisher/adapter/tracking identities and registry. Full focused/model-change/build; clean fresh-main integration/protected PR only; actuallive normalwriter/readiness/coverage/lock proof plusfollowingrefresh before success.",
+  "resources": {
+    "newPaidAICalls": 0,
+    "newOddsProviderCalls": 0,
+    "newTotalForecastFits": 6,
+    "newMarginForecastFits": 0,
+    "newJointCalibrationFits": 1,
+    "noRecurringAISpend": true
+  },
+  "claims": "Implementation/source-consistency qualification, not predictive-superiority or guaranteed bettor-intent inference.",
+  "developmentExposure": "Current R1/R5/R6 cases and semantic failures already inspected. Source encoding repair is not a pristine accuracy holdout; current game outcomes not used. Evaluate functional behavior, forward outcomes separately by release."
+}

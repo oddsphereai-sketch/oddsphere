@@ -6,7 +6,7 @@ import type {CbbForecast,CbbMarket} from "./types";
 import {CBB_CONTEXTUAL_RECOMMENDATION_RISK_RELEASE} from "./contextualRecommendationRisk";
 
 export const CBB_CONTEXTUAL_OUTCOME_BOARD_RELEASE="cbb_contextual_outcome_board_2026_11_05_r1_copy_only" as const;
-export const CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE="cbb_contextual_outcome_grade_2026_11_06_r8_direct_total_retained_margin" as const;
+export const CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE="cbb_contextual_outcome_grade_2026_11_06_r9_economic_total_retained_margin" as const;
 export const CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE="cbb_contextual_outcome_grade_2026_11_05_r7_contextual_recommendation_risk" as const;
 export const CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE="cbb_outcome_decision_2026_11_05_r8_contextual_recommendation_risk" as const;
 export const CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE="cbb_contextual_outcome_grade_2026_11_05_r6_noplay_price_lanes" as const;
