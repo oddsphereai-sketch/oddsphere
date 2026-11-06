@@ -35,7 +35,7 @@ are release-separated market counts, not additive UI game-filter counts or a
 promise that subsequent market inputs will produce the same board. All 68 new
 positive-value risk traces and 83 priced score laws passed bounded coherence
 checks. Both immutable baselines 173 locks/516 tracking rows and 176/525 remained
-exact. Live Duke: moneyline -100000 No Play, total Lean, spread Watch; Rice +3.5
+exact. Live Duke: moneyline -100000 No Play, total Lean, spread Watch; East Texas A&M +3.5 (Rice game)
 remains Lean. Eight raw-first cases found no concrete wiring or grade defect.
 This does not certify predictive accuracy or the working risk approximation.
 
