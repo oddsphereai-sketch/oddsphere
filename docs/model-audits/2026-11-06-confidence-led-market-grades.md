@@ -139,10 +139,10 @@ when a current R29 dynamic card would be Lean. Missing, stale, future,
 cross-book, cross-line, cross-capture or conflicting exact quotes cannot create
 the new qualification.
 
-Rollback only the complete new grade families, publisher/adapter/tracking
-versions and shared qualifier to their preceding releases. Retain every new
-lock's original payload and release; never recompute it with the rollback
-policy. Publication must stop on a mixed grade tuple, missing current markets,
+Rollback future qualification through a new versioned policy while retaining
+readers for R11/R10 and NBA R29 stored decisions. Do not deploy an older decoder
+that cannot recognize new confidence Leans. Retain every new lock's original
+payload and release; never recompute it with the rollback policy. Publication must stop on a mixed grade tuple, missing current markets,
 unexpected demotion, lock mutation, writer overlap, publication failure or
 unexplained runtime increase. Build and test success alone are not live proof.
 

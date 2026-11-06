@@ -26,7 +26,11 @@ individual write serialization, not the whole job's retained input arrays.
 No new request to a provider, writer, schedule, prediction lease or poll is added.
 The original T-60 budget is checked before every batch/retry; no new batch
 starts after its deadline. Already acknowledged rows survive a later failure;
-the failed tail is reported for ordinary idempotent recovery. An oversized single
+the failed tail is reported for ordinary idempotent recovery. An unacknowledged
+tail is not claimed durable: a later provider poll cannot reconstruct an old
+quote that the provider no longer returns. This bounded-write change does not
+introduce an independent durable retry queue or raw odds-response archive.
+An oversized single
 row fails explicitly; it is never truncated to meet the ceiling.
 
 Capture release:
