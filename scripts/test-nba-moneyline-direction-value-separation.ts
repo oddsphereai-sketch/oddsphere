@@ -4,7 +4,7 @@ import {
   resolveNbaMoneylineDirectionalSignal,
   type MarketIntelligence,
 } from "../lib/services/nba/nbaMarketIntelligence";
-import { gradeNbaMarket } from "../lib/services/nba/nbaMarketReview";
+import { gradeNbaMarket,gradeNbaR30MarketForAudit } from "../lib/services/nba/nbaMarketReview";
 
 const overpricedMoneyline = {
   pick: "away",
@@ -20,11 +20,11 @@ const overpricedMoneyline = {
 
 assert.equal(
   gradeNbaMarket(overpricedMoneyline).grade,
-  "watch",
-  "a same-side Moneyline price ahead of the model is a value Watchlist, not directional Caution",
+  "no_play",
+  "a complete moneyline beyond -500 is No Play while directional source evidence remains intact",
 );
 assert.equal(
-  gradeNbaMarket({ ...overpricedMoneyline, interpretMoneylinePriceGapAsConflict: true }).grade,
+  gradeNbaR30MarketForAudit({ ...overpricedMoneyline, interpretMoneylinePriceGapAsConflict: true }).grade,
   "caution",
   "the audit hook must reproduce the superseded same-side price-gap Caution",
 );
@@ -33,6 +33,8 @@ assert.equal(
   "caution",
   "a genuinely directional strong Spread conflict remains Caution",
 );
+
+assert.equal(gradeNbaMarket({...overpricedMoneyline,currentPriceAmerican:-490}).grade,"watch","inside the wager limit, a price gap alone remains value Watch rather than directional Caution");
 
 const spreadConfirmed = resolveNbaMoneylineDirectionalSignal("away", {
   directReadQualified: false,

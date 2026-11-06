@@ -47,7 +47,7 @@ const incumbent = gradeNbaMarket(base);
 const corrected = gradeNbaMarket({ ...base, namedBookPosture: spread });
 assert.equal(incumbent.grade, "best_angle"); assert.equal(corrected.grade, "lean");
 assert.equal(corrected.effectiveConfidence, incumbent.effectiveConfidence);
-const mlBase: GradeInput = { ...base, market: "moneyline", confidence: 75.9, currentPriceAmerican: -210, modelProbabilityOnPick: 0.7592529226 };
+const mlBase: GradeInput = { ...base, market: "moneyline", confidence: 75.9, currentPriceAmerican: -190, modelProbabilityOnPick: 0.7592529226 };
 assert.equal(gradeNbaMarket(mlBase).grade, "best_angle");
 assert.equal(gradeNbaMarket({ ...mlBase, namedBookPosture: moneyline }).grade, "lean");
 assert.deepEqual(gradeNbaMarket({ ...mlBase, namedBookPosture: spread }), gradeNbaMarket(mlBase), "wrong-market context cannot apply");

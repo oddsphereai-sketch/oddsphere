@@ -1,3 +1,4 @@
+import {qualifyMoneylinePrice,MONEYLINE_PRICE_NO_PLAY_REASON} from "../dailyEdge/moneylinePricePolicy";
 import type { NcaafBookOdds } from "./balldontlieNcaafSlate";
 import type { CfbCanonicalMarketAnchor } from "./cfbMarketInformedOutcome";
 import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
@@ -20,8 +21,10 @@ export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
   "cfb_market_sharp_aware_candidate_2026_11_05_r41_professional_pressure_reaction" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
-export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
+export const CFB_MARKET_SHARP_AWARE_PRICE_BOUNDARY_PREVIOUS_PRODUCTION_RELEASE =
   "cfb_market_sharp_aware_production_2026_11_05_r43_professional_pressure_reaction" as const;
+export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
+  "cfb_market_sharp_aware_production_2026_11_06_r44_moneyline_wager_price_boundaries" as const;
 export const CFB_MARKET_SHARP_AWARE_PRESSURE_REACTION_PREVIOUS_PRODUCTION_RELEASE =
   "cfb_market_sharp_aware_production_2026_11_04_r42_causal_relative_innovation" as const;
 export const CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE =
@@ -422,7 +425,7 @@ export function applyCfbMarketSharpAwareGrades(args: {
       });
       return {
         ...decision,
-        grade: balanced.finalGrade,
+        grade: qualifyMoneylinePrice(decision.market,decision.evaluatedQuote.price,balanced.finalGrade),
         probabilityGrade: rawAdjustment.probabilityGrade,
         gradeAdjustment: {
           release: rawAdjustment.release,
@@ -433,7 +436,7 @@ export function applyCfbMarketSharpAwareGrades(args: {
           confidenceScore: rawAdjustment.confidenceScore,
           confidenceAdjustment: rawAdjustment.confidenceAdjustment,
           executionStatus: balanced.executionStatus,
-          reasonCodes: balanced.reasonCodes,
+          reasonCodes: decision.market==="moneyline"&&decision.evaluatedQuote.price<-500?[...balanced.reasonCodes,MONEYLINE_PRICE_NO_PLAY_REASON]:balanced.reasonCodes,
         },
       };
     }),

@@ -1,0 +1,25 @@
+{
+  "at": "2026-11-06T21:37:52.245Z",
+  "cutoff": "2026-11-06T19:46:23.288Z",
+  "captureSha256": "9eab6597328aeee5cefbe2eb9eb6ed68e1ea4fc7a867b4ef85c8822670c0cf4f",
+  "games": 9,
+  "markets": 27,
+  "historicalSplitRows": 1724,
+  "assumedFailure": "price_observation_lookup_failed",
+  "actual": {
+    "lean": 11,
+    "best_angle": 6,
+    "watch": 10
+  },
+  "reproduced": {
+    "lean": 11,
+    "best_angle": 6,
+    "watch": 10
+  },
+  "matched": 27,
+  "independentScoresRetained": true,
+  "mismatches": [],
+  "productionWrites": 0,
+  "providerCalls": 0,
+  "limits": "Retrospective controlled failure reenactment using the historical split window; exact prior SQL error was not retained in the member snapshot and is not claimed directly observed."
+}
