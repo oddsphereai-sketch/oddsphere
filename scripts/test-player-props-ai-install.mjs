@@ -22,7 +22,7 @@ try{
  assert.equal((await db.query("SELECT state FROM player_props_ai_reviews WHERE job_key='synthetic'")).rows[0].state,'cancelled');
  const invalid=[...planArgs];invalid[4]='{}';assert.equal((await db.query('SELECT player_props_ai_plan_v3($1,$2,$3,$4,$5,$6) v',invalid)).rows[0].v.funded,false);
  assert.equal((await db.query("SELECT full_calendar FROM player_props_ai_budgets WHERE month_key='2026-11'")).rows[0].full_calendar,false);
- await db.query("INSERT INTO player_props_ai_attempts(job_key,phase,part,model,reserved_micro) VALUES('synthetic',1,1,'gpt-6-luna',0)");
+ await db.query("INSERT INTO player_props_ai_attempts(job_key,phase,part,model,reserved_micro) VALUES('synthetic',1,1,'gpt-6-luna',1)");
  await assert.rejects(db.query("UPDATE player_props_ai_attempts SET state='sending' WHERE job_key='synthetic'"),/paid_runs_disabled/);
  assert.equal((await db.query("SELECT state FROM player_props_ai_attempts WHERE job_key='synthetic'")).rows[0].state,'reserved');
  // A schema reinstall cannot activate spending or reset the configured switch.
