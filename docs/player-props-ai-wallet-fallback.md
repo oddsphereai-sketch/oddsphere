@@ -157,7 +157,8 @@ Install v61, v62 and v63 together. v63 adds the service-only paid control and ca
 cache. `paid_enabled` defaults false, and triggers block claims/sends while false.
 Reinstallation never enables it. Both server environment switches
 `PLAYER_PROPS_AI_SITE_ENABLED` and `PLAYER_PROPS_AI_PAID_RUNS_ENABLED` also default
-off. A server-only `OPENAI_API_KEY`, both switches and the explicitly enabled DB
+off. A server-only `PLAYER_PROPS_AI_OPENAI_API_KEY` (or the existing shared key when no
+dedicated variable is configured), both switches and the explicitly enabled DB
 control are all required for paid generation. Installation does not activate them.
 With site integration off the new path performs zero database/provider/AI I/O.
 
@@ -183,3 +184,10 @@ Do not enable inference as part of a code deploy. After a protected deployment,
 verify feature-off health and the installed paid-off control. Server key setup and
 explicit paid activation are separate steps; an ordinary scheduled review, when
 later authorized, supplies forward accuracy and realized-cost evidence.
+
+The production-setup follow-up versions site publication as
+`player_props_ai_site_2026_11_07_r2_isolated_server_key`. The dedicated server key
+is configured without replacing credentials used by other AI products. Both prop
+review switches and the database paid switch remain off for deployment. No inference
+request is used to validate key presence. A configured secret is not proof of its
+continued provider validity; ordinary authorized reviews will record real receipts.

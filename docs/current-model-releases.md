@@ -1,16 +1,18 @@
 # Current production model releases and qualified research candidates
 
-## November 7 player-prop AI forecast candidate — not activated
+## November 7 player-prop AI integration — paid runs disabled
 
 R13 connects the accepted law and eight-area reader to the existing NBA/NFL/MLB
 writers, current exact prices, future locks and release-scoped tracking. The site
-publication contract is `player_props_ai_site_2026_11_07_r1_writer_publication`;
+publication contract is `player_props_ai_site_2026_11_07_r2_isolated_server_key`;
 estimate semantics are `player_props_ai_estimate_2026_11_07_r1_not_empirically_calibrated`.
 The service-only control is `player_props_ai_control_2026_11_07_r1_explicit_off`;
 calendar admission is `player_props_ai_calendar_2026_11_07_r1_complete_month`.
-The v63 schema is installed with paid runs disabled; code rollout remains a draft
-PR and is not a claim that live predictions have changed. Both environment gates
-also default off. Source reconfirmation history is NBA store
+The v63 schema is installed with paid runs disabled. Installing or deploying this
+code does not activate the review flow or change existing baseline predictions. Both environment gates
+also default off. The dedicated server secret `PLAYER_PROPS_AI_OPENAI_API_KEY` takes
+precedence over the existing shared OpenAI key; an explicitly empty dedicated value
+cannot fall back to another product’s credential. Source reconfirmation history is NBA store
 `nba_player_props_private_store_2026_11_07_r7_native_reconfirmation`; NFL source state
 is `nfl_player_props_current_season_state_2026_11_07_r5_nullable_passing_outcomes`.
 Legacy states retain their exact source values; missing passing TD/INT counts are

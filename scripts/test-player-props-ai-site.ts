@@ -13,6 +13,7 @@ import {advanceNbaPlayerPropsCandidateLifecycle} from "../lib/services/nba/nbaPl
 import {buildNbaPlayerPropsLockedTrackingRows} from "../lib/services/nba/nbaPlayerPropsPrivateTrackingStore";
 import {resolveNflPlayerPropsPrediction} from "../app/player-props/lib/nflPlayerPropsPresentation";
 import {reviewPropsForSite} from "../lib/playerPropsAi/siteRuntime";
+import {propsAiSiteConfig} from "../lib/playerPropsAi/siteConfig";
 import {generateAiReview} from "../lib/playerPropsAi/openai";
 import {parseCalendarDay,matchPropsCalendarGame,PROPS_AI_CALENDAR_RELEASE} from "../lib/playerPropsAi/calendar";
 import {READER_AREAS} from "../lib/playerPropsAi/readerCoverage";
@@ -59,6 +60,9 @@ const mlbChoices=choices.map(c=>({...c,market:"batter_hits"}));
 const mlbRow={id:"legacy",providerIds:{gameId:"native",mlbStatsPlayerId:"p",bdlPlayerId:1},market:"batter_hits",line:12.5,book:"one",side:"over",marketProbability:.4,independentProbability:.6,units:1,lockStatus:null,oddsMovement:null,missingFeatures:[],oddsSanity:[]} as unknown as Parameters<typeof applyMlbSiteAi>[0][number];
 const mlbApplied=applyMlbSiteAi([mlbRow,{...mlbRow,id:"other",side:"under"}],mlbPacket,mlbChoices,now);assert.equal(mlbApplied[0].side,"over");assert.equal(mlbApplied[1].side,"under");assert.equal(mlbApplied[1].marketProbability,.5);assert.equal(mlbApplied[1].modelEdge,.4);assert.equal(mlbApplied[0].aiReview?.selectedSide,"under");
 const lockedMlb={...mlbRow,lockStatus:{status:"locked" as const,lockedAt:lock}};const lockedMlbRows=[lockedMlb];assert.strictEqual(applyMlbSiteAi(lockedMlbRows,mlbPacket,mlbChoices,now),lockedMlbRows);
+assert.equal(propsAiSiteConfig({PLAYER_PROPS_AI_OPENAI_API_KEY:"synthetic-props",OPENAI_API_KEY:"synthetic-other"}).key,"synthetic-props");
+assert.equal(propsAiSiteConfig({PLAYER_PROPS_AI_OPENAI_API_KEY:"",OPENAI_API_KEY:"synthetic-other"}).key,"");
+assert.equal(propsAiSiteConfig({PLAYER_PROPS_AI_OPENAI_API_KEY:"synthetic-props"}).paid,false);
 async function main(){
  const before={site:process.env.PLAYER_PROPS_AI_SITE_ENABLED,paid:process.env.PLAYER_PROPS_AI_PAID_RUNS_ENABLED};delete process.env.PLAYER_PROPS_AI_SITE_ENABLED;delete process.env.PLAYER_PROPS_AI_PAID_RUNS_ENABLED;
  let io=0;const client=new Proxy({},{get(){io++;throw new Error("unexpected database IO");}}) as SupabaseClient;
