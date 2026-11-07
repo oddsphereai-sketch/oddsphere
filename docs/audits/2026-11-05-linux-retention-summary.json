@@ -1,0 +1,309 @@
+{
+  "run": "https://github.com/oddsphereai-sketch/oddsphere/actions/runs/42043892768",
+  "status": "success",
+  "syntheticOnly": true,
+  "conditions": "PostgREST 14.5 Linux static; PostgreSQL 17.6; five connections; two RTS capabilities. Three mixed page rounds; large-write cases first send five concurrent 19.55MB invented bodies. Compressed case encodes identical body losslessly. 35 seconds idle, pool recycling and small requests before final. Not observed production concurrency.",
+  "limits": "Accountable mapping totals are not a complete host Committed_AS census; LazyFree is reclaimable residency, not proof reservations disappeared. No production fixtures, credentials or endpoints.",
+  "observations": [
+    {
+      "case": "current_pages",
+      "name": "baseline",
+      "apiRssBytes": 22716416,
+      "apiAccountableMappingBytes": 21741568,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 5,
+      "backendManagedBytes": 11380656,
+      "backendAccountableMappingSumBytes": 30793728
+    },
+    {
+      "case": "current_pages",
+      "name": "after_work",
+      "apiRssBytes": 101924864,
+      "apiAccountableMappingBytes": 114823168,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 5,
+      "backendManagedBytes": 11814000,
+      "backendAccountableMappingSumBytes": 107184128
+    },
+    {
+      "case": "current_pages",
+      "name": "after_idle_before_request",
+      "apiRssBytes": 102035456,
+      "apiAccountableMappingBytes": 114868224,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 0,
+      "backendManagedBytes": 0,
+      "backendAccountableMappingSumBytes": 0
+    },
+    {
+      "case": "current_pages",
+      "name": "after_pool_recycle",
+      "apiRssBytes": 102035456,
+      "apiAccountableMappingBytes": 114868224,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 5,
+      "backendManagedBytes": 8009640,
+      "backendAccountableMappingSumBytes": 21790720
+    },
+    {
+      "case": "current_pages",
+      "name": "final",
+      "apiRssBytes": 54345728,
+      "apiAccountableMappingBytes": 48275456,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 5,
+      "backendManagedBytes": 8050600,
+      "backendAccountableMappingSumBytes": 21790720
+    },
+    {
+      "case": "current_pages_and_large_writes",
+      "name": "baseline",
+      "apiRssBytes": 22573056,
+      "apiAccountableMappingBytes": 21606400,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 5,
+      "backendManagedBytes": 11383728,
+      "backendAccountableMappingSumBytes": 30789632
+    },
+    {
+      "case": "current_pages_and_large_writes",
+      "name": "after_work",
+      "apiRssBytes": 402735104,
+      "apiAccountableMappingBytes": 490467328,
+      "apiLazyFreeBytes": 165859328,
+      "backendCount": 5,
+      "backendManagedBytes": 11997296,
+      "backendAccountableMappingSumBytes": 118308864
+    },
+    {
+      "case": "current_pages_and_large_writes",
+      "name": "after_idle_before_request",
+      "apiRssBytes": 402714624,
+      "apiAccountableMappingBytes": 490475520,
+      "apiLazyFreeBytes": 165969920,
+      "backendCount": 0,
+      "backendManagedBytes": 0,
+      "backendAccountableMappingSumBytes": 0
+    },
+    {
+      "case": "current_pages_and_large_writes",
+      "name": "after_pool_recycle",
+      "apiRssBytes": 402714624,
+      "apiAccountableMappingBytes": 490475520,
+      "apiLazyFreeBytes": 165969920,
+      "backendCount": 5,
+      "backendManagedBytes": 8009640,
+      "backendAccountableMappingSumBytes": 21790720
+    },
+    {
+      "case": "current_pages_and_large_writes",
+      "name": "final",
+      "apiRssBytes": 250261504,
+      "apiAccountableMappingBytes": 247480320,
+      "apiLazyFreeBytes": 165969920,
+      "backendCount": 5,
+      "backendManagedBytes": 8050600,
+      "backendAccountableMappingSumBytes": 21790720
+    },
+    {
+      "case": "current_pages_and_compressed_writes",
+      "name": "baseline",
+      "apiRssBytes": 22577152,
+      "apiAccountableMappingBytes": 21606400,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 5,
+      "backendManagedBytes": 11383728,
+      "backendAccountableMappingSumBytes": 30789632
+    },
+    {
+      "case": "current_pages_and_compressed_writes",
+      "name": "after_work",
+      "apiRssBytes": 105938944,
+      "apiAccountableMappingBytes": 119267328,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 5,
+      "backendManagedBytes": 11998320,
+      "backendAccountableMappingSumBytes": 107356160
+    },
+    {
+      "case": "current_pages_and_compressed_writes",
+      "name": "after_idle_before_request",
+      "apiRssBytes": 106024960,
+      "apiAccountableMappingBytes": 119197696,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 0,
+      "backendManagedBytes": 0,
+      "backendAccountableMappingSumBytes": 0
+    },
+    {
+      "case": "current_pages_and_compressed_writes",
+      "name": "after_pool_recycle",
+      "apiRssBytes": 106024960,
+      "apiAccountableMappingBytes": 119197696,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 5,
+      "backendManagedBytes": 8009640,
+      "backendAccountableMappingSumBytes": 21790720
+    },
+    {
+      "case": "current_pages_and_compressed_writes",
+      "name": "final",
+      "apiRssBytes": 58376192,
+      "apiAccountableMappingBytes": 52510720,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 5,
+      "backendManagedBytes": 8050600,
+      "backendAccountableMappingSumBytes": 21790720
+    },
+    {
+      "case": "current_pages_and_large_writes_idle_gc",
+      "name": "baseline",
+      "apiRssBytes": 22564864,
+      "apiAccountableMappingBytes": 21606400,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 5,
+      "backendManagedBytes": 11383728,
+      "backendAccountableMappingSumBytes": 30789632
+    },
+    {
+      "case": "current_pages_and_large_writes_idle_gc",
+      "name": "after_work",
+      "apiRssBytes": 533139456,
+      "apiAccountableMappingBytes": 624414720,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 5,
+      "backendManagedBytes": 11998320,
+      "backendAccountableMappingSumBytes": 133390336
+    },
+    {
+      "case": "current_pages_and_large_writes_idle_gc",
+      "name": "after_idle_before_request",
+      "apiRssBytes": 408662016,
+      "apiAccountableMappingBytes": 499200000,
+      "apiLazyFreeBytes": 236773376,
+      "backendCount": 0,
+      "backendManagedBytes": 0,
+      "backendAccountableMappingSumBytes": 0
+    },
+    {
+      "case": "current_pages_and_large_writes_idle_gc",
+      "name": "after_pool_recycle",
+      "apiRssBytes": 408662016,
+      "apiAccountableMappingBytes": 499200000,
+      "apiLazyFreeBytes": 236773376,
+      "backendCount": 5,
+      "backendManagedBytes": 10625960,
+      "backendAccountableMappingSumBytes": 24391680
+    },
+    {
+      "case": "current_pages_and_large_writes_idle_gc",
+      "name": "final",
+      "apiRssBytes": 267067392,
+      "apiAccountableMappingBytes": 265105408,
+      "apiLazyFreeBytes": 236773376,
+      "backendCount": 5,
+      "backendManagedBytes": 10666920,
+      "backendAccountableMappingSumBytes": 24391680
+    },
+    {
+      "case": "legacy_then_current_pages",
+      "name": "baseline",
+      "apiRssBytes": 22564864,
+      "apiAccountableMappingBytes": 21606400,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 5,
+      "backendManagedBytes": 11383728,
+      "backendAccountableMappingSumBytes": 30789632
+    },
+    {
+      "case": "legacy_then_current_pages",
+      "name": "after_work",
+      "apiRssBytes": 544755712,
+      "apiAccountableMappingBytes": 629649408,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 5,
+      "backendManagedBytes": 11814000,
+      "backendAccountableMappingSumBytes": 92999680
+    },
+    {
+      "case": "legacy_then_current_pages",
+      "name": "after_idle_before_request",
+      "apiRssBytes": 544796672,
+      "apiAccountableMappingBytes": 629579776,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 0,
+      "backendManagedBytes": 0,
+      "backendAccountableMappingSumBytes": 0
+    },
+    {
+      "case": "legacy_then_current_pages",
+      "name": "after_pool_recycle",
+      "apiRssBytes": 544796672,
+      "apiAccountableMappingBytes": 629579776,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 5,
+      "backendManagedBytes": 8009640,
+      "backendAccountableMappingSumBytes": 21790720
+    },
+    {
+      "case": "legacy_then_current_pages",
+      "name": "final",
+      "apiRssBytes": 286089216,
+      "apiAccountableMappingBytes": 282079232,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 5,
+      "backendManagedBytes": 8050600,
+      "backendAccountableMappingSumBytes": 21790720
+    },
+    {
+      "case": "legacy_then_current_pages_idle_gc",
+      "name": "baseline",
+      "apiRssBytes": 22577152,
+      "apiAccountableMappingBytes": 21606400,
+      "apiLazyFreeBytes": 0,
+      "backendCount": 5,
+      "backendManagedBytes": 11383728,
+      "backendAccountableMappingSumBytes": 30789632
+    },
+    {
+      "case": "legacy_then_current_pages_idle_gc",
+      "name": "after_work",
+      "apiRssBytes": 547053568,
+      "apiAccountableMappingBytes": 633057280,
+      "apiLazyFreeBytes": 209383424,
+      "backendCount": 5,
+      "backendManagedBytes": 11814000,
+      "backendAccountableMappingSumBytes": 93007872
+    },
+    {
+      "case": "legacy_then_current_pages_idle_gc",
+      "name": "after_idle_before_request",
+      "apiRssBytes": 534528000,
+      "apiAccountableMappingBytes": 620081152,
+      "apiLazyFreeBytes": 258920448,
+      "backendCount": 0,
+      "backendManagedBytes": 0,
+      "backendAccountableMappingSumBytes": 0
+    },
+    {
+      "case": "legacy_then_current_pages_idle_gc",
+      "name": "after_pool_recycle",
+      "apiRssBytes": 534528000,
+      "apiAccountableMappingBytes": 620081152,
+      "apiLazyFreeBytes": 258920448,
+      "backendCount": 5,
+      "backendManagedBytes": 8009640,
+      "backendAccountableMappingSumBytes": 21790720
+    },
+    {
+      "case": "legacy_then_current_pages_idle_gc",
+      "name": "final",
+      "apiRssBytes": 287465472,
+      "apiAccountableMappingBytes": 284979200,
+      "apiLazyFreeBytes": 257257472,
+      "backendCount": 5,
+      "backendManagedBytes": 8050600,
+      "backendAccountableMappingSumBytes": 21790720
+    }
+  ]
+}
