@@ -35,6 +35,8 @@ function store(client:typeof db){let queue:Promise<unknown>=Promise.resolve();re
   catch(error){throw error;}
 }} as unknown as SupabaseClient);}
 const wallet=store(db),wallet2=store(other);
+// Foundation wallet assertions target v2; site controls have their own installation test.
+wallet.plan=(plan)=>wallet.rpc("player_props_ai_plan_v2",{p_month:plan.month,p_jobs:plan.jobs,p_companions:plan.companionSlots,p_plan_hash:plan.hash,p_sources:plan.sources,p_release:plan.release});
 const budget=async()=> (await db.query("SELECT * FROM player_props_ai_budgets WHERE month_key='2026-11'")).rows[0];
 const job=async(key:string)=>(await db.query("SELECT to_jsonb(r) v FROM player_props_ai_reviews r WHERE job_key=$1",[key])).rows[0].v as PropsAiJob;
 const clock=()=>"2026-11-07T21:40:00Z";

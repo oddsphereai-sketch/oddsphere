@@ -2,7 +2,24 @@
 
 ## November 7 player-prop AI forecast candidate — not activated
 
-`PROPS_AI_RELEASE` is `player_props_ai_2026_11_07_r12_funded_partial_fallback`;
+R13 connects the accepted law and eight-area reader to the existing NBA/NFL/MLB
+writers, current exact prices, future locks and release-scoped tracking. The site
+publication contract is `player_props_ai_site_2026_11_07_r1_writer_publication`;
+estimate semantics are `player_props_ai_estimate_2026_11_07_r1_not_empirically_calibrated`.
+The service-only control is `player_props_ai_control_2026_11_07_r1_explicit_off`;
+calendar admission is `player_props_ai_calendar_2026_11_07_r1_complete_month`.
+The v63 schema is installed with paid runs disabled; code rollout remains a draft
+PR and is not a claim that live predictions have changed. Both environment gates
+also default off. Source reconfirmation history is NBA store
+`nba_player_props_private_store_2026_11_07_r7_native_reconfirmation`; NFL source state
+is `nfl_player_props_current_season_state_2026_11_07_r5_nullable_passing_outcomes`.
+Legacy states retain their exact source values; missing passing TD/INT counts are
+unknown, not zero. The active MLB R44 champion remains the independent prior.
+AI decisions have their own effective R13 row release; do not blend them with R44
+performance. See `docs/player-props-ai-wallet-fallback.md` for the complete disabled
+site path, operational fallback and activation gates.
+
+`PROPS_AI_RELEASE` is `player_props_ai_2026_11_07_r13_disabled_site_integration`;
 budget candidate is `player_props_ai_budget_2026_11_07_r3_full_source_wallet`.
 Both are exported from `lib/playerPropsAi/releases.ts`. The wire coordinate
 contract is `props_scenario_rows_2026_11_07_r2_physical_coordinates`; the stored

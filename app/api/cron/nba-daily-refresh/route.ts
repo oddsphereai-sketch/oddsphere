@@ -110,7 +110,7 @@ export async function GET(request: Request): Promise<Response> {
   return cronHandler(
     request,
     "nba_daily_refresh",
-    async () => {
+    async ({runId}) => {
       // ─── Gate 1: NBA_CRON_ENABLED env flag ────────────────────────
       // Default off. When unset, the route logs a clean "disabled"
       // success row so we can verify the cron is firing without
@@ -475,6 +475,7 @@ export async function GET(request: Request): Promise<Response> {
           const rollingSchedule = await loadNbaRollingSchedule(etDateDashed);
           const privatePlayerProps = await refreshNbaPlayerPropsPrivateCandidate({
             client: supabase,
+            writerRunId:runId,
             slateDate: playerPropsSlateDate,
             season: providerSeason,
             schedule: rollingSchedule.games,

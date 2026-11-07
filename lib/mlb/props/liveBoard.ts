@@ -1,3 +1,8 @@
+import {createClient as createPropsAiDbClient} from "@supabase/supabase-js";
+import {reviewPropsForSite} from "../../playerPropsAi/siteRuntime";
+import {liveMlbPacket} from "../../playerPropsAi/liveSources";
+import {applyMlbSiteAi} from "../../playerPropsAi/siteBindings";
+import {propsAiSiteConfig} from "../../playerPropsAi/siteConfig";
 import { createHash, randomUUID } from "node:crypto";
 import type {
   PlayerPropPreviewRow,
@@ -142,6 +147,7 @@ import {
 } from "./privateTrackingStore";
 
 type RefreshArgs = {
+  writerRunId?:string;
   slateDate: string;
   refreshMode?: "fast" | "full";
   asOfTimestamp?: string;
@@ -212,6 +218,8 @@ export type MlbPropsForecastTelemetry = {
   actionableDataGateFailureRows: number;
   actionableProjectionSideContradictionRows: number;
   lockedRows: number;
+  aiForecastRows?: number;
+  effectiveForecastReleases?: Record<string,number>;
 };
 
 export function summarizeMlbPropsForecastTelemetry(args: {
@@ -246,12 +254,14 @@ export function summarizeMlbPropsForecastTelemetry(args: {
     actionableDataGateFailureRows: rows.filter(actionableRowFailsDataGate).length,
     actionableProjectionSideContradictionRows: forecastRows.filter((row) =>
       ACTIONABLE_GRADES.has(row.playGrade)
+      && !row.aiReview
       && !(row.market === "batter_home_runs" && row.offerContract === "milestone")
       && checkProjectionSideIntegrity({
         side: row.side,
         line: row.line,
         projection: row.projection,
       }).status === "contradiction").length,
+    ...(rows.some(r=>r.aiReview)?{aiForecastRows:rows.filter(r=>r.aiReview).length,effectiveForecastReleases:rows.reduce<Record<string,number>>((counts,row)=>{const release=row.aiReview?.release??MLB_PROPS_MODEL_RELEASE_ID;counts[release]=(counts[release]??0)+1;return counts;},{})}:{}),
     lockedRows: rows.filter((row) => row.lockStatus?.status === "locked").length,
   };
 }
@@ -532,6 +542,18 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
       })) ?? [],
     },
   };
+  if(args.persist!==false&&propsAiSiteConfig().integrated){
+    const client=createPropsAiDbClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
+    const captured={...snapshot,data:buildDashboardData({slateDate:args.slateDate,asOfTimestamp,games,probablePitchers,props:expandedDecisionProps,sourceOdds:boardSourceOdds,environmentErrors:environment.errors})};
+    const ai=await reviewPropsForSite({client,sport:"mlb",writerRunId:args.writerRunId,deadline:Date.parse(asOfTimestamp)+260000,
+      games:games.map(g=>({id:g.id,start:g.scheduledStart,away:resolveMlbStatsTeamId(g.awayTeamId)?.abbreviation??g.awayTeamId,home:resolveMlbStatsTeamId(g.homeTeamId)?.abbreviation??g.homeTeamId})),
+      load:(game,window)=>liveMlbPacket({game,window,snapshot:captured,currentOdds:boardSourceOdds,openingOdds})});
+    for(const game of ai.games)snapshot.data.props=applyMlbSiteAi(snapshot.data.props,game.packet,game.decisions,new Date().toISOString());
+    snapshot.asOfTimestamp=new Date().toISOString();
+    snapshot.data=buildDashboardData({slateDate:args.slateDate,asOfTimestamp:snapshot.asOfTimestamp,games,probablePitchers,props:snapshot.data.props,sourceOdds:boardSourceOdds,environmentErrors:environment.errors});
+    snapshot.movement=compareMlbPropsBoardMovement(previous,snapshot.data.props);
+    snapshot.validation=validateMlbPropsBoardData({data:snapshot.data,sourceRows:boardSourceOdds.length,mappedRows:mappedOdds.length,asOfTimestamp:snapshot.asOfTimestamp,providerCoverage,playerGameIdentityConflictRows,previousSnapshot:previous,probablePitcherFallbackAssignments:probablePitcherResolution.fallbackAssignments.length,probablePitcherFallbackFindings:probablePitcherResolution.findings});
+  }
   enforceSnapshotPayloadLimits(snapshot);
   const forecastTelemetry = summarizeMlbPropsForecastTelemetry({
     snapshot,
@@ -551,7 +573,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     throw new Error(`MLB props BDL request budget exceeded: ${balldontlieCalls}/${maxBdlCalls}.`);
   }
 
-  if (!validation.publishable || args.persist === false) {
+  if (!snapshot.validation.publishable || args.persist === false) {
     return {
       published: false,
       scoringRunId: null,
@@ -587,9 +609,9 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
   // best-price rows. Failure cannot block the authoritative board or locks.
   const privateTrackingCapture = await captureMlbPropsPrivateTracking({
     sourceOdds,
-    publishedRows: props,
+    publishedRows: snapshot.data.props,
     slateDate: args.slateDate,
-    evaluatedAt: asOfTimestamp,
+    evaluatedAt: snapshot.asOfTimestamp,
     sourceSnapshotId: snapshot.snapshotId,
     modelRelease: MLB_PROPS_MODEL_RELEASE_ID,
   });

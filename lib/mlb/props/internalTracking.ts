@@ -664,7 +664,7 @@ export function trackingInsert(
   const row = candidate.row;
   const actionable = ACTIONABLE_GRADES.has(row.playGrade) && row.units > 0;
   const bdlPlayerId = row.providerIds?.bdlPlayerId ?? null;
-  const modelReleaseId = snapshot.modelContext?.modelReleaseId ?? "mlb_props_release_missing";
+  const modelReleaseId = row.aiReview?.release ?? snapshot.modelContext?.modelReleaseId ?? "mlb_props_release_missing";
   const shadowPitcherPrediction = snapshot.modelContext?.shadowPitcherPredictions?.find((shadow) =>
     shadow.gameId === row.providerIds?.gameId
     && prefixedInteger(shadow.playerId, "mlbstats-player-") === candidate.mlbPlayerId
@@ -702,7 +702,7 @@ export function trackingInsert(
     confidence: row.confidence,
     stake_units: actionable ? row.units : 0,
     tracking_cohort: actionable ? "actionable" : "model_observation",
-    model_version: snapshot.modelContext?.marketModelVersions?.[row.market] ?? "mlb_props_model_version_missing",
+    model_version: row.aiReview?.release ?? snapshot.modelContext?.marketModelVersions?.[row.market] ?? "mlb_props_model_version_missing",
     board_snapshot_id: snapshot.snapshotId,
     locked_at: lockedAt,
     latest_line: row.line,
@@ -720,6 +720,7 @@ export function trackingInsert(
     metadata_json: {
       private: true,
       modelReleaseId,
+      ...(row.aiReview?{aiReview:row.aiReview}:{}),
       trackingPolicyReleaseId: MLB_PROPS_TRACKING_POLICY_RELEASE_ID,
       lockPolicy: `T-${targetLockMinutes}`,
       minutesToStart: round(candidate.minutesToStart, 2),

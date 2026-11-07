@@ -127,8 +127,9 @@ export function buildMlbPropsPrivateTrackingGames(args: {
     const canonicalLine = lineStats.get(providerMarketKey(bdlGameId, bdlPlayerId, offer.marketKey));
     const canonicalMainLine = !rawAlternate && canonicalLine === offer.line;
     const exactBase = baseRows.byExactOffer.get(exactOfferKey(bdlGameId, bdlPlayerId, offer.marketKey, offer.line, offer.side, offer.sportsbook));
+    const effectiveRelease=exactBase?.aiReview?.release??base.effectiveRelease??args.modelRelease;
     const row: MlbPropsPrivateTrackingRow = {
-      rowKey: [args.modelRelease, base.gameId, bdlPlayerId, offer.marketKey, offer.line, offer.side, normalize(offer.sportsbook)].join("|"),
+      rowKey: [effectiveRelease, base.gameId, bdlPlayerId, offer.marketKey, offer.line, offer.side, normalize(offer.sportsbook)].join("|"),
       gameId: base.gameId,
       providerPlayerId: base.providerPlayerId,
       playerName: base.playerName,
@@ -151,7 +152,7 @@ export function buildMlbPropsPrivateTrackingGames(args: {
       finalProbability: exactBase?.finalProbability ?? null,
       publishedPrediction: canonicalMainLine ? forecastSide(exactBase) ?? base.publishedPrediction : null,
       grade: exactBase?.playGrade ?? (canonicalMainLine ? "PRIVATE_MAIN_LINE" : "PRIVATE_ALT_LINE"),
-      modelRelease: args.modelRelease,
+      modelRelease: effectiveRelease,
       sourceSnapshotId: args.sourceSnapshotId,
       captureRelease: MLB_PROPS_PRIVATE_TRACKING_RELEASE,
     };
@@ -364,6 +365,7 @@ function indexPublishedRows(rows: readonly PlayerPropPreviewRow[]) {
     scheduledStart: string;
     projection: number | null;
     publishedPrediction: "over" | "under" | null;
+    effectiveRelease: string | null;
   };
   const byProviderScope = new Map<string, Base>();
   const byExactOffer = new Map<string, PlayerPropPreviewRow>();
@@ -381,6 +383,7 @@ function indexPublishedRows(rows: readonly PlayerPropPreviewRow[]) {
       scheduledStart: row.gameStartTime,
       projection: row.projection,
       publishedPrediction: forecastSide(row),
+      effectiveRelease:row.aiReview?.release??null,
     });
     byExactOffer.set(exactOfferKey(bdlGameId, bdlPlayerId, row.market, row.line, row.side, row.book), row);
   }

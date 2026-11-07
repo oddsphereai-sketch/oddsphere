@@ -192,6 +192,7 @@ async function main(): Promise<void> {
     if (!target) continue;
     const evidence = buildNbaPlayerPropsMarketEvidence({ target, observations: market.observations, evaluatedAt: row.lockedAt });
     if (evidence.targetExcludedOverProbability === null) continue;
+    if(row.independentProjection===null)continue;
     const independentSide: Side = row.independentProjection > row.line ? "over" : "under";
     const marketSide: Side = evidence.targetExcludedOverProbability > 0.5 ? "over" : "under";
     decisions.push({

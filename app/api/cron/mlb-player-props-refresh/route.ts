@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function GET(request: Request) {
-  return cronHandler(request, "mlb_player_props_refresh", async () => {
+  return cronHandler(request, "mlb_player_props_refresh", async ({runId}) => {
     if (process.env.MLB_PLAYER_PROPS_CRON_ENABLED !== "true") {
       return {
         partial: true,
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     const refreshMode = url.searchParams.get("full") === "true" ? "full" : "fast";
     let result: Awaited<ReturnType<typeof refreshMlbPropsBoard>>;
     try {
-      result = await refreshMlbPropsBoard({ slateDate, refreshMode, persist: true });
+      result = await refreshMlbPropsBoard({ slateDate, refreshMode, persist: true,writerRunId:runId });
     } catch (error) {
       // Locking must not depend on a completely successful provider refresh.
       // If BDL expands unexpectedly or a nonessential enrichment call fails,

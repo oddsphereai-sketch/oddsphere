@@ -80,7 +80,6 @@ BEGIN
     IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(p_companions) x WHERE x=j-'requests') THEN RAISE EXCEPTION 'missing_exact_companion'; END IF;
     standard:=player_props_ai_quote(j->'requests',false,false); primary_cost:=player_props_ai_quote(j->'requests',false,j->>'stage'='early');
     SELECT * INTO prior FROM player_props_ai_reviews WHERE job_key=j->>'key';
-    IF FOUND AND prior.billing_month<>p_month AND p_month<>to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM') THEN RAISE EXCEPTION 'carryover_must_fund_actual_current_month'; END IF;
     IF FOUND AND prior.state<>'pending' THEN
       IF prior.scheduled_start<>(j->>'start')::timestamptz OR prior.lock_at<>(j->>'lock')::timestamptz OR prior.due_at<>(j->>'dueAt')::timestamptz OR prior.billing_month<>p_month THEN RAISE EXCEPTION 'started_review_is_immutable'; END IF;
     ELSE primary_total:=primary_total+primary_cost;

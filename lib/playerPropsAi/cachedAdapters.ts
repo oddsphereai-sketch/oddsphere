@@ -5,6 +5,7 @@ import type { NbaPlayerPropsMemberSnapshot } from "../services/nba/nbaPlayerProp
 import type { NflPlayerPropsProductionSnapshot } from "../services/football/nflPlayerPropsProductionContract";
 import { CATALOG, PRODUCT_RELEASE, type Evidence, type GamePacket, type Json, type Player, type Quote } from "./evidenceContract";
 import { digest, instant, slots } from "./evidence";
+import {capturedReviewSlots,type CapturedReviewWindow} from "./liveWindow";
 
 export type CachedExport = {
   readOnly: true; generatedAt: string;
@@ -17,7 +18,7 @@ const evidence = (id: string, kind: Evidence["kind"], availableAt: string, sourc
 // Same name/team join used for cost identity; provider-ID coverage must be established before runtime use.
 const nflIdentity = (team: string, name: string) => `${team}:${name.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
 
-export function fromCachedExport(source: CachedExport) {
+export function fromCachedExport(source: CachedExport,window?:CapturedReviewWindow) {
   if (source.readOnly !== true) throw new Error("Expected read-only local source export");
   const packets: GamePacket[] = [];
   const skipped: { sport: string; gameId: string; reason: string }[] = [];
@@ -35,8 +36,8 @@ export function fromCachedExport(source: CachedExport) {
       const observations = (day.market?.observations ?? []).filter(q => q.canonicalGameId === game.gameId && (CATALOG.nba.required as readonly string[]).includes(q.market));
       const ids = [...new Set([...decisions.map(d => d.playerId), ...observations.flatMap(q => q.canonicalPlayerId ? [q.canonicalPlayerId] : [])])];
       const locks = [...new Set(decisions.flatMap(d => d.lockedAt ? [d.lockedAt] : []))];
-      const lock = locks.length === 1 ? locks[0] : new Date(instant(game.scheduledStart) - 3600_000).toISOString();
-      for (const slot of slots({ sport: "nba", gameId: game.gameId, start: game.scheduledStart, lock })) {
+      const lock = window?.gameId===game.gameId?window.lock:locks.length === 1 ? locks[0] : new Date(instant(game.scheduledStart) - 3600_000).toISOString();
+      for (const slot of capturedReviewSlots({gameId:game.gameId,start:game.scheduledStart,lock},window,()=>slots({ sport: "nba", gameId: game.gameId, start: game.scheduledStart, lock }))) {
         const cutoff = instant(slot.at);
         const players: Player[] = ids.map(id => {
           const rows = decisions.filter(d => d.playerId === id), first = rows[0];
@@ -101,9 +102,9 @@ export function fromCachedExport(source: CachedExport) {
     const snapshot = item.snapshot; if (!snapshot) continue;
     for (const gameId of new Set(snapshot.memberDecisions.map(r => r.gameId))) {
       const rows = snapshot.memberDecisions.filter(r => r.gameId === gameId), first = rows[0];
-      const lock = first.lockAt;
+      const lock = window?.gameId===gameId?window.lock:first.lockAt;
       if (!lock) { skipped.push({ sport: "nfl", gameId, reason: "Missing verified lock" }); continue; }
-      for (const slot of slots({ sport: "nfl", gameId, start: first.scheduledStart, lock })) {
+      for (const slot of capturedReviewSlots({gameId,start:first.scheduledStart,lock},window,()=>slots({ sport: "nfl", gameId, start: first.scheduledStart, lock }))) {
         const cutoff = instant(slot.at), players: Player[] = [];
         const quotes = new Map<string, Quote>();
         for (const id of new Set(rows.map(r => nflIdentity(r.team, r.playerName)))) {

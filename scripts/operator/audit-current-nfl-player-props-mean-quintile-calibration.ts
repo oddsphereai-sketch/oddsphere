@@ -270,7 +270,7 @@ function scoreCandidate(row: NflPlayerPropsRuntimeDecision, independentProjectio
     watchlistEnabled: lane?.watchlist === true,
     expectedValue,
     probabilityEdge: edge,
-    participationProbability: row.participationProbability,
+    participationProbability: row.participationProbability ?? Number.NaN,
     movement: row.marketMovement,
     leanThresholds,
     bestAngleThresholds,

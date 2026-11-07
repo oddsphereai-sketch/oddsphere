@@ -7,6 +7,7 @@ import { PRODUCT_RELEASE, type Evidence, type GamePacket, type Json, type Quote 
 import { digest, instant, slots } from "./evidence";
 import {attachGameReaderContext,type ReaderGameContext} from "./gameContext";
 import {nbaReaderBenchmark} from "./nbaBenchmarks";
+import {capturedReviewSlots,type CapturedReviewWindow} from "./liveWindow";
 
 type NbaContextGame = { awayTeam: string; homeTeam: string; gameStartAt: string; generatedAt: string; nbaAvailability?: Json };
 export type NflPublicHistory = { source: string; availableAt: string; rows: { player_id: string; player_display_name: string; position: string; team: string; opponent_team: string; game: { gameId: string; start: string; home: string; away: string }; stats: Record<string, number | null> }[] };
@@ -116,12 +117,12 @@ export function enrichCachedPacket(packet: GamePacket, source: EnrichedSource): 
   return packet.sport==="nfl"?attachGameReaderContext(enriched,source.nflContext??[]):enriched;
 }
 
-export function mlbPackets(source: EnrichedSource): GamePacket[] {
-  const items = source.mlbLocked ?? [], games = new Map(items.flatMap(item => item.snapshot.data.props.flatMap(row => row.providerIds?.gameId ? [[row.providerIds.gameId, row.gameStartTime] as const] : [])));
+export function mlbPackets(source: EnrichedSource,window?:CapturedReviewWindow,liveSnapshots:readonly MlbPropsBoardSnapshot[]=[]): GamePacket[] {
+  const items = [...(source.mlbLocked ?? []),...liveSnapshots.map(snapshot=>({date:snapshot.slateDate,snapshot}))], games = new Map(items.flatMap(item => item.snapshot.data.props.flatMap(row => row.providerIds?.gameId ? [[row.providerIds.gameId, row.gameStartTime] as const] : [])));
   const packets: GamePacket[] = [];
   for (const [gameId, start] of games) {
-    const lock = new Date(instant(start) - 3600_000).toISOString();
-    for (const slot of slots({ sport: "mlb", gameId, start, lock })) {
+    const lock = window?.gameId===gameId?window.lock:new Date(instant(start) - 3600_000).toISOString();
+    for (const slot of capturedReviewSlots({gameId,start,lock},window,()=>slots({ sport: "mlb", gameId, start, lock }))) {
       const eligible = items.filter(item => instant(item.snapshot.asOfTimestamp) <= instant(slot.at) && item.snapshot.data.props.some(row => row.providerIds?.gameId === gameId))
         .sort((a, b) => instant(b.snapshot.asOfTimestamp) - instant(a.snapshot.asOfTimestamp));
       const item = eligible[0];

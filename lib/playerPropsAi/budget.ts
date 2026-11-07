@@ -12,7 +12,7 @@ export class PropsAiStore {
     return data as T;
   }
   async plan(plan: WalletPlan) {
-    return this.rpc<{funded:boolean;reason?:string;required_micro?:number;budget:PropsAiBudget}>("player_props_ai_plan_v2", { p_month: plan.month, p_jobs: plan.jobs, p_companions: plan.companionSlots, p_plan_hash: plan.hash, p_sources: plan.sources, p_release: plan.release });
+    return this.rpc<{funded:boolean;reason?:string;required_micro?:number;budget:PropsAiBudget}>("player_props_ai_plan_v3", { p_month: plan.month, p_jobs: plan.jobs, p_companions: plan.companionSlots, p_plan_hash: plan.hash, p_sources: plan.sources, p_release: plan.release });
   }
   async job(key: string): Promise<PropsAiJob | null> {
     const { data, error } = await this.client.from("player_props_ai_reviews").select("*").eq("job_key", key).maybeSingle();

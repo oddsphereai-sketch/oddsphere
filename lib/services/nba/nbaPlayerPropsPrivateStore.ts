@@ -9,8 +9,9 @@ import type { NbaPlayerPropPriceObservation } from "./nbaPlayerPropsContract";
 import type { NbaPlayerPropsMemberSnapshot } from "./nbaPlayerPropsProductContract";
 
 export const NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE =
-  "nba_player_props_private_store_2026_10_28_r6_expanded_bounded_market_history_capacity" as const;
+  "nba_player_props_private_store_2026_11_07_r7_native_reconfirmation" as const;
 const NBA_PLAYER_PROPS_PRIVATE_STORE_LEGACY_RELEASES = new Set([
+  "nba_player_props_private_store_2026_10_28_r6_expanded_bounded_market_history_capacity",
   "nba_player_props_private_store_2026_10_23_r5_bounded_market_history_capacity",
   "nba_player_props_private_store_2026_10_21_r4_bounded_quote_chronology",
   "nba_player_props_private_store_2026_10_21_r3_chronological_observation_identity",
@@ -126,7 +127,13 @@ export function mergeNbaPlayerPropsMarketHistory(args: {
     const trail = rows.get(key) ?? [];
     const sameTimestamp = trail.find((prior) => prior.observedAt === row.observedAt);
     if (sameTimestamp) {
-      if (sameEconomicQuote(sameTimestamp, row)) preserved += 1;
+      if (sameEconomicQuote(sameTimestamp, row)) {
+        // Economic observation clock stays unchanged; a later real provider response confirms freshness.
+        if (row.receivedAt && (!sameTimestamp.receivedAt || Date.parse(row.receivedAt)>Date.parse(sameTimestamp.receivedAt))) {
+          rows.set(key,trail.map(prior=>prior===sameTimestamp?{...prior,receivedAt:row.receivedAt}:prior));
+          refreshed += 1;
+        } else preserved += 1;
+      }
       else conflicts += 1;
       continue;
     }

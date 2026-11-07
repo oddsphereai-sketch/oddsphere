@@ -35,6 +35,7 @@ export type Quote = {
   observedAt: string; receivedAt: string; live: boolean;
   /** Missing on legacy local packets: do not infer current-quote eligibility from it. */
   opening?: boolean;
+  offerContract?: "two_way" | "milestone";
   /** An export/snapshot clock is availability evidence, not a fresh provider confirmation. */
   receivedAtProvenance?: "provider_response" | "collection_start" | "snapshot_availability";
 };
@@ -50,6 +51,8 @@ export type GamePacket = {
   stage: Stage; cutoff: string; players: Player[]; quotes: Quote[];
   sourceLimitations: string[];
   sharedGameContext?: Json;
+  /** Native collector identity when the funding calendar uses a separately bound fixture ID. */
+  sourceGameId?:string;
 };
 
 /** Source-of-truth mathematical definitions; count/event units must be retained by adapters. */

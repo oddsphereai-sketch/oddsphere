@@ -5,6 +5,7 @@ export type NflPlayerPropsTouchdownForecastRow = {
   market: string;
   side: "over" | "under" | "yes";
   finalProbability: number;
+  aiReview?: {selectedSide:"over"|"under"|"yes"};
 };
 
 export type NflPlayerPropsOverUnderForecastRow = NflPlayerPropsTouchdownForecastRow & {
@@ -20,8 +21,10 @@ export function selectNflPlayerPropsTouchdownScorers<T extends NflPlayerPropsTou
   rows: readonly T[],
 ): ReadonlySet<string> {
   const playersByTeam = new Map<string, Map<string, T>>();
+  const aiSelected=new Set<string>();
   for (const row of rows) {
     if (row.market !== "anytime_td" || row.side !== "yes" || !Number.isFinite(row.finalProbability)) continue;
+    if(row.aiReview){if(row.finalProbability>=.5)aiSelected.add(nflPlayerPropsTouchdownPlayerKey(row));continue;}
     const teamKey = `${row.gameId}|${row.team}`;
     const playerKey = nflPlayerPropsTouchdownPlayerKey(row);
     const players = playersByTeam.get(teamKey) ?? new Map<string, T>();
@@ -29,7 +32,7 @@ export function selectNflPlayerPropsTouchdownScorers<T extends NflPlayerPropsTou
     if (!previous || row.finalProbability > previous.finalProbability) players.set(playerKey, row);
     playersByTeam.set(teamKey, players);
   }
-  const selected = new Set<string>();
+  const selected = new Set<string>(aiSelected);
   for (const players of playersByTeam.values()) {
     const ranked = [...players.values()].sort((a, b) => b.finalProbability - a.finalProbability || a.playerName.localeCompare(b.playerName));
     const expectedDistinctScorers = ranked.reduce((sum, row) => sum + clampProbability(row.finalProbability), 0);
@@ -61,6 +64,8 @@ export function selectNflPlayerPropsOverForecasts<T extends NflPlayerPropsOverUn
   }
   const selected = new Set<string>();
   for (const [key, marketRows] of pairs) {
+    const reviewed=marketRows.find(row=>row.aiReview);
+    if(reviewed){if(reviewed.aiReview!.selectedSide==="over")selected.add(key);continue;}
     const over = marketRows.find((row) => row.side === "over");
     const under = marketRows.find((row) => row.side === "under");
     const projection = marketRows.find((row) => Number.isFinite(row.projection))?.projection;

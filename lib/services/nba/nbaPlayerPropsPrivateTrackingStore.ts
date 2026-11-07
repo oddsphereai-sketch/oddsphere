@@ -41,7 +41,7 @@ export function buildNbaPlayerPropsLockedTrackingRows(args: {
 }): NbaPlayerPropsPrivateTrackingRow[] {
   return args.snapshot.decisions.flatMap((row) => {
     if (!row.lockedAt) return [];
-    if (!Number.isFinite(row.independentProbability)
+    if ((!row.aiReview && !Number.isFinite(row.independentProbability))
       || !row.modelRelease || !row.calibrationRelease || !row.decisionRelease) return [];
     return [buildNbaPlayerPropsPrivateTrackingRow({
       gameId: row.gameId,
@@ -58,7 +58,7 @@ export function buildNbaPlayerPropsLockedTrackingRows(args: {
       canonicalMainLine: true,
       independentProjection: row.independentProjection,
       finalProjection: row.projection,
-      independentProbability: row.independentProbability!,
+      independentProbability: row.independentProbability??null,
       marketProbability: row.targetExcludedProbability,
       finalProbability: row.probability,
       grade: row.grade,
@@ -71,6 +71,7 @@ export function buildNbaPlayerPropsLockedTrackingRows(args: {
       },
       observedAt: row.evaluatedAt,
       lockedAt: row.lockedAt,
+      ...(row.aiReview?{aiReview:row.aiReview}:{}),
       modelRelease: row.modelRelease,
       calibrationRelease: row.calibrationRelease,
       decisionRelease: row.decisionRelease,

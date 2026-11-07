@@ -266,7 +266,7 @@ function replayRow(
     watchlistEnabled: lane.watchlist,
     expectedValue,
     probabilityEdge,
-    participationProbability: row.participationProbability,
+    participationProbability: row.participationProbability ?? Number.NaN,
     movement: row.marketMovement,
     leanThresholds,
     bestAngleThresholds,

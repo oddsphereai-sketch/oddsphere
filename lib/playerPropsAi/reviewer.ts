@@ -5,11 +5,15 @@ import { usageMicroUsd, type PropsAiJob, type PropsAiReviewStore } from "./budge
 import { jointReviewRequest, parseJointReview } from "./request";
 import { countAiInput, generateAiReview, structuredAiText, AiGenerationError } from "./openai";
 import { prepareReviewParts } from "./partitions";
+import {criticalContextHashes} from "./criticalContext";
 import { PROPS_AI_MAX_OUTPUT_PER_REQUEST, PROPS_AI_STRONG_MODEL, PROPS_AI_RELEASE, type PropsAiModel } from "./releases";
 
 type PreparedPart = Awaited<ReturnType<typeof prepareReviewParts>>[number];
 type PartProvenance = { part:number; phase:number; model:PropsAiModel; requestedTier:string; actualTier:string; responseId:string; playerIds:string[] };
 export type AcceptedGameReview = { release: typeof PROPS_AI_RELEASE; gameId: string; start: string; lock: string; cutoff: string;
+  criticalContextHashes:Record<string,string>;
+  marketScopes:Record<string,string[]>;
+  sourceGameId?:string;
   model: string; partProvenance:PartProvenance[]; stage: "early" | "final"; issuedAt?: string; inputHash?: string; players: ReturnType<typeof parseJointReview>["players"];
   inputEvidence: { encoding: "gzip-base64"; digest: string; bytes: number; data: string } };
 export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob; store: PropsAiReviewStore; key: string;
@@ -69,7 +73,7 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
         const input=Buffer.from(JSON.stringify(args.packet)),compressed=gzipSync(input),partProvenance=[...provenance.values()].sort((a,b)=>a.part-b.part);
         invariant(input.byteLength<=16_000_000&&compressed.byteLength<=2_000_000,"oversize_immutable_input_evidence");
         const models=[...new Set(partProvenance.map(p=>p.model))];
-        const review:AcceptedGameReview={release:PROPS_AI_RELEASE,gameId:args.packet.gameId,start:args.packet.start,lock:args.packet.lock,cutoff:args.packet.cutoff,model:models.length===1?models[0]:"mixed_recorded_per_part",partProvenance,stage:args.packet.stage,players:parsed,inputEvidence:{encoding:"gzip-base64",digest:inputHash,bytes:input.byteLength,data:compressed.toString("base64")}};
+        const review:AcceptedGameReview={release:PROPS_AI_RELEASE,gameId:args.packet.gameId,sourceGameId:args.packet.sourceGameId??args.packet.gameId,start:args.packet.start,lock:args.packet.lock,cutoff:args.packet.cutoff,criticalContextHashes:criticalContextHashes(args.packet),marketScopes:Object.fromEntries(args.packet.players.map(p=>[p.id,[...p.markets]])),model:models.length===1?models[0]:"mixed_recorded_per_part",partProvenance,stage:args.packet.stage,players:parsed,inputEvidence:{encoding:"gzip-base64",digest:inputHash,bytes:input.byteLength,data:compressed.toString("base64")}};
         const completed=await args.store.finish(job.job_key,token,review,null);
         return {status:completed.state,review:completed.state==="completed"?completed.result as AcceptedGameReview:null};
       }

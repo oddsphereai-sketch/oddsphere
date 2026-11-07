@@ -452,7 +452,7 @@ function summarizeConfidenceCandidateActionability(
     if (row.market === "anytime_td" || row.side === "yes") return row;
     if (actionable(row.grade) && row.finalProbability < 0.55) return { ...row, grade: "Watchlist" as const };
     if (row.grade !== "Watchlist" || row.finalProbability < 0.55 || row.expectedValue < 0.03
-      || row.probabilityEdge < 0.015 || row.participationProbability < 0.7 || row.marketMovement === "adverse") return row;
+      || row.probabilityEdge < 0.015 || (row.participationProbability === null || row.participationProbability < 0.7) || row.marketMovement === "adverse") return row;
     const lane = nflPlayerPropsProductionMarketLane(row.market);
     const independentBooks = new Set(row.bookEvidence.map((book) => normalize(book.sportsbook))
       .filter((book) => book !== normalize(row.sportsbook))).size;
@@ -524,7 +524,7 @@ function replayWeightCandidate(row: NflPlayerPropsRuntimeDecision): NflPlayerPro
     watchlistEnabled: lane.watchlist,
     expectedValue,
     probabilityEdge,
-    participationProbability: row.participationProbability,
+    participationProbability: row.participationProbability ?? Number.NaN,
     movement: row.marketMovement,
     leanThresholds,
     bestAngleThresholds,
@@ -636,9 +636,9 @@ function reconstructThresholdGrade(row: NflPlayerPropsRuntimeDecision): NflPlaye
     ? { ev: 0.03, edge: 0.015, participation: 0.7 }
     : { ev: 0.04, edge: 0.02, participation: 0.7 };
   if (row.expectedValue >= best.ev && row.probabilityEdge >= best.edge
-    && row.participationProbability >= best.participation) return "Best Angle";
+    && row.participationProbability !== null && row.participationProbability >= best.participation) return "Best Angle";
   if (row.expectedValue >= lean.ev && row.probabilityEdge >= lean.edge
-    && row.participationProbability >= lean.participation) return "Lean";
+    && row.participationProbability !== null && row.participationProbability >= lean.participation) return "Lean";
   return row.expectedValue >= 0 && row.probabilityEdge >= 0 ? "Watchlist" : "No Play";
 }
 

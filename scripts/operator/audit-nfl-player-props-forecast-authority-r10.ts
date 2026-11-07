@@ -168,7 +168,7 @@ function replay(row: NflPlayerPropsRuntimeDecision): Candidate {
     eligibleSide: lane.eligibleSides.includes(row.side as "over" | "under"),
     marketResidualQualified: policy.qualified || runtime.releaseEvidence.ownerApprovedForwardException === true,
     bestAngleEnabled: lane.bestAngle, leanEnabled: lane.lean, watchlistEnabled: lane.watchlist,
-    expectedValue, probabilityEdge, participationProbability: row.participationProbability,
+    expectedValue, probabilityEdge, participationProbability: row.participationProbability ?? Number.NaN,
     movement: row.marketMovement, leanThresholds, bestAngleThresholds,
   });
   const bridged = baseGrade === "No Play" && row.market === "passing_yards" && row.grade === "Watchlist"

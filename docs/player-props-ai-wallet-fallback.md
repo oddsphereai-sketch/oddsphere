@@ -1,7 +1,7 @@
 # Player-prop AI full-source wallet and fallback integration
 
-Base: `e008a0fd4f22653a8fde8690b87d38d4d1ac3cf2`. Runtime R12:
-`player_props_ai_2026_11_07_r12_funded_partial_fallback`; wallet R3:
+Base: `e008a0fd4f22653a8fde8690b87d38d4d1ac3cf2`. Current candidate R13:
+`player_props_ai_2026_11_07_r13_disabled_site_integration`; wallet R3:
 `player_props_ai_budget_2026_11_07_r3_full_source_wallet`.
 NBA/NFL/MLB forecast semantics, canonical law, grade policy and two-window schedule
 remain those of the R11 format rehearsal. No production prediction, stake, member
@@ -126,3 +126,60 @@ availability, inference quality and monthly realized usage continue to be measur
 forward; synthetic failures do not prove real Flex availability. The previous private
 monthly cost report remains a workload estimate, not a guarantee of uninterrupted AI
 under arbitrary failures while enforcing a fixed cap.
+
+## November 7 site integration follow-up (R13, paid runs disabled)
+
+The existing NBA, NFL and MLB writers now pass their current collected source state
+and the existing sport lease run ID into the common site adapter. No new timer,
+provider collection pass or independent prediction writer is added. Full-month free
+public calendars fund two logical jobs per fixture. TBD fixture clocks are explicitly
+non-executable accounting reservations. Exact native home/away/start identity must
+resolve before a job can run. A missed early window is not purchased again at final
+time. Reviews that cannot complete in the writer deadline retain the independent
+forecast. Completion on every game cannot be guaranteed during provider outages.
+
+Accepted R13 laws are reused to price current exact offers without another AI call.
+A real change to player availability, role, statistics or matchup invalidates an old
+review. Quote-only changes can be repriced from that same law. Every offered supported
+player enters the captured reader packet; missing independent heads stay missing.
+Additional NFL passing-TD/interception heads use the accepted law. Players without
+an independent participation estimate remain visible as No Play with unknown role
+confidence. NBA independent-only fields are nullable for genuinely AI-only heads.
+No independent forecast is fabricated to fill a new DTO field.
+
+AI member readers display the actual accepted assessment, all eight source areas,
+source availability and estimated confidence. Selection follows event probability,
+not the position of a potentially skewed mean relative to the line. Exact legacy
+locks retain precedence; future AI locks store the accepted source evidence and
+release. Tracking separates the effective AI release from the prior model release.
+
+Install v61, v62 and v63 together. v63 adds the service-only paid control and calendar
+cache. `paid_enabled` defaults false, and triggers block claims/sends while false.
+Reinstallation never enables it. Both server environment switches
+`PLAYER_PROPS_AI_SITE_ENABLED` and `PLAYER_PROPS_AI_PAID_RUNS_ENABLED` also default
+off. A server-only `OPENAI_API_KEY`, both switches and the explicitly enabled DB
+control are all required for paid generation. Installation does not activate them.
+With site integration off the new path performs zero database/provider/AI I/O.
+
+The versioned source envelopes are funding estimates, not evidence truncation and
+not a promise that every future month fits under $50. The wallet refuses unfunded
+requests, reserves core/fallback/recovery before optional stronger finals, and never
+silently increases the cap. Unexpected vendor overbilling is recorded and freezes
+new authorizations. The cap cannot control other applications' use of the API key.
+No new paid evaluation was performed for this follow-up.
+
+Focused R13 source-to-member tests pair actionable promotion and demotion without
+removing a player or market: the two one-row synthetic boards move 0→1 and 1→0
+actionables respectively, with total row coverage unchanged. These are process
+fixtures, not measured production performance. All eight source areas and citation
+hashes remain visible; full source fact values stay in the private immutable review
+rather than being duplicated into every member row.
+
+A deployment must preserve the latest production main base, reconcile the open #676
+additive NFL research-archive writer hook (without restoring its superseded writer
+release), and retain the unrelated registry/governance changes in #877/#811/#606.
+Re-run integration safety and required checks if any of those PRs merges first.
+Do not enable inference as part of a code deploy. After a protected deployment,
+verify feature-off health and the installed paid-off control. Server key setup and
+explicit paid activation are separate steps; an ordinary scheduled review, when
+later authorized, supplies forward accuracy and realized-cost evidence.

@@ -42,7 +42,7 @@ export type NflPlayerPropsPrivateTrackingRow = Readonly<{
   finalProbability: number;
   probabilityEdge: number;
   expectedValue: number;
-  participationProbability: number;
+  participationProbability: number | null;
   grade: Decision["grade"];
   marketMovement: Decision["marketMovement"];
   healthHolds: readonly string[];

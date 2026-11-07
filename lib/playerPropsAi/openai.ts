@@ -1,5 +1,6 @@
 import { invariant } from "./evidence";
 import type { PropsAiModel } from "./releases";
+import {requireRealPropsAiPermission} from "./siteConfig";
 export type AiUsage = { input_tokens: number; output_tokens: number; input_tokens_details?: { cache_write_tokens?: number; cache_write_tokens_details?: { ttl_12h_tokens?: number } }; output_tokens_details?: { reasoning_tokens?: number } };
 export type AiResponse = { id: string; status: string; model: string; service_tier?:string; usage?: AiUsage; output?: { content?: { type: string; text?: string }[] }[] };
 export type AiRequest = { model: PropsAiModel; instructions: string; input: string; text: unknown; max_output_tokens: number; store: false };
@@ -7,6 +8,7 @@ export class AiGenerationError extends Error {
   constructor(readonly status:number,readonly code:string|null,readonly knownUnbilled:boolean){super(`generation_http_${status}${knownUnbilled?"_resource_unavailable":""}`);}
 }
 export async function countAiInput(body: AiRequest, args: { key: string; fetchImpl?: typeof fetch }) {
+  if(!args.fetchImpl)requireRealPropsAiPermission();
   const response = await (args.fetchImpl ?? fetch)("https://api.openai.com/v1/responses/input_tokens", {
     method: "POST", headers: { Authorization: `Bearer ${args.key}`, "Content-Type": "application/json" },
     body: JSON.stringify({ model: body.model, instructions: body.instructions, input: body.input, text: body.text }), signal: AbortSignal.timeout(45000),
@@ -15,6 +17,7 @@ export async function countAiInput(body: AiRequest, args: { key: string; fetchIm
   const data = await response.json(); invariant(Number.isSafeInteger(data.input_tokens) && data.input_tokens > 0, "invalid_input_token_count"); return data.input_tokens as number;
 }
 export async function generateAiReview(body: AiRequest, args: { key: string; timeoutMs: number; fetchImpl?: typeof fetch; serviceTier?:"default"|"flex"; stream?:boolean; onOutputText?:(delta:string)=>void; onCreated?: (id: string) => Promise<void>; onProgress?: (event:{type:string;elapsedMs:number;textCharacters:number})=>void }): Promise<AiResponse> {
+  if(!args.fetchImpl)requireRealPropsAiPermission();
   const started=Date.now();let textCharacters=0;
   invariant(args.key && Number.isFinite(args.timeoutMs) && args.timeoutMs > 0 && args.timeoutMs <= 180000, "invalid_generation_configuration");
   const response = await (args.fetchImpl ?? fetch)("https://api.openai.com/v1/responses", { method: "POST",
