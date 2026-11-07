@@ -550,7 +550,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
       load:(game,window)=>liveMlbPacket({game,window,snapshot:captured,currentOdds:boardSourceOdds,openingOdds})});
     for(const game of ai.games)snapshot.data.props=applyMlbSiteAi(snapshot.data.props,game.packet,game.decisions,new Date().toISOString());
     snapshot.asOfTimestamp=new Date().toISOString();
-    snapshot.data=buildDashboardData({slateDate:args.slateDate,asOfTimestamp:snapshot.asOfTimestamp,games,probablePitchers,props:snapshot.data.props,sourceOdds:boardSourceOdds,environmentErrors:environment.errors});
+    snapshot.data=buildDashboardData({slateDate:args.slateDate,asOfTimestamp:snapshot.asOfTimestamp,games,probablePitchers,props:snapshot.data.props,research:snapshot.data.research,sourceOdds:boardSourceOdds,environmentErrors:environment.errors});
     snapshot.movement=compareMlbPropsBoardMovement(previous,snapshot.data.props);
     snapshot.validation=validateMlbPropsBoardData({data:snapshot.data,sourceRows:boardSourceOdds.length,mappedRows:mappedOdds.length,asOfTimestamp:snapshot.asOfTimestamp,providerCoverage,playerGameIdentityConflictRows,previousSnapshot:previous,probablePitcherFallbackAssignments:probablePitcherResolution.fallbackAssignments.length,probablePitcherFallbackFindings:probablePitcherResolution.findings});
   }
@@ -2632,7 +2632,7 @@ function isBlockingModelContextWarning(value: string): boolean {
   ].includes(value);
 }
 
-function buildDashboardData(args: {
+export function buildDashboardData(args: {
   slateDate: string;
   asOfTimestamp: string;
   games: MlbGameEntity[];
@@ -2640,6 +2640,7 @@ function buildDashboardData(args: {
   props: PlayerPropPreviewRow[];
   sourceOdds: PropOddsSnapshot[];
   environmentErrors: string[];
+  research?: PlayerPropsDashboardData["research"];
 }): PlayerPropsDashboardData {
   const matchups = args.games.map((game) => {
     const away = resolveMlbStatsTeamId(game.awayTeamId)?.abbreviation ?? "AWAY";
@@ -2687,7 +2688,7 @@ function buildDashboardData(args: {
       averageDataConfidence: args.props.length ? round(args.props.reduce((sum, row) => sum + row.confidence, 0) / args.props.length, 3) : 0,
     },
     props: compacted.props,
-    research: compacted.research,
+    research: args.research ? { ...compacted.research, ...args.research } : compacted.research,
   };
 }
 

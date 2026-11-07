@@ -4,7 +4,7 @@
 
 R13 connects the accepted law and eight-area reader to the existing NBA/NFL/MLB
 writers, current exact prices, future locks and release-scoped tracking. The site
-publication contract is `player_props_ai_site_2026_11_07_r2_isolated_server_key`;
+publication contract is `player_props_ai_site_2026_11_07_r3_production_handoff`;
 estimate semantics are `player_props_ai_estimate_2026_11_07_r1_not_empirically_calibrated`.
 The service-only control is `player_props_ai_control_2026_11_07_r1_explicit_off`;
 calendar admission is `player_props_ai_calendar_2026_11_07_r1_complete_month`.

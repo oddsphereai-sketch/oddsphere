@@ -186,8 +186,15 @@ explicit paid activation are separate steps; an ordinary scheduled review, when
 later authorized, supplies forward accuracy and realized-cost evidence.
 
 The production-setup follow-up versions site publication as
-`player_props_ai_site_2026_11_07_r2_isolated_server_key`. The dedicated server key
+`player_props_ai_site_2026_11_07_r3_production_handoff`. The dedicated server key
 is configured without replacing credentials used by other AI products. Both prop
 review switches and the database paid switch remain off for deployment. No inference
 request is used to validate key presence. A configured secret is not proof of its
 continued provider validity; ordinary authorized reviews will record real receipts.
+
+The final publication path retains MLB shared research when summary counts are
+rebuilt after AI repricing. Existing recent-form, matchup, lineup and environment
+modules must not disappear from fallback rows merely because the first compaction
+moved them out of inline row fields. This preserves the source graph without any
+new provider request or inference. The dedicated round-trip test proves source
+immutability and retained reader modules.
