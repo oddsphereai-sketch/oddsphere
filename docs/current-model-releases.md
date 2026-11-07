@@ -15,6 +15,13 @@ sport writer's lease. The actual reviewer retries only failed whole-player parts
 records true service tiers, and retains unknown charges. Native PostgreSQL and mock
 HTTP prove the integration without more paid testing. No current production model,
 sole writer, grade, stake or lock changes; rollout remains separate from implementation.
+The carried-forward source-clock candidate also exports NBA observation R3 /
+collector R6 (`2026_11_06_*_response_completion`) and NFL provider observation
+`nfl_player_props_provider_observation_2026_11_06_r15_response_completion`.
+Those collectors add actual response-completion metadata to future observations;
+legacy collection-start fields remain exact. MLB adds optional `providerResponseAt`
+without changing the active `mlb_props_2026_10_21_r44` forecast bundle. These source
+releases are candidate changes, not a claim that production has already advanced.
 Keep this candidate offline until the remaining engineering gates in
 `player-props-ai-wallet-fallback.md` and `player-props-ai-forecast-reliability.md` pass. Original receipts and financial
 reports stay private; no superseded MLB/NFL/NBA rule is restored by these replays.

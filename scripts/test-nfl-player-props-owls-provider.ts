@@ -2,8 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { collectNflPlayerPropsObservations } from "../lib/services/football/nflPlayerPropsCollector";
 
+// Provider fixtures are dated October 28. Keep freshness deterministic and move
+// the clock at each mocked HTTP completion to distinguish receipt from collection start.
+const OriginalDate=Date;let fixtureClock=OriginalDate.parse("2026-10-28T03:25:00Z");
+globalThis.Date=class extends OriginalDate{constructor(value?:string|number){super(value??fixtureClock);}static now(){return fixtureClock;}} as unknown as DateConstructor;
 const calls: Array<{ url: string; authorization: string | null }> = [];
 const fetchImpl: typeof fetch = async (input, init) => {
+  fixtureClock+=1000;
   const url = new URL(String(input));
   calls.push({ url: url.toString(), authorization: new Headers(init?.headers).get("authorization") });
   if (url.hostname === "api.balldontlie.io" && url.pathname.endsWith("/games")) {
@@ -69,6 +74,7 @@ assert.deepEqual(result.snapshot.providerRequests, { balldontlie: 3, owls: 1 });
 assert.equal(result.snapshot.collectionComplete, true);
 assert.equal(result.normalization.owls.rows.length, 2);
 assert.equal(result.referenceResearchObservations.length, 2);
+assert.ok(result.normalization.owls.rows.every(row=>row.receivedAt&&Date.parse(row.receivedAt)>Date.parse(result.snapshot.fetchedAt)));
 assert.ok(result.referenceResearchObservations.every((row) => row.provider === "owls" && row.canonicalGameId === "424129"));
 assert.equal(result.snapshot.healthFindings.some((finding) => /SHARPAPI/.test(finding)), false);
 const routeSource = readFileSync("app/api/cron/nfl-forward-evidence/route.ts", "utf8");
@@ -81,7 +87,7 @@ assert.doesNotMatch(`${writerSource}\n${collectorSource}`, /SHARPAPI_KEY|new Sha
 console.log("NFL player-props Owls provider: all focused tests passed");
 }
 
-void main().catch((error) => {
+void main().finally(()=>{globalThis.Date=OriginalDate;}).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
