@@ -78,7 +78,12 @@ try{
   assert.equal((await wallet.plan(full)).funded,true);assert.equal(Number((await budget()).core_reserved_micro),Number(first.core_reserved_micro));assert.equal(digest(full),before);
   await assert.rejects(wallet.plan({...full,jobs:full.jobs.slice(1)}),/omits_review|drop_pending/);
   await assert.rejects(wallet.plan({...full,sources:{...sources,nfl:{complete:false,source:"incomplete"}} as unknown as CalendarSources}),/calendar_sources_required/);
+  // No optional balance: temporary Standard escrow must draw and restore the protected pool.
+  await db.query("UPDATE player_props_ai_budgets SET cap_micro=core_reserved_micro+consumed_micro+fallback_remaining_micro+recovery_remaining_micro WHERE month_key='2026-11'");
   const capacity=await run("g0","early","capacity",true);assert.equal(capacity.result.status,"completed");
+  assert.equal(Number((await budget()).fallback_remaining_micro),Number(first.fallback_remaining_micro));
+  assert.equal(Number((await budget()).recovery_remaining_micro),3_000_000);
+  await db.query("UPDATE player_props_ai_budgets SET cap_micro=50000000 WHERE month_key='2026-11'");
   assert.equal(capacity.calls.length,3);assert.equal(capacity.calls.filter(c=>c.player==="a").length,1);assert.equal(capacity.calls.at(-1)!.tier,"default");assert.ok(capacity.calls.every(c=>c.model==="gpt-6-luna"));
   const accepted=(await job(keys("g0")[0])).result as {players:unknown[];partProvenance:{phase:number}[]};assert.equal(accepted.players.length,2);assert.deepEqual(accepted.partProvenance.map(p=>p.phase),[1,2]);
   const duplicate=await run("g0","early");assert.equal(duplicate.result.status,"skipped");assert.equal(duplicate.calls.length,0);
