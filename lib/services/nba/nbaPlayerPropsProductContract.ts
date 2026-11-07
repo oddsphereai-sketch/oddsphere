@@ -1,5 +1,6 @@
 import type { NbaPlayerPropMarket, NbaPlayerPropSide } from "./nbaPlayerPropsContract";
 import type { NbaPlayerPropsReaderMetric } from "./nbaPlayerPropsReaderContract";
+import type {PropsAiMemberEvidence} from "../../playerPropsAi/publicationContract";
 
 export const NBA_PLAYER_PROPS_PRODUCT_CANDIDATE_RELEASE =
   "nba_player_props_product_candidate_2026_10_23_r8_canonical_coverage" as const;
@@ -40,11 +41,12 @@ export type NbaPlayerPropsMemberDecision = Readonly<{
   market: NbaPlayerPropMarket;
   line: number;
   projection: number;
-  independentProjection: number;
-  independentProbability?: number;
+  independentProjection: number | null;
+  independentProbability?: number | null;
   modelRelease?: string;
   calibrationRelease?: string;
   decisionRelease?: string;
+  aiReview?:PropsAiMemberEvidence;
   side: Extract<NbaPlayerPropSide, "over" | "under">;
   probability: number;
   grade: NbaPlayerPropsMemberGrade;
@@ -54,7 +56,7 @@ export type NbaPlayerPropsMemberDecision = Readonly<{
   targetExcludedProbability: number | null;
   targetExcludedBooks: number;
   targetExcludedReferenceBooks: number;
-  marketEvidenceMode: "target_excluded_arbitration" | "candidate_projection" | "independent_projection";
+  marketEvidenceMode: "target_excluded_arbitration" | "candidate_projection" | "independent_projection" | "ai_joint_law";
   gradePolicySource:
     | "points_ungated_ranked"
     | "assists_role_stable_ranked"
@@ -63,7 +65,8 @@ export type NbaPlayerPropsMemberDecision = Readonly<{
     | "combo_market_relative_lean"
     | "forward_only_market_relative_lean"
     | "accuracy_side_rerank"
-    | "forecast_only";
+    | "forecast_only"
+    | "ai_source_review";
   role: readonly NbaPlayerPropsReaderMetric[];
   production: readonly NbaPlayerPropsReaderMetric[];
   matchup: readonly NbaPlayerPropsReaderMetric[];
@@ -142,18 +145,19 @@ export function buildNbaPlayerPropsMemberSnapshot(args: {
       || decision.targetExcludedBooks !== 0
       || decision.grade !== "No Play"
     )) throw new Error(`NBA props independent-only decision ${decision.decisionKey} may not imply corroboration or actionability.`);
-    if (decision.marketEvidenceMode !== "independent_projection" && decision.targetExcludedProbability === null) {
+    if (decision.marketEvidenceMode !== "independent_projection" && decision.marketEvidenceMode !== "ai_joint_law" && decision.targetExcludedProbability === null) {
       throw new Error(`NBA props corroborated decision ${decision.decisionKey} is missing its other-book probability.`);
     }
+    if(decision.aiReview && (decision.marketEvidenceMode!=="ai_joint_law" || decision.side!==decision.aiReview.selectedSide || !decision.aiReview.lawHash)) throw new Error("NBA AI forecast provenance mismatch");
     const expectedSide = decision.projection > decision.line ? "over" : "under";
-    if (decision.side !== expectedSide) throw new Error(`NBA props decision ${decision.decisionKey} contradicts its projection.`);
+    if (!decision.aiReview && decision.side !== expectedSide) throw new Error(`NBA props decision ${decision.decisionKey} contradicts its projection.`);
     if (!Number.isInteger(decision.americanPrice) || decision.americanPrice === 0) {
       throw new Error(`NBA props decision ${decision.decisionKey} has an invalid price.`);
     }
     timestamp(decision.evaluatedAt, "evaluatedAt");
     if (decision.lockedAt !== null) timestamp(decision.lockedAt, "lockedAt");
     if (args.mode === "private_forward_candidate" && (
-      !Number.isFinite(decision.independentProbability)
+      (!decision.aiReview && !Number.isFinite(decision.independentProbability))
       || !decision.modelRelease || !decision.calibrationRelease || !decision.decisionRelease
     )) throw new Error(`NBA props forward decision ${decision.decisionKey} is missing frozen tracking provenance.`);
   }

@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE =
-  "nfl_player_props_current_season_state_2026_10_15_r4_game_model_play_capture" as const;
+  "nfl_player_props_current_season_state_2026_11_07_r5_nullable_passing_outcomes" as const;
+const NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_R4 = "nfl_player_props_current_season_state_2026_10_15_r4_game_model_play_capture";
 const NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_PRECEDING_RELEASE =
   "nfl_player_props_current_season_state_2026_09_16_r1_prior_final_games" as const;
 const NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_TEAM_BOX_RELEASE =
@@ -24,6 +25,8 @@ export type NflPlayerPropsCurrentSeasonStat = {
   passing_attempts: number;
   passing_completions: number;
   passing_yards: number;
+  passing_tds?: number | null;
+  passing_interceptions?: number | null;
   rushing_attempts: number;
   rushing_yards: number;
   receptions: number;
@@ -471,6 +474,8 @@ function normalizeStat(value: unknown, games: ReadonlyMap<string, PriorGame>): N
     passing_attempts: numeric(row.passing_attempts),
     passing_completions: numeric(row.passing_completions),
     passing_yards: numeric(row.passing_yards),
+    passing_tds: nullableNumeric(row.passing_touchdowns ?? row.passing_tds),
+    passing_interceptions: nullableNumeric(row.passing_interceptions),
     rushing_attempts: numeric(row.rushing_attempts),
     rushing_yards: numeric(row.rushing_yards),
     receptions: numeric(row.receptions),
@@ -581,7 +586,7 @@ function parseState(value: unknown, season: number): NflPlayerPropsCurrentSeason
       stats: row.stats as NflPlayerPropsCurrentSeasonStat[],
     };
   }
-  return row.release === NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE
+  return (row.release === NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE || row.release === NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_R4)
     && row.season === season
     && Number.isInteger(row.completeThroughWeek)
     && typeof row.updatedAt === "string"
@@ -589,7 +594,7 @@ function parseState(value: unknown, season: number): NflPlayerPropsCurrentSeason
     && Array.isArray(row.teamStats)
     && Array.isArray(row.playMetrics)
     && Array.isArray(row.stats)
-      ? value as NflPlayerPropsCurrentSeasonState
+      ? { ...value as NflPlayerPropsCurrentSeasonState, release: NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE }
       : null;
 }
 
@@ -606,6 +611,7 @@ function record(value: unknown): Record<string, unknown> { return value && typeo
 function text(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
 function id(value: unknown): string | null { return typeof value === "string" || typeof value === "number" ? String(value) : null; }
 function integer(value: unknown): number | null { const parsed = Number(value); return Number.isInteger(parsed) ? parsed : null; }
+function nullableNumeric(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }
 function numeric(value: unknown): number { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
 function strictNumeric(value: unknown): number | null { if (value === null || value === undefined || value === "") return null; const parsed = Number(value); return Number.isFinite(parsed) ? parsed : null; }
 function iso(value: unknown): string | null { const parsed = typeof value === "string" ? Date.parse(value) : NaN; return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null; }

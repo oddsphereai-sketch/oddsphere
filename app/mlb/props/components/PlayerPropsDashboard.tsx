@@ -1,5 +1,7 @@
 "use client";
 
+import {AiPropReader} from "@/app/player-props/components/AiPropReader";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   PROP_GRADES,
@@ -86,6 +88,7 @@ type SlateMatchup = {
 };
 
 export type PlayerPropPreviewRow = {
+  aiReview?: import("../../../../lib/playerPropsAi/publicationContract").PropsAiMemberEvidence;
   id: string;
   researchKey?: string;
   lockStatus?: {
@@ -868,6 +871,8 @@ function marketDirection(pair: MarketPair): MarketDirection | null {
 }
 
 function modelPrediction(pair: MarketPair): ModelPrediction | null {
+  const reviewed=pair.rows.find(row=>row.aiReview&&(row.aiReview.selectedSide==="yes"?"over":row.aiReview.selectedSide)===row.side);
+  if(reviewed)return {side:reviewed.side,row:reviewed,probability:reviewed.finalProbability};
   const longshotValue = pair.rows
     .filter(isLongshotValueRow)
     .sort((a, b) => (b.expectedValue ?? Number.NEGATIVE_INFINITY) - (a.expectedValue ?? Number.NEGATIVE_INFINITY))[0];
@@ -905,6 +910,7 @@ function rowMarketDirection(row: PlayerPropPreviewRow): MarketDirection | null {
 }
 
 function rowPredictionSide(row: PlayerPropPreviewRow): "over" | "under" | null {
+  if(row.aiReview)return row.aiReview.selectedSide==="yes"?"over":row.aiReview.selectedSide;
   if (isLongshotValueRow(row)) return row.side;
   if (isModelSignalSide(row)) return row.side;
   if (row.modelProbability !== null && row.modelProbability >= 0.5) return row.side;
@@ -1009,6 +1015,7 @@ function PlayerSummaryMetric({ label, value }: { label: string; value: string })
 }
 
 export function PropDetailDrawer({ row, comparisons, onClose, showDiagnostics = false, researchPending = false }: { row: PlayerPropPreviewRow; comparisons: PlayerPropPreviewRow[]; onClose: () => void; showDiagnostics?: boolean; researchPending?: boolean }) {
+  if(row.aiReview)return <AiPropReader evidence={row.aiReview} title={`${row.player} · ${row.marketLabel}`} selection={`${row.side} ${row.line}`} projection={row.projection} probability={row.finalProbability??0} price={`${row.book} ${signed(row.odds)}`} grade={getPropGradeLabel(row.playGrade)} lockedAt={row.lockStatus?.lockedAt} onClose={onClose} />;
   const prices = [...comparisons].sort((a, b) => b.odds - a.odds);
   return <PlayerPropReaderDialog ariaLabel={`${row.player} prop details`} title={row.player} leading={<PlayerAvatar player={row.player} team={row.team} headshotUrl={row.headshotUrl} compact />} onClose={onClose}>
       <div className="grid min-w-0 gap-4 p-4 sm:p-6 lg:grid-cols-2">
@@ -1923,6 +1930,7 @@ function propReaderSummary(row: PlayerPropPreviewRow, prices: PlayerPropPreviewR
 }
 
 function cardReason(row: PlayerPropPreviewRow): string {
+  if(row.aiReview)return row.aiReview.assessment;
   if (row.projection === null) return memberGradeDescription(row.playGrade);
   if (!assessPropPrice(row.odds).signalEligible) return "This price remains visible for comparison but is not eligible for a positive signal.";
   if (row.reasonCodes.includes("LONGSHOT_VALUE_CONTEXT")) return isPositiveSignal(row)

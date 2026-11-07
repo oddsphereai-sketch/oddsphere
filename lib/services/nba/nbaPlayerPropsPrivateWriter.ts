@@ -1,3 +1,8 @@
+import {reviewPropsForSite} from "../../playerPropsAi/siteRuntime";
+import {liveNbaPacket} from "../../playerPropsAi/liveSources";
+import {applyNbaSiteAi} from "../../playerPropsAi/siteBindings";
+import {propsAiSiteConfig} from "../../playerPropsAi/siteConfig";
+import type {EnrichedSource} from "../../playerPropsAi/cachedEnrichment";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { canonicalNbaAbbreviation, fetchEspnNbaGameInjuries } from "./espnNbaInjuries";
 import {
@@ -63,6 +68,7 @@ export type NbaPlayerPropsPrivateWriterResult = Readonly<{
 
 export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   client: SupabaseClient;
+  writerRunId?: string;
   slateDate: string;
   season: number;
   schedule: readonly NbaRollingScheduleGame[];
@@ -294,7 +300,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     homeTeam: game.homeTeam,
     awayTeam: game.awayTeam,
   }));
-  const candidate = buildNbaPlayerPropsMemberSnapshot({
+  let candidate = buildNbaPlayerPropsMemberSnapshot({
     mode: "private_forward_candidate",
     generatedAt: now,
     slateDate: args.slateDate,
@@ -302,8 +308,17 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     decisions: memberDecisions,
     inputRows: mergedMarket.history.observations.length,
   });
+  const aiBaseline=candidate;
+  if(propsAiSiteConfig().integrated&&priorState&&currentState){
+    const contexts=await args.client.from("lab_response_snapshots").select("payload,generated_at").eq("sport","nba").like("snapshot_key","%current-only::live-copy%").order("generated_at",{ascending:false}).limit(4);
+    const ai=await reviewPropsForSite({client:args.client,sport:"nba",writerRunId:args.writerRunId,deadline:Date.parse(now)+260000,
+      games:games.map(g=>({id:g.gameId,start:g.scheduledStart,away:g.awayTeam,home:g.homeTeam})),
+      load:(game,window)=>liveNbaPacket({game,window,snapshot:aiBaseline,market:mergedMarket.history,prior:priorState,current:currentState!,context:contexts.error?[]:contexts.data as EnrichedSource["nbaContext"]})});
+    for(const game of ai.games)candidate=applyNbaSiteAi(candidate,game.packet,game.decisions,new Date().toISOString());
+  }
   const previous = await readNbaPlayerPropsPrivateSnapshot({ client: args.client, slateDate: args.slateDate });
-  const lifecycle = advanceNbaPlayerPropsCandidateLifecycle({ now, previous, candidate });
+  const publicationNow=propsAiSiteConfig().integrated?new Date().toISOString():now;
+  const lifecycle = advanceNbaPlayerPropsCandidateLifecycle({ now:publicationNow, previous, candidate });
   await writeNbaPlayerPropsPrivateSnapshot({
     client: args.client,
     snapshot: lifecycle.snapshot,

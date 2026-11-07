@@ -146,7 +146,7 @@ function candidateRow(row: NflPlayerPropsRuntimeDecision): NflPlayerPropsRuntime
     watchlistEnabled: lane?.watchlist === true,
     expectedValue: ev,
     probabilityEdge: edge,
-    participationProbability: row.participationProbability,
+    participationProbability: row.participationProbability ?? Number.NaN,
     movement: row.marketMovement,
     leanThresholds,
     bestAngleThresholds,

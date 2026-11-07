@@ -1,5 +1,50 @@
 # Current production model releases and qualified research candidates
 
+## November 7 player-prop AI integration — paid runs disabled
+
+R13 connects the accepted law and eight-area reader to the existing NBA/NFL/MLB
+writers, current exact prices, future locks and release-scoped tracking. The site
+publication contract is `player_props_ai_site_2026_11_07_r3_production_handoff`;
+estimate semantics are `player_props_ai_estimate_2026_11_07_r1_not_empirically_calibrated`.
+The service-only control is `player_props_ai_control_2026_11_07_r1_explicit_off`;
+calendar admission is `player_props_ai_calendar_2026_11_07_r1_complete_month`.
+The v63 schema is installed with paid runs disabled. Installing or deploying this
+code does not activate the review flow or change existing baseline predictions. Both environment gates
+also default off. The dedicated server secret `PLAYER_PROPS_AI_OPENAI_API_KEY` takes
+precedence over the existing shared OpenAI key; an explicitly empty dedicated value
+cannot fall back to another product’s credential. Source reconfirmation history is NBA store
+`nba_player_props_private_store_2026_11_07_r7_native_reconfirmation`; NFL source state
+is `nfl_player_props_current_season_state_2026_11_07_r5_nullable_passing_outcomes`.
+Legacy states retain their exact source values; missing passing TD/INT counts are
+unknown, not zero. The active MLB R44 champion remains the independent prior.
+AI decisions have their own effective R13 row release; do not blend them with R44
+performance. See `docs/player-props-ai-wallet-fallback.md` for the complete disabled
+site path, operational fallback and activation gates.
+
+`PROPS_AI_RELEASE` is `player_props_ai_2026_11_07_r13_disabled_site_integration`;
+budget candidate is `player_props_ai_budget_2026_11_07_r3_full_source_wallet`.
+Both are exported from `lib/playerPropsAi/releases.ts`. The wire coordinate
+contract is `props_scenario_rows_2026_11_07_r2_physical_coordinates`; the stored
+canonical law remains `player_props_ai_law_2026_11_06_r1_integer_scenarios`.
+Full-source API completion and physical-law checks passed sampled NBA/NFL/MLB
+rehearsals. This is process evidence only, not measured accuracy or activation.
+The v62 wallet replaces fixed allowances with full-source request envelopes, protects
+the entire primary calendar and fallback/recovery pools, and requires the existing
+sport writer's lease. The actual reviewer retries only failed whole-player parts,
+records true service tiers, and retains unknown charges. Native PostgreSQL and mock
+HTTP prove the integration without more paid testing. No current production model,
+sole writer, grade, stake or lock changes; rollout remains separate from implementation.
+The carried-forward source-clock candidate also exports NBA observation R3 /
+collector R6 (`2026_11_06_*_response_completion`) and NFL provider observation
+`nfl_player_props_provider_observation_2026_11_06_r15_response_completion`.
+Those collectors add actual response-completion metadata to future observations;
+legacy collection-start fields remain exact. MLB adds optional `providerResponseAt`
+without changing the active `mlb_props_2026_10_21_r44` forecast bundle. These source
+releases are candidate changes, not a claim that production has already advanced.
+Keep this candidate offline until the remaining engineering gates in
+`player-props-ai-wallet-fallback.md` and `player-props-ai-forecast-reliability.md` pass. Original receipts and financial
+reports stay private; no superseded MLB/NFL/NBA rule is restored by these replays.
+
 ## November 6 NBA rolling publication R2
 
 `nba_reader_publication_2026_11_06_r2_scoped_split_high_water` preserves the R1

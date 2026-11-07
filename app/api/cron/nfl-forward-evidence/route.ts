@@ -118,6 +118,7 @@ export async function GET(request: Request): Promise<Response> {
       try {
         playerProps = await runNflPlayerPropsProductionWriter({
           client: supabase,
+          writerRunId:runId,
           season,
           week,
           now: cycleNow,

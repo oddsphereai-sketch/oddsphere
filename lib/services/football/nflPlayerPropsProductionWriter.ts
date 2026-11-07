@@ -1,3 +1,7 @@
+import {propsAiSiteConfig} from "../../playerPropsAi/siteConfig";
+import {reviewPropsForSite} from "../../playerPropsAi/siteRuntime";
+import {liveNflPacket} from "../../playerPropsAi/liveSources";
+import {applyNflSiteAi} from "../../playerPropsAi/siteBindings";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NflPlayerPropMarket } from "./nflPlayerPropsContract";
 import {
@@ -254,6 +258,7 @@ function summarizePredictionSides(
 
 export async function runNflPlayerPropsProductionWriter(args: {
   client: SupabaseClient;
+  writerRunId?:string;
   season: number;
   week: number;
   now: string;
@@ -387,7 +392,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
     auditSourceAwareQualifiedMarkets: ["receptions"],
     auditIncumbentMarketArbitrationMarkets: ["receiving_yards"],
   });
-  const nextBoard = buildNflPlayerPropsRuntimeBoard({
+  let nextBoard = buildNflPlayerPropsRuntimeBoard({
     offers,
     referenceOffers: effectiveReferenceOffers,
     features,
@@ -409,10 +414,20 @@ export async function runNflPlayerPropsProductionWriter(args: {
       .map((sportsbook) => [sportsbook, (referenceResearchMarketEvidence?.i ?? [])
         .reduce((count, identity) => count + identity[2].filter((book) => book[0] === sportsbook).length, 0)]),
   );
+  if(args.apply&&propsAiSiteConfig().integrated){
+    const observer=await readNflPlayerPropsMarketObserverHistory({client:args.client,season:args.season,week:args.week}).catch(()=>null);
+    const marketHistory={observer,references:effectiveReferenceOffers,availableAt:new Date().toISOString()};
+    const aiBaseline=reconcileNflPlayerPropsProductionSnapshot({season:args.season,week:args.week,evaluatedAt:args.now,nextBoard,previous});
+    const ai=await reviewPropsForSite({client:args.client,sport:"nfl",writerRunId:args.writerRunId,deadline:Date.parse(args.now)+260000,
+      games:context.games.map(g=>({id:g.canonicalGameId,start:g.scheduledStart,away:g.awayTeam,home:g.homeTeam})),
+      load:(game,window)=>liveNflPacket({game,window,snapshot:aiBaseline,observations:collection.snapshot,history:currentSeason.state,context,marketHistory})});
+    for(const game of ai.games)nextBoard=applyNflSiteAi(nextBoard,game.packet,game.decisions,new Date().toISOString());
+  }
+  const publicationNow=args.apply&&propsAiSiteConfig().integrated?new Date().toISOString():args.now;
   const snapshot = reconcileNflPlayerPropsProductionSnapshot({
     season: args.season,
     week: args.week,
-    evaluatedAt: args.now,
+    evaluatedAt: publicationNow,
     nextBoard,
     previous,
   });

@@ -1,0 +1,22 @@
+/** Actual member DTO compaction round trip. No provider or inference requests. */
+import assert from 'node:assert/strict';
+import {buildDashboardData} from '../lib/mlb/props/liveBoard';
+import type {PlayerPropPreviewRow} from '../app/mlb/props/components/PlayerPropsDashboard';
+const at='2026-11-07T18:00:00Z';
+const recent={statLabel:'Hits',logs:[{gameId:'synthetic-old',date:'2026-11-05',value:2}],samples:{last5:{count:1,average:2}}};
+const environment={weather:{status:'available',temperatureF:65},park:{status:'available',factor:1}};
+const row={id:'synthetic',researchKey:'synthetic-research',providerIds:{gameId:'synthetic-game'},market:'batter_hits',playGrade:'WATCHLIST',confidence:.6,finalProbability:.6,recentForm:recent,environment} as unknown as PlayerPropPreviewRow;
+const args={slateDate:'2026-11-07',asOfTimestamp:at,games:[],probablePitchers:[],sourceOdds:[],environmentErrors:[]};
+const source=buildDashboardData({...args,props:[row]});
+const before=JSON.stringify(source);
+assert.equal(source.props[0].recentForm,undefined);
+assert.deepEqual(source.research?.['synthetic-research'].recentForm,recent);
+const changedRows=source.props.map(r=>({...r,projection:1.3,playGrade:'LEAN' as const}));
+const rebuilt=buildDashboardData({...args,props:changedRows,research:source.research});
+assert.equal(rebuilt.summary.leans,1);
+assert.equal(rebuilt.props[0].projection,1.3);
+assert.deepEqual(rebuilt.research?.['synthetic-research'].recentForm,recent);
+assert.deepEqual(rebuilt.research?.['synthetic-research'].environment,environment);
+assert.equal(JSON.stringify(source),before);
+assert.equal(row.recentForm,recent);
+console.log('MLB AI publication round trip passed: updated summary/forecast, intact shared recent-form/environment reader sources and immutable input. No network calls.');

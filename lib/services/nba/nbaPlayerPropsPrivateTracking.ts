@@ -17,6 +17,7 @@ export const NBA_PLAYER_PROPS_PRIVATE_TRACKING_MAX_JSON_BYTES = 40_000_000;
 export const NBA_PLAYER_PROPS_PRIVATE_TRACKING_MAX_GZIP_BYTES = 3_000_000;
 
 export type NbaPlayerPropsPrivateTrackingRow = Readonly<{
+  aiReview?: import("../../playerPropsAi/publicationContract").PropsAiMemberEvidence;
   rowKey: string;
   gameId: string;
   playerId: string;
@@ -30,15 +31,15 @@ export type NbaPlayerPropsPrivateTrackingRow = Readonly<{
   sportsbook: string;
   americanPrice: number;
   canonicalMainLine: boolean;
-  independentProjection: number;
+  independentProjection: number | null;
   finalProjection: number;
-  independentProbability: number;
+  independentProbability: number | null;
   marketProbability: number | null;
   finalProbability: number;
   grade: string;
   marketMovement: string | null;
   marketEvidence?: Readonly<{
-    mode: "target_excluded_arbitration" | "candidate_projection" | "independent_projection";
+    mode: "target_excluded_arbitration" | "candidate_projection" | "independent_projection" | "ai_joint_law";
     targetExcludedBooks: number;
     targetExcludedReferenceBooks: number;
     movement: Readonly<{
@@ -96,9 +97,9 @@ export function buildNbaPlayerPropsPrivateTrackingRow(
   input: Omit<NbaPlayerPropsPrivateTrackingRow, "rowKey" | "captureRelease">,
 ): NbaPlayerPropsPrivateTrackingRow {
   validateFinite(input.line, "line");
-  validateFinite(input.independentProjection, "independentProjection");
+  if(input.independentProjection!==null)validateFinite(input.independentProjection, "independentProjection");
   validateFinite(input.finalProjection, "finalProjection");
-  validateProbability(input.independentProbability, "independentProbability");
+  if(input.independentProbability!==null)validateProbability(input.independentProbability, "independentProbability");
   if (input.marketProbability !== null) validateProbability(input.marketProbability, "marketProbability");
   validateProbability(input.finalProbability, "finalProbability");
   timestamp(input.scheduledStart, "scheduledStart");

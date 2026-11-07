@@ -175,6 +175,7 @@ async function main(): Promise<void> {
         ? buildNbaPlayerPropsMarketEvidence({ target, observations: market.observations, evaluatedAt: row.lockedAt })
         : null;
       if (target) matchedTargets += 1;
+      if(row.independentProjection===null)continue;
       const independentSide = row.independentProjection > row.line ? "over" : "under";
       const marketProbability = evidence?.targetExcludedOverProbability ?? null;
       const marketSide = marketProbability === null ? null : marketProbability > 0.5 ? "over" : "under";

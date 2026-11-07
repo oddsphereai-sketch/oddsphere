@@ -621,7 +621,7 @@ function integratedSourceAwareCandidate(
       watchlistEnabled: lane.watchlist,
       expectedValue,
       probabilityEdge,
-      participationProbability: candidateRow.participationProbability,
+      participationProbability: candidateRow.participationProbability ?? Number.NaN,
       movement,
       leanThresholds,
       bestAngleThresholds,

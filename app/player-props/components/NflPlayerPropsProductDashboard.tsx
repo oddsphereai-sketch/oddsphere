@@ -1,5 +1,7 @@
 "use client";
 
+import {AiPropReader} from "@/app/player-props/components/AiPropReader";
+
 import { useEffect, useMemo, useState } from "react";
 import type { NflPlayerPropsMemberDecision as Row, NflPlayerPropsMemberGrade, NflPlayerPropsMemberSnapshot } from "@/lib/services/football/nflPlayerPropsProductionContract";
 import type { NflPlayerPropsBookEvidence, NflPlayerPropsForecastTrend } from "@/lib/services/football/nflPlayerPropsRuntime";
@@ -196,6 +198,7 @@ function SideQuote({ row, prediction, selectedKey, onSelect, card = false }: { r
 }
 
 function PropReader({ row, onClose }: { row: Row; onClose: () => void }) {
+  if(row.aiReview)return <AiPropReader evidence={row.aiReview} title={`${row.playerName} · ${label(row.market)}`} selection={selection(row)} projection={row.projection} probability={row.finalProbability} price={`${book(row.sportsbook)} ${price(row.americanPrice)}`} grade={row.grade} lockedAt={row.state==="locked"?row.lockAt:null} onClose={onClose} />;
   const comparisons = [...(row.bookEvidence ?? [{ sportsbook: row.sportsbook, provider: row.provider, americanPrice: row.americanPrice, observedAt: row.observedAt, openingObservedAt: null, openingLine: null, openingAmericanPrice: null }])].sort((a, b) => b.americanPrice - a.americanPrice);
   const movementBook = selectNflPlayerPropsMovementBook({
     market: row.market,
@@ -365,7 +368,7 @@ function predictionSelection(prediction: NflPlayerPropsPrediction<Row>, line: nu
 function shortCanonicalModelRead(prediction: NflPlayerPropsPrediction<Row>, row: Row): string { return prediction.projection === null ? `${pct(prediction.probability)} touchdown forecast from role, team, and opponent context.` : `${prediction.projection.toFixed(1)} projected against ${row.line}, with an empirical range retained in the reader.`; }
 function matchup(row: Row): string { return row.opponent ? `${row.team} · ${row.opponent}` : row.team; }
 function gameLabel(game: GameSummary): string { return game.teams.length > 1 ? `${game.teams[0]} · ${game.teams[1]}` : game.opponent ? `${game.teams[0] ?? "NFL"} · ${game.opponent}` : game.teams[0] ?? "NFL matchup"; }
-function modelRead(row: Row): string { const independentConfirmationMissing = row.healthHolds.includes("independent_same_line_confirmation_missing"); const comparison = independentConfirmationMissing ? `${pct(row.marketProbability)} from the current book's two-sided no-vig price context` : `${pct(row.marketProbability)} from the independent market`; const priceCase = `OddSphere gives it a ${pct(row.finalProbability)} calibrated chance versus ${comparison}, producing ${signedPct(row.expectedValue)} expected value at ${price(row.americanPrice)}.${independentConfirmationMissing ? " Independent same-line confirmation is still required, so this read remains No Play." : ""}`; if (row.projection === null) return `The model forecasts a ${pct(row.rawModelProbability)} touchdown probability from participation, role opportunity, team environment, and opponent context. ${priceCase}`; const relation = row.projection >= row.line ? "above" : "below"; const range = row.projectionRange ? ` Its empirical 80% range is ${row.projectionRange.lower.toFixed(1)}–${row.projectionRange.upper.toFixed(1)}.` : ""; return `The model projects ${row.projection.toFixed(1)}, ${Math.abs(row.projection - row.line).toFixed(1)} ${relation} the ${row.line} line.${range} ${priceCase}`; }
+function modelRead(row: Row): string { if(row.aiReview)return row.aiReview.assessment; const independentConfirmationMissing = row.healthHolds.includes("independent_same_line_confirmation_missing"); const comparison = independentConfirmationMissing ? `${pct(row.marketProbability)} from the current book's two-sided no-vig price context` : `${pct(row.marketProbability)} from the independent market`; const priceCase = `OddSphere gives it a ${pct(row.finalProbability)} calibrated chance versus ${comparison}, producing ${signedPct(row.expectedValue)} expected value at ${price(row.americanPrice)}.${independentConfirmationMissing ? " Independent same-line confirmation is still required, so this read remains No Play." : ""}`; if (row.projection === null) return `The model forecasts a ${pct(row.rawModelProbability)} touchdown probability from participation, role opportunity, team environment, and opponent context. ${priceCase}`; const relation = row.projection >= row.line ? "above" : "below"; const range = row.projectionRange ? ` Its empirical 80% range is ${row.projectionRange.lower.toFixed(1)}–${row.projectionRange.upper.toFixed(1)}.` : ""; return `The model projects ${row.projection.toFixed(1)}, ${Math.abs(row.projection - row.line).toFixed(1)} ${relation} the ${row.line} line.${range} ${priceCase}`; }
 function gradeColors(grade: Row["grade"]): { border: string; background: string; text: string } {
   const sharedGrade: PropGrade = grade === "Best Angle" ? "BEST_ANGLE" : grade === "Lean" ? "LEAN" : grade === "Watchlist" ? "WATCHLIST" : "NO_PLAY";
   return getPropGradeColor(sharedGrade);
@@ -379,7 +382,7 @@ function availabilityText(value: NonNullable<Row["forecastContext"]>["availabili
 function unique(values: string[]): string[] { return [...new Set(values.filter(Boolean))]; }
 function label(value: string): string { return value.split("_").map(capitalize).join(" "); }
 function capitalize(value: string): string { return value.charAt(0).toUpperCase() + value.slice(1); }
-function pct(value: number): string { return `${(value * 100).toFixed(1)}%`; }
+function pct(value: number|null): string { return value===null?"Unavailable":`${(value * 100).toFixed(1)}%`; }
 function signedPct(value: number): string { return `${value >= 0 ? "+" : ""}${(value * 100).toFixed(1)}%`; }
 function price(value: number): string { return value > 0 ? `+${value}` : String(value); }
 function impliedProbability(value: number): number { return value > 0 ? 100 / (value + 100) : Math.abs(value) / (Math.abs(value) + 100); }

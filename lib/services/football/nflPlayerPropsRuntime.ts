@@ -396,7 +396,7 @@ export type NflPlayerPropsRuntimeFeatureRow = {
   } | null;
   availability: {
     listed: boolean; status: string | null; detail: string | null; reportedAt: string | null;
-    reportUpdatedAt: string | null; source: DailyEdgeGameAvailability["source"];
+    reportUpdatedAt: string | null; source: DailyEdgeGameAvailability["source"] | "unavailable";
   };
   features: Record<string, number | null>;
   expectedRoleFeatures?: Record<string, number | null>;
@@ -491,6 +491,7 @@ export type NflPlayerPropsMemberDecisionSupport = {
   };
 };
 export type NflPlayerPropsRuntimeDecision = {
+  aiReview?: import("../../playerPropsAi/publicationContract").PropsAiMemberEvidence;
   gameId: string; providerPlayerId: string | null; playerName: string; team: string; opponent: string;
   scheduledStart: string; market: NflPlayerPropMarket; line: number;
   side: "over" | "under" | "yes"; sportsbook: string; provider: string; americanPrice: number;
@@ -498,7 +499,7 @@ export type NflPlayerPropsRuntimeDecision = {
   observedAt: string; lockAt: string; state: "unlocked" | "locked"; roleFingerprint: string;
   projection: number | null; projectionRange: NflPlayerPropsProjectionRange | null;
   forecastContext: NflPlayerPropsForecastContext;
-  participationProbability: number; rawModelProbability: number;
+  participationProbability: number | null; rawModelProbability: number;
   marketProbability: number; finalProbability: number; probabilityEdge: number; expectedValue: number;
   grade: NflPlayerPropsGrade; marketMovement: NflPlayerPropsMarketMovement; healthHolds: string[]; provisional: false;
   modelRelease: string; calibrationRelease: string; decisionRelease: string;

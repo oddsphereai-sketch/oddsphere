@@ -1,5 +1,7 @@
 "use client";
 
+import {AiPropReader} from "@/app/player-props/components/AiPropReader";
+
 import { useMemo, useState } from "react";
 import type {
   NbaPlayerPropsMemberDecision as Row,
@@ -160,6 +162,7 @@ function BoardRow({ row, onSelect }: { row: Row; onSelect: (key: string) => void
 }
 
 function PropReader({ row, onClose }: { row: Row; onClose: () => void }) {
+  if(row.aiReview)return <AiPropReader evidence={row.aiReview} title={`${row.playerName} · ${marketLabel(row.market)}`} selection={`${row.side} ${row.line}`} projection={row.projection} probability={row.probability} price={`${row.sportsbook} ${row.americanPrice>0?"+":""}${row.americanPrice}`} grade={row.grade} lockedAt={row.lockedAt} onClose={onClose} />;
   const bestPickQuote = bestExactQuote(row, row.side);
   const otherSide = row.side === "over" ? "under" : "over";
   const bestOpposingQuote = bestExactQuote(row, otherSide);

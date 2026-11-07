@@ -95,14 +95,17 @@ export {
 export function resolveNflPlayerPropsPrediction<
   T extends {
     side: "over" | "under" | "yes";
+    aiReview?: {selectedSide:"over"|"under"|"yes"};
     finalProbability: number;
     line: number;
     projection: number | null;
   },
 >(rows: readonly T[], options?: { touchdownPositive?: boolean }): NflPlayerPropsPrediction<T> | null {
+  const reviewed=rows.find(row=>row.aiReview&&row.side===row.aiReview.selectedSide);
+  if(reviewed&&reviewed.side!=="yes")return {outcome:reviewed.side,probability:reviewed.finalProbability,projection:reviewed.projection,row:reviewed,quotedSide:reviewed.side};
   const yes = rows.find((row) => row.side === "yes");
   if (yes) {
-    const touchdownPositive = options?.touchdownPositive ?? yes.finalProbability >= 0.5;
+    const touchdownPositive = yes.aiReview?yes.finalProbability>=0.5:options?.touchdownPositive ?? yes.finalProbability >= 0.5;
     return touchdownPositive
       ? { outcome: "yes", probability: yes.finalProbability, projection: null, row: yes, quotedSide: "yes" }
       : { outcome: "no", probability: 1 - yes.finalProbability, projection: null, row: yes, quotedSide: null };
@@ -155,6 +158,7 @@ export function resolveNflPlayerPropsPrediction<
 export function resolveNflPlayerPropsActionableForecast<
   T extends {
     side: "over" | "under" | "yes";
+    aiReview?: {selectedSide:"over"|"under"|"yes"};
     finalProbability: number;
     line: number;
     projection: number | null;

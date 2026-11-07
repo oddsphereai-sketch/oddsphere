@@ -62,7 +62,7 @@ const rows = snapshot.board.decisions.map((row) => ({
     : Math.abs(row.rawModelProbability - row.marketProbability) > 0.48
     ? "No Play"
     : (row.market === "receiving_yards" || row.market === "receptions") && row.side === "under" && row.grade === "Watchlist"
-      && row.expectedValue >= 0.04 && row.probabilityEdge >= 0.02 && row.participationProbability >= 0.70
+      && row.expectedValue >= 0.04 && row.probabilityEdge >= 0.02 && row.participationProbability !== null && row.participationProbability >= 0.70
       && row.bookEvidence.length >= 2
       ? "Lean"
       : row.grade,

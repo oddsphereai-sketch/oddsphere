@@ -10,7 +10,7 @@ import type {
 } from "./nbaPlayerPropsContract";
 
 export const NBA_PLAYER_PROPS_LIVE_COLLECTOR_RELEASE =
-  "nba_player_props_live_collector_2026_10_28_r5_owls_prices" as const;
+  "nba_player_props_live_collector_2026_11_06_r6_response_completion" as const;
 const BDL_BASE = "https://api.balldontlie.io";
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_SPORT = "basketball_nba";
@@ -88,9 +88,10 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
     });
     bdlRequests += 1;
     const playerMap = canonicalPlayerMap(data(current.body));
+    const currentReceivedAt = new Date().toISOString();
     observations.push(...normalizeBallDontLieNbaPlayerProps({
       values: data(current.body), fetchedAt, events: eventMap, canonicalPlayers: playerMap,
-    }).rows);
+    }).rows.map(row => ({ ...row, receivedAt: currentReceivedAt })));
     if (args.includeOpenings) {
       const opening = await requestJson({
         url: `${BDL_BASE}/nba/v2/odds/player_props/opening?game_id=${encodeURIComponent(game.providerGameId)}`,
@@ -99,13 +100,14 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
       });
       bdlRequests += 1;
       const openingRows = data(opening.body);
+      const openingReceivedAt = new Date().toISOString();
       observations.push(...normalizeBallDontLieNbaPlayerProps({
         values: openingRows,
         fetchedAt,
         opening: true,
         events: eventMap,
         canonicalPlayers: { ...canonicalPlayerMap(openingRows), ...playerMap },
-      }).rows);
+      }).rows.map(row => ({ ...row, receivedAt: openingReceivedAt })));
     }
   }
 
@@ -151,6 +153,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
       const response = await new OwlsInsightClient(args.owlsInsightApiKey, { fetchImpl, timeoutMs: 20_000 })
         .props<{ data?: unknown }>("nba");
       const owlsEvents = array(object(response.body)?.data);
+      const owlsReceivedAt = new Date().toISOString();
       validateOwlsCapacity(owlsEvents);
       const canonicalGames: Record<string, string> = {};
       for (const eventValue of owlsEvents) {
@@ -168,7 +171,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
         canonicalGames,
         canonicalPlayers: args.canonicalPlayersByName,
       });
-      const freshRows = normalized.rows.filter((row) => {
+      const freshRows = normalized.rows.map(row => ({ ...row, receivedAt: owlsReceivedAt })).filter((row) => {
         const observedAt = Date.parse(row.observedAt);
         const fetched = Date.parse(fetchedAt);
         return observedAt <= fetched + MAX_PROVIDER_CLOCK_SKEW_MS
@@ -223,6 +226,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
       url.searchParams.set("bookmakers", ODDS_BOOKMAKERS);
       url.searchParams.set("oddsFormat", "american");
       const response = await requestJson({ url: url.toString(), headers: { Accept: "application/json" }, fetchImpl });
+      const oddsReceivedAt = new Date().toISOString();
       theOddsApiRequests += 1;
       creditsUsed += headerInteger(response.headers, "x-requests-last") ?? ODDS_MARKETS.length;
       creditsRemaining = headerInteger(response.headers, "x-requests-remaining") ?? creditsRemaining;
@@ -233,7 +237,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
           ...args.canonicalPlayersByName,
           ...Object.fromEntries([...canonicalNames(observations).entries()]),
         },
-      }).rows);
+      }).rows.map(row => ({ ...row, receivedAt: oddsReceivedAt })));
     }
   } else if (gapGames.length > 0) findings.push("the_odds_api_gap_fetch_skipped_missing_key");
 

@@ -100,7 +100,7 @@ async function main(): Promise<void> {
       snapshot: snapshot.snapshotRelease,
       historical: historical?.release ?? null,
     },
-    current: currentSummary(snapshot.decisions),
+    current: currentSummary(snapshot.decisions.filter((row): row is typeof row & {independentProjection:number} => row.independentProjection!==null && !row.aiReview)),
     historical: historical ? historicalSummary(historical.rows) : null,
   }, null, 2)}\n`);
 }

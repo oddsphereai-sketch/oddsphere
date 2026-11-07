@@ -210,6 +210,7 @@ async function main(): Promise<void> {
       });
       const referenceSide = probabilitySide(evidence.targetExcludedReferenceOverProbability);
       const movement = movementState(evidence, referenceSide);
+      if(row.independentProjection===null)continue;
       decisions.push({
         slateDate: date,
         market: row.market,

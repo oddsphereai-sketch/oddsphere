@@ -96,7 +96,7 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
       // The market-board adapter has already selected the latest observation
       // at or before T-60. Freeze that authorized boundary row, not an older
       // unlocked row retained from the previous writer cycle.
-      return { ...next, state: "locked" as const };
+      return { ...(prior?.aiReview&&isFreshAtLock(prior)?prior:next), state: "locked" as const };
     }
     recomputedUnlocked += 1;
     return next;
@@ -313,7 +313,7 @@ function isFreshAt(row: NflPlayerPropsRuntimeDecision, evaluatedAt: number): boo
     && age <= nflPlayerPropsRuntimePolicy().maximumQuoteAgeHours * 3_600_000;
 }
 function isFreshAtLock(row: NflPlayerPropsRuntimeDecision): boolean {
-  const age = Date.parse(row.lockAt) - Date.parse(row.observedAt);
+  const age = Date.parse(row.lockAt) - Date.parse(row.aiReview?.selectedSide===row.side?row.aiReview.quoteConfirmedAt:row.observedAt);
   return Number.isFinite(age) && age >= 0
     && age <= nflPlayerPropsRuntimePolicy().maximumQuoteAgeHours * 3_600_000;
 }

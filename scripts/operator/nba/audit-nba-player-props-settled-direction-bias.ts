@@ -216,6 +216,7 @@ async function main(): Promise<void> {
             : null;
         })();
       if (!revision || revision.actual === null || revision.result === "push" || revision.result === "void") continue;
+      if(row.independentProjection===null)continue;
       const outcomeSide: Side = revision.actual > row.line ? "over" : "under";
       settled.push({
         slateDate: history.slateDate,
