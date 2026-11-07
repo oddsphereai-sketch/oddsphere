@@ -4,6 +4,7 @@ import { priceAiLaw } from "../lib/playerPropsAi/pricing";
 import { reviewSlots, monthSlots } from "../lib/playerPropsAi/schedule";
 import { usageMicroUsd } from "../lib/playerPropsAi/budget";
 import { PROPS_AI_SCENARIOS } from "../lib/playerPropsAi/releases";
+import { scenarioColumns, decodeScenarioRows } from "../lib/playerPropsAi/scenarioCoordinates";
 const vector = (n: number) => Array(PROPS_AI_SCENARIOS).fill(n) as number[];
 const nba = { markets: ["points", "threes", "rebounds", "assists", "points_rebounds_assists"] };
 const raw = { weights: [9, 1, ...Array(14).fill(0)], outcomes: { points: [10, 40, ...Array(14).fill(10)], rebounds: vector(2), assists: vector(3), threes: vector(0) } };
@@ -47,4 +48,20 @@ assert.equal(monthSlots([crossing], "2026-11", "2026-11-30T12:00:00Z").length, 1
 assert.equal(monthSlots([crossing], "2026-12", "2026-11-30T12:00:00Z").length, 1);
 assert.equal(usageMicroUsd("gpt-6-luna", { input_tokens: 145000, output_tokens: 10000 }), 19500);
 assert.equal(usageMicroUsd("gpt-6.1-terra", { input_tokens: 145000, output_tokens: 10000 }), 195000);
+assert.equal(usageMicroUsd("gpt-6-luna", { input_tokens: 145000, output_tokens: 10000 },"flex"), 9750);
+assert.equal(usageMicroUsd("gpt-6-luna", { input_tokens: 145000, output_tokens: 10000 },"unknown"), 19500);
+assert.equal(usageMicroUsd("gpt-6-luna", { input_tokens: 1, output_tokens: 1 },"flex"), 1); // Integer ceiling after discount.
+const physical = (sport: "nba"|"nfl"|"mlb", player: {markets:string[]}, coordinates: Record<string,number>) => {
+  const rows=Array.from({length:PROPS_AI_SCENARIOS},()=>scenarioColumns(sport,player).map(k=>coordinates[k]??0));
+  return validateLaw(sport,player,decodeScenarioRows(sport,player,rows));
+};
+const qb={markets:["passing_yards","passing_tds","interceptions","rushing_yards","anytime_td"]};
+const physicalQb=physical("nfl",qb,{relativeWeight:1,other_incomplete_passes:6,non_touchdown_completions:18,passing_tds:2,interceptions:1,passing_yards_gained:210,passing_yards_lost:10,rushing_yards_lost:2,touchdowns:0});
+assert.equal(physicalQb.outcomes.passing_completions[0],20);assert.equal(physicalQb.outcomes.passing_attempts[0],27);
+assert.equal(physicalQb.outcomes.passing_yards[0],200);assert.equal(physicalQb.outcomes.rushing_yards[0],-2);
+assert.equal(lawForecast(physicalQb,"anytime_td",.5).over,0);
+const physicalBatter=physical("mlb",batter,{relativeWeight:1,batter_home_runs:2,batter_non_home_run_runs:1,batter_non_home_run_rbis:3,batter_singles:1});
+assert.equal(physicalBatter.outcomes.batter_runs_scored[0],3);assert.equal(physicalBatter.outcomes.batter_rbis[0],5);
+assert.equal(lawForecast(physicalBatter,"batter_hits",.5).mean,3);assert.equal(lawForecast(physicalBatter,"batter_total_bases",.5).mean,9);
+assert.equal(lawForecast(physicalBatter,"batter_hits_runs_rbis",.5).mean,11);
 console.log("Player-prop AI core: coherent laws, rare/binary/push contracts, symmetric grade changes, exact prices, clocks and two-window billing boundaries passed. No API calls.");

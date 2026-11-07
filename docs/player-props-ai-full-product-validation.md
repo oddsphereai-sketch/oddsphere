@@ -1,9 +1,15 @@
 # Player-prop AI product: full-scope offline validation
 
-Process-first continuation base: `9c9ba4db585044f5a0867dc6040fc1ac2ecf667c`.
+Forecast-reliability continuation base: `e008a0fd4f22653a8fde8690b87d38d4d1ac3cf2`.
 Packet contract: `player_props_ai_offline_full_product_2026_11_06_r1`.
 Research behavior is exported by `probability-proposals.ts`; receipts preserve each
 original request. This is a manual local evaluation system, not a deployed model.
+
+The current joint-forecast candidate and measured-cost workflow are described in
+[`player-props-ai-forecast-reliability.md`](player-props-ai-forecast-reliability.md).
+That workflow supersedes the older point-forecast/output-density cost rehearsal below.
+The older scripts and their immutable receipts remain available for provenance, but
+their smaller input layout cannot justify a current full-product monthly estimate.
 
 ## Owner's launch standard — November 6
 

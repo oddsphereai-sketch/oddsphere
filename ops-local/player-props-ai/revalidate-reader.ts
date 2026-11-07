@@ -14,7 +14,8 @@ const accepted=[],failed=[];
 for(const receipt of result.receipts){
   const response=JSON.parse(readFileSync(receipt.file,"utf8")).response as AiResponse;
   const request=JSON.parse(readFileSync(receipt.file.replace(/\.json$/,".request.json"),"utf8")).body;
-  const part=playerSubset(packet,JSON.parse(request.input).players.map((p:{id:string})=>p.id)),facts=readerEvidence(part);
+  const input=JSON.parse(request.input),source=input.format?.startsWith("props_source_records_")?input.document:input;
+  const part=playerSubset(packet,source.players.map((p:{id:string})=>p.id)),facts=readerEvidence(part);
   const value=structuredAiText(response) as {players:Record<string,{coverage:ReaderCoverage}>};
   for(const p of part.players){
     try{accepted.push({playerId:p.id,coverage:validatePlayerCoverage(p,facts[p.id],value.players[p.id].coverage),originalResponseId:response.id,originalReceiptFile:receipt.file,originalRequestHash:digest(request)});}

@@ -13,6 +13,7 @@ async function main(){
  const file=arg("packet"),label=arg("label"),model=(arg("model")??PROPS_AI_PRIMARY_MODEL) as PropsAiModel;
  invariant(file&&label&&/^[a-z0-9_-]+$/i.test(label)&&[PROPS_AI_PRIMARY_MODEL,PROPS_AI_STRONG_MODEL].includes(model)&&process.env.OPENAI_API_KEY,"Packet, unique label, supported model and private key environment required");
  const packet=JSON.parse(readFileSync(file,"utf8")) as GamePacket;
+ const serviceTier=arg("tier")==="flex"?"flex":"default";
  const readerOnly=arg("mode")==="reader",request=readerOnly?readerReviewRequest:jointReviewRequest;
  const parts=await prepareReviewParts(packet,{key:process.env.OPENAI_API_KEY!,model,count:(p,m)=>countAiInput(request(p,m,PROPS_AI_MAX_OUTPUT_PER_REQUEST),{key:process.env.OPENAI_API_KEY!})});
  const root="/private/tmp/oddsphere-props-ai-eval-20261106",budget=new TestBudget(`${root}/ledger.json`);mkdirSync(root,{recursive:true,mode:0o700});
@@ -24,20 +25,20 @@ async function main(){
  });
  budget.reserveMany(planned.map(p=>p.attempt));const receipts=[],players=[];
  try { for(const part of planned){
-  budget.claim(part.attempt);writeFileSync(part.file.replace(/\.json$/,".request.json"),JSON.stringify({label,body:part.body,packetDigest:digest(part.packet)}),{mode:0o600,flag:"wx"});
-  let response;const progress:{type:string;elapsedMs:number;textCharacters:number}[]=[];
-  try{response=await generateAiReview(part.body,{key:process.env.OPENAI_API_KEY!,timeoutMs:180000,onProgress:event=>{if(progress.length<1000)progress.push(event);else progress[999]=event;},onCreated:async id=>{budget.update(part.attempt.id,{responseId:id,status:"streaming"});}});}
+  budget.claim(part.attempt);writeFileSync(part.file.replace(/\.json$/,".request.json"),JSON.stringify({label,serviceTier,body:part.body,packetDigest:digest(part.packet)}),{mode:0o600,flag:"wx"});
+  let response,visibleOutput="";const progress:{type:string;elapsedMs:number;textCharacters:number}[]=[];
+  try{response=await generateAiReview(part.body,{key:process.env.OPENAI_API_KEY!,timeoutMs:180000,serviceTier,stream:arg("transport")==="stream",onOutputText:arg("diagnostic")==="true"?delta=>{if(visibleOutput.length+delta.length<1000000)visibleOutput+=delta;}:undefined,onProgress:event=>{if(progress.length<1000)progress.push(event);else progress[999]=event;},onCreated:async id=>{budget.update(part.attempt.id,{responseId:id,status:"streaming"});}});}
   catch(error){budget.update(part.attempt.id,{status:"failed_reservation_retained"});throw error;}
-  finally{writeFileSync(part.file.replace(/\.json$/,".stream-health.json"),JSON.stringify({events:progress,scope:"Bounded timing/count metadata (first events and latest event); no partial model text or hidden reasoning stored"}),{mode:0o600,flag:"wx"});}
+  finally{writeFileSync(part.file.replace(/\.json$/,".stream-health.json"),JSON.stringify({events:progress,scope:"Bounded timing/count metadata (first events and latest event); no hidden reasoning stored"}),{mode:0o600,flag:"wx"});if(arg("diagnostic")==="true")writeFileSync(part.file.replace(/\.json$/,".visible-output.txt"),visibleOutput,{mode:0o600,flag:"wx"});}
   writeFileSync(part.file,JSON.stringify({label,response}),{mode:0o600,flag:"wx"});
-  invariant(response.usage,"No usage; reserved charge retained");const actual=usageMicroUsd(model,response.usage)/1e6;
+  invariant(response.usage,"No usage; reserved charge retained");const actual=usageMicroUsd(model,response.usage,response.service_tier)/1e6;
   budget.update(part.attempt.id,{actualUsd:actual,inputTokens:response.usage.input_tokens,outputTokens:response.usage.output_tokens,status:response.status,responseId:response.id});
   let qualityError:string|null=null;
   try{const parsed=readerOnly?parseReaderReview(part.packet,structuredAiText(response)):parseJointReview(part.packet,structuredAiText(response));players.push(...parsed.players);writeFileSync(part.file.replace(/\.json$/,".accepted.json"),JSON.stringify(parsed),{mode:0o600,flag:"wx"});}
   catch(error){qualityError=(error as Error).message;budget.update(part.attempt.id,{qualityError});}
-  receipts.push({file:part.file,input:response.usage.input_tokens,output:response.usage.output_tokens,cost:actual,qualityError});
+  receipts.push({file:part.file,input:response.usage.input_tokens,output:response.usage.output_tokens,cost:actual,confirmedServiceTier:response.service_tier??"unknown_billed_standard_conservatively",qualityError});
  } } finally {budget.cancelUnsent(planned.map(p=>p.attempt.id));}
- const report={label,model,game:packet.gameId,players:packet.players.length,markets:packet.players.reduce((n,p)=>n+p.markets.length,0),requests:planned.length,
+ const report={label,model,requestedServiceTier:serviceTier,game:packet.gameId,players:packet.players.length,markets:packet.players.reduce((n,p)=>n+p.markets.length,0),requests:planned.length,
   knownUsd:receipts.reduce((n,r)=>n+r.cost,0),allProcessChecksPassed:receipts.every(r=>!r.qualityError),mode:readerOnly?"reader_process_only":"joint_forecast",reviewedPlayers:players.length,receipts,productionWrites:0,
   scope:"full-scope API-format/process/cost rehearsal; no retrospective accuracy qualification or live publication"};
  writeFileSync(`${root}/${label}.joint-result.json`,JSON.stringify(report),{mode:0o600,flag:"wx"});console.log(JSON.stringify(report));

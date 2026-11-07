@@ -1,7 +1,7 @@
 import { invariant } from "./evidence";
 import type { PropsAiModel } from "./releases";
 export type AiUsage = { input_tokens: number; output_tokens: number; input_tokens_details?: { cache_write_tokens?: number; cache_write_tokens_details?: { ttl_12h_tokens?: number } }; output_tokens_details?: { reasoning_tokens?: number } };
-export type AiResponse = { id: string; status: string; model: string; usage?: AiUsage; output?: { content?: { type: string; text?: string }[] }[] };
+export type AiResponse = { id: string; status: string; model: string; service_tier?:string; usage?: AiUsage; output?: { content?: { type: string; text?: string }[] }[] };
 export type AiRequest = { model: PropsAiModel; instructions: string; input: string; text: unknown; max_output_tokens: number; store: false };
 export async function countAiInput(body: AiRequest, args: { key: string; fetchImpl?: typeof fetch }) {
   const response = await (args.fetchImpl ?? fetch)("https://api.openai.com/v1/responses/input_tokens", {
@@ -11,18 +11,28 @@ export async function countAiInput(body: AiRequest, args: { key: string; fetchIm
   invariant(response.ok, `input_count_http_${response.status}`);
   const data = await response.json(); invariant(Number.isSafeInteger(data.input_tokens) && data.input_tokens > 0, "invalid_input_token_count"); return data.input_tokens as number;
 }
-export async function generateAiReview(body: AiRequest, args: { key: string; timeoutMs: number; fetchImpl?: typeof fetch; onCreated?: (id: string) => Promise<void>; onProgress?: (event:{type:string;elapsedMs:number;textCharacters:number})=>void }): Promise<AiResponse> {
+export async function generateAiReview(body: AiRequest, args: { key: string; timeoutMs: number; fetchImpl?: typeof fetch; serviceTier?:"default"|"flex"; stream?:boolean; onOutputText?:(delta:string)=>void; onCreated?: (id: string) => Promise<void>; onProgress?: (event:{type:string;elapsedMs:number;textCharacters:number})=>void }): Promise<AiResponse> {
   const started=Date.now();let textCharacters=0;
   invariant(args.key && Number.isFinite(args.timeoutMs) && args.timeoutMs > 0 && args.timeoutMs <= 180000, "invalid_generation_configuration");
   const response = await (args.fetchImpl ?? fetch)("https://api.openai.com/v1/responses", { method: "POST",
     headers: { Authorization: `Bearer ${args.key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ ...body, stream: true, service_tier: "default", truncation: "disabled", reasoning: { effort: "low" }, prompt_cache_options: { mode: "explicit" } }),
+    body: JSON.stringify({ ...body, stream: args.stream??false, service_tier: args.serviceTier??"default", truncation: "disabled", reasoning: { effort: "low" }, prompt_cache_options: { mode: "explicit" } }),
     signal: AbortSignal.timeout(args.timeoutMs),
   });
   invariant(response.ok, `generation_http_${response.status}`);
-  if (!response.headers.get("content-type")?.includes("text/event-stream")) return await response.json() as AiResponse;
+  if (!response.headers.get("content-type")?.includes("text/event-stream")) {
+    invariant(response.body,"missing_response_body");
+    const reader=response.body.getReader(),decoder=new TextDecoder();let text="",bytes=0;
+    try{while(true){const {value,done}=await reader.read();bytes+=value?.byteLength??0;invariant(bytes<=4000000,"oversize_response_body");text+=decoder.decode(value,{stream:!done});if(done)break;}}
+    finally{await reader.cancel().catch(()=>undefined);reader.releaseLock();}
+    const result=JSON.parse(text) as AiResponse;
+    const visible=result.output?.flatMap(o=>o.content??[]).filter(c=>c.type==="output_text").map(c=>c.text??"").join("")??"";
+    args.onOutputText?.(visible);args.onProgress?.({type:`response.${result.status}`,elapsedMs:Date.now()-started,textCharacters:visible.length});
+    return result;
+  }
   invariant(response.body, "missing_response_stream");
   const reader = response.body.getReader(), decoder = new TextDecoder(); let pending = "", bytes = 0;
+  try{
   while (true) {
     const { value, done } = await reader.read(); bytes += value?.byteLength ?? 0;
     invariant(bytes <= 4_000_000, "oversize_response_stream");
@@ -33,7 +43,7 @@ export async function generateAiReview(body: AiRequest, args: { key: string; tim
       const text = block.split("\n").filter(line => line.startsWith("data:")).map(line => line.slice(5).trim()).join("\n");
       if (!text || text === "[DONE]") continue;
       const event = JSON.parse(text);
-      if(event.type==="response.output_text.delta")textCharacters+=typeof event.delta==="string"?event.delta.length:0;
+      if(event.type==="response.output_text.delta"&&typeof event.delta==="string"){textCharacters+=event.delta.length;args.onOutputText?.(event.delta);}
       args.onProgress?.({type:String(event.type),elapsedMs:Date.now()-started,textCharacters});
       if (event.type === "response.created" && event.response?.id) await args.onCreated?.(event.response.id);
       if (["response.completed", "response.incomplete", "response.failed"].includes(event.type)) return event.response as AiResponse;
@@ -41,6 +51,7 @@ export async function generateAiReview(body: AiRequest, args: { key: string; tim
     }
     invariant(!done, "response_ended_without_usage_receipt");
   }
+  }finally{await reader.cancel().catch(()=>undefined);reader.releaseLock();}
 }
 export function structuredAiText(response: AiResponse) {
   invariant(response.status === "completed", `generation_${response.status}`);
