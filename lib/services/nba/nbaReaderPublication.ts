@@ -1,7 +1,7 @@
 /** Read completeness is different from source agreement. An observed absence
  * is legitimate context; a failed lookup cannot masquerade as no opposition.
  * No forecast or grade runs under this guard's failure path. */
-export const NBA_READER_PUBLICATION_RELEASE="nba_reader_publication_2026_11_06_r1_complete_reads" as const;
+export const NBA_READER_PUBLICATION_RELEASE="nba_reader_publication_2026_11_06_r2_scoped_split_high_water" as const;
 const safeCode=(code:string)=>/^(price|split)_observation_(high_water_failed|lookup_failed|id_order_invalid|coverage_incomplete)$/.test(code)?code:"reader_evidence_unavailable";
 /** A short page may be a server-imposed limit. Only the scoped high-water
  * frontier proves completion; an empty page before it is incomplete evidence. */
@@ -48,4 +48,13 @@ export function nbaReaderFailureReceipt(response:Response){
  const codes=raw.split(",");
  if(codes.some(c=>c!=="nba_pipeline_build_failed"&&safeCode(c)!==c))return undefined;
  return {release:NBA_READER_PUBLICATION_RELEASE,codes};
+}
+
+/** Diagnostic-only contract: callers already persist result.error in their
+ * existing data_refresh_log row. No new log writer or prediction path. */
+export const NBA_READER_FAILURE_LOG_RELEASE="nba_reader_failure_log_2026_11_06_r1_allowlisted_phase" as const;
+export function nbaReaderFailureLogSuffix(receipt:ReturnType<typeof nbaReaderFailureReceipt>):string {
+ if(!receipt)return "";
+ const codes=[...new Set(receipt.codes.map(code=>code==="nba_pipeline_build_failed"?code:safeCode(code)))].sort();
+ return ` [${NBA_READER_FAILURE_LOG_RELEASE}: ${codes.join(",")}]`;
 }

@@ -1,5 +1,14 @@
 # Current production model releases and qualified research candidates
 
+## November 6 NBA rolling publication R2
+
+`nba_reader_publication_2026_11_06_r2_scoped_split_high_water` preserves the R1
+complete-read guard and fixes the observed future-slate split MAX timeout with
+an exact scoped read-only SQL function. GradeR31/modelR36/marriageR38 and all
+locked families are unchanged; healthy complete-input grade impact is zero.
+A diagnostic-only R1 suffix also persists allowlisted source phases through the
+existing cron error_message path. No new writer/provider/retention/cadence rule.
+Proof and migration: `model-audits/2026-11-06-nba-durable-read-failure-diagnostics.md`.
 ## November 6 CBB verified-school pipeline handoff R55
 
 Publisher `cbb_member_pipeline_2026_11_06_r55_verified_school_pipeline_handoff`

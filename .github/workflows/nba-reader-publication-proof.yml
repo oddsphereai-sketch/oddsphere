@@ -1,0 +1,21 @@
+name: NBA reader publication proof
+on:
+  pull_request:
+    paths:
+      - 'lib/db/schema-migration-v61-nba-split-high-water.sql'
+      - 'lib/services/nba/nbaSplitHighWater.ts'
+      - 'lib/services/nba/nbaReaderPublication.ts'
+      - 'scripts/test-bounded-response-transport-postgres.mjs'
+      - '.github/workflows/nba-reader-publication-proof.yml'
+permissions:
+  contents: read
+jobs:
+  nba-split-frontier-postgres-proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install --prefix "$RUNNER_TEMP/nba-reader-proof" --no-audit --no-fund --ignore-scripts @electric-sql/pglite@0.5.15
+      - run: node scripts/test-bounded-response-transport-postgres.mjs "$RUNNER_TEMP/nba-reader-proof/node_modules/@electric-sql/pglite/dist/index.js"
