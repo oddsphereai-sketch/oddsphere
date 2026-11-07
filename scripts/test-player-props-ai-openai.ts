@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {generateAiReview,structuredAiText,type AiRequest} from "../lib/playerPropsAi/openai";
+import {generateAiReview,structuredAiText,AiGenerationError,type AiRequest} from "../lib/playerPropsAi/openai";
 const body:AiRequest={model:"gpt-6-luna",instructions:"Synthetic parser test",input:"{}",text:{},max_output_tokens:100,store:false};
 const complete={id:"synthetic",model:"gpt-6-luna",status:"completed",usage:{input_tokens:10,output_tokens:5},output:[{content:[{type:"output_text",text:'{"ok":true}'}]}]};
 async function main(){
@@ -21,6 +21,9 @@ async function main(){
   assert.deepEqual(structuredAiText(json),{ok:true});assert.deepEqual(json.usage,complete.usage);
   const flex=await generateAiReview(body,{key:"synthetic-key",timeoutMs:10000,serviceTier:"flex",fetchImpl:(async(_url,options)=>{assert.equal(JSON.parse(String(options?.body)).service_tier,"flex");return Response.json({...complete,service_tier:"flex"});}) as typeof fetch});
   assert.equal(flex.service_tier,"flex");
+  for(const [tier,code,unbilled] of [["flex","resource_unavailable",true],["flex","rate_limit_exceeded",false],["default","resource_unavailable",false]] as const){
+    await assert.rejects(()=>generateAiReview(body,{key:"synthetic-key",timeoutMs:10000,serviceTier:tier,fetchImpl:(async()=>Response.json({error:{code}},{status:429})) as typeof fetch}),error=>error instanceof AiGenerationError&&error.knownUnbilled===unbilled);
+  }
   let cancelled=false;
   const oversized=async()=>new Response(new ReadableStream({start(controller){controller.enqueue(new Uint8Array(4000001));},cancel(){cancelled=true;}}),{headers:{"content-type":"application/json"}});
   await assert.rejects(()=>generateAiReview(body,{key:"synthetic-key",timeoutMs:10000,fetchImpl:oversized as typeof fetch}),/oversize_response_body/);

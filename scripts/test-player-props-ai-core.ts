@@ -51,6 +51,9 @@ assert.equal(usageMicroUsd("gpt-6.1-terra", { input_tokens: 145000, output_token
 assert.equal(usageMicroUsd("gpt-6-luna", { input_tokens: 145000, output_tokens: 10000 },"flex"), 9750);
 assert.equal(usageMicroUsd("gpt-6-luna", { input_tokens: 145000, output_tokens: 10000 },"unknown"), 19500);
 assert.equal(usageMicroUsd("gpt-6-luna", { input_tokens: 1, output_tokens: 1 },"flex"), 1); // Integer ceiling after discount.
+assert.equal(usageMicroUsd("gpt-6.1-terra", { input_tokens: 147048, output_tokens: 7000 }),182048);
+assert.equal(usageMicroUsd("gpt-6-luna", { input_tokens: 1000, output_tokens: 0,input_tokens_details:{cache_write_tokens:1000} }),125);
+assert.equal(usageMicroUsd("gpt-6-luna", { input_tokens: 1000, output_tokens: 0,input_tokens_details:{cache_write_tokens:1000,cache_write_tokens_details:{ttl_12h_tokens:1000}} }),250);
 const physical = (sport: "nba"|"nfl"|"mlb", player: {markets:string[]}, coordinates: Record<string,number>) => {
   const rows=Array.from({length:PROPS_AI_SCENARIOS},()=>scenarioColumns(sport,player).map(k=>coordinates[k]??0));
   return validateLaw(sport,player,decodeScenarioRows(sport,player,rows));

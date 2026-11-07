@@ -3,6 +3,9 @@ import type { PropsAiModel } from "./releases";
 export type AiUsage = { input_tokens: number; output_tokens: number; input_tokens_details?: { cache_write_tokens?: number; cache_write_tokens_details?: { ttl_12h_tokens?: number } }; output_tokens_details?: { reasoning_tokens?: number } };
 export type AiResponse = { id: string; status: string; model: string; service_tier?:string; usage?: AiUsage; output?: { content?: { type: string; text?: string }[] }[] };
 export type AiRequest = { model: PropsAiModel; instructions: string; input: string; text: unknown; max_output_tokens: number; store: false };
+export class AiGenerationError extends Error {
+  constructor(readonly status:number,readonly code:string|null,readonly knownUnbilled:boolean){super(`generation_http_${status}${knownUnbilled?"_resource_unavailable":""}`);}
+}
 export async function countAiInput(body: AiRequest, args: { key: string; fetchImpl?: typeof fetch }) {
   const response = await (args.fetchImpl ?? fetch)("https://api.openai.com/v1/responses/input_tokens", {
     method: "POST", headers: { Authorization: `Bearer ${args.key}`, "Content-Type": "application/json" },
@@ -19,7 +22,12 @@ export async function generateAiReview(body: AiRequest, args: { key: string; tim
     body: JSON.stringify({ ...body, stream: args.stream??false, service_tier: args.serviceTier??"default", truncation: "disabled", reasoning: { effort: "low" }, prompt_cache_options: { mode: "explicit" } }),
     signal: AbortSignal.timeout(args.timeoutMs),
   });
-  invariant(response.ok, `generation_http_${response.status}`);
+  if(!response.ok){
+    let code:string|null=null;
+    // Only explicit Flex capacity rejection is documented as uncharged.
+    try{const text=await response.text();if(text.length<=16384){const error=JSON.parse(text)?.error;code=typeof error?.code==="string"?error.code:typeof error?.type==="string"?error.type:null;}}catch{}
+    throw new AiGenerationError(response.status,code,args.serviceTier==="flex"&&response.status===429&&["resource_unavailable","resource_unavailable_error"].includes(code??""));
+  }
   if (!response.headers.get("content-type")?.includes("text/event-stream")) {
     invariant(response.body,"missing_response_body");
     const reader=response.body.getReader(),decoder=new TextDecoder();let text="",bytes=0;
