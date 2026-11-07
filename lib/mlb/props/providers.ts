@@ -107,6 +107,8 @@ export type PropOddsSnapshot = {
   decimalOdds: number;
   impliedProbability: number;
   asOfTimestamp: string;
+  /** Actual HTTP completion; never reconstructed for older snapshots. */
+  providerResponseAt?: string;
   snapshotRole?: "opening" | "current" | "closing" | "reference";
   provider: string;
   rawPayload?: unknown;

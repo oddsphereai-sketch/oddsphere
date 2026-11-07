@@ -1,5 +1,31 @@
 # Current production model releases and qualified research candidates
 
+## November 7 player-prop AI forecast candidate — not activated
+
+`PROPS_AI_RELEASE` is `player_props_ai_2026_11_07_r12_funded_partial_fallback`;
+budget candidate is `player_props_ai_budget_2026_11_07_r3_full_source_wallet`.
+Both are exported from `lib/playerPropsAi/releases.ts`. The wire coordinate
+contract is `props_scenario_rows_2026_11_07_r2_physical_coordinates`; the stored
+canonical law remains `player_props_ai_law_2026_11_06_r1_integer_scenarios`.
+Full-source API completion and physical-law checks passed sampled NBA/NFL/MLB
+rehearsals. This is process evidence only, not measured accuracy or activation.
+The v62 wallet replaces fixed allowances with full-source request envelopes, protects
+the entire primary calendar and fallback/recovery pools, and requires the existing
+sport writer's lease. The actual reviewer retries only failed whole-player parts,
+records true service tiers, and retains unknown charges. Native PostgreSQL and mock
+HTTP prove the integration without more paid testing. No current production model,
+sole writer, grade, stake or lock changes; rollout remains separate from implementation.
+The carried-forward source-clock candidate also exports NBA observation R3 /
+collector R6 (`2026_11_06_*_response_completion`) and NFL provider observation
+`nfl_player_props_provider_observation_2026_11_06_r15_response_completion`.
+Those collectors add actual response-completion metadata to future observations;
+legacy collection-start fields remain exact. MLB adds optional `providerResponseAt`
+without changing the active `mlb_props_2026_10_21_r44` forecast bundle. These source
+releases are candidate changes, not a claim that production has already advanced.
+Keep this candidate offline until the remaining engineering gates in
+`player-props-ai-wallet-fallback.md` and `player-props-ai-forecast-reliability.md` pass. Original receipts and financial
+reports stay private; no superseded MLB/NFL/NBA rule is restored by these replays.
+
 ## November 6 NBA rolling publication R2
 
 `nba_reader_publication_2026_11_06_r2_scoped_split_high_water` preserves the R1
