@@ -156,7 +156,7 @@ for (const name of ["catalog.ts", "core.ts", "validation.ts", "adapters.ts", "ma
   for (const match of code.matchAll(/^import (?!type\b).*from ["']([^"']+)["']/gm)) assert.ok(match[1].startsWith("./") || match[1].startsWith("node:"), `Runtime dependency escapes offline boundary: ${match[1]}`);
 }
 // The pure implementations moved into shared lib modules; inspect those too.
-for(const name of ["evidenceContract.ts","evidence.ts","cachedAdapters.ts","cachedEnrichment.ts","marketReport.ts","input.ts","readerLogs.ts","readerCoverage.ts","gameContext.ts","nbaBenchmarks.ts","nflMarkets.ts","law.ts","request.ts"]){
+for(const name of ["evidenceContract.ts","evidence.ts","cachedAdapters.ts","cachedEnrichment.ts","marketReport.ts","input.ts","readerLogs.ts","readerCoverage.ts","gameContext.ts","nbaBenchmarks.ts","nflMarkets.ts","law.ts","sourceCodec.ts","scenarioCoordinates.ts","request.ts"]){
   const code=readFileSync(new URL(`../../lib/playerPropsAi/${name}`,import.meta.url),"utf8");
   assert.doesNotMatch(code,/\bfetch\s*\(|process\.env|createClient\s*\(|\b(?:client|supabase)\.from\s*\(/);
   for(const match of code.matchAll(/^import (?!type\b).*from ["']([^"']+)["']/gm))assert.ok(match[1].startsWith("./")||match[1].startsWith("node:")||name==="nbaBenchmarks.ts"&&match[1]==="../services/nba/nbaPointInTimeFeatures",`Shared pure module acquired runtime capability: ${name}:${match[1]}`);

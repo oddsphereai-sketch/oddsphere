@@ -41,10 +41,10 @@ export class PropsAiStore {
   reap() { return this.rpc<number>("player_props_ai_reap"); }
 }
 /** Integer ceiling includes all output/reasoning. Cache writes are charged even if unexpectedly returned. */
-export function usageMicroUsd(model: PropsAiModel, usage: { input_tokens: number; output_tokens: number; input_tokens_details?: { cache_write_tokens?: number; cache_write_tokens_details?: { ttl_12h_tokens?: number } } }) {
+export function usageMicroUsd(model: PropsAiModel, usage: { input_tokens: number; output_tokens: number; input_tokens_details?: { cache_write_tokens?: number; cache_write_tokens_details?: { ttl_12h_tokens?: number } } },confirmedTier?:string) {
   const input = usage?.input_tokens, output = usage?.output_tokens, writes = usage?.input_tokens_details?.cache_write_tokens ?? 0, longWrites = usage?.input_tokens_details?.cache_write_tokens_details?.ttl_12h_tokens ?? 0;
   invariant([input, output, writes, longWrites].every(n => Number.isSafeInteger(n) && n >= 0) && longWrites <= writes && writes <= input, "Missing/invalid usage receipt");
   const multiplier = model === "gpt-6.1-terra" ? 10 : 1;
   const long = input >= 272000;
-  return Math.ceil(multiplier * ((input + (writes - longWrites) * .25 + longWrites * 1.5) * .1 * (long ? 2 : 1) + output * .5 * (long ? 1.5 : 1)));
+  return Math.ceil((confirmedTier==="flex"?.5:1)*multiplier * ((input + (writes - longWrites) * .25 + longWrites * 1.5) * .1 * (long ? 2 : 1) + output * .5 * (long ? 1.5 : 1)));
 }

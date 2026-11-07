@@ -1,5 +1,20 @@
 # Current production model releases and qualified research candidates
 
+## November 7 player-prop AI forecast candidate — not activated
+
+`PROPS_AI_RELEASE` is `player_props_ai_2026_11_07_r11_bounded_physical_rows`;
+budget candidate is `player_props_ai_budget_2026_11_07_r2_bounded_output`.
+Both are exported from `lib/playerPropsAi/releases.ts`. The wire coordinate
+contract is `props_scenario_rows_2026_11_07_r2_physical_coordinates`; the stored
+canonical law remains `player_props_ai_law_2026_11_06_r1_integer_scenarios`.
+Full-source API completion and physical-law checks passed sampled NBA/NFL/MLB
+rehearsals. This is process evidence only, not measured accuracy or activation.
+The production wallet still needs full-source reservations and durable tier/fallback
+accounting; no current production model, sole writer, grade, stake or lock changes.
+Keep this candidate offline until the remaining engineering gates in
+`player-props-ai-forecast-reliability.md` pass. Original receipts and financial
+reports stay private; no superseded MLB/NFL/NBA rule is restored by these replays.
+
 ## November 6 NBA rolling publication R2
 
 `nba_reader_publication_2026_11_06_r2_scoped_split_high_water` preserves the R1
