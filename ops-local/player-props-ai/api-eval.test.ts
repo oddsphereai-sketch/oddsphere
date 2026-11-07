@@ -51,6 +51,13 @@ async function main() {
     const one = { id: "one", job: "one", model: "gpt-6-luna" as const, reservedUsd: 1.1, actualUsd: null, status: "reserved", inputTokens: 1, outputTokens: null };
     assert.throws(() => atomic.reserveMany([one, { ...one, id: "two" }]), /ceiling/);
     assert.throws(() => readFileSync(atomic.file), /ENOENT/); // No half-reserved review.
+    atomic.reserveMany([{...one,reservedUsd:.1},{...one,id:"two",reservedUsd:.1}]);
+    atomic.claim({...one,reservedUsd:.1});
+    assert.equal(atomic.cancelUnsent(["one","two"]),1); // Sending/unknown costs cannot be erased.
+    const cancellation=JSON.parse(readFileSync(atomic.file,"utf8"));
+    assert.equal(cancellation.attempts[0].actualUsd,null);assert.equal(cancellation.attempts[0].status,"sending");
+    assert.equal(cancellation.attempts[1].actualUsd,0);assert.equal(cancellation.attempts[1].status,"cancelled_never_dispatched");
+    assert.throws(()=>atomic.reserve({...one,id:"two",reservedUsd:.1}),/already attempted/);
     const held = JSON.parse(readFileSync(budget.file, "utf8"));
     assert.ok(held.attempts.reduce((n: number, a: { actualUsd: number | null; reservedUsd: number }) => n + (a.actualUsd ?? a.reservedUsd), 0) < 2);
     console.log("API evaluation budget/receipt tests passed: no real API calls.");

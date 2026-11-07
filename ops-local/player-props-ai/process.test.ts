@@ -16,7 +16,7 @@ assert.ok(market.books[0].anchorLatestRetainedPair); // Native change clocks nee
 assert.equal(market.books[0].anchorLatestRetainedPair!.overReceivedAt, packet.quotes[0].receivedAt);
 assert.equal(referencePairs(packet, target, 300000).length, 1);
 const tables = readableInput(report);
-assert.equal(tables.format, "player_props_readable_tables_r4_dual_clock");
+assert.equal(tables.format, "player_props_readable_tables_r6_cross_line_openings");
 assert.match(tables.schema.clockMeaning, /NOT confirmation/);
 const trace = tables.quoteTraces[0] as Json[];
 assert.equal(trace[6], "provider_response");

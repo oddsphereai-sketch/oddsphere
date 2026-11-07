@@ -9,7 +9,7 @@
 export const NBA_PLAYER_PROPS_RESEARCH_SCHEMA_RELEASE =
   "nba_player_props_research_schema_2026_10_20_r1" as const;
 export const NBA_PLAYER_PROPS_OBSERVATION_RELEASE =
-  "nba_player_props_observation_2026_10_28_r2_owls_prices" as const;
+  "nba_player_props_observation_2026_11_06_r3_response_completion" as const;
 export const NBA_PLAYER_PROPS_MODEL_RELEASE =
   "nba_player_props_model_unfit_2026_10_20_r1" as const;
 export const NBA_PLAYER_PROPS_CALIBRATION_RELEASE =
@@ -77,6 +77,8 @@ export type NbaPlayerPropPriceObservation = {
   americanPrice: number;
   observedAt: string;
   fetchedAt: string;
+  /** Future collector responses only. Legacy fetchedAt remains exact collection-start metadata. */
+  receivedAt?: string;
   isOpening: boolean;
   isLive: boolean;
   homeTeam: string | null;
