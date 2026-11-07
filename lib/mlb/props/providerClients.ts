@@ -236,6 +236,7 @@ export class BallDontLieMlbPropsClient implements PropOddsProvider {
           query: { game_id: gameId, per_page: 100 },
           maxPages,
         });
+        const providerResponseAt = new Date().toISOString();
         gameTrace.rawProps = rawProps.length;
         if (rawProps.length > 0) trace.gamesWithPlayerProps++;
         const rawCoverage = rawProps.map((rawProp) => {
@@ -250,7 +251,7 @@ export class BallDontLieMlbPropsClient implements PropOddsProvider {
         const parsed = rawCoverage.flatMap((entry) => entry.rows);
         const normalizedRawProps = rawCoverage.filter((entry) => entry.rows.length > 0).length;
         const unmappedMarketTypes = [...new Set(rawCoverage.filter((entry) => !entry.mapped).map((entry) => entry.marketType))].sort();
-        rows.push(...parsed);
+        rows.push(...parsed.map(row => ({ ...row, providerResponseAt })));
         gameTrace.normalizedRawProps = normalizedRawProps;
         gameTrace.droppedRawProps = rawProps.length - normalizedRawProps;
         gameTrace.normalizedRows = parsed.length;
@@ -302,7 +303,8 @@ export class BallDontLieMlbPropsClient implements PropOddsProvider {
           query: { game_id: gameId },
           maxPages: 1,
         });
-        rows.push(...parseBallDontLiePlayerProps(rawProps, asOfTimestamp, undefined, "opening"));
+        const providerResponseAt = new Date().toISOString();
+        rows.push(...parseBallDontLiePlayerProps(rawProps, asOfTimestamp, undefined, "opening").map(row => ({ ...row, providerResponseAt })));
       } catch (error) {
         if (error instanceof BdlNotFoundError) continue;
         throw error;

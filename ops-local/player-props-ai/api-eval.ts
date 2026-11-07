@@ -51,6 +51,17 @@ export class TestBudget {
       saved.status = "sending";
     });
   }
+  cancelUnsent(ids:string[]){
+    return this.transaction(ledger=>{
+      let cancelled=0;
+      for(const attempt of ledger.attempts){
+        if(!ids.includes(attempt.id)||attempt.status!=="reserved"||attempt.responseId||attempt.actualUsd!==null)continue;
+        attempt.actualUsd=0;attempt.status="cancelled_never_dispatched";
+        attempt.qualityError="Reserved part cancelled before dispatch; no generation call occurred";cancelled++;
+      }
+      return cancelled;
+    });
+  }
   update(id: string, update: Partial<Attempt>) {
     this.transaction(ledger => {
       const attempt = ledger.attempts.find(a => a.id === id); invariant(attempt, "Unreserved request");

@@ -80,6 +80,7 @@ export async function collectNflPlayerPropsObservations(args: {
   if (games.length === 0) throw new Error("BALLDONTLIE returned no games for the requested NFL props slate.");
   if (games.length > MAX_GAMES) throw new Error(`NFL props slate circuit breaker opened at ${games.length} games.`);
 
+  const currentReceipts = new Map<string,string>(), openingReceipts = new Map<string,string>();
   const currentPayloads = await inBatches(games, BDL_CONCURRENCY, async (game) => {
     const envelope = await bdlFetch({
       path: "/odds/player_props",
@@ -89,12 +90,14 @@ export async function collectNflPlayerPropsObservations(args: {
       optionalEmpty: true,
     });
     bdlRequests += 1;
+    currentReceipts.set(game.providerGameId,new Date().toISOString());
     return data(envelope);
   });
   let bdlCurrent = normalizeBalldontlieNflPlayerProps({
     values: currentPayloads.flat(),
     fetchedAt,
   });
+  bdlCurrent = { ...bdlCurrent, rows: bdlCurrent.rows.map(row => ({ ...row, receivedAt: currentReceipts.get(row.providerEventId) })) };
 
   let bdlOpenings = normalizeBalldontlieNflPlayerProps({ values: [], fetchedAt, opening: true });
   if (args.includeOpenings === true) {
@@ -107,6 +110,7 @@ export async function collectNflPlayerPropsObservations(args: {
         optionalEmpty: true,
       });
       bdlRequests += 1;
+      openingReceipts.set(game.providerGameId,new Date().toISOString());
       return data(envelope);
     });
     bdlOpenings = normalizeBalldontlieNflPlayerProps({
@@ -114,6 +118,7 @@ export async function collectNflPlayerPropsObservations(args: {
       fetchedAt,
       opening: true,
     });
+    bdlOpenings = { ...bdlOpenings, rows: bdlOpenings.rows.map(row => ({ ...row, receivedAt: openingReceipts.get(row.providerEventId) })) };
   }
 
   const bdlPlayerIds = collectBoundedPlayerIdentities([...bdlCurrent.rows, ...bdlOpenings.rows]);
@@ -140,11 +145,13 @@ export async function collectNflPlayerPropsObservations(args: {
 
   let owlsRaw: unknown[] = [];
   let owlsComplete = false;
+  let owlsReceivedAt: string | undefined;
   if (owlsKey) {
     owlsRequests = 1;
     try {
       const result = await new OwlsInsightClient(owlsKey, { fetchImpl, timeoutMs: 20_000 })
         .props<{ data?: unknown }>("nfl");
+      owlsReceivedAt = new Date().toISOString();
       owlsRaw = owlsEvents(result.body);
       validateOwlsCapacity(owlsRaw);
       owlsComplete = true;
@@ -155,7 +162,7 @@ export async function collectNflPlayerPropsObservations(args: {
     healthFindings.push("OWLS_INSIGHT_API_KEY_MISSING");
   }
   const owlsAll = normalizeOwlsNflPlayerProps({ values: owlsRaw, fetchedAt });
-  const owlsFreshRows = owlsAll.rows.filter((row) => freshAtFetch(row.observedAt, fetchedAt));
+  const owlsFreshRows = owlsAll.rows.map(row => ({ ...row, ...(owlsReceivedAt ? { receivedAt: owlsReceivedAt } : {}) })).filter((row) => freshAtFetch(row.observedAt, fetchedAt));
   if (owlsFreshRows.length < owlsAll.rows.length) healthFindings.push("OWLS_STALE_OR_FUTURE_PROP_ROWS_REJECTED");
   const owlsRowsInWindow = owlsFreshRows.filter((row) => inSlateWindow(row.scheduledStart, games));
   const owlsReconciliation = reconcileProviderRowsToSlate(owlsRowsInWindow, games);
