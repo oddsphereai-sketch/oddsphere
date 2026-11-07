@@ -1,3 +1,4 @@
+// Historical v61 migration proof only. Current wallet/reviewer proof: test-player-props-ai-wallet.ts.
 // Disposable task-owned Unix-socket PostgreSQL only. Never accept a hosted DB URL.
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";

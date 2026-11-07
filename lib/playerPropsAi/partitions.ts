@@ -2,7 +2,7 @@ import type { GamePacket, Json } from "./evidenceContract";
 import { digest, invariant, validatePacket } from "./evidence";
 import { jointReviewRequest } from "./request";
 import { countAiInput } from "./openai";
-import { PROPS_AI_MAX_INPUT_PER_REQUEST, PROPS_AI_MAX_OUTPUT_PER_REQUEST, PROPS_AI_PRIMARY_MODEL, type PropsAiModel } from "./releases";
+import { PROPS_AI_MAX_INPUT_PER_REQUEST, PROPS_AI_MAX_OUTPUT_PER_REQUEST, PROPS_AI_MAX_PARTS, PROPS_AI_PRIMARY_MODEL, type PropsAiModel } from "./releases";
 export function playerSubset(packet: GamePacket, ids: string[]): GamePacket {
   const included = new Set(ids);
   const markets: string[] = [], times: string[] = [], sources: string[] = [];
@@ -30,7 +30,7 @@ export async function prepareReviewParts(packet: GamePacket, args: { key: string
     // Size estimates choose whole-player bins; the actual model-specific count is
     // still authoritative. No source, player or market is truncated to fit.
     const weighted=packet.players.map(p=>({id:p.id,weight:JSON.stringify(jointReviewRequest(playerSubset(packet,[p.id]),model,PROPS_AI_MAX_OUTPUT_PER_REQUEST)).length})).sort((a,b)=>b.weight-a.weight);
-    for (const numberOfBins of [2,3,4]) {
+    for (let numberOfBins=2;numberOfBins<=Math.min(PROPS_AI_MAX_PARTS,packet.players.length);numberOfBins++) {
       const bins:string[][]=Array.from({length:numberOfBins},()=>[]),loads=Array(numberOfBins).fill(0) as number[];
       for(const p of weighted){const i=loads.indexOf(Math.min(...loads));bins[i].push(p.id);loads[i]+=p.weight;}
       if(bins.some(b=>!b.length))continue;
@@ -48,7 +48,7 @@ export async function prepareReviewParts(packet: GamePacket, args: { key: string
       }
       if(parts.length)break;
     }
-    invariant(parts.length>0,"complete_player_evidence_exceeds_bounded_four_partition_capacity");
+    invariant(parts.length>0,"complete_player_evidence_exceeds_bounded_partition_capacity");
   }
   invariant(digest(parts.flatMap(p => p.packet.players.map(p => p.id)).sort()) === digest(packet.players.map(p => p.id).sort()), "partition_player_coverage_mismatch");
   return parts;

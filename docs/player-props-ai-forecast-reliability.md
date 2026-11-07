@@ -1,6 +1,6 @@
 # Full-source player-prop forecast candidate
 
-Candidate: `player_props_ai_2026_11_07_r11_bounded_physical_rows`, from
+Forecast-format rehearsal: `player_props_ai_2026_11_07_r11_bounded_physical_rows`, from
 `e008a0fd4f22653a8fde8690b87d38d4d1ac3cf2`. This is an unactivated, local process/cost
 candidate. Existing production model releases, predictions, grades, stakes and locked
 records remain authoritative. No production writer, collector or cron is added here.
@@ -84,13 +84,13 @@ All actual exports, full-source profiles, usage receipts, aggregate financial re
 and the unchanged shared test ledger stay private outside Git. The test ceiling stays
 at two dollars across all attempts, including failures and unknown-charge holds.
 
-## Remaining activation work
+## Wallet continuation and remaining activation work
 
-The prototype SQL wallet's fixed per-sport reservations are obsolete for the measured
-full-source layout. They are not evidence that this policy is deployed or funded.
-Before activation, replace them with request envelopes for a complete live calendar,
-persist tier/fallback eligibility in the atomic wallet, protect all remaining core
-obligations before upgrades, and test safe deadline recovery. Full-game stronger
+The unactivated R12/R3 continuation now implements request envelopes, durable tiers,
+protected core/fallback/recovery funding and partial fallback in v62 SQL and the real
+reviewer. See [wallet integration](player-props-ai-wallet-fallback.md) for the native
+database proof and rollout contract. The historical v61 flat-allowance proof alone is
+not a valid funding check. Full-game stronger
 completion and NBA/MLB Flex behavior still require bounded validation or an explicit
 Standard-only plan with its higher cost. No new paid tests are authorized by this doc.
 
