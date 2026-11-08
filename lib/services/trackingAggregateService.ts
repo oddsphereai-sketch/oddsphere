@@ -25,6 +25,7 @@
 
 import { resolveRecordForGrading } from "./predictionGradingService";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isMissingRpcFunction } from "../db/missingRpcFunction";
 import {
   bucketForConfidence,
   type ConfidenceBucket,
@@ -402,6 +403,7 @@ const TRACKING_PROJECTED_RECORD_SELECT = TRACKING_RECORD_SELECT
   .map((column) => column.split(":")[0])
   .join(",");
 const TRACKING_RECORD_PROJECTION_VIEW = "prediction_records_tracking_projection";
+const TRACKING_RECORD_PAGE_RPC = "tracking_prediction_records_page";
 
 function trackingProjectionViewMissing(error: { code?: string; message?: string } | null): boolean {
   return error !== null
@@ -685,6 +687,7 @@ export async function fetchAllPredictionRecords(
 ): Promise<{ rows: PredictionRecordRow[]; error: unknown | null }> {
   const out: PredictionRecordRow[] = [];
   let useLegacyProjection = false;
+  let useRpc = typeof supabase.rpc === "function";
   for (let fromRow = 0; ; fromRow += TRACKING_PAGE_SIZE) {
     const pageQuery = () => {
       let query = supabase
@@ -699,14 +702,37 @@ export async function fetchAllPredictionRecords(
       if (opts.competition !== undefined) query = query.contains("snapshot_json", { competition: opts.competition });
       return query;
     };
-    let { data, error } = await pageQuery();
+    // Page narrow IDs before decoding immutable JSON. An OFFSET on the view
+    // decodes all skipped records again for every later history page.
+    const rpcQuery = () => {
+      let query = supabase.rpc(TRACKING_RECORD_PAGE_RPC, {
+        p_sport: opts.sport ?? null,
+        p_from: opts.from ?? null,
+        p_to: opts.to ?? null,
+        p_competition: opts.competition ?? null,
+        p_offset: fromRow,
+        p_limit: TRACKING_PAGE_SIZE,
+      });
+      if (opts.signal) query = query.abortSignal(opts.signal);
+      return query;
+    };
+    let { data, error } = useRpc ? await rpcQuery() : await pageQuery();
+    if (useRpc && isMissingRpcFunction(error, TRACKING_RECORD_PAGE_RPC)) {
+      useRpc = false;
+      ({ data, error } = await pageQuery());
+    }
     if (!useLegacyProjection && trackingProjectionViewMissing(error)) {
       // Retry this page against the unchanged legacy projection, then remain
       // on it for this entire read. Never retry a timeout/permission failure.
       useLegacyProjection = true;
+      useRpc = false;
       ({ data, error } = await pageQuery());
     }
     if (error) return { rows: out, error };
+    if ((useRpc && !Array.isArray(data))
+      || (data !== null && (!Array.isArray(data) || data.length > TRACKING_PAGE_SIZE))) {
+      return { rows: out, error: new Error("Tracking history returned an invalid bounded page.") };
+    }
     const page = ((data ?? []) as unknown) as PredictionRecordRow[];
     try { out.push(...await readFrozenFirstInningTrackingAuthority(supabase, page, opts.signal)); }
     catch (error) { return { rows: out, error }; }
