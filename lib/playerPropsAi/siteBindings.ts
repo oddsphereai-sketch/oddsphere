@@ -35,7 +35,7 @@ export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:Game
     const c=choice(choices,row.playerId,row.market,row.line,row.sportsbook);if(!c||c.side==="yes")return row;
     changed=true;
     return {...row,decisionKey:[c.evidence.release,row.gameId,row.playerId,row.market,c.line].join("|"),projection:c.projection,probability:c.probability,side:c.side,grade:c.grade,sportsbook:c.book,americanPrice:c.american,expectedValue:c.expectedValue,
-      modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:c.evidence.publicationRelease,targetExcludedProbability:null,targetExcludedBooks:0,targetExcludedReferenceBooks:0,marketEvidenceMode:"ai_joint_law" as const,gradePolicySource:"ai_source_review" as const,evaluatedAt:now,aiReview:c.evidence,
+      modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:c.evidence.selectionRelease??c.evidence.publicationRelease,targetExcludedProbability:null,targetExcludedBooks:0,targetExcludedReferenceBooks:0,marketEvidenceMode:"ai_joint_law" as const,gradePolicySource:"ai_source_review" as const,evaluatedAt:now,aiReview:c.evidence,
       priceLadder:nbaAiPrices(packet,c,now),movement:nbaMovement(packet,c)};
   });
   for(const player of packet.players)for(const market of player.markets){
@@ -44,7 +44,7 @@ export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:Game
     const game=snapshot.games.find(g=>g.gameId===packet.gameId);if(!c||!game||instant(now)>=instant(packet.lock))continue;
     decisions.push({decisionKey:[c.evidence.release,game.gameId,player.id,market,c.line].join("|"),gameId:game.gameId,scheduledStart:game.scheduledStart,homeTeam:game.homeTeam,awayTeam:game.awayTeam,
       playerId:player.id,playerName:player.name,team:player.team,opponent:player.opponent,market:market as NbaPlayerPropsMemberDecision["market"],line:c.line,projection:c.projection,independentProjection:null,independentProbability:null,
-      modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:c.evidence.publicationRelease,aiReview:c.evidence,side:c.side as "over"|"under",probability:c.probability,grade:c.grade,sportsbook:c.book,americanPrice:c.american,expectedValue:c.expectedValue,
+      modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:c.evidence.selectionRelease??c.evidence.publicationRelease,aiReview:c.evidence,side:c.side as "over"|"under",probability:c.probability,grade:c.grade,sportsbook:c.book,americanPrice:c.american,expectedValue:c.expectedValue,
       targetExcludedProbability:null,targetExcludedBooks:0,targetExcludedReferenceBooks:0,marketEvidenceMode:"ai_joint_law",gradePolicySource:"ai_source_review",role:[],production:[],matchup:[],priceLadder:nbaAiPrices(packet,c,now),movement:nbaMovement(packet,c),evaluatedAt:now,lockedAt:null});changed=true;
   }
   return changed?buildNbaPlayerPropsMemberSnapshot({...snapshot,generatedAt:now,decisions,inputRows:snapshot.diagnostics.inputRows}):snapshot;
