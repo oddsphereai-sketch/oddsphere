@@ -20,10 +20,12 @@ const law=(p:Player)=>validateLaw("nba",p,{weights:[9,1,...Array(14).fill(0)],ou
 const review={release:PROPS_AI_RELEASE,gameId:"funded",sourceGameId:"native",start,lock,cutoff:now,stage:"early",issuedAt:now,inputHash:"synthetic",model:"synthetic",criticalContextHashes:criticalContextHashes(packet),marketScopes:{a:["points","rebounds"],b:["points","rebounds"]},partProvenance:[],inputEvidence:{digest:"synthetic"},
   players:packet.players.map(p=>({playerId:p.id,assessment:"Synthetic",law:law(p),confidence:[2,0],exceptions:[null,"Unresolved rebound source"],coverage:{}}))} as unknown as AcceptedGameReview;
 const frozen=JSON.stringify(review),original=siteAiDecisions(packet,review,now);
-const retained={...review,release:"player_props_ai_2026_11_08_r15_review_window_handoff" as const},retainedBefore=JSON.stringify(retained);
-assert.equal(selectSiteReview(packet,[retained],now),retained);
-assert.ok(siteAiDecisions(packet,retained,now).every(c=>c.evidence.release===retained.release),"accepted R15 laws retain their own release, never relabeled R16");
-assert.equal(JSON.stringify(retained),retainedBefore);
+for(const release of ["player_props_ai_2026_11_08_r15_review_window_handoff","player_props_ai_2026_11_08_r16_nfl_output_headroom"] as const){
+  const retained={...review,release},retainedBefore=JSON.stringify(retained);
+  assert.equal(selectSiteReview(packet,[retained],now),retained);
+  assert.ok(siteAiDecisions(packet,retained,now).every(c=>c.evidence.release===retained.release),"accepted R15/R16 laws retain their own release, never relabeled as the new generation");
+  assert.equal(JSON.stringify(retained),retainedBefore);
+}
 assert.equal(original.length,4);
 const added=structuredClone(packet);added.players.push(actor("c"));
 added.players[0].markets.push("assists");
