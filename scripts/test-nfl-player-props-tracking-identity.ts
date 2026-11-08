@@ -37,6 +37,7 @@ for (const [quoteName, rosterName] of [["Aaron Jones", "Aaron Jones Sr."], ["Mic
 }
 
 async function main() {
+  globalThis.fetch=async()=>{throw Error("Offline tracking proof forbids network");};
   const stored = new Map<string, Record<string, unknown>>();
   const client = { from: () => ({ upsert: async (rows: Record<string, unknown>[], options: Record<string, unknown>) => {
     assert.equal(options.ignoreDuplicates, true);
@@ -57,6 +58,31 @@ async function main() {
   const legacyBefore = JSON.stringify([...stored]);
   await writeLockedNflPlayerPropsTracking({ client, snapshot, context });
   assert.equal(JSON.stringify([...stored]), legacyBefore, "the normal writer cannot silently repair a legacy locked missing identity");
+  const legacyQuote={...first,snapshot_json:{trackingRelease:"legacy",decision:{...decision,sportsbook:"legacy-other-book",americanPrice:150}}};
+  stored.set(String(first.tracking_key),legacyQuote);
+  const legacyQuoteBefore=JSON.stringify([...stored]);
+  await writeLockedNflPlayerPropsTracking({client,snapshot,context});
+  assert.equal(JSON.stringify([...stored]),legacyQuoteBefore,"even inconsistent legacy quote evidence must remain exact; no silent locked-record correction");
+  // The same player/line/side can be offered at multiple books. Each insertion
+  // candidate must retain its own immutable quote, including duplicate keys.
+  for(const prices of [[-110,125], [125,-110]]){
+    const quotes=prices.map((price,i)=>({...decision,sportsbook:`book-${i}`,americanPrice:price,
+      finalProbability:i===0?.57:.61,expectedValue:i===0?.08:.3725,providerPlayerId:String(80+i)}));
+    const source={board:{decisions:quotes}} as unknown as NflPlayerPropsProductionSnapshot;
+    const before=JSON.stringify(source);
+    const capture={from:()=>({upsert:async(rows:Record<string,unknown>[],options:Record<string,unknown>)=>{
+      assert.equal(options.ignoreDuplicates,true);assert.equal(rows.length,quotes.length);
+      rows.forEach((row,i)=>{
+        const evidence=(row.snapshot_json as {decision:typeof decision}).decision;
+        assert.deepEqual(evidence,quotes[i]);
+        assert.equal(row.sportsbook,evidence.sportsbook);assert.equal(row.locked_price,evidence.americanPrice);
+        assert.equal(row.locked_probability,evidence.finalProbability);assert.equal(row.locked_expected_value,evidence.expectedValue);
+        assert.equal(row.provider_player_id,quotes[i]!.providerPlayerId);
+      });return {error:null};
+    }})} as unknown as SupabaseClient;
+    await writeLockedNflPlayerPropsTracking({client:capture,snapshot:source});
+    assert.equal(JSON.stringify(source),before,"the exact source locked board cannot change");
+  }
   console.log("NFL props future identity capture and complete legacy lock immutability passed.");
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

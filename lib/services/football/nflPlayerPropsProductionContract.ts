@@ -196,16 +196,25 @@ function releaseCoherentRetainedUnlockedDecision(
 }
 
 export function buildNflPlayerPropsTrackingRows(snapshot: NflPlayerPropsProductionSnapshot): NflPlayerPropsTrackedDecision[] {
+  return buildNflPlayerPropsTrackingEntries(snapshot).map(entry => entry.row);
+}
+
+/** Retain the exact source quote beside each derived tracking row. A player/line
+ * key deliberately spans books and cannot bind a locked price to its evidence. */
+export function buildNflPlayerPropsTrackingEntries(snapshot: NflPlayerPropsProductionSnapshot): Array<{
+  decision: NflPlayerPropsRuntimeDecision;
+  row: NflPlayerPropsTrackedDecision;
+}> {
   return snapshot.board.decisions.filter((row): row is NflPlayerPropsRuntimeDecision & { grade: "Best Angle" | "Lean" } =>
     row.state === "locked" && (row.grade === "Best Angle" || row.grade === "Lean"))
-    .map((row) => ({
+    .map((row) => ({ decision: row, row: {
       trackingKey: decisionKey(row), gameId: row.gameId, providerPlayerId: row.providerPlayerId, playerName: row.playerName, market: row.market,
       line: row.line, side: row.side, sportsbook: row.sportsbook, lockedPrice: row.americanPrice,
       lockedProbability: row.finalProbability, lockedExpectedValue: row.expectedValue, grade: row.grade,
       lockedAt: row.lockAt, result: "pending", closingPrice: null, closingImpliedProbability: null,
       clvProbabilityPoints: null, modelRelease: row.modelRelease, calibrationRelease: row.calibrationRelease,
       decisionRelease: row.decisionRelease,
-    }));
+    } }));
 }
 
 export function buildNflPlayerPropsMemberSnapshot(
