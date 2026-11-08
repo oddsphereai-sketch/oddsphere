@@ -1,3 +1,4 @@
+import {PROPS_AI_NFL_SOURCE_RELEASE} from "./nflPlayerIdentity";
 /** Pure joins over cached/public research. Never backdate a newly fetched record. */
 import type { NflPlayerPropsCurrentSeasonState } from "../services/football/nflPlayerPropsCurrentSeasonState";
 import type { MlbPropsBoardSnapshot, MlbPropsGameLockPointer } from "../mlb/props/boardSnapshotStore";
@@ -67,9 +68,10 @@ export function enrichCachedPacket(packet: GamePacket, source: EnrichedSource): 
     }
     if (packet.sport === "nfl") {
       const original = source.nfl.flatMap(w => w.snapshot?.memberDecisions ?? []).find(r => r.gameId === packet.gameId && teamKey(r.team) === teamKey(player.team) && nameKey(r.playerName) === nameKey(player.name));
+      const verifiedId=packet.sourceInputRelease===PROPS_AI_NFL_SOURCE_RELEASE&&player.id.startsWith("nfl-bdl-player:")?player.id.slice("nfl-bdl-player:".length):original?.providerPlayerId;
       const state = source.nflHistory;
       const games = new Map(state?.games.map(g => [g.gameId, g]) ?? []);
-      const eligible = (state?.stats ?? []).filter(row => (original?.providerPlayerId ? row.playerId === original.providerPlayerId : nameKey(row.playerName) === nameKey(player.name) && teamKey(row.team) === teamKey(player.team)) && games.has(row.gameId) && instant(row.scheduledStart) + 6 * 3600_000 < cutoff && instant(state!.updatedAt) <= cutoff)
+      const eligible = (state?.stats ?? []).filter(row => (verifiedId ? row.playerId === verifiedId : nameKey(row.playerName) === nameKey(player.name) && teamKey(row.team) === teamKey(player.team)) && games.has(row.gameId) && instant(row.scheduledStart) + 6 * 3600_000 < cutoff && instant(state!.updatedAt) <= cutoff)
         .sort((a, b) => instant(b.scheduledStart) - instant(a.scheduledStart));
       const recent = eligible.slice(0, 10), opponent = eligible.filter(row => {
         const g = games.get(row.gameId)!; return teamKey(g.homeTeam === row.team ? g.awayTeam : g.homeTeam) === teamKey(player.opponent);

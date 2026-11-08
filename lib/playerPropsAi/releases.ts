@@ -1,6 +1,7 @@
 /** One authoritative identity path for the AI-assisted player-prop product. */
 export const PROPS_AI_RELEASE = "player_props_ai_2026_11_08_r15_review_window_handoff" as const;
-export const PROPS_AI_NFL_DECISION_RELEASE="player_props_ai_nfl_decision_2026_11_08_r6_exact_quote_receipts" as const;
+export const PROPS_AI_NFL_DECISION_RELEASE="player_props_ai_nfl_decision_2026_11_08_r7_verified_current_actors" as const;
+export const PROPS_AI_NFL_EXACT_RECEIPT_RELEASES:readonly string[]=[PROPS_AI_NFL_DECISION_RELEASE,"player_props_ai_nfl_decision_2026_11_08_r6_exact_quote_receipts"];
 export const PROPS_AI_ESTIMATE_RELEASE="player_props_ai_estimate_2026_11_07_r1_not_empirically_calibrated" as const;
 export const PROPS_AI_LAW_RELEASE = "player_props_ai_law_2026_11_06_r1_integer_scenarios" as const;
 export const PROPS_AI_GRADE_RELEASE = "player_props_ai_grade_2026_11_06_r1_confidence_price" as const;
