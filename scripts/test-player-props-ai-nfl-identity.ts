@@ -32,10 +32,10 @@ assert.throws(()=>liveNflPacket({game,window:{gameId:game.id,stage:'early',cutof
 // Regression from the ordinary producer: same actor represented by separate
 // cached display groups must merge its evidence, not reject the whole game.
 const priorHead={...stored,market:'receptions',line:2.5,side:'over',sportsbook:'synthetic',provider:'balldontlie',americanPrice:-110,observedAt:at,bookEvidence:[],participationProbability:.9,forecastContext:{featureAsOf:at},modelRelease:'synthetic'};
-const aliasedSnapshot={...snapshot,memberDecisions:[priorHead,{...priorHead,playerName:'Kenneth Gainwell'}]} as never;
+const aliasedSnapshot={...snapshot,memberDecisions:[priorHead,{...priorHead,playerName:'Kenny Gainwell Jr.'}]} as never;
 const merged=liveNflPacket({game,window:{gameId:game.id,stage:'early',cutoff:at,lock},snapshot:aliasedSnapshot,observations:{observations:[native,quote]} as never,history,context});
-assert.equal(merged.players.length,1);assert.ok(merged.players[0].evidence.some(e=>e.kind==='independent_model'));
-const conflictingSnapshot={...snapshot,memberDecisions:[priorHead,{...priorHead,playerName:'Kenneth Gainwell',providerPlayerId:'999'}],board:{decisions:[stored]}} as never;
+assert.equal(merged.players.length,1);assert.equal(merged.players[0].evidence.filter(e=>e.kind==='independent_model').length,1,'identical facts from suffix groups are deduplicated');
+const conflictingSnapshot={...snapshot,memberDecisions:[priorHead,{...priorHead,playerName:'Kenny Gainwell Jr.',providerPlayerId:'999'}],board:{decisions:[stored]}} as never;
 assert.throws(()=>liveNflPacket({game,window:{gameId:game.id,stage:'early',cutoff:at,lock},snapshot:conflictingSnapshot,observations:{observations:[native,quote]} as never,history,context}),/Ambiguous NFL captured player/);
 // Verified native ID joins historical stats despite a different display name.
 const oldGame={gameId:'past',scheduledStart:'2026-11-01T18:00:00Z',homeTeam:'TB',awayTeam:'NO'};
