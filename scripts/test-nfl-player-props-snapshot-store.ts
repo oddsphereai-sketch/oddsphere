@@ -73,7 +73,7 @@ assert.throws(() => buildNflPlayerPropsMemberSnapshot(snapshot, "not-a-timestamp
   "an invalid member lifecycle boundary fails closed");
 
 assert.equal(NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE,
-  "nfl_player_props_snapshot_envelope_2026_11_08_r2_interned_ai_coverage");
+  "nfl_player_props_snapshot_envelope_2026_11_08_r3_review_metadata");
 assert.equal(NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES, 32_000_000);
 assert.ok(NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES > NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES,
   "canonical retained-week history has bounded headroom beyond the current/future member board");
