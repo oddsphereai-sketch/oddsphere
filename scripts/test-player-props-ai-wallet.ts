@@ -67,6 +67,7 @@ try{
   for(const role of ["anon","authenticated","service_role"])await admin.query(`DO $$ BEGIN CREATE ROLE ${role}; EXCEPTION WHEN duplicate_object THEN NULL; END $$`);
   await db.query(readFileSync("lib/db/schema-migration-v61-player-props-ai-runtime.sql","utf8"));
   const migration=readFileSync("lib/db/schema-migration-v62-player-props-ai-wallet.sql","utf8");await db.query(migration);await db.query(migration);
+  const targetMigration=readFileSync("lib/db/schema-migration-v64-player-props-ai-budget-target.sql","utf8");await db.query(targetMigration);await db.query(targetMigration);
   await db.query("CREATE TABLE test_clock(at timestamptz); INSERT INTO test_clock VALUES('2026-11-07T21:40:00Z'); CREATE FUNCTION props_ai_test_clock() RETURNS timestamptz LANGUAGE sql VOLATILE AS 'SELECT at FROM test_clock'");
   const functions=await db.query("SELECT pg_get_functiondef(oid) body FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname LIKE 'player_props_ai_%'");
   for(const f of functions.rows)await db.query(f.body.replaceAll("clock_timestamp()","props_ai_test_clock()"));
@@ -110,8 +111,8 @@ try{
   assert.equal(Number((await budget()).core_reserved_micro),pendingSum);
   const boundaryGame={...game("utc-boundary"),start:"2026-12-01T03:00:00Z",lock:"2026-12-01T02:00:00Z"};
   const boundary=makePropsWalletPlan({month:"2026-12",now:clock(),games:[boundaryGame],bounds:{"nba|utc-boundary":bounds},sources});assert.equal(boundary.jobs.length,1);assert.equal(boundary.companionSlots.length,2);assert.equal((await wallet.plan(boundary)).funded,true);
-  const excessive=makePropsWalletPlan({month:"2027-04",now:clock(),games:Array.from({length:600},(_,i)=>({...game(`large${i}`),start:"2027-04-06T23:00:00Z",lock:"2027-04-06T22:00:00Z"})),bounds:Object.fromEntries(Array.from({length:600},(_,i)=>[`nba|large${i}`,Array.from({length:4},()=>({input_tokens:145000,max_output_tokens:7000}))])),sources});
-  const denied=await wallet.plan(excessive);assert.equal(denied.funded,false);assert.ok(denied.required_micro!>50_000_000);assert.equal((await db.query("SELECT count(*) c FROM player_props_ai_reviews WHERE billing_month='2027-04'")).rows[0].c,"0");
+  const excessive=makePropsWalletPlan({month:"2027-04",now:clock(),games:Array.from({length:900},(_,i)=>({...game(`large${i}`),start:"2027-04-06T23:00:00Z",lock:"2027-04-06T22:00:00Z"})),bounds:Object.fromEntries(Array.from({length:900},(_,i)=>[`nba|large${i}`,Array.from({length:4},()=>({input_tokens:145000,max_output_tokens:7000}))])),sources});
+  const denied=await wallet.plan(excessive);assert.equal(denied.funded,false);assert.ok(denied.required_micro!>60_000_000);assert.equal((await db.query("SELECT count(*) c FROM player_props_ai_reviews WHERE billing_month='2027-04'")).rows[0].c,"0");
   const largePacket={...packet("all-players","early"),players:Array.from({length:40},(_,i)=>({...packet("all-players","early").players[0],id:`large-player-${i}`,evidence:packet("all-players","early").players[0].evidence.map(e=>({...e,id:`large-${i}:${e.id}`}))}))};
   const largeParts=await prepareReviewParts(largePacket,{key:"synthetic",count:async()=>1000});assert.equal(largeParts.length,5);assert.equal(new Set(largeParts.flatMap(p=>p.packet.players.map(p=>p.id))).size,40);
   await db.query("SET ROLE authenticated");await assert.rejects(db.query("SELECT * FROM player_props_ai_budgets"),/permission denied/);await assert.rejects(db.query("SELECT player_props_ai_reap()"),/permission denied/);await db.query("RESET ROLE");
@@ -177,6 +178,29 @@ try{
   const deferred=await dispatchFundedPropsReviews({...dispatchArgs,deadline:Date.now()+1000});assert.equal(deferred[0].status,"deferred");assert.equal(dispatchCalls,0);
   const dispatched=await dispatchFundedPropsReviews(dispatchArgs);assert.equal(dispatched.length,1);assert.equal(dispatched[0].status,"completed",JSON.stringify(dispatched));assert.equal(dispatched[0].review!.players.length,40);assert.equal(dispatchCalls,5);assert.ok(countCalls>=5);
   assert.equal((await dispatchFundedPropsReviews(dispatchArgs)).length,0);assert.equal(dispatchCalls,5);
+  // Coverage may use the approved emergency band; optional stronger work may not.
+  const emergencyBounds=Array.from({length:3},()=>({input_tokens:145000,max_output_tokens:7000}));
+  const emergencyGames=Array.from({length:600},(_,i)=>({...game(`emergency${i}`),start:"2030-04-06T23:00:00Z",lock:"2030-04-06T22:00:00Z"}));
+  const emergencyPlan=makePropsWalletPlan({month:"2030-04",now:"2030-04-06T21:40:00Z",games:emergencyGames,bounds:Object.fromEntries(emergencyGames.map(g=>[`nba|${g.id}`,emergencyBounds])),sources});
+  await db.query("UPDATE test_clock SET at='2030-04-06T21:40:00Z';UPDATE cron_job_leases SET lease_expires_at='2030-05-01T00:00:00Z'");
+  const emergencyFunding=await wallet.plan(emergencyPlan);assert.equal(emergencyFunding.funded,true);
+  const emergencyBudget=(await db.query("SELECT * FROM player_props_ai_budgets WHERE month_key='2030-04'")).rows[0];
+  const obligations=Number(emergencyBudget.core_reserved_micro)+Number(emergencyBudget.fallback_remaining_micro)+Number(emergencyBudget.recovery_remaining_micro);
+  assert.equal(Number(emergencyBudget.target_micro),50_000_000);assert.equal(Number(emergencyBudget.cap_micro),60_000_000);
+  assert.ok(obligations>50_000_000&&obligations<60_000_000);
+  const emergencyJob=emergencyPlan.jobs.find(j=>j.stage==="final")!;
+  const primaryClaim=await wallet.claim(emergencyJob.key,"emergency-primary",emergencyBounds.map(b=>({...b,strong_input_tokens:145000})),true,"synthetic-owner");
+  assert.equal(primaryClaim.claimed,true);assert.equal(primaryClaim.job!.model,"gpt-6-luna");
+  await wallet.finish(emergencyJob.key,primaryClaim.token!,null,"synthetic_unsent");
+  const emergencyDenied=makePropsWalletPlan({...{month:"2030-05",now:"2030-05-06T21:40:00Z",sources},games:Array.from({length:900},(_,i)=>({...game(`limit${i}`),start:"2030-05-06T23:00:00Z",lock:"2030-05-06T22:00:00Z"})),bounds:Object.fromEntries(Array.from({length:900},(_,i)=>[`nba|limit${i}`,emergencyBounds]))});
+  assert.equal((await wallet.plan(emergencyDenied)).funded,false);
+  // The monthly allowance cannot all be spent on stronger finals on the first busy day.
+  const spreadGames=Array.from({length:100},(_,i)=>({...game(`spread${i}`),start:`2030-06-${String(6+Math.floor(i/20)).padStart(2,"0")}T23:00:00Z`,lock:`2030-06-${String(6+Math.floor(i/20)).padStart(2,"0")}T22:00:00Z`}));
+  const spreadPlan=makePropsWalletPlan({month:"2030-06",now:"2030-06-06T21:40:00Z",games:spreadGames,bounds:Object.fromEntries(spreadGames.map(g=>[`nba|${g.id}`,bounds])),sources});
+  await db.query("UPDATE test_clock SET at='2030-06-06T21:40:00Z';UPDATE cron_job_leases SET lease_expires_at='2030-07-01T00:00:00Z'");
+  assert.equal((await wallet.plan(spreadPlan)).funded,true);
+  for(let i=0;i<3;i++){const key=reviewSlots(spreadGames[i])[1].key,c=await wallet.claim(key,`spread${i}`,bounds.map(b=>({...b,strong_input_tokens:1000})),true,"synthetic-owner");assert.equal(c.claimed,true);assert.equal(c.job!.model,i<2?"gpt-6.1-terra":"gpt-6-luna");await wallet.finish(key,c.token!,null,"synthetic_unsent");}
+  console.log("Target/emergency proof passed: all core reviews fund above $50, optional upgrades stay below target and daily/monthly 10%, $60 authorizations stop, no AI HTTP for these cases.");
   console.log("Native wallet/reviewer integration passed: exact request funding, full coverage, two stages, partial Flex/strong fallback, unknown charges, duplicates/concurrency, immutable results, cap rejection, UTC boundaries, 40-player partitioning, lock cutoff and RLS. All AI HTTP was mocked; zero paid calls.");
 }finally{await other.end();await db.end();await admin.query(`DROP DATABASE ${database} WITH (FORCE)`);await admin.end();}
 }

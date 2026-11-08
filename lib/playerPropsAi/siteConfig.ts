@@ -1,5 +1,6 @@
+import {PROPS_AI_FAMILIAR_READER_RELEASE} from "./publicationContract";
 /** Server-only switches. Both default off; no NEXT_PUBLIC key can enable inference. */
-export const PROPS_AI_SITE_RELEASE="player_props_ai_site_2026_11_07_r3_production_handoff" as const;
+export const PROPS_AI_SITE_RELEASE=PROPS_AI_FAMILIAR_READER_RELEASE;
 export const PROPS_AI_CONTROL_RELEASE="player_props_ai_control_2026_11_07_r1_explicit_off" as const;
 export function propsAiSiteConfig(env:Record<string,string|undefined>=process.env){
   const integrated=env.PLAYER_PROPS_AI_SITE_ENABLED==="true";

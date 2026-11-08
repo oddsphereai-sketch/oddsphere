@@ -13,11 +13,32 @@ exact. Promotions/demotions: 0/0. Only missing records from saved pregame eviden
 are eligible for the existing canonical materialization and settlement paths.
 See `docs/model-audits/2026-11-08-cfb-tracking-pagination-predeclaration.md`.
 
-## November 7 player-prop AI integration — paid runs disabled
+## November 8 player-prop coverage-first activation contract
 
-R13 connects the accepted law and eight-area reader to the existing NBA/NFL/MLB
+Owner authorization sets the operating target to $50/month and the emergency
+ceiling to $60/month. v64 is required before enabling R14. Optional stronger finals
+can use only money below the $50 target, after all pending core/fallback/recovery
+obligations, and are at most 10% of planned finals both per ET game day and per
+billing month. Primary coverage can use the emergency band; the approved $60
+ceiling remains an authorization stop. No game/player/market is removed to fit a
+budget. Unknown sent charges stay reserved and cannot trigger blind retries.
+
+Site R4 retains the existing NBA/NFL/MLB sport reader shells, decimal formatting,
+exact-price comparisons, market history and available research. The source review
+appears inside existing evidence panels. It must not be called an empirically
+calibrated forecast or a statistical Monte Carlo simulation. A probability-first
+side cannot be flipped by mean-versus-line display logic. Legacy locked AI payloads
+keep the exact R3 reader; future R4 locks retain the new reader. All locked writer
+fields and ordinary legacy readers remain immutable. Accepted forecast law and
+grade formulas are unchanged. Source/reader/wallet/focused tests, full model gate,
+fresh-main PR checks, migration verification, and live source/lease/lock/readers
+remain activation requirements. See `model-audits/2026-11-08-player-props-activation.md`.
+
+## November 7 player-prop AI foundation — activation remains explicitly gated
+
+R14 connects the accepted law and eight-area reader to the existing NBA/NFL/MLB
 writers, current exact prices, future locks and release-scoped tracking. The site
-publication contract is `player_props_ai_site_2026_11_07_r3_production_handoff`;
+publication contract is `player_props_ai_site_2026_11_08_r4_familiar_readers`;
 estimate semantics are `player_props_ai_estimate_2026_11_07_r1_not_empirically_calibrated`.
 The service-only control is `player_props_ai_control_2026_11_07_r1_explicit_off`;
 calendar admission is `player_props_ai_calendar_2026_11_07_r1_complete_month`.
@@ -30,12 +51,12 @@ cannot fall back to another product’s credential. Source reconfirmation histor
 is `nfl_player_props_current_season_state_2026_11_07_r5_nullable_passing_outcomes`.
 Legacy states retain their exact source values; missing passing TD/INT counts are
 unknown, not zero. The active MLB R44 champion remains the independent prior.
-AI decisions have their own effective R13 row release; do not blend them with R44
+AI decisions have their own effective R14 row release; do not blend them with R44
 performance. See `docs/player-props-ai-wallet-fallback.md` for the complete disabled
 site path, operational fallback and activation gates.
 
-`PROPS_AI_RELEASE` is `player_props_ai_2026_11_07_r13_disabled_site_integration`;
-budget candidate is `player_props_ai_budget_2026_11_07_r3_full_source_wallet`.
+`PROPS_AI_RELEASE` is `player_props_ai_2026_11_08_r14_coverage_first`;
+budget candidate is `player_props_ai_budget_2026_11_08_r4_target_and_emergency`.
 Both are exported from `lib/playerPropsAi/releases.ts`. The wire coordinate
 contract is `props_scenario_rows_2026_11_07_r2_physical_coordinates`; the stored
 canonical law remains `player_props_ai_law_2026_11_06_r1_integer_scenarios`.

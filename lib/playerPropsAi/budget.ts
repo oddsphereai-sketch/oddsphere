@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { invariant } from "./evidence";
 import type { WalletPlan } from "./walletPlan";
 import type { PropsAiModel } from "./releases";
-export type PropsAiBudget = { month_key: string; cap_micro: number; core_reserved_micro: number; consumed_micro: number; fallback_remaining_micro: number; recovery_remaining_micro: number; unexpected_overrun_micro: number; planned_games: number; stronger_finals: number; full_calendar: boolean; funding_error: string | null; plan_hash: string | null };
+export type PropsAiBudget = { month_key: string; cap_micro: number; target_micro: number; core_reserved_micro: number; consumed_micro: number; fallback_remaining_micro: number; recovery_remaining_micro: number; unexpected_overrun_micro: number; planned_games: number; stronger_finals: number; full_calendar: boolean; funding_error: string | null; plan_hash: string | null };
 export type PropsAiJob = { job_key: string; sport: "nba" | "nfl" | "mlb"; game_id: string; game_day: string; stage: "early" | "final"; scheduled_start: string; lock_at: string; due_at: string; billing_month: string; state: string; claim_token: string | null; model: PropsAiModel | null; requested_tier: "default"|"flex"; parts: number | null; phase: number; input_hash: string | null; result: unknown; error_code: string | null };
 export class PropsAiStore {
   constructor(readonly client: SupabaseClient) {}

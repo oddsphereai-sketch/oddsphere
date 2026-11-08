@@ -1,3 +1,17 @@
+# November 8 activation policy supersedes the original $50 stop
+
+The operating target is $50 and the owner-approved emergency ceiling is $60.
+Append-only v64 and R14 are required. Optional stronger finals remain under the
+$50 target and at most 10% both per ET game day and per billing month; all core
+reviews/fallback/recovery are protected first. The emergency band can fund core
+coverage above target. No paid test or extra scheduled review is introduced.
+Existing locked readers retain their exact legacy payloads. New forecasts use the
+familiar sport reader, with source evidence inside its existing panels. Details:
+`model-audits/2026-11-08-player-props-activation.md`.
+
+The following November 7 foundation notes are historical where they describe a
+$50 hard stop or R13/R3 identifiers; the registry and runtime constants are current.
+
 # Player-prop AI full-source wallet and fallback integration
 
 Base: `e008a0fd4f22653a8fde8690b87d38d4d1ac3cf2`. Current candidate R13:
