@@ -59,7 +59,7 @@ export function applyNflSiteAi(board:NflPlayerPropsRuntimeBoard,packet:GamePacke
     const marketProbability=q.american>0?100/(100+q.american):-q.american/(100-q.american);
     changed=true;
     const next={...row,providerPlayerId:bound.id.replace(/^nfl-bdl-player:/,""),americanPrice:q.american,observedAt:q.observedAt,projection:c.projection,projectionRange:null,rawModelProbability:probability,finalProbability:probability,expectedValue:ev,marketProbability,probabilityEdge:probability-marketProbability,bookEvidence:row.bookEvidence.map(b=>book(b.sportsbook)===book(q.book)&&b.provider===q.provider?{...b,americanPrice:q.american,observedAt:q.observedAt}:b),grade:c.grade==="No Play"?"No Play" as const:row.side===c.side?c.grade:"Watchlist" as const,
-      modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:PROPS_AI_NFL_DECISION_RELEASE,aiReview:c.evidence};
+      modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:PROPS_AI_NFL_DECISION_RELEASE,aiReview:{...c.evidence,quoteConfirmedAt:q.receivedAt}};
     // These predecessor explanations describe a different forecast. Raw market evidence remains intact.
     delete next.projectionEvidence;delete next.decisionSupport;delete next.passingMarketEvidence;delete next.qualifiedReferenceEvidence;delete next.marketEvidenceId;
     return next;
@@ -80,7 +80,7 @@ export function applyNflSiteAi(board:NflPlayerPropsRuntimeBoard,packet:GamePacke
         playerName:player.name,team:player.team,opponent:player.opponent,projection:c.projection,projectionRange:null,rawModelProbability:probability,finalProbability:probability,marketProbability,probabilityEdge:probability-marketProbability,
         expectedValue:probability*(q.american>0?q.american/100:100/-q.american)-loss,grade:!template||c.grade==="No Play"?"No Play":q.side===c.side?c.grade:"Watchlist",marketMovement:"neutral",healthHolds:[],
         bookEvidence:[{sportsbook:q.book,provider:q.provider,americanPrice:q.american,observedAt:q.observedAt,openingObservedAt:null,openingLine:null,openingAmericanPrice:null}],
-        forecastContext:context,modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:PROPS_AI_NFL_DECISION_RELEASE,aiReview:c.evidence};
+        forecastContext:context,modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:PROPS_AI_NFL_DECISION_RELEASE,aiReview:{...c.evidence,quoteConfirmedAt:q.receivedAt}};
       delete next.projectionEvidence;delete next.decisionSupport;delete next.passingMarketEvidence;delete next.qualifiedReferenceEvidence;delete next.marketEvidenceId;
       decisions.push(next);changed=true;
     }

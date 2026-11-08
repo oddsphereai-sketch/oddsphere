@@ -1,5 +1,28 @@
 # Current production model releases and qualified research candidates
 
+## November 8 NFL prop exact side receipts and review-window admission
+
+NFL source decision R6 `player_props_ai_nfl_decision_2026_11_08_r6_exact_quote_receipts`,
+writer R71 `nfl_player_props_writer_2026_11_08_r71_exact_quote_receipts`, member R55
+`nfl_player_props_member_2026_11_08_r55_exact_quote_receipts` and lifecycle R37
+`nfl_player_props_member_lifecycle_2026_11_08_r37_exact_quote_receipts` supersede
+R5/R70/R54/R36 below. Each verified quote side stores its own provider receipt;
+future locks use that receipt for both sides instead of an old unchanged-price
+vendor clock on the non-selected side. Stale confirmations still refuse retention.
+All existing locked fields and reader precedence remain exact. Accepted forecast
+R15, familiar reader R4 and wallet R4 remain unchanged. Schedule R3
+`player_props_ai_schedule_2026_11_08_r3_no_late_early_purchase` closes an early
+window at final time independently of the final job state, both before preparation
+and immediately before claim. A completed/failed final cannot make a missed early
+slot eligible again. The read-only cadence hint applies the same boundary;
+v66's R2 execution-capacity contract stays installed unchanged. No review
+repurchase, job, request, threshold or spending increase. Same-input current
+forecast/grade impact is 0 promotions/0 demotions; paired future-lock tests preserve
+both qualifying AI promotions and demotions over a predecessor native tuple.
+Radar copy mentions an empirical range only when one actually exists; numeric and
+legacy stored range fields stay exact. See
+`docs/model-audits/2026-11-08-nfl-props-exact-side-receipts.md`.
+
 ## November 8 NFL prop verified source scope and exact locks
 
 NFL AI decision R5 is `player_props_ai_nfl_decision_2026_11_08_r5_verified_source_scope`;

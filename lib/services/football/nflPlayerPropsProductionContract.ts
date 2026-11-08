@@ -1,3 +1,4 @@
+import {PROPS_AI_NFL_DECISION_RELEASE} from "../../playerPropsAi/releases";
 import {propsTeam} from "../../playerPropsAi/teamIdentity";
 import {
   NFL_PLAYER_PROPS_DECISION_RELEASE,
@@ -16,9 +17,9 @@ import { selectNflPlayerPropsCanonicalLines } from "./nflPlayerPropsCanonicalLin
 import { withoutUnresolvedNflPlayerAliasDuplicates } from "./nflPlayerPropsMemberAliasIdentity";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_11_08_r54_source_coherent_locks" as const;
+  "nfl_player_props_member_2026_11_08_r55_exact_quote_receipts" as const;
 export const NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE =
-  "nfl_player_props_member_lifecycle_2026_11_08_r36_exact_lock_precedence" as const;
+  "nfl_player_props_member_lifecycle_2026_11_08_r37_exact_quote_receipts" as const;
 const NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE =
   "nfl_player_props_decision_2026_10_27_r38_passing_yards_direction" as const;
 export const NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET = 2 as const;
@@ -323,7 +324,7 @@ function isFreshAt(row: NflPlayerPropsRuntimeDecision, evaluatedAt: number): boo
     && age <= nflPlayerPropsRuntimePolicy().maximumQuoteAgeHours * 3_600_000;
 }
 function isFreshAtLock(row: NflPlayerPropsRuntimeDecision): boolean {
-  const age = Date.parse(row.lockAt) - Date.parse(row.aiReview?.selectedSide===row.side?row.aiReview.quoteConfirmedAt:row.observedAt);
+  const age = Date.parse(row.lockAt) - Date.parse(row.aiReview&&(row.aiReview.selectedSide===row.side||row.decisionRelease===PROPS_AI_NFL_DECISION_RELEASE)?row.aiReview.quoteConfirmedAt:row.observedAt);
   return Number.isFinite(age) && age >= 0
     && age <= nflPlayerPropsRuntimePolicy().maximumQuoteAgeHours * 3_600_000;
 }

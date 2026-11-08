@@ -1,3 +1,4 @@
+import {PROPS_AI_NFL_DECISION_RELEASE} from "../lib/playerPropsAi/releases";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
@@ -195,8 +196,8 @@ assert.equal(JSON.stringify(legacyAliasSnapshot), lockedAliasBefore, "reader ali
 const lockedAliasWriter = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 9, evaluatedAt: "2026-11-04T13:00:00Z",
   previous: { ...legacyAliasSnapshot, board: { ...boardRows([resolvedAliasDecision, lockedAlias]), publicationEnabled: true, trackingEnabled: true } }, nextBoard: boardRows([resolvedAliasDecision]) });
 assert.deepEqual(lockedAliasWriter.board.decisions.find(row => row.playerName === "Chigoziem Okonkwo"), lockedAlias, "the writer preserves the complete prior locked alias record even when the current feed omits it");
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_11_08_r54_source_coherent_locks");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_11_08_r70_source_coherent_locks");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_11_08_r55_exact_quote_receipts");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_11_08_r71_exact_quote_receipts");
 assert.equal(NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES, 60);
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_11_04_r42_suffix_roster_identity");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_11_04_r5_verified_participation");
@@ -826,4 +827,15 @@ const afterLock=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:1,ev
 assert.deepEqual(afterLock.board.decisions,exactLock.board.decisions,"all original locked books retained exactly");
 assert.deepEqual(afterLock.memberDecisions,[explicitMember],"stored member payload precedes a differing legacy board value");
 assert.deepEqual(buildNflPlayerPropsMemberSnapshot(afterLock,"2026-09-01T11:10:00.000Z").memberDecisions,[explicitMember]);
+// Both sides of a current verified source quote keep their own provider
+// confirmation, even when the vendor's unchanged-price clock is old.
+for(const [retainedGrade,nativeGrade] of [['Lean','No Play'],['Watchlist','Lean']] as const){
+ const opposing={...aiBookA,side:'under' as const,observedAt:'2026-08-25T11:00:00Z',grade:retainedGrade,decisionRelease:PROPS_AI_NFL_DECISION_RELEASE,aiReview:{...aiBookA.aiReview!,selectedSide:'over' as const}};
+ const previous=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:1,evaluatedAt:nearLock,nextBoard:boardRows([opposing])});
+ const locked=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:1,evaluatedAt:decision.lockAt,previous,nextBoard:boardRows([{...opposing,projection:99,grade:nativeGrade,aiReview:undefined}])});
+ assert.equal(locked.board.decisions[0].projection,opposing.projection);assert.equal(locked.board.decisions[0].grade,retainedGrade);
+ const stale={...previous,board:{...boardRows([{...opposing,aiReview:{...opposing.aiReview,quoteConfirmedAt:'2026-08-25T11:00:00Z'}}]),publicationEnabled:true as const,trackingEnabled:true as const}};
+ const refused=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:1,evaluatedAt:decision.lockAt,previous:stale,nextBoard:boardRows([{...opposing,projection:99,grade:nativeGrade,aiReview:undefined}])});
+ assert.equal(refused.board.decisions[0].projection,99,'stale provider confirmation does not retain an AI tuple');
+}
 console.log("NFL player-props one-writer lifecycle, T-60 freeze, tracking, and CLV contract passed.");

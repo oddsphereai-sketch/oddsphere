@@ -1,3 +1,4 @@
+import {isMissedPropsEarlyWindow} from "./schedule";
 import {propsAiCompletionWindowMs} from "./completionWindow";
 import { gzipSync } from "node:zlib";
 import type { GamePacket } from "./evidenceContract";
@@ -24,6 +25,7 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
   if(args.job.state!=="pending")return {status:"skipped",reason:"not_pending"};
   invariant(args.job.game_id === args.packet.gameId && args.job.sport===args.packet.sport && instant(args.job.scheduled_start) === instant(args.packet.start) && instant(args.job.lock_at)===instant(args.packet.lock) && args.job.stage === args.packet.stage && args.job.game_day===etDate(args.packet.start), "job_input_identity_mismatch");
   invariant(instant(clock()) < instant(args.packet.lock) && instant(args.packet.cutoff) <= instant(clock()), "input_outside_actual_review_window");
+  if(isMissedPropsEarlyWindow(args.job.stage,args.packet.lock,clock()))return {status:"skipped",reason:"early_window_closed_final_only"};
   const slot=args.generationSlot??(async <T>(run:()=>Promise<T>)=>run());
   const parts = await (args.prepare?.() ?? prepareReviewParts(args.packet, { key: args.key, fetchImpl: args.fetchImpl, count:(packet,model)=>slot(()=>countAiInput(jointReviewRequest(packet,model,PROPS_AI_MAX_OUTPUT_PER_REQUEST),args)) }));
   invariant(digest(parts.flatMap(p=>p.packet.players.map(p=>p.id)).sort())===digest(args.packet.players.map(p=>p.id).sort()),"partition_player_coverage_mismatch");
@@ -31,6 +33,7 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
   const requests = await Promise.all(parts.map(async part=>({input_tokens:part.inputTokens,max_output_tokens:PROPS_AI_MAX_OUTPUT_PER_REQUEST,
     strong_input_tokens:preferStronger ? await slot(()=>(args.countStrong?.(part) ?? countAiInput(jointReviewRequest(part.packet,PROPS_AI_STRONG_MODEL,PROPS_AI_MAX_OUTPUT_PER_REQUEST),{key:args.key,fetchImpl:args.fetchImpl}))).catch(()=>null) : null})));
   if(Math.min(deadline-Date.now(),instant(args.packet.lock)-instant(clock()))<propsAiCompletionWindowMs(parts.length)) return {status:"skipped",reason:"insufficient_completion_window"};
+  if(isMissedPropsEarlyWindow(args.job.stage,args.packet.lock,clock()))return {status:"skipped",reason:"early_window_closed_final_only"};
   const inputHash = digest(args.packet), claimed = await args.store.claim(args.job.job_key, inputHash, requests, preferStronger,args.writerRunId);
   if (!claimed.claimed) return { status: "skipped", reason: claimed.reason };
   const job = claimed.job!, token = claimed.token!;

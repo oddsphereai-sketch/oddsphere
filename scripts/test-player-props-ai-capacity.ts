@@ -1,3 +1,4 @@
+import {isMissedPropsEarlyWindow} from "../lib/playerPropsAi/schedule";
 /** Pure offline proofs: no database, providers, model calls or paid requests. */
 import assert from "node:assert/strict";
 import {encodeNbaPlayerPropsPrivatePayload,decodeNbaPlayerPropsPrivatePayload} from "../lib/services/nba/nbaPlayerPropsPrivateStore";
@@ -34,6 +35,15 @@ async function main() {
  const late=await runPropsReview({...args,deadline:Date.now()+40_000});
  assert.equal(late.status,"skipped");assert.equal("reason" in late&&late.reason,"insufficient_completion_window");assert.equal(claims,0,"no money claimed or requests sent for the actual late-batch regression");
  await runPropsReview({...args,deadline:Date.now()+180_000});assert.equal(claims,1,"a funded full completion window remains eligible");
+ assert.equal(isMissedPropsEarlyWindow('early',lock,'2026-11-08T16:34:59.999Z'),false);
+ assert.equal(isMissedPropsEarlyWindow('early',lock,'2026-11-08T16:35:00Z'),true);
+ assert.equal(isMissedPropsEarlyWindow('final',lock,'2026-11-08T16:35:00Z'),false);
+ let prepared=0;
+ const closed=await runPropsReview({...args,clock:()=>"2026-11-08T16:36:00Z",prepare:async()=>{prepared++;throw Error('closed early slot must not prepare or count tokens');}});
+ assert.equal(closed.status,'skipped');assert.equal('reason' in closed&&closed.reason,'early_window_closed_final_only');assert.equal(prepared,0);assert.equal(claims,1);
+ let movingClock=now;
+ const crossed=await runPropsReview({...args,deadline:Date.now()+180_000,clock:()=>movingClock,prepare:async()=>{movingClock='2026-11-08T16:35:00Z';return [{packet,inputTokens:1}];}});
+ assert.equal(crossed.status,'skipped');assert.equal('reason' in crossed&&crossed.reason,'early_window_closed_final_only');assert.equal(claims,1,'window is checked again before any money is claimed');
  console.log("AI capacity proof passed: >32 MB exact evidence round-trip, immutable locks/inline precedence, bounded 16-game/80-part dispatch, and late work deferred before any claim. No network calls.");
 }
 void main();

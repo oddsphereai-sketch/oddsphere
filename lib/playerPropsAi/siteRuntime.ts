@@ -1,3 +1,4 @@
+import {isMissedPropsEarlyWindow} from "./schedule";
 import {propsAiGenerationPool} from "./completionWindow";
 /** Invoked only by the existing sport-scoped prediction writer. Never owns a timer or member write. */
 import type {SupabaseClient} from "@supabase/supabase-js";
@@ -39,9 +40,8 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
     if(paid&&calendar&&nativeByFundedId.size){
       const due=await args.client.from("player_props_ai_reviews").select("*").eq("sport",args.sport).eq("state","pending").in("game_id",[...nativeByFundedId.keys()]).lte("due_at",clock()).gt("lock_at",clock()).order("due_at",{ascending:true});
       if(due.error)throw new Error("due_review_read_failed");
-      // An already-missed early window cannot buy an identical second review at final time.
-      const finalDue=new Set((due.data??[]).filter(j=>j.stage==="final").map(j=>j.game_id));
-      const runnable=(due.data??[]).filter(j=>j.stage!=="early"||!finalDue.has(j.game_id));
+      // Use the actual window, even when final has completed or failed.
+      const runnable=(due.data??[]).filter(j=>!isMissedPropsEarlyWindow(j.stage,j.lock_at,clock()));
       if(runnable.length!==(due.data??[]).length)findings.push("early_window_missed_final_only");
       // v66 bounds claims to sixteen whole games; one sport-wide pool bounds generation to sixteen requests.
       for(let i=0;i<runnable.length;i+=16){
