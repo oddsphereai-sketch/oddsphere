@@ -704,14 +704,19 @@ export async function fetchAllPredictionRecords(
     };
     // Page narrow IDs before decoding immutable JSON. An OFFSET on the view
     // decodes all skipped records again for every later history page.
-    let { data, error } = useRpc ? await supabase.rpc(TRACKING_RECORD_PAGE_RPC, {
-      p_sport: opts.sport ?? null,
-      p_from: opts.from ?? null,
-      p_to: opts.to ?? null,
-      p_competition: opts.competition ?? null,
-      p_offset: fromRow,
-      p_limit: TRACKING_PAGE_SIZE,
-    }) : await pageQuery();
+    const rpcQuery = () => {
+      let query = supabase.rpc(TRACKING_RECORD_PAGE_RPC, {
+        p_sport: opts.sport ?? null,
+        p_from: opts.from ?? null,
+        p_to: opts.to ?? null,
+        p_competition: opts.competition ?? null,
+        p_offset: fromRow,
+        p_limit: TRACKING_PAGE_SIZE,
+      });
+      if (opts.signal) query = query.abortSignal(opts.signal);
+      return query;
+    };
+    let { data, error } = useRpc ? await rpcQuery() : await pageQuery();
     if (useRpc && isMissingRpcFunction(error, TRACKING_RECORD_PAGE_RPC)) {
       useRpc = false;
       ({ data, error } = await pageQuery());

@@ -66,6 +66,24 @@ async function main() {
     return { data: [], error: null };
   } } as unknown as SupabaseClient, {});
   assert.deepEqual(empty, { rows: [], error: null });
+  const controller = new AbortController();
+  const aborted = { code: "", message: "AbortError: request cancelled" };
+  let signalReceived = false;
+  const cancelledClient = { from() { throw new Error("cancellation must not fall back to another scan"); },
+    rpc() {
+      const query = {
+        abortSignal(signal: AbortSignal) { assert.equal(signal, controller.signal); signalReceived = true; return query; },
+        then(resolve: (value: unknown) => unknown) {
+          return Promise.resolve({ data: null, error: aborted }).then(resolve);
+        },
+      };
+      return query;
+    },
+  } as unknown as SupabaseClient;
+  controller.abort();
+  const cancelled = await fetchAllPredictionRecords(cancelledClient, { ...opts, signal: controller.signal });
+  assert(signalReceived, "the coordinated reader's AbortSignal must reach the RPC");
+  assert.equal(cancelled.error, aborted);
   console.log("tracking page-first RPC, exact legacy payloads, bounded paging and migration fallback: PASS");
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
