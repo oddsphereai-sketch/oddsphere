@@ -1,3 +1,4 @@
+import { readCfbExistingTrackingRecords } from "../lib/services/football/cfbTrackingRecordStore";
 import assert from "node:assert/strict";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 import { createHash } from "node:crypto";
@@ -3182,17 +3183,28 @@ for (const invalid of [
 // requests or replacement prediction writes are available in this test client.
 const writtenTracking: PredictionRecordRow[] = [];
 const alreadyTrackedId = 900099;
-const alreadyTrackedKeys = ["moneyline", "spread", "total"].map(market => ({ external_id: alreadyTrackedId, market }));
+const alreadyTrackedIds = Array.from({ length: 400 }, (_, index) => alreadyTrackedId + index);
+const alreadyTrackedKeys = alreadyTrackedIds.flatMap(external_id =>
+  ["moneyline", "spread", "total"].map(market => ({ external_id, market })));
+const beforeExistingKeys = structuredClone(alreadyTrackedKeys);
 const untouchedLegacy = structuredClone(originalPreCausalPayload);
 untouchedLegacy.game.providerGameId = String(alreadyTrackedId);
 Object.assign(untouchedLegacy, { schemaRelease: "unreadable-old-schema" });
 const historyClient = { from(table: string) {
   let data: unknown[] = table === "prediction_records" ? [...alreadyTrackedKeys, ...writtenTracking] : [];
   const q = {
-    select() { return q; }, eq() { return q; }, in() { return q; },
+    select() { return q; }, eq() { return q; },
+    in(column: string, ids: number[]) {
+      if (table === "prediction_records" && column === "external_id") {
+        data = (data as Array<{ external_id: number }>).filter(row => ids.includes(row.external_id));
+      }
+      return q;
+    },
+    order() { return q; },
+    range(from: number, to: number) { data = data.slice(from, to + 1); return q; },
     upsert(rows: Array<Record<string, unknown>>) {
       assert(rows.length > 0);
-      assert(rows.every(r => r.external_id !== alreadyTrackedId), "canonical old games are never rewritten during a new lock");
+      assert(rows.every(r => !alreadyTrackedIds.includes(Number(r.external_id))), "canonical old games are never rewritten during a new lock");
       data = rows.map((r, i) => ({ id: 9001 + i, external_id: r.external_id })); return q;
     },
     insert(rows: PredictionRecordRow[]) {
@@ -3202,23 +3214,50 @@ const historyClient = { from(table: string) {
       data = rows.map((_, i) => ({ id: 100 + i })); return q;
     },
     then(resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) {
-      return Promise.resolve({ data, error: null }).then(resolve, reject);
+      return Promise.resolve({ data: data.slice(0, 1_000), error: null }).then(resolve, reject);
     },
   }; return q;
 } } as unknown as import("@supabase/supabase-js").SupabaseClient;
 const runOriginalLock = () => writeCfbOfficialTracking({ client: historyClient, apply: true, metadata: [],
   balldontlieApiKey: "test-no-provider", now: gameStartAt, candidates: [
-    { payload: untouchedLegacy, mode: "published_pregame_accuracy_recovery", publishedPregamePayload: untouchedLegacy },
+    ...alreadyTrackedIds.map(id => {
+      const legacy = structuredClone(untouchedLegacy);
+      legacy.game.providerGameId = String(id);
+      return { payload: legacy, mode: "published_pregame_accuracy_recovery" as const, publishedPregamePayload: legacy };
+    }),
     ...originalPreCausalCandidates,
   ] });
 const firstOriginalLock = await runOriginalLock();
 assert.equal(firstOriginalLock.trackingRecordsInserted, 3);
+assert.equal(firstOriginalLock.trackingRecordsExisting, 1_200, "all season identities beyond the production 1,000-row cap must be retained");
+assert.deepEqual(alreadyTrackedKeys, beforeExistingKeys, "the complete historical ledger remains immutable");
 assert.equal(firstOriginalLock.trackingError, null);
 const repeatOriginalLock = await runOriginalLock();
 assert.equal(repeatOriginalLock.trackingRecordsInserted, 0, "retry is idempotent across the release transition");
 assert.deepEqual(writtenTracking.map(r => [r.pick, r.line_value, r.odds_american, r.model_probability, r.play_grade]),
   originalPreCausalRecords.map(r => [r.pick, r.line_value, r.odds_american, r.model_probability, r.play_grade]));
 assert.deepEqual(originalPreCausalPayload, originalPreCausalBytes);
+
+let failedReadWrites = 0;
+const failedPageClient = { from() {
+  let offset = 0;
+  const q = {
+    select() { return q; }, eq() { return q; }, in() { return q; }, order() { return q; },
+    range(from: number) { offset = from; return q; },
+    upsert() { failedReadWrites++; return q; }, insert() { failedReadWrites++; return q; },
+    then(resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) {
+      return Promise.resolve(offset === 0
+        ? { data: alreadyTrackedKeys.slice(0, 500), error: null }
+        : { data: null, error: { message: "later page unavailable" } }).then(resolve, reject);
+    },
+  }; return q;
+} } as unknown as import("@supabase/supabase-js").SupabaseClient;
+await assert.rejects(writeCfbOfficialTracking({ client: failedPageClient, apply: true, metadata: [],
+  balldontlieApiKey: "test-no-provider", now: gameStartAt,
+  candidates: originalPreCausalCandidates,
+}), /CFB tracking record read failed: later page unavailable/);
+assert.equal(failedReadWrites, 0, "any incomplete identity read must stop the canonical writer before mutations");
+assert.deepEqual(await readCfbExistingTrackingRecords(historyClient, []), []);
 
 const recoveryCutoffAt = new Date(Date.parse(game.scheduledStart) - 60 * 60_000).toISOString();
 const recoverySourceCapturedAt = new Date(Date.parse(recoveryCutoffAt) - 10 * 60_000).toISOString();

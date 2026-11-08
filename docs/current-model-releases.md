@@ -1,5 +1,18 @@
 # Current production model releases and qualified research candidates
 
+## November 8 CFB complete tracking identity reads
+
+Sole writer is `cfb_forward_evidence_writer_2026_11_08_r154_complete_tracking_identity_read`.
+Its existing-record lookup uses bounded, ordered, complete identity-only pages;
+the season ledger exceeds the production REST 1,000-row response cap. The old
+truncated lookup retried existing immutable keys, causing duplicate-key rejection
+of the entire batch and blocking missing games. The denominator audit shares the
+same complete reader. Existing locks, model/decision/calibration/grade releases,
+prices, stakes, forecasts, and the sport-scoped prediction_pipeline lease remain
+exact. Promotions/demotions: 0/0. Only missing records from saved pregame evidence
+are eligible for the existing canonical materialization and settlement paths.
+See `docs/model-audits/2026-11-08-cfb-tracking-pagination-predeclaration.md`.
+
 ## November 7 player-prop AI integration — paid runs disabled
 
 R13 connects the accepted law and eight-area reader to the existing NBA/NFL/MLB
