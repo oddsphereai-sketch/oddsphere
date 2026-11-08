@@ -37,7 +37,7 @@ import {
 import { isPublicallyTracked } from "../config/officialTrackingStart";
 import { UCL_CALIBRATION_RELEASE, UCL_MODEL_RELEASE } from "./ucl/uclModel";
 import { filterCompleteUclLockManifestCohorts } from "./ucl/uclLockManifest";
-import { nflTrackingCorrectionSupersededRecordId } from "./football/nflPublishedTrackingCorrection";
+import { trackingCorrectionSupersededRecordId } from "./tracking/trackingCorrectionPrecedence";
 import {
   NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES,
   NHL_REGULAR_TRANSITION_MODEL_RELEASES,
@@ -90,7 +90,7 @@ export type DimensionRow<K extends string = string> = {
 export type TrackingDisplaySport = TrackedSport | "epl";
 
 export const TRACKING_AGGREGATE_CONTRACT_VERSION =
-  "tracking_aggregate_v22_frozen_first_inning_authority_2026_11_08" as const;
+  "tracking_aggregate_v22_original_lock_correction_authority_2026_11_08" as const;
 
 /**
  * Sport+market joint split with the Best Angle / Lean cuts most members
@@ -542,12 +542,12 @@ function chooseCanonicalTrackingRecord(
 ): PredictionRecordRow {
   const currentCorrection = current as TrackingRecordProjection;
   const candidateCorrection = candidate as TrackingRecordProjection;
-  const currentSupersedes = nflTrackingCorrectionSupersededRecordId({
+  const currentSupersedes = trackingCorrectionSupersededRecordId({
     modelVersion: current.model_version,
     correctionRelease: currentCorrection.tracking_correction_release ?? current.snapshot_json?.tracking_correction_release,
     supersedesPredictionRecordId: currentCorrection.supersedes_prediction_record_id ?? current.snapshot_json?.supersedes_prediction_record_id,
   });
-  const candidateSupersedes = nflTrackingCorrectionSupersededRecordId({
+  const candidateSupersedes = trackingCorrectionSupersededRecordId({
     modelVersion: candidate.model_version,
     correctionRelease: candidateCorrection.tracking_correction_release ?? candidate.snapshot_json?.tracking_correction_release,
     supersedesPredictionRecordId: candidateCorrection.supersedes_prediction_record_id ?? candidate.snapshot_json?.supersedes_prediction_record_id,

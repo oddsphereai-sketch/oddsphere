@@ -1,3 +1,4 @@
+import { trackingCorrectionSupersededRecordId } from "../tracking/trackingCorrectionPrecedence";
 import { computeSlateDate } from "../../dates/slateDate";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllPredictionRecords, dedupePredictionRecordsForTracking, effectiveTrackingPlayGrade, trackingDisplaySport, isTrackingRecordEligible } from "../trackingAggregateService";
@@ -9,8 +10,9 @@ const PAGE_SIZE = 200;
 const ROLLOUT = "2026-11-08T00:00:00Z";
 export type TrackingLockExpectation = { sport: string; externalId: number; market: string; grade: string; lockedAt: string; startsAt: string; source: string; exactGrade?: boolean };
 export type TrackingIntegrityFinding = { kind: string; sport: string; game: number; market: string; severity: "error" | "warn"; recordId?: number; detail: string };
-export type TrackingIntegrityReport = { release: typeof TRACKING_INTEGRITY_AUDIT_RELEASE; checkedAt: string; from: string; records: number; publishedActionableLocks: number; errors: number; warnings: number; findings: TrackingIntegrityFinding[]; sports: Record<string, { records: number; bestAngles: number; leans: number; settled: number; pending: number }> };
+export type TrackingIntegrityReport = { release: typeof TRACKING_INTEGRITY_AUDIT_RELEASE; checkedAt: string; from: string; records: number; publishedActionableLocks: number; errors: number; warnings: number; findings: TrackingIntegrityFinding[]; sports: Record<string, { records: number; bestAngles: number; leans: number; settled: number; pending: number; publishedActionableLocks: number }> };
 const gradeKey = (value: unknown) => String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+export const trackingManifestInSlateWindow = (sport: "nfl" | "cfb", startsAt: string, from: string) => computeSlateDate(sport, startsAt) >= from;
 const terminal = (value: string) => ["final", "completed", "status_final", "post", "off", "canceled", "cancelled", "postponed"].includes(value.toLowerCase().replace(/^status[_ -]*/, ""));
 
 /** Exact saved lock expectations only. No reforecast or retrospective grading changes. */
@@ -26,8 +28,8 @@ export function compareTrackingLockExpectations(records: PredictionRecordRow[], 
       // An explicitly superseding immutable correction is a different public
       // record, not a lost source grade. Older accuracy-only recoveries require
       // owner review; never manufacture recommendations from them here.
-      const projection = row as PredictionRecordRow & { supersedes_prediction_record_id?: unknown };
-      if (projection.supersedes_prediction_record_id) continue;
+      const projection = row as PredictionRecordRow & { tracking_correction_release?: unknown; supersedes_prediction_record_id?: unknown };
+      if (trackingCorrectionSupersededRecordId({ modelVersion: row.model_version, correctionRelease: projection.tracking_correction_release ?? row.snapshot_json?.tracking_correction_release, supersedesPredictionRecordId: projection.supersedes_prediction_record_id ?? row.snapshot_json?.supersedes_prediction_record_id })) continue;
       findings.push({ ...base, recordId: row.id, kind: "published_grade_differs", severity: Date.parse(lock.lockedAt) < Date.parse(ROLLOUT) ? "warn" : "error", detail: `Saved ${lock.grade}; tracked ${effectiveTrackingPlayGrade(row)}. Original records preserved for review.` });
     }
   }
@@ -86,7 +88,7 @@ export async function runTrackingIntegrityAudit(args: { client: SupabaseClient; 
         .eq("stage", "t60").gte("game_start_at", `${from}T00:00:00Z`).lte("game_start_at", new Date(Date.parse(checkedAt) + 3_600_000).toISOString()).order("id").range(offset, offset + PAGE_SIZE - 1).abortSignal(deadline);
       if (r.error) throw new Error(`tracking integrity ${sport} manifest read failed: ${r.error.message}`);
       for (const s of r.data ?? []) {
-        if (s.enabled !== "true" || s.published !== "true" || computeSlateDate(sport as "nfl" | "cfb", s.game_start_at) < from) continue;
+        if (s.enabled !== "true" || s.published !== "true" || !trackingManifestInSlateWindow(sport as "nfl" | "cfb", s.game_start_at, from)) continue;
         for (const bet of (s.bets ?? []) as Array<{ market: string; grade: string }>) {
           const grade = gradeKey(bet.grade); if (!["best_angle", "lean"].includes(grade)) continue;
           expectations.push({ sport, externalId: Number(s.provider_game_id), market: bet.market, grade, lockedAt: s.captured_at, startsAt: s.game_start_at, source: s.id });
@@ -165,7 +167,11 @@ export async function runTrackingIntegrityAudit(args: { client: SupabaseClient; 
   }
   const findings = [...compareTrackingLockExpectations(records, expectations), ...inspectTrackingSettlements({ records, games, grades, now: checkedAt })];
   const sports: TrackingIntegrityReport["sports"] = {};
-  for (const name of ["mlb", "nba", "wnba", "nhl", "nfl", "cfb", "cbb", "soccer", "epl", "ucl"]) sports[name] = { records: 0, bestAngles: 0, leans: 0, settled: 0, pending: 0 };
+  for (const name of ["mlb", "nba", "wnba", "nhl", "nfl", "cfb", "cbb", "soccer", "epl", "ucl"]) sports[name] = { records: 0, bestAngles: 0, leans: 0, settled: 0, pending: 0, publishedActionableLocks: 0 };
+  for (const lock of expectations) {
+    const name = lock.sport === "soccer" ? lock.source.includes("uefa_champions_league") ? "ucl" : "epl" : lock.sport;
+    sports[name].publishedActionableLocks++;
+  }
   for (const row of records.filter(isTrackingRecordEligible)) {
     const s = sports[trackingDisplaySport(row)], grade = effectiveTrackingPlayGrade(row);
     s.records++; if (grade === "best_angle") s.bestAngles++; if (grade === "lean") s.leans++;

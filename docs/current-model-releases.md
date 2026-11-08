@@ -1,9 +1,26 @@
 # Current production model releases and qualified research candidates
 
+## November 8 owner-approved historical CFB T60 corrections
+
+Daniel explicitly approved adding all nine reviewed October 24/31 calls after
+reviewing their dates, exact saved T60 picks and 8-1 settled outcome (Best 1-0,
+Leans 7-1). This is a fixed nine-record authorization, not a general legacy
+rewrite. Canonical CFB writer is
+`cfb_forward_evidence_writer_2026_11_08_r155_owner_approved_tracking_corrections`.
+Its append-only correction release/model are
+`cfb_published_tracking_correction_2026_11_08_r1_owner_approved_t60` /
+`cfb_tracking_original_t60_correction_2026_11_08_r1`. Original records and payloads
+remain unchanged. Pinned source IDs/hashes, exact T60 eligibility and original
+accuracy-only record IDs are required. One authoritative serializer copies the
+original tuple; no model or postgame price reconstruction occurs. Member,
+legacy and winner-accuracy readers prefer explicit correction markers once.
+Current board promotions/demotions: 0/0; history restores 1 Best and 8 Leans.
+See `docs/model-audits/2026-11-08-legacy-cfb-tracking-owner-review.md`.
+
 ## November 8 cross-sport tracking integrity and original FI lock authority
 
-Tracking aggregate is `tracking_aggregate_v22_frozen_first_inning_authority_2026_11_08`;
-member cache v16 and foundation snapshot r13 end in `frozen-fi-authority`.
+Tracking aggregate is `tracking_aggregate_v22_original_lock_correction_authority_2026_11_08`;
+member cache v16 and foundation snapshot r13 end in `original-lock-authority`.
 Seven legacy MLB FI rows already retain their original actionable member lock
 and settled result, but indexed Held/Toss-Up fields suppressed their grade cuts.
 The reader now uses the same exact stored lock authority as canonical grading,
@@ -23,7 +40,7 @@ new schedule, prediction writer, grade write, model or stake change is added.
 
 ## November 8 CFB complete tracking identity reads
 
-Sole writer is `cfb_forward_evidence_writer_2026_11_08_r154_complete_tracking_identity_read`.
+The preceding coverage repair was writer `cfb_forward_evidence_writer_2026_11_08_r154_complete_tracking_identity_read`; r155 above preserves that complete identity read.
 Its existing-record lookup uses bounded, ordered, complete identity-only pages;
 the season ledger exceeds the production REST 1,000-row response cap. The old
 truncated lookup retried existing immutable keys, causing duplicate-key rejection

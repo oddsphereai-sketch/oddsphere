@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PredictionRecordRow, PredictionGradeRow } from "../lib/types/domain/Tracking";
 import { readFrozenFirstInningTrackingAuthority, fetchGradesForRecordIds, effectiveTrackingPlayGrade, isTrackingPlayGradeCutEligible } from "../lib/services/trackingAggregateService";
-import { compareTrackingLockExpectations, inspectTrackingSettlements, type TrackingLockExpectation } from "../lib/services/audit/trackingIntegrityAudit";
+import { compareTrackingLockExpectations, inspectTrackingSettlements, trackingManifestInSlateWindow, type TrackingLockExpectation } from "../lib/services/audit/trackingIntegrityAudit";
 import { gradeStoredTrackingRecord } from "../lib/services/predictionGradingService";
 
 async function main() {
@@ -34,6 +34,9 @@ async function main() {
  assert.equal(compareTrackingLockExpectations([restored], [lock]).length, 0);
  assert.equal(compareTrackingLockExpectations([{ ...restored, locked_at: null }], [lock])[0].severity, "error");
  for (const sport of ["mlb", "nba", "wnba", "nhl", "nfl", "cfb", "cbb", "soccer"]) assert.equal(compareTrackingLockExpectations([], [{ ...lock, sport }]).length, 1);
+ assert.equal(trackingManifestInSlateWindow("cfb", "2026-10-31T02:30:00Z", "2026-10-31"), false, "Friday Eastern game cannot become a Saturday missing-record alarm");
+ assert.equal(trackingManifestInSlateWindow("cfb", "2026-10-31T02:30:00Z", "2026-10-30"), true);
+ assert.equal(trackingManifestInSlateWindow("nfl", "2026-11-02T01:20:00Z", "2026-11-01"), true, "DST Sunday night remains the Sunday slate");
  const now = "2026-07-11T12:00:00Z";
  const expected = gradeStoredTrackingRecord(restored, outcome);
  const games = new Map([[10, outcome]]), grades = new Map([[1, expected]]);
@@ -45,6 +48,8 @@ async function main() {
  const wrong = { ...expected, result: "loss" } as PredictionGradeRow;
  assert.equal(inspectTrackingSettlements({ records: [restored], games, grades: new Map([[1, wrong]]), now })[0].kind, "settled_result_differs");
  assert.equal(inspectTrackingSettlements({ records: [restored], games: new Map([[10, { ...outcome, status: "scheduled" }]]), grades, now })[0].severity, "warn");
+ const postponed = gradeStoredTrackingRecord(restored, { ...outcome, status: "STATUS_POSTPONED" });
+ assert.equal(inspectTrackingSettlements({ records: [restored], games: new Map([[10, { ...outcome, status: "STATUS_POSTPONED" }]]), grades: new Map([[1, postponed]]), now }).length, 0);
  const wnba = { ...restored, sport: "wnba", market: "spread", slate_date: "2026-07-09" } as PredictionRecordRow;
  assert.equal(gradeStoredTrackingRecord(wnba, outcome).result, "void", "audit and writer share legacy slate-void semantics");
  const cron = readFileSync(new URL("../app/api/cron/tracking-refresh/route.ts", import.meta.url), "utf8");

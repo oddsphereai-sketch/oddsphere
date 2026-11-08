@@ -15,3 +15,5 @@ These records were frozen as accuracy-only No Play a week before kickoff. Later 
 | 478269 | IOWA@MINN | total | 2026-10-18T04:00:16.34+00:00 | 2026-10-24T18:30:15.741+00:00 | Under 40.5 | Best Angle | -108 |
 
 Repository locked-record immutability requires explicit owner approval before publishing historical corrections. Originals and source payloads must remain unchanged.
+
+Owner approval obtained November 8, 2026, after reviewing dates and the complete 8–1 result (Best Angle 1–0; Leans 7–1): “Okay, yeah, uh, add them. Add them in and make sure it doesn’t happen again.” This authorizes only these nine append-only exact-source corrections.
