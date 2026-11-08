@@ -64,7 +64,7 @@ const loadSharedTrackingAggregate = unstable_cache(
       includeLaunchDay: false,
     });
   },
-  ["member-tracking-aggregate-v15-locked-grade-precedence"],
+  ["member-tracking-aggregate-v16-frozen-fi-authority"],
   { revalidate: TRACKING_RESPONSE_CACHE_TTL_MS / 1000, tags: ["member-tracking-aggregate"] },
 );
 

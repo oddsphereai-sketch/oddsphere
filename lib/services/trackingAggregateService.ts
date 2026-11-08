@@ -23,6 +23,7 @@
  * counts by default; the admin page can opt-in to view them.
  */
 
+import { resolveRecordForGrading } from "./predictionGradingService";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   bucketForConfidence,
@@ -89,7 +90,7 @@ export type DimensionRow<K extends string = string> = {
 export type TrackingDisplaySport = TrackedSport | "epl";
 
 export const TRACKING_AGGREGATE_CONTRACT_VERSION =
-  "tracking_aggregate_v21_locked_grade_precedence_2026_11_05" as const;
+  "tracking_aggregate_v22_frozen_first_inning_authority_2026_11_08" as const;
 
 /**
  * Sport+market joint split with the Best Angle / Lean cuts most members
@@ -635,6 +636,43 @@ export function isTrackingPlayGradeCutEligible(record: PredictionRecordRow): boo
   return record.sport === "cfb" || record.no_bet !== true;
 }
 
+/** Restore only fields already stored on the original public FI lock. The
+ * indexed legacy Held row remains untouched; canonical grading uses this same
+ * frozen authority. Read a small subobject only for contradictory actionables. */
+export async function readFrozenFirstInningTrackingAuthority(
+  client: SupabaseClient,
+  rows: PredictionRecordRow[],
+  signal?: AbortSignal,
+): Promise<PredictionRecordRow[]> {
+  const candidates = rows.filter(row => row.sport === "mlb" && row.market === "first_inning" &&
+    row.locked_at !== null && ["best_angle", "lean"].includes(effectiveTrackingPlayGrade(row)) &&
+    (row.held === true || row.no_bet === true || row.side === null || row.prediction_type === "toss_up"));
+  if (candidates.length === 0) return rows;
+  const frozen = new Map<number, Record<string, unknown>>();
+  const ids = candidates.map(row => row.id!);
+  for (let i = 0; i < ids.length; i += 100) {
+    const batch = ids.slice(i, i + 100);
+    let query = client.from("prediction_records")
+      .select("id,frozen:snapshot_json->member_facing_at_lock").in("id", batch);
+    if (signal) query = query.abortSignal(signal);
+    const { data, error } = await query;
+    if (error) throw new Error(`tracking frozen FI read failed: ${error.message}`);
+    if ((data ?? []).length !== batch.length) throw new Error("tracking frozen FI read incomplete");
+    for (const raw of data ?? []) {
+      if (!raw.frozen || typeof raw.frozen !== "object" || Array.isArray(raw.frozen)) {
+        throw new Error("tracking frozen FI authority missing");
+      }
+      frozen.set(raw.id, raw.frozen as Record<string, unknown>);
+    }
+  }
+  return rows.map(row => {
+    const authority = frozen.get(row.id!);
+    return authority ? resolveRecordForGrading({ ...row,
+      snapshot_json: { ...row.snapshot_json, member_facing_at_lock: authority },
+    }) : row;
+  });
+}
+
 export async function fetchAllPredictionRecords(
   supabase: SupabaseClient,
   opts: {
@@ -642,6 +680,7 @@ export async function fetchAllPredictionRecords(
     from?: string;
     to?: string;
     competition?: string;
+    signal?: AbortSignal;
   },
 ): Promise<{ rows: PredictionRecordRow[]; error: unknown | null }> {
   const out: PredictionRecordRow[] = [];
@@ -653,6 +692,7 @@ export async function fetchAllPredictionRecords(
         .select(useLegacyProjection ? TRACKING_RECORD_SELECT : TRACKING_PROJECTED_RECORD_SELECT)
         .order("id", { ascending: true })
         .range(fromRow, fromRow + TRACKING_PAGE_SIZE - 1);
+      if (opts.signal) query = query.abortSignal(opts.signal);
       if (opts.sport !== undefined) query = query.eq("sport", opts.sport);
       if (opts.from !== undefined) query = query.gte("slate_date", opts.from);
       if (opts.to !== undefined) query = query.lte("slate_date", opts.to);
@@ -668,23 +708,25 @@ export async function fetchAllPredictionRecords(
     }
     if (error) return { rows: out, error };
     const page = ((data ?? []) as unknown) as PredictionRecordRow[];
-    out.push(...page);
+    try { out.push(...await readFrozenFirstInningTrackingAuthority(supabase, page, opts.signal)); }
+    catch (error) { return { rows: out, error }; }
     if (page.length < TRACKING_PAGE_SIZE) break;
   }
   return { rows: out, error: null };
 }
 
-async function fetchGradesForRecordIds(
+export async function fetchGradesForRecordIds(
   supabase: SupabaseClient,
   recordIds: number[],
 ): Promise<PredictionGradeRow[]> {
   const out: PredictionGradeRow[] = [];
   for (let i = 0; i < recordIds.length; i += TRACKING_GRADE_ID_CHUNK_SIZE) {
     const ids = recordIds.slice(i, i + TRACKING_GRADE_ID_CHUNK_SIZE);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("prediction_grades")
       .select(TRACKING_GRADE_SELECT)
       .in("prediction_record_id", ids);
+    if (error) throw new Error(`tracking grades read failed: ${error.message}`);
     out.push(...(((data ?? []) as unknown) as PredictionGradeRow[]));
   }
   return out;

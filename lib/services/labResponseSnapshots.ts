@@ -46,7 +46,7 @@ export function trackingFoundationSnapshotKey(input: {
   sport?: string | null;
   date: string;
 }): string {
-  return ["tracking-foundation-r12-locked-grade-precedence", input.sport ?? "all", input.date].join("::");
+  return ["tracking-foundation-r13-frozen-fi-authority", input.sport ?? "all", input.date].join("::");
 }
 
 export async function readLabResponseSnapshot<T extends LabResponseSnapshotPayload>(

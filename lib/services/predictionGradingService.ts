@@ -189,6 +189,21 @@ export function resolveRecordForGrading(record: PredictionRecordRow): Prediction
   };
 }
 
+/** Shared pure settlement policy for the writer and read-only audits. */
+export function gradeStoredTrackingRecord(
+  record: PredictionRecordRow,
+  game: { status: string | null; game_date: string | null; home_score: number | null; away_score: number | null; first_inning_runs: number | null },
+  source: PredictionGradeRow["grade_source"] = "auto_score_ingest",
+): PredictionGradeRow {
+  const expectedSlate = record.sport === "wnba" && game.game_date !== null
+    ? computeSlateDate("wnba", game.game_date) : null;
+  if (isUnlockedWnbaRecordPublishedAfterStart(record, game.game_date)) return staleWnbaPostStartVoidGrade(record, source, game.game_date);
+  if (expectedSlate !== null && expectedSlate !== record.slate_date) return staleWnbaSlateVoidGrade(record, source, expectedSlate);
+  return gradePrediction({ record: resolveRecordForGrading(record), game: {
+    status: game.status ?? "unknown", home_score: game.home_score, away_score: game.away_score, first_inning_runs: game.first_inning_runs,
+  }, source });
+}
+
 export async function gradePredictionsForSlate(args: {
   sport: TrackedSport;
   slateDate: string;
@@ -356,25 +371,7 @@ export async function gradePredictionsForSlate(args: {
     const gradingRecord = resolveRecordForGrading(rec);
     const game = gameById.get(rec.game_id);
     if (game === undefined || rec.id === undefined) continue;
-    const wnbaExpectedSlate =
-      sport === "wnba" && game.game_date !== null
-        ? computeSlateDate("wnba", game.game_date)
-        : null;
-    const grade =
-      isUnlockedWnbaRecordPublishedAfterStart(rec, game.game_date)
-        ? staleWnbaPostStartVoidGrade(rec, source, game.game_date)
-        : wnbaExpectedSlate !== null && wnbaExpectedSlate !== rec.slate_date
-        ? staleWnbaSlateVoidGrade(rec, source, wnbaExpectedSlate)
-        : gradePrediction({
-            record: gradingRecord,
-            game: {
-              status: game.status ?? "unknown",
-              home_score: game.home_score,
-              away_score: game.away_score,
-              first_inning_runs: game.first_inning_runs,
-            },
-            source,
-          });
+    const grade = gradeStoredTrackingRecord(rec, game, source);
     if (grade.win) result.computed.wins++;
     else if (grade.loss) result.computed.losses++;
     else if (grade.push) result.computed.pushes++;

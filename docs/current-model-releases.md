@@ -1,5 +1,26 @@
 # Current production model releases and qualified research candidates
 
+## November 8 cross-sport tracking integrity and original FI lock authority
+
+Tracking aggregate is `tracking_aggregate_v22_frozen_first_inning_authority_2026_11_08`;
+member cache v16 and foundation snapshot r13 end in `frozen-fi-authority`.
+Seven legacy MLB FI rows already retain their original actionable member lock
+and settled result, but indexed Held/Toss-Up fields suppressed their grade cuts.
+The reader now uses the same exact stored lock authority as canonical grading,
+with a narrow bounded subobject read. Original rows/payloads remain unchanged:
+visibility restores 1 stored Best Angle and 6 stored Leans; current board grade
+promotions/demotions are 0/0. A failed grade query cannot publish an empty ledger.
+
+The existing tracking-refresh publication owner is r4
+`tracking_refresh_publication_2026_11_08_r4_all_sport_integrity_guard`. It runs the
+SELECT-only `tracking_integrity_audit_2026_11_08_r1_published_locks_and_settlement`
+once at the final scheduled sport (or a one-sport operator cycle), covering
+all Daily Edge sports/competitions over a bounded recent window. Independent
+saved football/CBB/member/native manifests detect calls absent from Tracking;
+settlement checks detect overdue/mismatched results. Findings/failures persist
+as partial cron health, with a private read-only proof endpoint. No provider,
+new schedule, prediction writer, grade write, model or stake change is added.
+
 ## November 8 CFB complete tracking identity reads
 
 Sole writer is `cfb_forward_evidence_writer_2026_11_08_r154_complete_tracking_identity_read`.
