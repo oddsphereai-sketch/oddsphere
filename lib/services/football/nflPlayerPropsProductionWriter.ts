@@ -418,7 +418,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
     const observer=await readNflPlayerPropsMarketObserverHistory({client:args.client,season:args.season,week:args.week}).catch(()=>null);
     const marketHistory={observer,references:effectiveReferenceOffers,availableAt:new Date().toISOString()};
     const aiBaseline=reconcileNflPlayerPropsProductionSnapshot({season:args.season,week:args.week,evaluatedAt:args.now,nextBoard,previous});
-    const ai=await reviewPropsForSite({client:args.client,sport:"nfl",writerRunId:args.writerRunId,deadline:Date.parse(args.now)+260000,
+    const ai=await reviewPropsForSite({client:args.client,sport:"nfl",writerRunId:args.writerRunId,deadline:Date.parse(args.now)+390000,
       games:context.games.map(g=>({id:g.canonicalGameId,start:g.scheduledStart,away:g.awayTeam,home:g.homeTeam})),
       load:(game,window)=>liveNflPacket({game,window,snapshot:aiBaseline,observations:collection.snapshot,history:currentSeason.state,context,marketHistory})});
     for(const game of ai.games)nextBoard=applyNflSiteAi(nextBoard,game.packet,game.decisions,new Date().toISOString());

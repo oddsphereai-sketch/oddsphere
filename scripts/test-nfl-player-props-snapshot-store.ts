@@ -73,7 +73,7 @@ assert.throws(() => buildNflPlayerPropsMemberSnapshot(snapshot, "not-a-timestamp
   "an invalid member lifecycle boundary fails closed");
 
 assert.equal(NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE,
-  "nfl_player_props_snapshot_envelope_2026_09_02_r1_gzip_deduplicated_member");
+  "nfl_player_props_snapshot_envelope_2026_11_08_r2_interned_ai_coverage");
 assert.equal(NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES, 32_000_000);
 assert.ok(NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES > NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES,
   "canonical retained-week history has bounded headroom beyond the current/future member board");
@@ -171,6 +171,19 @@ assert.ok(measured.envelopeJsonBytes < Buffer.byteLength(JSON.stringify(largeSna
 assert.ok(measured.jsonBytes <= NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES);
 
 async function main(): Promise<void> {
+  const repeatedCoverage={recent_form:{status:"available",facts:Array.from({length:100},(_,i)=>({id:`retained-fact-${i}`,hash:`retained-hash-${i}`,label:"Exact locked source evidence. ".repeat(20),availableAt:evaluatedAt,sourceIds:["source"]})),factIds:[],effect:"uncertain",observation:"Retained exact observation."}};
+  const aiRows=Array.from({length:600},(_,i)=>({...actionable,sportsbook:`book-${i}`,line:10.5+i/1000,aiReview:{release:"retained-r15",lawRelease:"retained-law",gradeRelease:"retained-grade",publicationRelease:"retained-reader",reviewId:"retained-review",lawHash:"retained-hash",inputHash:"retained-input",reviewedAt:evaluatedAt,stage:"early",model:"retained-model",confidence:1,confidenceMeaning:"AI-estimated evidence strength; not empirical calibration",quoteConfirmedAt:evaluatedAt,selectedSide:"over",assessment:"Exact retained assessment",coverage:repeatedCoverage,exception:null}} as NflPlayerPropsRuntimeDecision));
+  const aiSnapshot=productionSnapshot(aiRows),aiOriginal=JSON.stringify(aiSnapshot);
+  assert.ok(Buffer.byteLength(aiOriginal)>32_000_000,"real canonical/transport regression fixture exceeds former expanded JSON capacity");
+  const aiEnvelope=encodeNflPlayerPropsSnapshotPayload(aiSnapshot);
+  assert.ok(aiEnvelope.uncompressedBytes<16_000_000);
+  assert.deepEqual(decodeNflPlayerPropsSnapshotPayload(aiEnvelope),aiSnapshot,"all locked fields and full coverage survive canonical storage exactly");
+  const aiMember=buildNflPlayerPropsMemberSnapshot(aiSnapshot),aiTransport=encodeNflPlayerPropsMemberTransport(aiMember);
+  assert.deepEqual(await decodeNflPlayerPropsMemberTransport(aiTransport),aiMember,"client receives every exact stored locked field through the interned transport");
+  assert.equal(JSON.stringify(aiSnapshot),aiOriginal,"neither writer preflight nor transport encoding mutates locked source records");
+  assert.deepEqual(decodeNflPlayerPropsSnapshotPayload({...encoded,envelopeRelease:"nfl_player_props_snapshot_envelope_2026_09_02_r1_gzip_deduplicated_member"}),snapshot,"legacy envelope retains identical stored locked values");
+  const legacyTransport={...encodeNflPlayerPropsMemberTransport(memberBefore),release:"nfl_player_props_member_transport_2026_09_17_r1_gzip" as const};
+  assert.deepEqual(await decodeNflPlayerPropsMemberTransport(legacyTransport),memberBefore);
   const memberTransport = encodeNflPlayerPropsMemberTransport(memberBefore);
   assert.ok(memberTransport.compressedBytes < memberTransport.uncompressedBytes,
     "the member boundary transfers a compressed board instead of the multi-megabyte JSON object");

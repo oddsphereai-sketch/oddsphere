@@ -70,6 +70,8 @@ import { collectNbaProfessionalGameInputs } from "@/lib/services/nba/nbaProfessi
 import { refreshNbaPlayerPropsPrivateCandidate } from "@/lib/services/nba/nbaPlayerPropsPrivateWriter";
 import { nbaPlayerPropsSlateDate } from "@/lib/services/nba/nbaPlayerPropsLifecycle";
 
+export const maxDuration = 540;
+
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
 const NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV = "NBA_PLAYER_PROPS_PRIVATE_WRITER_ENABLED";
 const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_11_04_r24_paid_consumer_book_coverage";

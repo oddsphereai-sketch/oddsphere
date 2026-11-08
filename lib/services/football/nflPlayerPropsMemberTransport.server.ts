@@ -1,3 +1,4 @@
+import { stringifyPropsAiCoverage } from "../../playerPropsAi/coverageCodec";
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import type { NflPlayerPropsMemberSnapshot } from "./nflPlayerPropsProductionContract";
@@ -11,7 +12,7 @@ import {
 export function encodeNflPlayerPropsMemberTransport(
   snapshot: NflPlayerPropsMemberSnapshot,
 ): NflPlayerPropsMemberTransport {
-  const json = JSON.stringify(snapshot);
+  const json = stringifyPropsAiCoverage(snapshot);
   const uncompressedBytes = Buffer.byteLength(json);
   if (uncompressedBytes > NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES) {
     throw new Error(`NFL player props member transport exceeds the ${NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES}-byte JSON limit.`);

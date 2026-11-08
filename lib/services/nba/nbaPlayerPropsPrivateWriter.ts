@@ -311,7 +311,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   const aiBaseline=candidate;
   if(propsAiSiteConfig().integrated&&priorState&&currentState){
     const contexts=await args.client.from("lab_response_snapshots").select("payload,generated_at").eq("sport","nba").like("snapshot_key","%current-only::live-copy%").order("generated_at",{ascending:false}).limit(4);
-    const ai=await reviewPropsForSite({client:args.client,sport:"nba",writerRunId:args.writerRunId,deadline:Date.parse(now)+260000,
+    const ai=await reviewPropsForSite({client:args.client,sport:"nba",writerRunId:args.writerRunId,deadline:Date.parse(now)+480000,
       games:games.map(g=>({id:g.gameId,start:g.scheduledStart,away:g.awayTeam,home:g.homeTeam})),
       load:(game,window)=>liveNbaPacket({game,window,snapshot:aiBaseline,market:mergedMarket.history,prior:priorState,current:currentState!,context:contexts.error?[]:contexts.data as EnrichedSource["nbaContext"]})});
     for(const game of ai.games)candidate=applyNbaSiteAi(candidate,game.packet,game.decisions,new Date().toISOString());

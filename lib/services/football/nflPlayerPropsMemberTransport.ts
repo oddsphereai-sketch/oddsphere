@@ -1,7 +1,9 @@
+import { parsePropsAiCoverage } from "../../playerPropsAi/coverageCodec";
 import type { NflPlayerPropsMemberSnapshot } from "./nflPlayerPropsProductionContract";
 
 export const NFL_PLAYER_PROPS_MEMBER_TRANSPORT_RELEASE =
-  "nfl_player_props_member_transport_2026_09_17_r1_gzip" as const;
+  "nfl_player_props_member_transport_2026_11_08_r2_interned_ai_coverage" as const;
+const LEGACY_TRANSPORT_RELEASE = "nfl_player_props_member_transport_2026_09_17_r1_gzip";
 
 export const NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES = 16_000_000;
 export const NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_GZIP_BYTES = 2_000_000;
@@ -9,7 +11,7 @@ const MAX_BASE64_CHARACTERS = 4 * Math.ceil(NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MA
 
 export type NflPlayerPropsMemberTransport = {
   kind: "nfl_player_props_member_transport_v1";
-  release: typeof NFL_PLAYER_PROPS_MEMBER_TRANSPORT_RELEASE;
+  release: typeof NFL_PLAYER_PROPS_MEMBER_TRANSPORT_RELEASE | typeof LEGACY_TRANSPORT_RELEASE;
   encoding: "gzip-base64";
   checksum: string;
   compressedBytes: number;
@@ -34,7 +36,7 @@ export async function decodeNflPlayerPropsMemberTransport(
   if (await sha256(decompressed) !== value.checksum) {
     throw new Error("NFL player props member transport checksum does not match.");
   }
-  const parsed = JSON.parse(new TextDecoder().decode(decompressed)) as unknown;
+  const parsed = parsePropsAiCoverage(new TextDecoder().decode(decompressed));
   if (!isNflPlayerPropsMemberSnapshot(parsed)) {
     throw new Error("NFL player props member transport payload is invalid.");
   }
@@ -44,7 +46,7 @@ export async function decodeNflPlayerPropsMemberTransport(
 export function isNflPlayerPropsMemberTransport(value: unknown): value is NflPlayerPropsMemberTransport {
   if (!isRecord(value)) return false;
   return value.kind === "nfl_player_props_member_transport_v1"
-    && value.release === NFL_PLAYER_PROPS_MEMBER_TRANSPORT_RELEASE
+    && (value.release === NFL_PLAYER_PROPS_MEMBER_TRANSPORT_RELEASE || value.release === LEGACY_TRANSPORT_RELEASE)
     && value.encoding === "gzip-base64"
     && typeof value.checksum === "string"
     && /^[a-f0-9]{64}$/.test(value.checksum)

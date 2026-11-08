@@ -68,6 +68,9 @@ try{
   await db.query(readFileSync("lib/db/schema-migration-v61-player-props-ai-runtime.sql","utf8"));
   const migration=readFileSync("lib/db/schema-migration-v62-player-props-ai-wallet.sql","utf8");await db.query(migration);await db.query(migration);
   const targetMigration=readFileSync("lib/db/schema-migration-v64-player-props-ai-budget-target.sql","utf8");await db.query(targetMigration);await db.query(targetMigration);
+  await db.query(readFileSync("lib/db/schema-migration-v63-player-props-ai-site-control.sql","utf8"));
+  await db.query(readFileSync("lib/db/schema-migration-v66-player-props-ai-slate-capacity.sql","utf8"));
+  await db.query("UPDATE player_props_ai_control SET paid_enabled=true");
   await db.query("CREATE TABLE test_clock(at timestamptz); INSERT INTO test_clock VALUES('2026-11-07T21:40:00Z'); CREATE FUNCTION props_ai_test_clock() RETURNS timestamptz LANGUAGE sql VOLATILE AS 'SELECT at FROM test_clock'");
   const functions=await db.query("SELECT pg_get_functiondef(oid) body FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname LIKE 'player_props_ai_%'");
   for(const f of functions.rows)await db.query(f.body.replaceAll("clock_timestamp()","props_ai_test_clock()"));
@@ -200,6 +203,17 @@ try{
   await db.query("UPDATE test_clock SET at='2030-06-06T21:40:00Z';UPDATE cron_job_leases SET lease_expires_at='2030-07-01T00:00:00Z'");
   assert.equal((await wallet.plan(spreadPlan)).funded,true);
   for(let i=0;i<3;i++){const key=reviewSlots(spreadGames[i])[1].key,c=await wallet.claim(key,`spread${i}`,bounds.map(b=>({...b,strong_input_tokens:1000})),true,"synthetic-owner");assert.equal(c.claimed,true);assert.equal(c.job!.model,i<2?"gpt-6.1-terra":"gpt-6-luna");await wallet.finish(key,c.token!,null,"synthetic_unsent");}
+  const alreadyRunning=Number((await db.query("SELECT count(*) n FROM player_props_ai_reviews WHERE state='running'")).rows[0].n);
+  assert.ok(alreadyRunning<16);
+  const batchClaims:{key:string;token:string}[]=[];
+  for(let i=0;i<=16-alreadyRunning;i++){
+    const key=reviewSlots(spreadGames[i])[0].key;
+    const c=await wallet.claim(key,`capacity${i}`,bounds.map(b=>({...b,strong_input_tokens:null})),false,"synthetic-owner");
+    if(i<16-alreadyRunning){assert.equal(c.claimed,true);batchClaims.push({key,token:c.token!});}
+    else {assert.equal(c.claimed,false);assert.equal(c.reason,"global_concurrency_busy");}
+  }
+  for(const c of batchClaims)await wallet.finish(c.key,c.token,null,"synthetic_unsent");
+  console.log("Native slate capacity proof passed: up to sixteen funded games claim atomically; the seventeenth is deferred; no generation or added spending.");
   console.log("Target/emergency proof passed: all core reviews fund above $50, optional upgrades stay below target and daily/monthly 10%, $60 authorizations stop, no AI HTTP for these cases.");
   console.log("Native wallet/reviewer integration passed: exact request funding, full coverage, two stages, partial Flex/strong fallback, unknown charges, duplicates/concurrency, immutable results, cap rejection, UTC boundaries, 40-player partitioning, lock cutoff and RLS. All AI HTTP was mocked; zero paid calls.");
 }finally{await other.end();await db.end();await admin.query(`DROP DATABASE ${database} WITH (FORCE)`);await admin.end();}

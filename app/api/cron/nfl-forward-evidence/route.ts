@@ -16,7 +16,7 @@ import { resolveNflForwardWeek, resolveNflOperationalWeek } from "@/lib/services
 import { resolveNflMarketBrainCaptureConfiguration } from
   "@/lib/services/football/nflMarketBrainCaptureConfig";
 
-export const maxDuration = 300;
+export const maxDuration = 450;
 
 export async function GET(request: Request): Promise<Response> {
   return cronHandler(request, "nfl_forward_evidence", async ({ runId }) => {

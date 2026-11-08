@@ -1,5 +1,39 @@
 # Current production model releases and qualified research candidates
 
+## November 8 player-prop evidence storage and execution repair
+
+Forecast/grade/estimate semantics remain the exact R15 law; accepted reviews are
+not regenerated or relabeled. Schedule R2 (`player_props_ai_schedule_2026_11_08_r2_deadline_admission`)
+requires a complete generation-window allowance before claiming money, admits one
+bounded batch of up to sixteen due games per existing writer, and shares sixteen
+generation slots across that writer. v66 raises the serialized wallet's maximum
+concurrent funded game claims from two to sixteen without adding review slots,
+requests per game, retries, optional upgrades, spending allowance or provider jobs.
+The R4 $50 target/$60 emergency wallet and daily/monthly stronger-final limits stay
+exact. Two logical game-day reviews remain the idempotent purchase identity.
+
+NFL snapshot envelope R2 and member transport R2 losslessly intern repeated public
+AI coverage and native forecast/book evidence context. NBA private store R8 uses the same codec for candidate snapshots only;
+all R7 native response-confirmation semantics remain exact. Legacy inline payloads
+and old envelopes decode first with their stored fields intact. Current locked
+payloads are neither corrected nor reinterpreted, and checksum/JSON/gzip ceilings
+remain bounded. The same complete evidence returns to the familiar member reader.
+
+The existing NFL route has a 450-second ceiling with review completion bounded at
+390 seconds from its original cycle clock, below the unchanged eight-minute sport
+lease. NBA has a 540-second ceiling with its existing props writer's review bounded
+at 480 seconds from its original clock, below the unchanged ten-minute lease. No
+new timer, independent writer or refresh is added. Source calls are unchanged;
+network concurrency changes execution order only. Source failures, price freshness,
+changed-context rejection and lock cutoffs still fail closed.
+
+The initial R15 production writer exposed excessive repeated evidence in the
+canonical snapshot and late second-batch admissions. Paid claims were paused;
+this repair must pass exact locked/legacy round-trips, full-slate capacity,
+post-collection deadline admission, native wallet/install, focused/full checks,
+protected fresh-main PR and ordinary production publication before reactivation.
+See `model-audits/2026-11-08-player-props-storage-and-completion.md`.
+
 ## November 8 CFB complete tracking identity reads
 
 Sole writer is `cfb_forward_evidence_writer_2026_11_08_r154_complete_tracking_identity_read`.
@@ -62,7 +96,7 @@ code does not activate the review flow or change existing baseline predictions. 
 also default off. The dedicated server secret `PLAYER_PROPS_AI_OPENAI_API_KEY` takes
 precedence over the existing shared OpenAI key; an explicitly empty dedicated value
 cannot fall back to another product’s credential. Source reconfirmation history is NBA store
-`nba_player_props_private_store_2026_11_07_r7_native_reconfirmation`; NFL source state
+`nba_player_props_private_store_2026_11_08_r8_interned_ai_coverage`; NFL source state
 is `nfl_player_props_current_season_state_2026_11_07_r5_nullable_passing_outcomes`.
 Legacy states retain their exact source values; missing passing TD/INT counts are
 unknown, not zero. The active MLB R44 champion remains the independent prior.
@@ -7408,7 +7442,7 @@ lock time. Projection core v2.3, full-game heads, decimal score output,
 promotion persistence, correction policy v23, stakes, sole writer, the shared
 `prediction_pipeline:mlb` lease, locks, tracking, and member presentation stay
 unchanged. The release stamps schema v10, calibration v29, decision r77, rule
-bundle v65, grade policy v55, FI probability head v5, FI named-book price-map
+bundle v66, grade policy v55, FI probability head v5, FI named-book price-map
 v1, and FI market-calibration v2. Evidence and rollback are recorded in
 `docs/model-audits/2026-09-01-mlb-first-inning-named-book-consensus.md`.
 
