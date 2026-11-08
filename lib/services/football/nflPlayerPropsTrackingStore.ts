@@ -1,28 +1,23 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NflPlayerPropsProductionSnapshot } from "./nflPlayerPropsProductionContract";
-import { buildNflPlayerPropsTrackingRows } from "./nflPlayerPropsProductionContract";
+import { buildNflPlayerPropsTrackingEntries } from "./nflPlayerPropsProductionContract";
 import type { NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract";
 import type { NflPlayerPropsMarketObserverRow } from "./nflPlayerPropsMarketObserverStore";
 import type { NflPlayerPropsInferenceContext } from "./nflPlayerPropsInferenceContext";
 import { nflPlayerPropsTrackingIdentity } from "./nflPlayerPropsTrackingIdentity";
 
 export const NFL_PLAYER_PROPS_TRACKING_RELEASE =
-  "nfl_player_props_tracking_2026_11_04_r42_suffix_roster_identity" as const;
+  "nfl_player_props_tracking_2026_11_08_r43_exact_quote_evidence" as const;
 
 export async function writeLockedNflPlayerPropsTracking(args: {
   client: SupabaseClient;
   snapshot: NflPlayerPropsProductionSnapshot;
   context?: NflPlayerPropsInferenceContext;
 }): Promise<{ proposed: number; insertedOrExisting: number }> {
-  const tracked = buildNflPlayerPropsTrackingRows(args.snapshot);
+  const tracked = buildNflPlayerPropsTrackingEntries(args.snapshot);
   if (tracked.length === 0) return { proposed: 0, insertedOrExisting: 0 };
-  const decisions = new Map(args.snapshot.board.decisions.map((row) => [
-    [row.gameId, row.playerName.toLowerCase().replace(/[^a-z0-9]/g, ""), row.market, row.line, row.side].join("|"), row,
-  ]));
-  const rows = tracked.map((row) => {
-    const decision = decisions.get(row.trackingKey);
-    const identity = decision ? nflPlayerPropsTrackingIdentity({ decision, context: args.context })
-      : { playerId: row.providerPlayerId, source: row.providerPlayerId ? "quote" : "unresolved", capturedAt: null };
+  const rows = tracked.map(({ row, decision }) => {
+    const identity = nflPlayerPropsTrackingIdentity({ decision, context: args.context });
     return {
       tracking_key: row.trackingKey,
       provider_game_id: row.gameId,

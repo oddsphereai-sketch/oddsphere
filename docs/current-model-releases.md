@@ -1,5 +1,17 @@
 # Current production model releases and qualified research candidates
 
+## November 8 NFL tracking exact source quote
+
+Tracking R43 is `nfl_player_props_tracking_2026_11_08_r43_exact_quote_evidence`;
+sole writer R76 is `nfl_player_props_writer_2026_11_08_r76_tracking_quote_binding`.
+Each new tracking insertion candidate retains its exact source decision beside
+the unchanged tracking fields. A player/line/side key cannot recover evidence
+across multiple books. Existing locked records, including legacy quote-evidence
+inconsistencies, remain exact; no historical correction or relabeling is applied.
+Prediction/grade/count impact is zero; all numerical, reader, lifecycle and AI
+review/selection identifiers stay exact. No new review, timer or paid test.
+See `model-audits/2026-11-08-nfl-props-tracking-exact-quote.md`.
+
 ## November 8 NFL official tracking storage capacity (V67)
 
 V67 widens only `nfl_player_prop_records.locked_expected_value` from
