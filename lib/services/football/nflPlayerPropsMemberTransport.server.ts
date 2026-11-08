@@ -12,7 +12,7 @@ import {
 export function encodeNflPlayerPropsMemberTransport(
   snapshot: NflPlayerPropsMemberSnapshot,
 ): NflPlayerPropsMemberTransport {
-  const json = stringifyPropsAiCoverage(snapshot);
+  const json = stringifyPropsAiCoverage(snapshot,{internReviewMetadata:true});
   const uncompressedBytes = Buffer.byteLength(json);
   if (uncompressedBytes > NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES) {
     throw new Error(`NFL player props member transport exceeds the ${NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES}-byte JSON limit.`);

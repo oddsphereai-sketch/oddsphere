@@ -15,7 +15,8 @@ import {
 
 export const NFL_PLAYER_PROPS_SNAPSHOT_KEY_PREFIX = "nfl::player-props" as const;
 export const NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE =
-  "nfl_player_props_snapshot_envelope_2026_11_08_r2_interned_ai_coverage" as const;
+  "nfl_player_props_snapshot_envelope_2026_11_08_r3_review_metadata" as const;
+const PRECEDING_ENVELOPE_RELEASE="nfl_player_props_snapshot_envelope_2026_11_08_r2_interned_ai_coverage" as const;
 const LEGACY_ENVELOPE_RELEASE = "nfl_player_props_snapshot_envelope_2026_09_02_r1_gzip_deduplicated_member";
 // The canonical snapshot retains prior-date locked rows for tracking and
 // settlement after those rows roll off the member board. It therefore needs a
@@ -36,7 +37,7 @@ type NflPlayerPropsStoredSnapshot = Omit<NflPlayerPropsProductionSnapshot, "memb
 
 export type NflPlayerPropsSnapshotEnvelope = {
   kind: "nfl_player_props_snapshot_v1";
-  envelopeRelease: typeof NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE | typeof LEGACY_ENVELOPE_RELEASE;
+  envelopeRelease: typeof NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE | typeof PRECEDING_ENVELOPE_RELEASE | typeof LEGACY_ENVELOPE_RELEASE;
   encoding: "gzip-base64";
   memberDecisionsStorage: "derived_from_board_non_held" | "embedded";
   checksum: string;
@@ -183,7 +184,7 @@ export async function writeNflPlayerPropsSnapshot(args: {
 }): Promise<void> {
   const generatedAt = args.snapshot.generatedAt;
   const memberSnapshot = buildNflPlayerPropsMemberSnapshot(args.snapshot, generatedAt);
-  const memberJson = stringifyPropsAiCoverage(memberSnapshot);
+  const memberJson = stringifyPropsAiCoverage(memberSnapshot,{internReviewMetadata:true});
   const memberJsonBytes = Buffer.byteLength(memberJson);
   if (memberJsonBytes > NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES) {
     throw new Error(
@@ -260,7 +261,7 @@ export function encodeNflPlayerPropsSnapshotPayload(
   const stored: NflPlayerPropsStoredSnapshot = canDeriveMemberDecisions
     ? withoutMemberDecisions
     : { ...withoutMemberDecisions, memberDecisions };
-  const json = stringifyPropsAiCoverage(stored);
+  const json = stringifyPropsAiCoverage(stored,{internReviewMetadata:true});
   const jsonBytes = Buffer.byteLength(json);
   if (jsonBytes > NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES) {
     throw new Error(`NFL player props snapshot exceeds the ${NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES}-byte JSON limit.`);
@@ -335,7 +336,7 @@ export function measureNflPlayerPropsSnapshotPayload(
 function isEnvelope(value: unknown): value is NflPlayerPropsSnapshotEnvelope {
   if (!isRecord(value)) return false;
   return value.kind === "nfl_player_props_snapshot_v1"
-    && (value.envelopeRelease === NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE || value.envelopeRelease === LEGACY_ENVELOPE_RELEASE)
+    && (value.envelopeRelease === NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE || value.envelopeRelease===PRECEDING_ENVELOPE_RELEASE || value.envelopeRelease === LEGACY_ENVELOPE_RELEASE)
     && value.encoding === "gzip-base64"
     && (value.memberDecisionsStorage === "derived_from_board_non_held" || value.memberDecisionsStorage === "embedded")
     && typeof value.checksum === "string"

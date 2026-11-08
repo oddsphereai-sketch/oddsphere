@@ -1,5 +1,26 @@
 # Current production model releases and qualified research candidates
 
+## November 8 NFL full-board member transport capacity
+
+NFL member transport R3 and canonical envelope R3 end in `review_metadata`; sole
+writer R74 is `nfl_player_props_writer_2026_11_08_r74_review_metadata_transport`.
+This supersedes the R73 writer below without changing member R57, lifecycle R39,
+selection R1, source decision R8, accepted R15 forecasts or familiar reader R4.
+NFL encoding opts into coverage-table V2: repeated actor-review metadata and row
+key schemas are stored once and restored with exact original fields/order.
+Existing inline/V1 tables and R1/R2 transports/envelopes retain reader precedence.
+NBA and MLB encoders keep their existing default V1 format unchanged.
+
+A normal R73 run completed review selection but retained the member LKG because
+the expanded member DTO exceeded 16 MB. No ceiling is raised: member JSON/gzip
+remain 16 MB/2 MB; canonical JSON/gzip remain 32 MB/2 MB. Offline historical-source
+reconstruction round-trips 5,453 rows at 17,339,863 to 10,472,261 wire bytes; a
+16-game/512-actor/12,288-row fixture round-trips at 38,105,111 to 5,884,033 bytes.
+No player, scope, evidence, locked value, quote clock, confidence or grade is
+removed or recomputed. No provider/inference request, review slot or paid test
+is added. See `model-audits/2026-11-08-props-member-transport-capacity.md`.
+
+
 ## November 8 player-scoped AI publication continuity
 
 Selection `player_props_ai_selection_2026_11_08_r1_reviewed_player_scopes` keeps
