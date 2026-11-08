@@ -85,6 +85,9 @@ assert.equal(nullLockedApplied.decisions.filter(r=>r.side==="under").length,1,"n
 const milestoneChoices=nflChoices.map(c=>({...c,side:"yes" as const,quote:{...c.quote,side:"yes" as const,offerContract:"milestone" as const}}));
 const milestonePacket={...nflPacket,quotes:nflPacket.quotes.map(q=>({...q,side:"yes" as const,offerContract:"milestone" as const}))};
 assert.equal(applyNflSiteAi({...nflBoard,decisions:[underRow]},milestonePacket,milestoneChoices,now).decisions[0].projection,20,"a milestone cannot replace a two-way contract at the same line");
+const implicitMilestone=nflChoices.map(c=>({...c,side:"yes" as const,quote:{...c.quote,side:"yes" as const,offerContract:undefined}}));
+const mixedContractPacket={...nflPacket,quotes:[...nflPacket.quotes,{...nflPacket.quotes[0],side:"yes" as const}]};
+assert.ok(applyNflSiteAi(nflBoard,mixedContractPacket,implicitMilestone,now).decisions.every(r=>r.side==="yes"),"implicit milestone cannot append an ordinary over/under quote");
 const stalePacket={...nflPacket,quotes:nflPacket.quotes.map(q=>({...q,receivedAt:"2026-11-07T19:00:00Z"}))};
 assert.strictEqual(applyNflSiteAi({...nflBoard,decisions:[sourceRow]},stalePacket,nflChoices,now).decisions[0],sourceRow);
 const livePacket={...nflPacket,quotes:nflPacket.quotes.map(q=>({...q,live:true}))};
