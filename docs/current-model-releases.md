@@ -13,7 +13,7 @@ Its append-only correction release/model are
 remain unchanged. Pinned source IDs/hashes, exact T60 eligibility and original
 accuracy-only record IDs are required. One authoritative serializer copies the
 original tuple; no model or postgame price reconstruction occurs. Member,
-legacy and winner-accuracy readers prefer explicit correction markers once.
+legacy and winner-accuracy readers prefer explicit correction markers once. The winner reader checks actual stored replacements across lock-date windows, so the old early-lock date cannot retain a second copy.
 Current board promotions/demotions: 0/0; history restores 1 Best and 8 Leans.
 See `docs/model-audits/2026-11-08-legacy-cfb-tracking-owner-review.md`.
 
