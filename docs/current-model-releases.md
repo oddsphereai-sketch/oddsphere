@@ -1,5 +1,19 @@
 # Current production model releases and qualified research candidates
 
+## November 8 truthful NFL model-context status
+
+Future generation R17 `player_props_ai_2026_11_08_r17_nfl_input_status`, NFL source
+R2 `player_props_ai_nfl_source_2026_11_08_r2_model_context_status` and sole writer
+R77 `nfl_player_props_writer_2026_11_08_r77_model_context_status` distinguish the
+corrected limitation flag. Count independent model heads only; movement facts
+cannot falsely report context missing or conceal a genuinely missing second head.
+All supplied facts, players, markets, clocks, native predictions and grade rules
+remain exact. Accepted R15/R16 laws and all locked payloads keep original values
+and releases; no replay or relabeling. NBA/MLB source/grouping behavior, MLB R44,
+member R57, lifecycle R39, source decision R8, selection R1 and tracking R43 stay
+exact. No new paid test, provider call or review window. See
+`model-audits/2026-11-08-props-nfl-input-status.md`.
+
 ## November 8 NFL tracking exact source quote
 
 Tracking R43 is `nfl_player_props_tracking_2026_11_08_r43_exact_quote_evidence`;

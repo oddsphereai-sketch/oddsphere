@@ -123,7 +123,7 @@ export function fromCachedExport(source: CachedExport,window?:CapturedReviewWind
           }
           players.push({ id, name: row.playerName, team: row.team, opponent: row.opponent,
             markets: heads.map(h => h.market).sort(), evidence: values,
-            missing: ["individual historical game logs missing", "individual matchup history missing", "qualified joint outcome law not attached", "identity joined by normalized name/team; provider-ID reconciliation unverified", ...(values.length !== heads.length ? ["independent model/context unavailable at this cutoff"] : [])] });
+            missing: ["individual historical game logs missing", "individual matchup history missing", "qualified joint outcome law not attached", "identity joined by normalized name/team; provider-ID reconciliation unverified", ...(values.filter(value => value.kind === "independent_model").length !== heads.length ? ["independent model/context unavailable at this cutoff"] : [])] });
           for (const h of playerRows) for (const book of h.bookEvidence) {
             if (instant(snapshot.generatedAt) > cutoff || instant(book.observedAt) > cutoff) continue;
             for (const state of [
