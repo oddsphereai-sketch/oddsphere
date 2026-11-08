@@ -1,6 +1,8 @@
 "use client";
 
 import {AiPropReader} from "@/app/player-props/components/AiPropReader";
+import {PropsAiEvidence} from "@/app/player-props/components/PropsAiEvidence";
+import {needsLegacyLockedAiReader} from "@/lib/playerPropsAi/publicationContract";
 
 import { useMemo, useState } from "react";
 import type {
@@ -162,7 +164,7 @@ function BoardRow({ row, onSelect }: { row: Row; onSelect: (key: string) => void
 }
 
 function PropReader({ row, onClose }: { row: Row; onClose: () => void }) {
-  if(row.aiReview)return <AiPropReader evidence={row.aiReview} title={`${row.playerName} · ${marketLabel(row.market)}`} selection={`${row.side} ${row.line}`} projection={row.projection} probability={row.probability} price={`${row.sportsbook} ${row.americanPrice>0?"+":""}${row.americanPrice}`} grade={row.grade} lockedAt={row.lockedAt} onClose={onClose} />;
+  if(row.aiReview&&needsLegacyLockedAiReader(row.aiReview,row.lockedAt!==null))return <AiPropReader evidence={row.aiReview} title={`${row.playerName} · ${marketLabel(row.market)}`} selection={`${row.side} ${row.line}`} projection={row.projection} probability={row.probability} price={`${row.sportsbook} ${row.americanPrice>0?"+":""}${row.americanPrice}`} grade={row.grade} lockedAt={row.lockedAt} onClose={onClose} />;
   const bestPickQuote = bestExactQuote(row, row.side);
   const otherSide = row.side === "over" ? "under" : "over";
   const bestOpposingQuote = bestExactQuote(row, otherSide);
@@ -191,7 +193,7 @@ function PropReader({ row, onClose }: { row: Row; onClose: () => void }) {
           <FeaturedEvidence row={row} />
           <details className="min-w-0 rounded-xl border border-gray-800 bg-black/20">
             <summary className="cursor-pointer list-none px-4 py-4 text-sm font-black text-violet-200">View every model input <span aria-hidden="true" className="float-right text-gray-600">＋</span></summary>
-            <div className="grid gap-3 border-t border-gray-800 p-4"><EvidencePanel title="Role & minutes" metrics={row.role} /><EvidencePanel title="Recent production" metrics={row.production} /><EvidencePanel title="Matchup" metrics={row.matchup} /></div>
+            <div className="grid gap-3 border-t border-gray-800 p-4">{row.aiReview?<PropsAiEvidence evidence={row.aiReview} />:null}<EvidencePanel title="Role & minutes" metrics={row.role} /><EvidencePanel title="Recent production" metrics={row.production} /><EvidencePanel title="Matchup" metrics={row.matchup} /></div>
           </details>
         </div>
         <div className="min-w-0 space-y-4">
@@ -222,6 +224,7 @@ function FeaturedEvidence({ row }: { row: Row }) {
   return <section className="min-w-0 rounded-xl border border-violet-400/20 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,.12),transparent_48%),rgba(0,0,0,.20)] p-4 sm:p-5">
     <p className="text-[10px] font-black uppercase tracking-wider text-emerald-300">Why this pick</p>
     <h4 className="mt-1 text-lg font-black text-white">Key drivers for {marketLabel(row.market)}</h4>
+    {row.aiReview?<p className="mt-3 text-sm leading-6 text-gray-200">{row.aiReview.assessment}</p>:null}
     <div className="mt-4 grid grid-cols-2 gap-2">{featuredMetrics(row).map(({ metric, group }) => <FeaturedMetric key={metric.key} metric={metric} group={group} />)}</div>
   </section>;
 }
