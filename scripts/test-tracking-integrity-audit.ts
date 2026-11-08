@@ -5,7 +5,7 @@ import type { PredictionRecordRow, PredictionGradeRow } from "../lib/types/domai
 import { readFrozenFirstInningTrackingAuthority, fetchGradesForRecordIds, effectiveTrackingPlayGrade, isTrackingPlayGradeCutEligible } from "../lib/services/trackingAggregateService";
 import { compareTrackingLockExpectations, inspectTrackingSettlements, trackingManifestInSlateWindow, type TrackingLockExpectation } from "../lib/services/audit/trackingIntegrityAudit";
 import { dedupePredictionRecordsForTracking } from "../lib/services/trackingAggregateService";
-import { preferAppendOnlyWinnerTrackingCorrections } from "../lib/services/tracking/winnerAccuracyScorecardQuery";
+import { excludeSupersededCfbWinnerRecords, preferAppendOnlyWinnerTrackingCorrections } from "../lib/services/tracking/winnerAccuracyScorecardQuery";
 import { CFB_APPROVED_TRACKING_CORRECTIONS, CFB_PUBLISHED_TRACKING_CORRECTION_MODEL_VERSION as CM, CFB_PUBLISHED_TRACKING_CORRECTION_RELEASE as CR, cfbTrackingCorrectionSupersededRecordId, buildApprovedCfbTrackingCorrection, writeApprovedCfbTrackingCorrections } from "../lib/services/football/cfbPublishedTrackingCorrection";
 import { gradeStoredTrackingRecord } from "../lib/services/predictionGradingService";
 
@@ -76,6 +76,11 @@ async function main() {
  assert.deepEqual(original,originalCopy);
  const winnerRows=[{id:478269,model_version:'original',tracking_correction_release:null,supersedes_prediction_record_id:null},{id:999999,model_version:CM,tracking_correction_release:CR,supersedes_prediction_record_id:478269}];
  assert.deepEqual(preferAppendOnlyWinnerTrackingCorrections(winnerRows),[winnerRows[1]]);
+ const correctionClient=(rows:unknown[],error:unknown=null)=>({from(table:string){assert.equal(table,'prediction_records');const q={select(fields:string){assert(!fields.includes('locked_at'));return q;},eq(){return q;},then(resolve:any){return Promise.resolve({data:rows,error}).then(resolve);}};return q;}} as unknown as SupabaseClient);
+ assert.deepEqual(await excludeSupersededCfbWinnerRecords(correctionClient([winnerRows[1]]),[winnerRows[0]]),[], 'old early-lock date cannot retain an original when replacement is outside its time window');
+ assert.deepEqual(await excludeSupersededCfbWinnerRecords(correctionClient([]),[winnerRows[0]]),[winnerRows[0]], 'without an actual stored replacement, keep original');
+ assert.deepEqual(await excludeSupersededCfbWinnerRecords(correctionClient([{...winnerRows[1],model_version:'unreleased'}]),[winnerRows[0]]),[winnerRows[0]]);
+ await assert.rejects(excludeSupersededCfbWinnerRecords(correctionClient([],{message:'unavailable'}),[winnerRows[0]]),/CFB winner correction read failed/);
  let correctionWrites=0;
  const alreadyDone={from(){const query={select(){return query;},eq(_key:string,_value:string){return query;},then(resolve:any){return Promise.resolve({data:approvals.map(a=>({id:a.originalId+100000,external_id:a.externalId,market:a.market,model_version:CM,release:CR,supersedes:a.originalId})),error:null}).then(resolve);},insert(){correctionWrites++;throw new Error('must not insert twice');},update(){throw new Error('immutable');},delete(){throw new Error('immutable');}};return query;}} as unknown as SupabaseClient;
  assert.equal(await writeApprovedCfbTrackingCorrections(alreadyDone),0);assert.equal(correctionWrites,0);

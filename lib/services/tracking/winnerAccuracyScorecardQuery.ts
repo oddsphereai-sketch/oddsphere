@@ -15,6 +15,7 @@ import {
   uclLockManifestCohortKey,
   type UclLockManifestRow,
 } from "../ucl/uclLockManifest";
+import { CFB_APPROVED_TRACKING_CORRECTIONS, CFB_PUBLISHED_TRACKING_CORRECTION_MODEL_VERSION } from "../football/cfbPublishedTrackingCorrection";
 import { trackingCorrectionSupersededRecordId } from "./trackingCorrectionPrecedence";
 
 export const WINNER_ACCURACY_QUERY_PAGE_SIZE = 1_000;
@@ -416,6 +417,25 @@ export function preferAppendOnlyWinnerTrackingCorrections<T extends Pick<
   return records.filter((record) => !superseded.has(record.id));
 }
 
+/** A correction can lock on a different day than its erroneous original.
+ * Check only the nine approved identities outside the requested date window,
+ * so the old early-lock day cannot retain a second copy. No replacement is
+ * displayed outside its own window; absent replacements preserve originals. */
+export async function excludeSupersededCfbWinnerRecords<T extends { id: number }>(client: ReadClient, records: T[]): Promise<T[]> {
+  const approvedIds = new Set<number>(CFB_APPROVED_TRACKING_CORRECTIONS.map(a => a.originalId));
+  if (!records.some(r => approvedIds.has(r.id))) return records;
+  const result = await client.from("prediction_records")
+    .select("model_version,tracking_correction_release:snapshot_json->>tracking_correction_release,supersedes_prediction_record_id:snapshot_json->supersedes_prediction_record_id")
+    .eq("sport", "cfb").eq("model_version", CFB_PUBLISHED_TRACKING_CORRECTION_MODEL_VERSION);
+  if (result.error) throw new Error(`CFB winner correction read failed: ${result.error.message}`);
+  if ((result.data?.length ?? 0) > CFB_APPROVED_TRACKING_CORRECTIONS.length) throw new Error("CFB winner correction identity scope exceeded");
+  const superseded = new Set((result.data ?? []).flatMap(row => {
+    const id = trackingCorrectionSupersededRecordId({ modelVersion: row.model_version, correctionRelease: row.tracking_correction_release, supersedesPredictionRecordId: row.supersedes_prediction_record_id });
+    return id === null ? [] : [id];
+  }));
+  return records.filter(r => !superseded.has(r.id));
+}
+
 export async function loadWinnerAccuracyScorecards(
   options: QueryOptions,
   client: ReadClient = supabase,
@@ -424,10 +444,10 @@ export async function loadWinnerAccuracyScorecards(
   const recordCap = options.recordCap ?? WINNER_ACCURACY_DAILY_RECORD_CAP;
   if (!Number.isInteger(recordCap) || recordCap < 1 || recordCap > 10_000) throw new Error("Invalid record cap.");
   const bounds = options.lockedDate === null ? null : utcBoundsForEtDate(options.lockedDate);
-  const records = preferAppendOnlyWinnerTrackingCorrections(await excludePartialUclWinnerCohorts(
+  const records = await excludeSupersededCfbWinnerRecords(client, preferAppendOnlyWinnerTrackingCorrections(await excludePartialUclWinnerCohorts(
     client,
     await fetchRecords(client, bounds, recordCap),
-  ));
+  )));
   const grades = await fetchGrades(client, records.map((row) => row.id));
   const gradeById = new Map(grades.map((grade) => [grade.prediction_record_id, grade]));
   const settled = records.filter((row) => {
