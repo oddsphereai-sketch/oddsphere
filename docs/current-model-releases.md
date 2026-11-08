@@ -3,7 +3,7 @@
 ## November 8 NFL full-board member transport capacity
 
 NFL member transport R3 and canonical envelope R3 end in `review_metadata`; sole
-writer R74 is `nfl_player_props_writer_2026_11_08_r74_review_metadata_transport`.
+writer R74 is `nfl_player_props_writer_2026_11_08_r74_member_metadata_codec`.
 This supersedes the R73 writer below without changing member R57, lifecycle R39,
 selection R1, source decision R8, accepted R15 forecasts or familiar reader R4.
 NFL encoding opts into coverage-table V2: repeated actor-review metadata and row
