@@ -54,5 +54,7 @@ jobs:
       - run: npm ci
       - name: Prepare nonsecret test environment
         run: cp .env.example .env.local
+      - name: Prove exact NFL tracking quote evidence and immutable legacy records
+        run: node --import tsx scripts/test-nfl-player-props-tracking-identity.ts
       - name: Run mandatory model-change gate and real PostgreSQL proof
         run: npm run verify:model-change
