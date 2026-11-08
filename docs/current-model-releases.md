@@ -1,5 +1,15 @@
 # Current production model releases and qualified research candidates
 
+## November 8 NFL official tracking storage capacity (V67)
+
+V67 widens only `nfl_player_prop_records.locked_expected_value` from
+`NUMERIC(9,8)` to `NUMERIC(20,8)` after a real long-odds tracking batch overflow.
+Eight-decimal scale, every existing locked value/JSON, reader precedence,
+duplicate insert immutability and access controls remain exact. No forecast,
+grade, input or runtime identifier changes; NFL writer R75 and tracking R42
+continue through the sole leased writer. No extra review or paid test.
+See `model-audits/2026-11-08-nfl-props-tracking-value-capacity.md`.
+
 ## November 8 NFL output headroom and retained R15 authority
 
 Future AI generations are R16 `player_props_ai_2026_11_08_r16_nfl_output_headroom`;
