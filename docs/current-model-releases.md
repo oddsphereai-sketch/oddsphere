@@ -22,7 +22,7 @@ See `docs/model-audits/2026-11-08-legacy-cfb-tracking-owner-review.md`.
 Tracking aggregate is `tracking_aggregate_v22_original_lock_correction_authority_2026_11_08`;
 member cache v16 and foundation snapshot r13 end in `original-lock-authority`.
 Eight legacy MLB FI rows already retain their original actionable member lock
-but indexed Held/Toss-Up fields suppressed their grade cuts. Seven have settled win/loss results; one July 11 Lean retains its original Void pending separate owner review.
+but indexed Held/Toss-Up fields suppressed their grade cuts. Seven have settled win/loss results; one July 11 Lean retains its original Void at Daniel’s explicit November 8 direction. No MLB outcome correction is authorized.
 The reader now uses the same exact stored lock authority as canonical grading,
 with a narrow bounded subobject read. Original rows/payloads remain unchanged:
 visibility restores 1 stored Best Angle and 7 stored Leans; current board grade

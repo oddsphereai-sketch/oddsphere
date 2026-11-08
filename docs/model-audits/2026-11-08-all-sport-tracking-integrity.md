@@ -1,6 +1,6 @@
 # November 8 all-sport tracking integrity audit
 
-Starting production base: `045b233e9fee95022a0b2c94ec149622fb7706f6`. Integrated newer protected release `68e3c51b5bd2fb4cdfd80cf6b2de2d07a3964d98` before final validation.
+Starting production base: `045b233e9fee95022a0b2c94ec149622fb7706f6`. Integrated newer protected release `68e3c51b5bd2fb4cdfd80cf6b2de2d07a3964d98` and subsequent NFL review-window release `b87ce374afae` before repeating final validation.
 
 ## Evidence and scope
 
@@ -25,7 +25,7 @@ Independent saved-source census: CBB 257 actionable locks matched; WNBA 181 matc
 
 - CFB season identity pagination already repaired by #1059. This release preserves that path and prevents read failures masquerading as an empty grade ledger.
 - Nine approved October 24/31 CFB corrections append exact saved T60 tuples, pinned to source ID and SHA-256. All nine positive real-source proofs passed, including original prices/probabilities, causal quote timestamps and final score grading: Best Angle 1–0; Leans 7–1. Originals remain unchanged. Canonical CFB r155 materializes them under its existing sport lease; the reviewed operator grades only their new IDs under that same lease.
-- Original MLB FI snapshot precedence restores eight existing public grades (1 Best, 7 Leans) hidden by contradictory indexed Held fields. It writes no original payload. Seven have stored W/L results. The July 11 Toronto–San Diego Lean has a historical Void despite a frozen NRFI pick and two first-inning runs; separate owner approval is pending before any correction. A June 24 nonactionable legacy row lacks first-inning score evidence; its existing Void remains unchanged.
+- Original MLB FI snapshot precedence restores eight existing public grades (1 Best, 7 Leans) hidden by contradictory indexed Held fields. It writes no original payload. Seven have stored W/L results. The July 11 Toronto–San Diego Lean has a historical Void despite a frozen NRFI pick and two first-inning runs; Daniel explicitly directed on November 8 to leave this older result unchanged; no outcome correction is authorized. A June 24 nonactionable legacy row lacks first-inning score evidence; its existing Void remains unchanged.
 - Historical CFB 847 and NFL 11 result differences reflect canonical games regressed to scheduled status, while their terminal results/final scores remain stored. The audit reports these as source-status regressions and never downgrades a final result to pending.
 - Seven June World Cup Caution voids and six WNBA ET-slate voids retain their original legacy settlement semantics. No bulk historical regrade.
 - Existing late legacy locks remain visible as historical evidence; no timestamps are rewritten.
