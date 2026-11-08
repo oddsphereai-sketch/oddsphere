@@ -5,6 +5,7 @@ on:
       - 'app/api/cron/cfb-forward-evidence/route.ts'
       - 'lib/services/football/cfbOfficialTrackingRecord.ts'
       - 'lib/services/football/cfbForwardEvidenceWriter.ts'
+      - 'lib/services/football/cfbTrackingRecordStore.ts'
       - 'scripts/operator/audit-cfb-published-tracking-denominators.ts'
       - 'scripts/test-cfb-v1-production.ts'
       - '.github/workflows/cfb-t60-tracking-proof.yml'

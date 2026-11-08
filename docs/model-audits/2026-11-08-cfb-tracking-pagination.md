@@ -32,7 +32,9 @@ priced-lock materialization, no historical game writes, idempotent retry and
 zero writes on later-page read failure. Existing locked-reader precedence tests
 remain in the focused production suite. Tracking aggregate: 69/69 passed;
 tracking refresh helpers: 45/45 passed; production build and TypeScript passed.
-The full model gate and protected publication/live proof are required separately.
+The full `npm run verify:model-change` gate passed. Its unrelated optional NFL
+Market Brain PostgreSQL proof is skipped locally because its URL is unset.
+Protected publication and live proof are required separately.
 
 Original November 7 fingerprints for post-deploy comparison:
 
@@ -45,3 +47,10 @@ Older final-game partial-market coverage exists on August 29 (1 game), September
 5 (7), September 6 (3), and September 26 (1). Those games already have tracking;
 missing historical market contracts must not be invented to force three rows.
 The newly identified zero-record gap is the 66 November 7 games.
+
+The complete canonical denominator audit independently reconciles 95 games /
+283 published markets (95 Moneyline, 94 Spread, 94 Total): 87 existed and 196
+were missing. MCN@HCU has no stored pregame Spread or Total line/outlook;
+those two markets cannot be manufactured after the result. Its original
+Moneyline forecast remains eligible for accuracy-only materialization.
+The hosted CFB proof workflow also watches the new identity reader module.
