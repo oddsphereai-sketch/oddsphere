@@ -36,7 +36,7 @@ assert.match(nfl,/Reader Summary/);assert.match(nfl,/Projection Context/);assert
 const radarSnapshot={...nflSnapshot,memberDecisions:nflSnapshot.memberDecisions.map(r=>({...r,grade:r.side==='under'?'Lean' as const:'Watchlist' as const}))};
 const radar=renderToStaticMarkup(<NflPlayerPropsProductDashboard snapshot={radarSnapshot} />);
 assert.doesNotMatch(radar,/empirical range retained/);assert.match(radar,/supplied player and market evidence/);
-const retainedRange={lower:2,upper:20,centralCoverage:.8,source:'empirical_residual_distribution' as const};
+const retainedRange={lower:2,upper:20,centralCoverage:.8 as const,source:'empirical_residual_distribution' as const};
 const legacyRange=renderToStaticMarkup(<NflPlayerPropsProductDashboard snapshot={{...radarSnapshot,memberDecisions:radarSnapshot.memberDecisions.map(r=>({...r,projectionRange:retainedRange,state:'locked' as const}))}} />);
 assert.match(legacyRange,/empirical range retained/);
 console.log('Familiar reader proof passed: same sport shells, computed decimals, eight-area evidence, probability-first direction, exact legacy locked reader precedence and input immutability. No network calls.');

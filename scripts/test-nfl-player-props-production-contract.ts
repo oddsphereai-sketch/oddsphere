@@ -834,7 +834,7 @@ for(const [retainedGrade,nativeGrade] of [['Lean','No Play'],['Watchlist','Lean'
  const previous=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:1,evaluatedAt:nearLock,nextBoard:boardRows([opposing])});
  const locked=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:1,evaluatedAt:decision.lockAt,previous,nextBoard:boardRows([{...opposing,projection:99,grade:nativeGrade,aiReview:undefined}])});
  assert.equal(locked.board.decisions[0].projection,opposing.projection);assert.equal(locked.board.decisions[0].grade,retainedGrade);
- const stale={...previous,board:boardRows([{...opposing,aiReview:{...opposing.aiReview,quoteConfirmedAt:'2026-08-25T11:00:00Z'}}])};
+ const stale={...previous,board:{...boardRows([{...opposing,aiReview:{...opposing.aiReview,quoteConfirmedAt:'2026-08-25T11:00:00Z'}}]),publicationEnabled:true as const,trackingEnabled:true as const}};
  const refused=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:1,evaluatedAt:decision.lockAt,previous:stale,nextBoard:boardRows([{...opposing,projection:99,grade:nativeGrade,aiReview:undefined}])});
  assert.equal(refused.board.decisions[0].projection,99,'stale provider confirmation does not retain an AI tuple');
 }

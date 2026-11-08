@@ -10,7 +10,7 @@ not substituted for a current provider confirmation. Old already-locked rows kee
 every field and reader precedence; no historical payload is reconstructed.
 
 The accepted R15 law, per-side probabilities, projection, current price, grade,
-wallet R4, schedule R2, familiar reader R4, sole sport lease and provider jobs remain
+wallet R4, familiar reader R4, sole sport lease and provider jobs remain
 unchanged. No extra AI review or paid testing. Same-input current decision impact
 is zero promotions and zero demotions. Paired future-lock fixtures prove that the
 saved AI grade can correctly retain a Lean over a predecessor native No Play and
@@ -31,3 +31,12 @@ source-decision release, reader values and frozen legacy rows/evidence. Paid
 scheduled production remains authorized within the unchanged target/emergency
 wallet; no manual cron or paid smoke request is needed. Accepted reviews must not
 be repurchased or relabeled under a different AI forecast release.
+
+Schedule R3 also fixes a late early-slot purchase: the prior admission filter
+looked only at pending finals, so a completed final could expose a still-pending
+missed early slot on the next refresh. Actual clock boundaries now close early
+admission at final time regardless of final state. Both preparation and wallet
+claim are guarded; the read-only cadence query applies the same boundary. Tests
+cover the precise boundary, zero preparation/token-count/claim after closure,
+and a window crossed during preparation. No SQL change, additional slot, lease,
+provider request or review repurchase; v66 retains its R2 capacity marker.
