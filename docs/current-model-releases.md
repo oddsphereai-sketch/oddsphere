@@ -1,5 +1,28 @@
 # Current production model releases and qualified research candidates
 
+## November 8 player-scoped AI publication continuity
+
+Selection `player_props_ai_selection_2026_11_08_r1_reviewed_player_scopes` keeps
+unchanged reviewed actors/scopes usable when another actor/market is added or
+removed. It never assigns old confidence to a newly offered scope: confidence and
+exceptions retain the original reviewed scope indexes. Actual critical context
+changes still reject each affected actor; all source, current-price, identity and
+lock gates remain exact. Final retains precedence. Each captured purchase still
+requires complete player/scope coverage; accepted R15 reviews are immutable.
+
+NFL source decision R8/writer R73/member R57/lifecycle R39 end in
+`player_scope_publication`; R6/R7 own-side quote receipts retain authority. NBA
+future AI decisions and public evidence stamp selection R1. Familiar reader R4,
+forecast R15, wallet R4 and schedule R3 remain unchanged; every legacy locked field
+and reader takes precedence. MLB champion `mlb_props_2026_10_21_r44` remains exact.
+The sole existing sport writers log separate review/current-context/new-scope/
+priced-actor counts and load AI packets only on the Eastern game day. No extra
+purchase, provider call, timer or paid test. See
+`model-audits/2026-11-08-props-player-scope-publication.md` for scope, board impact,
+required offline/live proof and rollback. Late-posted actors await the existing
+final review; historical missed windows are never retroactively completed.
+
+
 ## November 8 NFL props verified current actor inputs
 
 Source contract `player_props_ai_nfl_source_2026_11_08_r1_verified_current_actors`,

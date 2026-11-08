@@ -26,7 +26,7 @@ const choices=siteAiDecisions(packet,review,now);assert.equal(choices.length,1);
 assert.equal(selectSiteReview(packet,[{...review,release:"old"} as unknown as AcceptedGameReview],now),null);
 assert.equal(selectSiteReview(packet,[review,{...review,stage:"early",issuedAt:"2026-11-07T20:01:00Z"}],"2026-11-07T20:02:00Z"),review);
 const clockOnly=structuredClone(packet);clockOnly.players[0].evidence[0].availableAt="2026-11-07T20:01:00Z";(clockOnly.players[0].evidence[0].value as {capturedAt:string}).capturedAt="2026-11-07T20:01:00Z";assert.deepEqual(criticalContextHashes(clockOnly),criticalContextHashes(packet));
-const extraMarket=structuredClone(packet);extraMarket.players[0].markets.push("rebounds");assert.equal(selectSiteReview(extraMarket,[review],now),null);
+const extraMarket=structuredClone(packet);extraMarket.players[0].markets.push("rebounds");assert.equal(selectSiteReview(extraMarket,[review],now),review);assert.equal(siteAiDecisions(extraMarket,review,now).length,1,"new scope is not assigned an old confidence");
 const changed=structuredClone(packet);changed.players[0].evidence[0].value={status:"out"};assert.equal(selectSiteReview(changed,[review],now),null);
 const differentPrice=structuredClone(packet);differentPrice.quotes.forEach(q=>{q.line=9.5;q.receivedAt="2026-11-07T20:01:00Z";q.observedAt=q.receivedAt;});assert.equal(siteAiDecisions(differentPrice,review,"2026-11-07T20:02:00Z")[0].side,"over");
 assert.equal(siteAiDecisions(packet,review,"2026-11-07T20:16:00Z").length,0);
