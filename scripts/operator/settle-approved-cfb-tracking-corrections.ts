@@ -12,7 +12,7 @@ async function main() {
  const db=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.SUPABASE_SERVICE_ROLE_KEY!);
  if(apply){
   const local=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
-  const r=await fetch('https://oddsphere.ai/api/admin/cbb/contextual-readiness',{headers:{Authorization:`Bearer ${process.env.CRON_SECRET}`}});
+  const r=await fetch('https://www.oddsphereai.com/api/admin/cbb/contextual-readiness',{headers:{Authorization:`Bearer ${process.env.CRON_SECRET}`}});
   const body=await r.json();if(!r.ok||body.data?.deployment?.commit!==local)throw new Error('Refusing apply before this exact clean protected production commit is deployed.');
   if(execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim())throw new Error('Refusing apply from dirty checkout.');
  }
