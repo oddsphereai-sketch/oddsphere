@@ -6,11 +6,12 @@ import { gradeStoredTrackingRecord } from "../predictionGradingService";
 import type { PredictionRecordRow, PredictionGradeRow } from "../../types/domain/Tracking";
 
 export const TRACKING_INTEGRITY_AUDIT_RELEASE = "tracking_integrity_audit_2026_11_08_r1_published_locks_and_settlement" as const;
+export const TRACKING_CBB_MANIFEST_CLOCK_RELEASE = "tracking_cbb_manifest_clock_2026_11_08_r1_publication_metadata" as const;
 const PAGE_SIZE = 200;
 const ROLLOUT = "2026-11-08T00:00:00Z";
 export type TrackingLockExpectation = { sport: string; externalId: number; market: string; grade: string; lockedAt: string; startsAt: string; source: string; exactGrade?: boolean };
 export type TrackingIntegrityFinding = { kind: string; sport: string; game: number; market: string; severity: "error" | "warn"; recordId?: number; detail: string };
-export type TrackingIntegrityReport = { release: typeof TRACKING_INTEGRITY_AUDIT_RELEASE; checkedAt: string; from: string; records: number; publishedActionableLocks: number; errors: number; warnings: number; findings: TrackingIntegrityFinding[]; sports: Record<string, { records: number; bestAngles: number; leans: number; settled: number; pending: number; publishedActionableLocks: number }> };
+export type TrackingIntegrityReport = { release: typeof TRACKING_INTEGRITY_AUDIT_RELEASE; cbbManifestClockRelease: typeof TRACKING_CBB_MANIFEST_CLOCK_RELEASE; checkedAt: string; from: string; records: number; publishedActionableLocks: number; errors: number; warnings: number; findings: TrackingIntegrityFinding[]; sports: Record<string, { records: number; bestAngles: number; leans: number; settled: number; pending: number; publishedActionableLocks: number }> };
 const gradeKey = (value: unknown) => String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 export const trackingManifestInSlateWindow = (sport: "nfl" | "cfb", startsAt: string, from: string) => computeSlateDate(sport, startsAt) >= from;
 const terminal = (value: string) => ["final", "completed", "status_final", "post", "off", "canceled", "cancelled", "postponed"].includes(value.toLowerCase().replace(/^status[_ -]*/, ""));
@@ -97,11 +98,20 @@ export async function runTrackingIntegrityAudit(args: { client: SupabaseClient; 
       if ((r.data?.length ?? 0) < PAGE_SIZE) break;
     }
   }
+  // CBB member-game rows intentionally have slate_date=null. Their sole
+  // writer stamps generated_at at the actual lock publication. Bound reads by
+  // that relational clock, then validate the original ET fixture date in JS.
+  const cbbPublishedFrom = new Date(Date.parse(`${from}T00:00:00Z`) - 86_400_000).toISOString();
   for (let offset = 0; ; offset += PAGE_SIZE) {
     const r = await db.from("lab_response_snapshots").select("snapshot_key,id:payload->snapshot->>gameId,locked:payload->snapshot->>lockedAt,starts:payload->snapshot->>startsAt,rows:payload->snapshot->board->rows")
-      .like("snapshot_key", "cbb::member-game::%").gte("slate_date", from).lte("slate_date", through).order("snapshot_key").range(offset, offset + PAGE_SIZE - 1).abortSignal(deadline);
+      .like("snapshot_key", "cbb::member-game::%").gte("generated_at", cbbPublishedFrom).lte("generated_at", `${through}T23:59:59.999Z`).order("snapshot_key").range(offset, offset + PAGE_SIZE - 1).abortSignal(deadline);
     if (r.error) throw new Error(`tracking integrity CBB manifest read failed: ${r.error.message}`);
-    for (const s of r.data ?? []) { if (!s.locked) continue; for (const bet of (s.rows ?? []) as Array<{ market: string; grade: string }>) {
+    for (const s of r.data ?? []) {
+      if (!s.locked) continue;
+      if (!s.starts || !Number.isFinite(Date.parse(s.starts))) throw new Error("tracking integrity CBB locked fixture clock missing");
+      const slate = computeSlateDate("cbb", s.starts);
+      if (slate < from || slate > through) continue;
+      for (const bet of (s.rows ?? []) as Array<{ market: string; grade: string }>) {
       const grade = gradeKey(bet.grade); if (["best_angle", "lean"].includes(grade)) expectations.push({ sport: "cbb", externalId: Number(s.id), market: bet.market, grade, lockedAt: s.locked, startsAt: s.starts!, source: s.snapshot_key });
     } }
     if ((r.data?.length ?? 0) < PAGE_SIZE) break;
@@ -165,7 +175,12 @@ export async function runTrackingIntegrityAudit(args: { client: SupabaseClient; 
       }
     }
   }
-  const findings = [...compareTrackingLockExpectations(records, expectations), ...inspectTrackingSettlements({ records, games, grades, now: checkedAt })];
+  const cbbSourceKeys = new Set(expectations.filter(lock => lock.sport === "cbb").map(lock => `${lock.externalId}:${lock.market}`));
+  const cbbSourceGaps: TrackingIntegrityFinding[] = records.filter(row => row.sport === "cbb" && row.locked_at && isTrackingRecordEligible(row) &&
+    ["best_angle", "lean"].includes(effectiveTrackingPlayGrade(row)) && !cbbSourceKeys.has(`${row.external_id}:${row.market}`))
+    .map(row => ({ kind: "cbb_published_source_missing", sport: "cbb", game: row.external_id!, market: row.market, recordId: row.id, severity: "error",
+      detail: "Locked CBB call has no independently read member lock in the audit window; never treat an empty source read as healthy coverage." }));
+  const findings = [...cbbSourceGaps, ...compareTrackingLockExpectations(records, expectations), ...inspectTrackingSettlements({ records, games, grades, now: checkedAt })];
   const sports: TrackingIntegrityReport["sports"] = {};
   for (const name of ["mlb", "nba", "wnba", "nhl", "nfl", "cfb", "cbb", "soccer", "epl", "ucl"]) sports[name] = { records: 0, bestAngles: 0, leans: 0, settled: 0, pending: 0, publishedActionableLocks: 0 };
   for (const lock of expectations) {
@@ -177,6 +192,6 @@ export async function runTrackingIntegrityAudit(args: { client: SupabaseClient; 
     s.records++; if (grade === "best_angle") s.bestAngles++; if (grade === "lean") s.leans++;
     if (grades.has(row.id!) && grades.get(row.id!)!.result !== "pending") s.settled++; else s.pending++;
   }
-  return { release: TRACKING_INTEGRITY_AUDIT_RELEASE, checkedAt, from, records: records.length, publishedActionableLocks: expectations.length,
+  return { release: TRACKING_INTEGRITY_AUDIT_RELEASE, cbbManifestClockRelease: TRACKING_CBB_MANIFEST_CLOCK_RELEASE, checkedAt, from, records: records.length, publishedActionableLocks: expectations.length,
     errors: findings.filter(f => f.severity === "error").length, warnings: findings.filter(f => f.severity === "warn").length, findings, sports };
 }
