@@ -32,7 +32,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: node --import tsx scripts/test-tracking-page-first.ts && node --import tsx scripts/test-tracking-snapshot-projection.ts
+      - run: node --import tsx scripts/test-tracking-page-first.ts && node --import tsx scripts/test-tracking-snapshot-projection.ts && node --import tsx scripts/test-tracking-integrity-audit.ts
       - run: npm install --prefix "$RUNNER_TEMP/tracking-page-proof" --no-audit --no-fund --ignore-scripts @electric-sql/pglite@0.5.15
       - run: node scripts/test-tracking-page-first-postgres.mjs "$RUNNER_TEMP/tracking-page-proof/node_modules/@electric-sql/pglite/dist/index.js"
       - run: node --import tsx scripts/test-homepage-tracking-parity.ts && node --import tsx scripts/test-homepage-category-tracker.ts && node --import tsx scripts/test-tracking-ucl-lifetime.ts && node --import tsx scripts/test-tracking-locked-grade.ts && node --import tsx scripts/test-ucl-alternate-line-lifetime.ts && node --import tsx scripts/test-alternate-line-performance.ts && node --import tsx scripts/test-tracking-aggregates.ts && node --import tsx scripts/test-tracking-page.ts && node --import tsx scripts/test-official-tracking-markets.ts
