@@ -127,10 +127,12 @@ def fit_scaled(
 
 def residual_grids(distribution: dict[str, Any], rows: pd.DataFrame, means: np.ndarray) -> list[np.ndarray]:
     positions = rows["position"].astype(str).to_numpy()
+    if len(positions) != len(means):
+        raise RuntimeError("position and mean arrays must have identical lengths")
     if distribution["family"] == "conditional_empirical_residual":
         fallback = np.asarray(distribution["fallbackResidualQuantiles"], dtype=float)
         output: list[np.ndarray] = []
-        for position, mean in zip(positions, means, strict=True):
+        for position, mean in zip(positions, means):
             selected = fallback
             for group in distribution["groups"]:
                 if group["position"] is not None and group["position"] != position:
@@ -142,7 +144,7 @@ def residual_grids(distribution: dict[str, Any], rows: pd.DataFrame, means: np.n
         return output
     standardized = np.asarray(distribution["standardizedResidualQuantiles"], dtype=float)
     output = []
-    for position, mean in zip(positions, means, strict=True):
+    for position, mean in zip(positions, means):
         scale = float(distribution["fallbackScale"])
         for group in distribution["scales"]:
             if group["position"] is not None and group["position"] != position:
@@ -161,11 +163,13 @@ def metrics(
     distribution: dict[str, Any],
 ) -> tuple[dict[str, float], np.ndarray]:
     grids = residual_grids(distribution, rows, means)
+    if not (len(actual) == len(means) == len(grids)):
+        raise RuntimeError("actual, mean, and residual-grid arrays must have identical lengths")
     pits = np.empty(len(actual))
     crps = np.empty(len(actual))
     nll = np.empty(len(actual))
     coverage = {50: np.empty(len(actual), dtype=bool), 80: np.empty(len(actual), dtype=bool), 90: np.empty(len(actual), dtype=bool)}
-    for index, (outcome, mean, residual_values) in enumerate(zip(actual, means, grids, strict=True)):
+    for index, (outcome, mean, residual_values) in enumerate(zip(actual, means, grids)):
         outcomes = np.clip(mean + residual_values, 0.0, None)
         pits[index] = np.mean(outcomes <= outcome)
         ordered = np.sort(outcomes)
