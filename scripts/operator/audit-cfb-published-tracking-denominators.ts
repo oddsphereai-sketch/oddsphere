@@ -1,3 +1,4 @@
+import { readCfbExistingTrackingRecords } from "../../lib/services/football/cfbTrackingRecordStore";
 import { createClient } from "@supabase/supabase-js";
 import { computeSlateDate } from "../../lib/dates/slateDate";
 import { readCfbForwardWriterEvidence } from "../../lib/services/football/cfbForwardEvidenceStore";
@@ -29,13 +30,7 @@ async function main(): Promise<void> {
     }));
   });
   const externalIds = [...new Set(planned.map((row) => row.externalId))];
-  const { data, error } = externalIds.length === 0
-    ? { data: [], error: null }
-    : await client.from("prediction_records")
-        .select("external_id,market")
-        .eq("sport", "cfb")
-        .in("external_id", externalIds);
-  if (error) throw new Error(`CFB tracking audit read failed: ${error.message}`);
+  const data = await readCfbExistingTrackingRecords(client, externalIds);
   const gameCensus = date ? await client.from("games")
     .select("external_id,status").eq("sport", "cfb").eq("slate_date", date) : { data: [], error: null };
   if (gameCensus.error) throw new Error(`CFB tracking game census read failed: ${gameCensus.error.message}`);

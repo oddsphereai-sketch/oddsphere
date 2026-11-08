@@ -1,3 +1,4 @@
+import { readCfbExistingTrackingRecords } from "./cfbTrackingRecordStore";
 import {qualifyMoneylinePrice} from "../dailyEdge/moneylinePricePolicy";
 import {CFB_V1_PRICE_BOUNDARY_PREVIOUS_DECISION_RELEASE} from "./cfbV1Decision";
 import {CFB_MARKET_SHARP_AWARE_PRICE_BOUNDARY_PREVIOUS_PRODUCTION_RELEASE} from "./cfbMarketSharpAwareShadow";
@@ -191,7 +192,7 @@ import { fetchCfbOwlsProvider } from "./cfbOwlsProvider";
 import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_11_06_r153_moneyline_wager_price_boundaries" as const;
+  "cfb_forward_evidence_writer_2026_11_08_r154_complete_tracking_identity_read" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -2386,8 +2387,7 @@ export async function writeCfbOfficialTracking(args: {
   if (!args.apply || proposed === 0) return { trackingAttempted: false, trackingRecordsProposed: proposed, trackingRecordsInserted: 0, trackingRecordsExisting: 0, trackingError: null, trackingProviderRequests: 0 };
   for (const decision of eligible.flatMap(({ payload }) => payload.decisions.evaluatedBets)) assertOfficialTrackingMarket("cfb", decision.market);
   const externalIds = eligible.map(({ payload }) => cfbProviderIntegerId(payload.game.providerGameId, "game"));
-  const { data: existingRows, error: existingError } = await args.client.from("prediction_records").select("external_id,market").eq("sport", "cfb").in("external_id", externalIds);
-  if (existingError) throw new Error(`CFB tracking record read failed: ${existingError.message}`);
+  const existingRows = await readCfbExistingTrackingRecords(args.client, externalIds);
   const existingKeys = buildMarketScopedFootballTrackingPlan(trackingGames, (existingRows ?? []) as Array<{ external_id: number; market: string }>).existingKeys;
   if (existingKeys.size === proposed) return { trackingAttempted: true, trackingRecordsProposed: proposed, trackingRecordsInserted: 0, trackingRecordsExisting: existingKeys.size, trackingError: null, trackingProviderRequests: 0 };
 
