@@ -8,11 +8,11 @@ import { jointReviewRequest, parseJointReview } from "./request";
 import { countAiInput, generateAiReview, structuredAiText, AiGenerationError } from "./openai";
 import { prepareReviewParts } from "./partitions";
 import {criticalContextHashes} from "./criticalContext";
-import { PROPS_AI_MAX_OUTPUT_PER_REQUEST, PROPS_AI_PART_CONCURRENCY, PROPS_AI_STRONG_MODEL, PROPS_AI_RELEASE, type PropsAiModel } from "./releases";
+import { PROPS_AI_MAX_OUTPUT_PER_REQUEST, PROPS_AI_PART_CONCURRENCY, PROPS_AI_STRONG_MODEL, PROPS_AI_RELEASE, PROPS_AI_ACCEPTED_RELEASES, type PropsAiModel } from "./releases";
 
 type PreparedPart = Awaited<ReturnType<typeof prepareReviewParts>>[number];
 type PartProvenance = { part:number; phase:number; model:PropsAiModel; requestedTier:string; actualTier:string; responseId:string; playerIds:string[] };
-export type AcceptedGameReview = { release: typeof PROPS_AI_RELEASE; gameId: string; start: string; lock: string; cutoff: string;
+export type AcceptedGameReview = { release: (typeof PROPS_AI_ACCEPTED_RELEASES)[number]; gameId: string; start: string; lock: string; cutoff: string;
   criticalContextHashes:Record<string,string>;
   marketScopes:Record<string,string[]>;
   sourceGameId?:string;

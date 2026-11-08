@@ -12,7 +12,7 @@ import {loadPropsCalendar,calendarWalletPlan,matchPropsCalendarGame} from "./cal
 import {runPropsReview,type AcceptedGameReview} from "./reviewer";
 import {selectSiteReview,siteAiDecisions,siteReviewCoverage,type SiteAiDecision} from "./publication";
 import {instant,etDate} from "./evidence";
-import {PROPS_AI_RELEASE,PROPS_AI_SELECTION_RELEASE,PROPS_AI_SCHEDULE_RELEASE,PROPS_AI_MIN_REVIEW_WINDOW_MS} from "./releases";
+import {PROPS_AI_RELEASE,PROPS_AI_ACCEPTED_RELEASES,PROPS_AI_SELECTION_RELEASE,PROPS_AI_SCHEDULE_RELEASE,PROPS_AI_MIN_REVIEW_WINDOW_MS} from "./releases";
 export type SiteReviewResult={game:LivePropsGame;packet:GamePacket;decisions:SiteAiDecision[]};
 type SiteCoverage={gameId:string;players:number;reviewedPlayers:number;contextChangedPlayers:number;unreviewedScopes:number;eligiblePlayers:number;pricedPlayers:number};
 export type SiteReviewOutcome={status:string;games:SiteReviewResult[];findings:string[];coverage?:SiteCoverage[]};
@@ -63,7 +63,7 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
     // Native source identity is stored in each accepted result; avoids fragile cross-provider IDs in readers.
     const rows=await args.client.from("player_props_ai_reviews").select("result").eq("sport",args.sport).eq("state","completed").gte("scheduled_start",now.slice(0,10)).order("completed_at",{ascending:false}).limit(256);
     if(rows.error)throw new Error("accepted_review_read_failed");
-    const accepted=(rows.data??[]).map(r=>r.result as AcceptedGameReview).filter(r=>r?.release===PROPS_AI_RELEASE);
+    const accepted=(rows.data??[]).map(r=>r.result as AcceptedGameReview).filter(r=>r&&PROPS_AI_ACCEPTED_RELEASES.includes(r.release));
     for(const game of active){
       try{
         const packet=await args.load(game,{gameId:game.id,stage:"final",cutoff:clock(),lock:new Date(instant(game.start)-3600000).toISOString()});

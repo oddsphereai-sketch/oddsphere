@@ -2,7 +2,7 @@ import type {GamePacket,Quote} from "./evidenceContract";
 import type {AcceptedGameReview} from "./reviewer";
 import type {PropsAiMemberEvidence} from "./publicationContract";
 import {criticalContextHashes} from "./criticalContext";
-import {PROPS_AI_RELEASE,PROPS_AI_GRADE_RELEASE,PROPS_AI_SELECTION_RELEASE} from "./releases";
+import {PROPS_AI_ACCEPTED_RELEASES,PROPS_AI_GRADE_RELEASE,PROPS_AI_SELECTION_RELEASE} from "./releases";
 import {PROPS_AI_SITE_RELEASE} from "./siteConfig";
 import {priceAiLaw,type PropsAiGrade} from "./pricing";
 import {lawForecast} from "./law";
@@ -11,7 +11,7 @@ import {instant} from "./evidence";
 export type SiteAiDecision={playerId:string;market:string;line:number;side:Quote["side"];book:string;provider:string;american:number;projection:number;probability:number;over:number;under:number;push:number;expectedValue:number;fairAmerican:number|null;grade:PropsAiGrade;quote:Quote;evidence:PropsAiMemberEvidence};
 function sameReviewGame(packet:GamePacket,review:AcceptedGameReview,now:string){
   const at=instant(now);
-  return review.release===PROPS_AI_RELEASE&&(review.sourceGameId??review.gameId)===packet.gameId
+  return PROPS_AI_ACCEPTED_RELEASES.includes(review.release)&&(review.sourceGameId??review.gameId)===packet.gameId
     &&instant(review.start)===instant(packet.start)&&instant(review.lock)===instant(packet.lock)
     &&Boolean(review.issuedAt)&&instant(review.issuedAt!)<=at&&instant(review.issuedAt!)<instant(packet.lock)&&at<instant(packet.lock);
 }
