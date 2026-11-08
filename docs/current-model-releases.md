@@ -1,5 +1,29 @@
 # Current production model releases and qualified research candidates
 
+## November 8 NFL prop verified source scope and exact locks
+
+NFL AI decision R5 is `player_props_ai_nfl_decision_2026_11_08_r5_verified_source_scope`;
+sole writer R70 is `nfl_player_props_writer_2026_11_08_r70_source_coherent_locks`,
+member R54 is `nfl_player_props_member_2026_11_08_r54_source_coherent_locks` and
+lifecycle R36 is `nfl_player_props_member_lifecycle_2026_11_08_r36_exact_lock_precedence`.
+These supersede writer R69/member R53/lifecycle R35 below. Forecast R15, familiar
+reader R4, wallet R4, schedule R2 and the independent numerical model remain exact.
+Nullable source IDs bind only through one exact same-name/team/opponent/game/clock
+actor; verified IDs and exact book/provider/line/side/event contracts remain required.
+Current provider receipts reprice that same law; obsolete unlocked native/duplicate
+rows cannot override its headline with a predecessor probability or grade. Missing
+or ambiguous identity is never guessed. Existing source evidence remains retained.
+
+Future locks retain each exact sportsbook tuple, rather than whichever book was
+last in a player/market map. Every prior locked board row and explicit locked
+member payload remains exact, with stored member fields taking precedence. No
+historical correction, review repurchase, provider job, writer or budget increase.
+Read-only saved-source replay: 696 to 589 game rows, 164 to 161 actionable book
+rows; 6 matched promotions, 0 matched demotions, with 9 obsolete/duplicate actionable
+rows removed. These are quote rows, not distinct recommended players. Synthetic
+paired promotion/demotion and exact legacy-lock/reader controls are required.
+See `docs/model-audits/2026-11-08-nfl-props-source-coherence.md`.
+
 ## November 8 player-prop evidence storage and execution repair
 
 Forecast/grade/estimate semantics remain the exact R15 law; accepted reviews are

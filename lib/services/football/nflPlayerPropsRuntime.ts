@@ -531,6 +531,7 @@ export type NflPlayerPropsRuntimeDecision = {
 };
 
 export type NflPlayerPropsRuntimeBoard = {
+  aiSourceCoherence?: {release:string;supersededNative:number;duplicateReviewed:number;ambiguousIdentity:number};
   release: typeof NFL_PLAYER_PROPS_BOARD_RELEASE;
   generatedAt: string; evaluatedAt: string; provisional: false; publicationEnabled: false; trackingEnabled: false;
   decisions: NflPlayerPropsRuntimeDecision[];
