@@ -1,3 +1,4 @@
+import {propsAiFailureCode,PROPS_AI_DIAGNOSTIC_RELEASE} from "./failureCode";
 import {isMissedPropsEarlyWindow} from "./schedule";
 import {propsAiGenerationPool} from "./completionWindow";
 /** Invoked only by the existing sport-scoped prediction writer. Never owns a timer or member write. */
@@ -19,7 +20,7 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
   // Counterfactual gate: zero database, calendar, provider, token-count or generation I/O.
   if(!config.integrated)return {status:"disabled",games:[],findings:[]};
   const clock=args.clock??(()=>new Date().toISOString()),now=clock(),deadline=args.deadline??Date.now()+230000,findings:string[]=[],results:SiteReviewResult[]=[];
-  const finish=(outcome:SiteReviewOutcome)=>{console.info(`PLAYER_PROPS_AI_SITE ${JSON.stringify({release:PROPS_AI_RELEASE,scheduleRelease:PROPS_AI_SCHEDULE_RELEASE,sport:args.sport,status:outcome.status,reviewedGames:outcome.games.length,findings:outcome.findings.slice(0,16)})}`);return outcome;};
+  const finish=(outcome:SiteReviewOutcome)=>{console.info(`PLAYER_PROPS_AI_SITE ${JSON.stringify({release:PROPS_AI_RELEASE,scheduleRelease:PROPS_AI_SCHEDULE_RELEASE,diagnosticsRelease:PROPS_AI_DIAGNOSTIC_RELEASE,sport:args.sport,status:outcome.status,reviewedGames:outcome.games.length,findings:outcome.findings.slice(0,16)})}`);return outcome;};
   const store=new PropsAiStore(args.client);
   try{
     const control=await args.client.from("player_props_ai_control").select("release,paid_enabled").eq("singleton",true).single();
@@ -53,7 +54,7 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
             // Funding identity is separate from the collector's exact native identity.
             const result=await runPropsReview({packet:{...packet,sourceGameId:native.id,gameId:job.game_id},job,store,key:config.key,writerRunId:args.writerRunId!,generationSlot,preferStronger:job.stage==="final"&&packet.players.some(p=>p.missing.length>0),fetchImpl:args.fetchImpl,clock,deadline});
             if(result.status!=="completed")findings.push(`review_unavailable:${native.id}:${"reason" in result?result.reason:result.status}`);
-          }catch{findings.push(`source_or_review_unavailable:${native.id}`);}
+          }catch(error){findings.push(`source_or_review_unavailable:${native.id}:${propsAiFailureCode(error)}`);}
         }));
       }
     }
@@ -66,7 +67,7 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
         const packet=await args.load(game,{gameId:game.id,stage:"final",cutoff:clock(),lock:new Date(instant(game.start)-3600000).toISOString()});
         const review=selectSiteReview(packet,accepted,clock());
         if(review)results.push({game,packet,decisions:siteAiDecisions(packet,review,clock())});
-      }catch{findings.push(`current_source_unavailable:${game.id}`);}
+      }catch(error){findings.push(`current_source_unavailable:${game.id}:${propsAiFailureCode(error)}`);}
     }
     return finish({status:paid?"active":"paid_disabled",games:results,findings});
   }catch{return finish({status:"unavailable",games:[],findings:[...findings,"ai_operational_fallback_keep_independent"]});}
