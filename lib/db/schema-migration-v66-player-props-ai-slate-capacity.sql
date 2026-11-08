@@ -4,7 +4,7 @@ DO $$
 DECLARE body text;
 BEGIN
  IF EXISTS(SELECT 1 FROM public.player_props_ai_control WHERE singleton AND paid_enabled) THEN
-  RAISE EXCEPTION 'pause_paid_reviews_before_v65';
+  RAISE EXCEPTION 'pause_paid_reviews_before_v66';
  END IF;
  body:=pg_get_functiondef('public.player_props_ai_claim(text,text,jsonb,boolean,text)'::regprocedure);
  IF position('player_props_ai_budget_2026_11_08_r4_target_and_emergency' in body)=0 THEN
