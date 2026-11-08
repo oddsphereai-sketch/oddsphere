@@ -73,7 +73,7 @@ async function main() {
     const capture={from:()=>({upsert:async(rows:Record<string,unknown>[],options:Record<string,unknown>)=>{
       assert.equal(options.ignoreDuplicates,true);assert.equal(rows.length,quotes.length);
       rows.forEach((row,i)=>{
-        const evidence=(row.snapshot_json as {decision:typeof decision}).decision;
+        const evidence=(row.snapshot_json as {decision:(typeof quotes)[number]}).decision;
         assert.deepEqual(evidence,quotes[i]);
         assert.equal(row.sportsbook,evidence.sportsbook);assert.equal(row.locked_price,evidence.americanPrice);
         assert.equal(row.locked_probability,evidence.finalProbability);assert.equal(row.locked_expected_value,evidence.expectedValue);
