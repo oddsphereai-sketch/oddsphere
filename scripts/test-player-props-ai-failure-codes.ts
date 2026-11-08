@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {propsAiFailureCode} from '../lib/playerPropsAi/failureCode';
+assert.equal(propsAiFailureCode(new Error('input_count_http_429')),'input_count_http_429');
+assert.equal(propsAiFailureCode(new Error('input_count_http_401')),'input_count_http_401');
+assert.equal(propsAiFailureCode(new Error('Conflicting NFL provider player identity')),'nfl_provider_identity_conflict');
+assert.equal(propsAiFailureCode(new Error('NFL offered-player identity coverage incomplete:3')),'nfl_offered_player_identity_incomplete');
+assert.equal(propsAiFailureCode(new Error('Future evidence: private-player-id')),'future_evidence');
+assert.equal(propsAiFailureCode(new DOMException('private transport details','TimeoutError')),'source_or_preparation_timeout');
+for(const input of [new Error('input_count_http_429 Authorization: Bearer synthetic-secret'),new Error('sk-proj-synthetic-secret'),new Error('Private player input'),{message:'input_count_http_429'},null])assert.equal(propsAiFailureCode(input),'unclassified');
+console.log('Safe review failure codes passed: exact preparation status, identity/clock categories, and no raw keys, bodies or source payloads. No network calls.');
