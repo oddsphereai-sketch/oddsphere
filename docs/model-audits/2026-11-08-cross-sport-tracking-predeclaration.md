@@ -38,3 +38,5 @@ true voids, query failures, and all sport/competition scopes.
 
 Require full model gate, focused tests, build/types, current-main integration
 safety, protected PR, live reader/snapshot/cron and immutable hash verification.
+
+Final review update: the complete census also found an eighth original FI Lean with a historical Void. Daniel explicitly chose to retain that older MLB result unchanged. He separately approved all nine CFB exact-source append-only corrections after reviewing the October 24/31 dates and complete 8–1 result. See the final all-sport audit and owner review for the fixed scope.
