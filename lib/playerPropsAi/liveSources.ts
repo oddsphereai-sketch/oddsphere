@@ -15,12 +15,13 @@ import {attachNflReaderMarkets} from "./nflMarkets";
 import {compileMarketReport} from "./marketReport";
 import {CATALOG,PRODUCT_RELEASE,type GamePacket,type Json,type Quote,type Player} from "./evidenceContract";
 import type {CapturedReviewWindow} from "./liveWindow";
+import {propsTeam} from "./teamIdentity";
 import {digest,instant,invariant} from "./evidence";
 
 export type LivePropsGame={id:string;start:string;away:string;home:string};
 const json=(v:unknown):Json=>JSON.parse(JSON.stringify(v));
 const name=(s:string)=>s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g,"").replace(/\b(jr|sr|ii|iii|iv)\b/g,"").replace(/[^a-z]/g,"");
-export const propsTeam=(s:string)=>({WSH:"WAS",JAC:"JAX",LA:"LAR",GS:"GSW",NY:"NYK",SA:"SAS",NO:"NOP",UTAH:"UTA",CHW:"CWS",AZ:"ARI",ATH:"OAK"}[s.toUpperCase()]??s.toUpperCase());
+export {propsTeam} from "./teamIdentity";
 export function emptyCapturedSource(at:string):CachedExport{
   const state={games:[],boxes:[],advanced:[],players:[],updatedAt:at} as unknown as NbaPlayerPropsCurrentState;
   return {readOnly:true,generatedAt:at,priorNba:state,currentNba:state,nba:[],nfl:[]};

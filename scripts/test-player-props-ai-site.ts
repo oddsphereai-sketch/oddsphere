@@ -56,6 +56,39 @@ const nflChoices=choices.map(c=>({...c,playerId:"nfl-bdl-player:1",market:"passi
 const nflBoard={decisions:[],counts:{}} as unknown as Parameters<typeof applyNflSiteAi>[0];
 const nflApplied=applyNflSiteAi(nflBoard,nflPacket,nflChoices,now);assert.equal(nflApplied.decisions.length,2);assert.ok(nflApplied.decisions.every(r=>r.participationProbability===null&&r.grade==="No Play"));
 const nflLocked={...nflApplied,decisions:nflApplied.decisions.map(r=>({...r,state:"locked" as const}))};assert.strictEqual(applyNflSiteAi(nflLocked,nflPacket,nflChoices,now),nflLocked);
+// Actual failure shape: a nullable source ID and a canonical ID represented the
+// same named actor/book. Both must use one verified current forecast authority.
+const sourceRow={...nflApplied.decisions[0],providerPlayerId:null,playerName:"Synthetic",team:"BOS",opponent:"NYK",aiReview:undefined,grade:"Best Angle" as const,projection:20,finalProbability:.55};
+const underRow={...sourceRow,side:"under" as const};
+const duplicateRows=[sourceRow,underRow,...nflApplied.decisions];
+const coherent=applyNflSiteAi({...nflBoard,decisions:duplicateRows},nflPacket,nflChoices,now);
+assert.equal(coherent.decisions.length,2);
+assert.equal(coherent.aiSourceCoherence?.duplicateReviewed,2);
+assert.ok(coherent.decisions.every(r=>r.providerPlayerId==="1"&&r.projection===13));
+assert.equal(coherent.decisions.find(r=>r.side==="under")?.finalProbability,.9);
+assert.equal(coherent.decisions.find(r=>r.side==="over")?.grade,"Watchlist");
+assert.equal(coherent.decisions.find(r=>r.side==="under")?.grade,nflChoices[0].grade);
+const promotion=applyNflSiteAi({...nflBoard,decisions:[{...underRow,grade:"No Play"}]},nflPacket,nflChoices,now);
+assert.ok(promotion.decisions.some(r=>r.side==="under"&&(r.grade==="Lean"||r.grade==="Best Angle")));
+const rejected=applyNflSiteAi({...nflBoard,decisions:[{...sourceRow,team:"WRONG"}]},nflPacket,nflChoices,now);
+assert.strictEqual(rejected.decisions[0].projection,20,"wrong team cannot inherit an AI identity");
+const ambiguousPacket={...nflPacket,players:[...nflPacket.players,{...nflPacket.players[0],id:"nfl-bdl-player:2"}]};
+assert.equal(applyNflSiteAi({...nflBoard,decisions:[sourceRow]},ambiguousPacket,nflChoices,now).decisions[0].projection,20);
+for(const field of ["gameId","opponent","scheduledStart","lockAt"] as const){
+ const bad={...sourceRow,[field]:field.endsWith("At")||field==="scheduledStart"?"2026-11-08T23:00:00Z":"wrong"};
+ assert.equal(applyNflSiteAi({...nflBoard,decisions:[bad]},nflPacket,nflChoices,now).decisions[0].projection,20,field);
+}
+const nullLocked={...underRow,state:"locked" as const};
+const nullLockedApplied=applyNflSiteAi({...nflBoard,decisions:[nullLocked]},nflPacket,nflChoices,now);
+assert.strictEqual(nullLockedApplied.decisions[0],nullLocked);
+assert.equal(nullLockedApplied.decisions.filter(r=>r.side==="under").length,1,"never append a duplicate over a verified nullable-ID lock");
+const milestoneChoices=nflChoices.map(c=>({...c,side:"yes" as const,quote:{...c.quote,side:"yes" as const,offerContract:"milestone" as const}}));
+const milestonePacket={...nflPacket,quotes:nflPacket.quotes.map(q=>({...q,side:"yes" as const,offerContract:"milestone" as const}))};
+assert.equal(applyNflSiteAi({...nflBoard,decisions:[underRow]},milestonePacket,milestoneChoices,now).decisions[0].projection,20,"a milestone cannot replace a two-way contract at the same line");
+const stalePacket={...nflPacket,quotes:nflPacket.quotes.map(q=>({...q,receivedAt:"2026-11-07T19:00:00Z"}))};
+assert.strictEqual(applyNflSiteAi({...nflBoard,decisions:[sourceRow]},stalePacket,nflChoices,now).decisions[0],sourceRow);
+const livePacket={...nflPacket,quotes:nflPacket.quotes.map(q=>({...q,live:true}))};
+assert.strictEqual(applyNflSiteAi({...nflBoard,decisions:[sourceRow]},livePacket,nflChoices,now).decisions[0],sourceRow);
 const mlbPacket={...packet,sport:"mlb" as const,players:[{...packet.players[0],markets:["batter_hits"]}],quotes:packet.quotes.map(q=>({...q,market:"batter_hits"}))};
 const mlbChoices=choices.map(c=>({...c,market:"batter_hits"}));
 const mlbRow={id:"legacy",providerIds:{gameId:"native",mlbStatsPlayerId:"p",bdlPlayerId:1},market:"batter_hits",line:12.5,book:"one",side:"over",marketProbability:.4,independentProbability:.6,units:1,lockStatus:null,oddsMovement:null,missingFeatures:[],oddsSanity:[]} as unknown as Parameters<typeof applyMlbSiteAi>[0][number];

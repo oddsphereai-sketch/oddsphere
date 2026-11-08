@@ -195,8 +195,8 @@ assert.equal(JSON.stringify(legacyAliasSnapshot), lockedAliasBefore, "reader ali
 const lockedAliasWriter = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 9, evaluatedAt: "2026-11-04T13:00:00Z",
   previous: { ...legacyAliasSnapshot, board: { ...boardRows([resolvedAliasDecision, lockedAlias]), publicationEnabled: true, trackingEnabled: true } }, nextBoard: boardRows([resolvedAliasDecision]) });
 assert.deepEqual(lockedAliasWriter.board.decisions.find(row => row.playerName === "Chigoziem Okonkwo"), lockedAlias, "the writer preserves the complete prior locked alias record even when the current feed omits it");
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_11_04_r53_verified_alias_duplicates");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_11_04_r69_verified_alias_display");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_11_08_r54_source_coherent_locks");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_11_08_r70_source_coherent_locks");
 assert.equal(NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES, 60);
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_11_04_r42_suffix_roster_identity");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_11_04_r5_verified_participation");
@@ -809,4 +809,21 @@ for (const required of [
   "GRANT SELECT, INSERT, UPDATE ON TABLE public.nfl_player_prop_records TO service_role",
 ]) assert.ok(migration.includes(required), `NFL props tracking migration must preserve: ${required}`);
 
+// Every locked book remains exact, and stored member fields take precedence
+// even if the corresponding legacy audit row has a different projection.
+const nearLock="2026-09-01T10:58:00.000Z";
+const aiBookA={...decision,observedAt:nearLock,sportsbook:"a",americanPrice:105,projection:5.123,aiReview:{quoteConfirmedAt:nearLock,selectedSide:"over"}} as NflPlayerPropsRuntimeDecision;
+const aiBookB={...aiBookA,sportsbook:"b",americanPrice:-115,projection:5.456};
+const exactPrior=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:1,evaluatedAt:nearLock,nextBoard:boardRows([aiBookA,aiBookB])});
+const exactLock=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:1,evaluatedAt:decision.lockAt,previous:exactPrior,nextBoard:boardRows([{...aiBookA,projection:99},{...aiBookB,projection:98}])});
+assert.equal(exactLock.board.decisions.find(r=>r.sportsbook==="a")?.projection,5.123);
+assert.equal(exactLock.board.decisions.find(r=>r.sportsbook==="b")?.projection,5.456);
+assert.equal(exactLock.board.decisions.find(r=>r.sportsbook==="a")?.americanPrice,105);
+assert.equal(exactLock.board.decisions.find(r=>r.sportsbook==="b")?.americanPrice,-115);
+const explicitMember={...exactLock.memberDecisions[0],projection:4.876,finalProbability:.62345,americanPrice:123};
+const publicAuthority={...exactLock,memberDecisions:[explicitMember]};
+const afterLock=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:1,evaluatedAt:"2026-09-01T11:10:00.000Z",previous:publicAuthority,nextBoard:emptyBoard()});
+assert.deepEqual(afterLock.board.decisions,exactLock.board.decisions,"all original locked books retained exactly");
+assert.deepEqual(afterLock.memberDecisions,[explicitMember],"stored member payload precedes a differing legacy board value");
+assert.deepEqual(buildNflPlayerPropsMemberSnapshot(afterLock,"2026-09-01T11:10:00.000Z").memberDecisions,[explicitMember]);
 console.log("NFL player-props one-writer lifecycle, T-60 freeze, tracking, and CLV contract passed.");
