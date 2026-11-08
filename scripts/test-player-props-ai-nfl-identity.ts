@@ -1,0 +1,44 @@
+import assert from 'node:assert/strict';
+import {resolveNflPropSourcePlayer,sameNflPropActorName,PROPS_AI_NFL_SOURCE_RELEASE} from '../lib/playerPropsAi/nflPlayerIdentity';
+import {liveNflPacket} from '../lib/playerPropsAi/liveSources';
+import {enrichCachedPacket} from '../lib/playerPropsAi/cachedEnrichment';
+type IdentityArgs=Parameters<typeof resolveNflPropSourcePlayer>[0];
+type LiveArgs=Parameters<typeof liveNflPacket>[0];
+const at='2026-11-08T17:00:00Z',start='2026-11-08T21:00:00Z',lock='2026-11-08T20:00:00Z';
+const game={id:'synthetic',start,away:'TB',home:'CHI'};
+const quote={canonicalGameId:game.id,scheduledStart:start,providerPlayerId:null,playerName:'Kenneth Gainwell',playerTeam:null,provider:'owls',market:'receptions',line:2.5,side:'over',sportsbook:'synthetic',americanPrice:-110,observedAt:at,receivedAt:at,isOpening:false,isLive:false} as IdentityArgs['row'];
+const native={...quote,provider:'balldontlie',playerName:'Kenny Gainwell',providerPlayerId:'12',playerTeam:'TB'} as IdentityArgs['row'];
+const stored={gameId:game.id,scheduledStart:start,lockAt:lock,providerPlayerId:'12',playerName:'Kenny Gainwell',team:'TB',opponent:'CHI',state:'unlocked',grade:'Held',healthHolds:['historical_identity_unmatched']} as unknown as IdentityArgs['rows'][number];
+const context={capturedAt:at,games:[{canonicalGameId:game.id,scheduledStart:start,awayTeam:'TB',homeTeam:'CHI',awayDepth:{roster:[{playerId:'12',name:'Kenny Gainwell'}]},homeDepth:{roster:[]},injuries:{players:[]},weather:null}]} as unknown as IdentityArgs['context'];
+const args={row:quote,rows:[stored],observations:[native],context,game};
+assert.equal(resolveNflPropSourcePlayer(args)?.providerId,'12');
+assert.equal(resolveNflPropSourcePlayer({...args,rows:[],observations:[]})?.providerId,'12','a unique exact roster ID is sufficient without a numerical-model row');
+assert.equal(resolveNflPropSourcePlayer({...args,rows:[],context:{...context,games:[{...context.games[0],awayDepth:{roster:[]}}]} as never})?.providerId,'12','a current primary-provider identity is sufficient without a model or roster row');
+assert.equal(resolveNflPropSourcePlayer({...args,row:{...native,playerName:null}})?.name,'Kenny Gainwell','a supplied ID can recover its exact roster name');
+assert.equal(resolveNflPropSourcePlayer({...args,row:{...quote,canonicalGameId:'wrong'}}),null);
+assert.equal(resolveNflPropSourcePlayer({...args,row:{...quote,scheduledStart:'2026-11-09T21:00:00Z'}}),null);
+assert.throws(()=>resolveNflPropSourcePlayer({...args,row:{...native,playerTeam:'CHI'}}),/player-team identity/);
+assert.throws(()=>resolveNflPropSourcePlayer({...args,row:{...native,providerPlayerId:'999'}}),/provider player identity/);
+assert.throws(()=>resolveNflPropSourcePlayer({...args,context:{...context,games:[{...context.games[0],scheduledStart:'2026-11-09T21:00:00Z'}]} as never}),/roster game identity/);
+for(const [a,b,id] of [['Marquise Brown','Hollywood Brown','666'],['Kevin Concepcion','KC Concepcion Jr.','33934397'],['Kenneth Gainwell','Kenny Gainwell','12'],['Chigoziem Okonkwo','Chig Okonkwo','734']]){
+ assert.equal(sameNflPropActorName(a,b,id),true);assert.equal(sameNflPropActorName(a,b,'wrong'),false);assert.equal(sameNflPropActorName(a,'Unrelated Player',id),false);
+}
+const snapshot={week:9,generatedAt:at,board:{decisions:[stored]},memberDecisions:[]} as unknown as LiveArgs['snapshot'];
+const history={updatedAt:at,games:[],stats:[],teamStats:[],playMetrics:[],release:'synthetic'} as unknown as LiveArgs['history'];
+const orphan={...quote,playerName:'Unresolved historical actor',isOpening:true};
+const packet=liveNflPacket({game,window:{gameId:game.id,stage:'early',cutoff:at,lock},snapshot,observations:{observations:[native,quote,orphan]} as never,history,context});
+assert.equal(packet.sourceInputRelease,PROPS_AI_NFL_SOURCE_RELEASE);assert.equal(packet.players.length,1);assert.equal(packet.players[0].id,'nfl-bdl-player:12');assert.equal(packet.quotes.length,2,'orphan history does not become a currently offered actor');
+assert.throws(()=>liveNflPacket({game,window:{gameId:game.id,stage:'early',cutoff:at,lock},snapshot,observations:{observations:[native,quote,{...orphan,isOpening:false}]} as never,history,context}),/offered-player identity coverage incomplete/,'unresolved current actors still block completion');
+// Regression from the ordinary producer: same actor represented by separate
+// cached display groups must merge its evidence, not reject the whole game.
+const priorHead={...stored,market:'receptions',line:2.5,side:'over',sportsbook:'synthetic',provider:'balldontlie',americanPrice:-110,observedAt:at,bookEvidence:[],participationProbability:.9,forecastContext:{featureAsOf:at},modelRelease:'synthetic'};
+const aliasedSnapshot={...snapshot,memberDecisions:[priorHead,{...priorHead,playerName:'Kenneth Gainwell'}]} as never;
+const merged=liveNflPacket({game,window:{gameId:game.id,stage:'early',cutoff:at,lock},snapshot:aliasedSnapshot,observations:{observations:[native,quote]} as never,history,context});
+assert.equal(merged.players.length,1);assert.ok(merged.players[0].evidence.some(e=>e.kind==='independent_model'));
+const conflictingSnapshot={...snapshot,memberDecisions:[priorHead,{...priorHead,playerName:'Kenneth Gainwell',providerPlayerId:'999'}],board:{decisions:[stored]}} as never;
+assert.throws(()=>liveNflPacket({game,window:{gameId:game.id,stage:'early',cutoff:at,lock},snapshot:conflictingSnapshot,observations:{observations:[native,quote]} as never,history,context}),/Ambiguous NFL captured player/);
+// Verified native ID joins historical stats despite a different display name.
+const oldGame={gameId:'past',scheduledStart:'2026-11-01T18:00:00Z',homeTeam:'TB',awayTeam:'NO'};
+const enriched=enrichCachedPacket(packet,{readOnly:true,generatedAt:at,nfl:[],nba:[],priorNba:{} as never,currentNba:{} as never,nflHistory:{...history,games:[oldGame],stats:[{gameId:'past',scheduledStart:oldGame.scheduledStart,playerId:'12',playerName:'Kenneth Gainwell',team:'TB'}]}} as never);
+assert.ok(enriched.players[0].evidence.some(e=>e.kind==='recent_games'));
+console.log('Verified NFL actor proof passed: exact current provider/roster IDs independent of prior model eligibility, bounded documented aliases, wrong-ID/team/game/clock refusal, current versus orphan opening coverage, and native-ID history join. No network calls.');

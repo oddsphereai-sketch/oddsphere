@@ -1,3 +1,4 @@
+import {sameNflPropActorName} from "./nflPlayerIdentity";
 /** Verified current source identity and one forecast authority per unlocked scope. */
 import type {NflPlayerPropsRuntimeDecision as Row} from "../services/football/nflPlayerPropsRuntime";
 import type {GamePacket,Quote} from "./evidenceContract";
@@ -6,7 +7,6 @@ import {propsTeam} from "./teamIdentity";
 import {instant} from "./evidence";
 import {PROPS_AI_NFL_DECISION_RELEASE} from "./releases";
 
-const name=(s:string)=>s.trim().replace(/\s+/g," ").toLowerCase();
 const book=(s:string)=>s.toLowerCase().replace(/[^a-z0-9]/g,"");
 const contract=(side:string,offer?:string)=>side==="yes"||offer==="milestone"?"milestone":"two_way";
 export function nflAiSourceBinding(packet:GamePacket,choices:SiteAiDecision[],now:string){
@@ -16,7 +16,7 @@ export function nflAiSourceBinding(packet:GamePacket,choices:SiteAiDecision[],no
       ||instant(row.lockAt)!==instant(packet.lock)||!row.team||!row.opponent)return null;
     const candidates=packet.players.filter(p=>propsTeam(p.team)===propsTeam(row.team)
       &&propsTeam(p.opponent)===propsTeam(row.opponent)
-      &&(row.providerPlayerId!==null?p.id===`nfl-bdl-player:${row.providerPlayerId}`:name(p.name)===name(row.playerName)));
+      &&(row.providerPlayerId!==null?p.id===`nfl-bdl-player:${row.providerPlayerId}`:sameNflPropActorName(p.name,row.playerName,p.id.replace(/^nfl-bdl-player:/,""))));
     return candidates.length===1?candidates[0].id:null;
   };
   const scope=(id:string,market:string,side:string,offer?:string)=>JSON.stringify([id,market,contract(side,offer)]);

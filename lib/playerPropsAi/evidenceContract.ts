@@ -50,6 +50,8 @@ export type GamePacket = {
   release: typeof PRODUCT_RELEASE; sport: Sport; gameId: string; start: string; lock: string;
   stage: Stage; cutoff: string; players: Player[]; quotes: Quote[];
   sourceLimitations: string[];
+  /** Versioned live-source identity contract; legacy stored inputs retain their own absence. */
+  sourceInputRelease?:string;
   sharedGameContext?: Json;
   /** Native collector identity when the funding calendar uses a separately bound fixture ID. */
   sourceGameId?:string;

@@ -1,5 +1,29 @@
 # Current production model releases and qualified research candidates
 
+## November 8 NFL props verified current actor inputs
+
+Source contract `player_props_ai_nfl_source_2026_11_08_r1_verified_current_actors`,
+source decision R7 `player_props_ai_nfl_decision_2026_11_08_r7_verified_current_actors`,
+writer R72 `nfl_player_props_writer_2026_11_08_r72_verified_current_actors`, member
+R56 `nfl_player_props_member_2026_11_08_r56_verified_current_actors` and lifecycle
+R38 `nfl_player_props_member_lifecycle_2026_11_08_r38_verified_current_actors`
+supersede R6/R71/R55/R37 below. Current provider and exact-game roster IDs can
+identify actors independently of old numerical-model eligibility. Multiple legacy
+display groups merge only after their native IDs agree; identical facts dedupe,
+while conflicting actor IDs still reject. Explicit named
+aliases require their exact native provider ID; conflicting IDs/teams/clocks still
+reject. Verified current IDs join individual history directly. Historical opening
+rows supplement current offered actors rather than introducing orphan actors or
+markets. Unresolved current actors still block a complete review; no player is
+silently removed. Each recorded source input carries the new contract.
+
+Forecast R15, familiar reader R4, wallet R4 and schedule R3 remain exact; accepted
+reviews and every stored locked row remain unchanged. R6's own-side receipt
+capability remains authoritative for future locks alongside R7. No new writer,
+provider job, review slot, request budget or spending allowance. Synthetic paired
+source-qualified promotion/demotion controls remain mandatory; see
+`docs/model-audits/2026-11-08-nfl-props-verified-current-actors.md`.
+
 ## November 8 NFL prop exact side receipts and review-window admission
 
 NFL source decision R6 `player_props_ai_nfl_decision_2026_11_08_r6_exact_quote_receipts`,
