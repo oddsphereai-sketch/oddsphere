@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PredictionRecordRow, PredictionGradeRow } from "../lib/types/domain/Tracking";
 import { readFrozenFirstInningTrackingAuthority, fetchGradesForRecordIds, effectiveTrackingPlayGrade, isTrackingPlayGradeCutEligible } from "../lib/services/trackingAggregateService";
-import { compareTrackingLockExpectations, inspectTrackingSettlements, trackingManifestInSlateWindow, type TrackingLockExpectation } from "../lib/services/audit/trackingIntegrityAudit";
+import { runTrackingIntegrityAudit, compareTrackingLockExpectations, inspectTrackingSettlements, trackingManifestInSlateWindow, type TrackingLockExpectation } from "../lib/services/audit/trackingIntegrityAudit";
 import { dedupePredictionRecordsForTracking } from "../lib/services/trackingAggregateService";
 import { excludeSupersededCfbWinnerRecords, preferAppendOnlyWinnerTrackingCorrections } from "../lib/services/tracking/winnerAccuracyScorecardQuery";
 import { CFB_APPROVED_TRACKING_CORRECTIONS, CFB_PUBLISHED_TRACKING_CORRECTION_MODEL_VERSION as CM, CFB_PUBLISHED_TRACKING_CORRECTION_RELEASE as CR, cfbTrackingCorrectionSupersededRecordId, buildApprovedCfbTrackingCorrection, writeApprovedCfbTrackingCorrections } from "../lib/services/football/cfbPublishedTrackingCorrection";
@@ -87,6 +87,29 @@ async function main() {
  const writer=readFileSync(new URL('../lib/services/football/cfbForwardEvidenceWriter.ts',import.meta.url),'utf8');assert(writer.includes('args.apply ? await writeApprovedCfbTrackingCorrections(args.client) : 0'));
  const append=readFileSync(new URL('../lib/services/football/cfbPublishedTrackingCorrection.ts',import.meta.url),'utf8');assert(!/\.(update|upsert|delete)\(/.test(append));assert(append.includes('matchesCfbForwardEvidencePayloadHash(payload, approval.sourceSha256)'));
  const operator=readFileSync(new URL('./operator/settle-approved-cfb-tracking-corrections.ts',import.meta.url),'utf8');assert(operator.includes("jobName='prediction_pipeline:cfb'"));assert(operator.includes('recordIds:q.data.filter'));assert(!operator.includes('ingestCfbFinalScores'));
+ // Exercise the complete guard with the real CBB storage contract: the
+ // relational slate date is null, while lock publication and ET start are valid.
+ const cbbRecord={...restored,id:901,game_id:902,external_id:903,sport:'cbb',market:'moneyline',pick:'HOME',side:'home',slate_date:'2026-11-07',game_date:'2026-11-08T02:00:00Z',locked_at:'2026-11-08T01:00:00Z',play_grade:'best_angle',member_facing_grade:'best_angle'} as unknown as PredictionRecordRow;
+ const cbbGame={id:902,status:'final',game_date:cbbRecord.game_date,home_score:80,away_score:70,first_inning_runs:null};
+ const cbbGrade=gradeStoredTrackingRecord(cbbRecord,cbbGame);cbbGrade.prediction_record_id=901;
+ const cbbManifest={snapshot_key:'cbb::member-game::903',slate_date:null,generated_at:'2026-11-08T01:00:00Z',id:'903',locked:'2026-11-08T01:00:00Z',starts:'2026-11-08T02:00:00Z',rows:[{market:'moneyline',grade:'Best Angle'}]};
+ let cbbLedger=[cbbRecord];
+ const cbbClauses:Array<[string,string,unknown]>=[];
+ const cbbClient={from(table:string){let like=false,census=false;const q={select(){return q;},order(){return q;},range(){return q;},eq(){return q;},not(){return q;},in(key:string){if(key==='sport')census=true;return q;},like(){like=true;return q;},gte(key:string,value:unknown){if(table==='lab_response_snapshots'&&like)cbbClauses.push(['gte',key,value]);return q;},lte(key:string,value:unknown){if(table==='lab_response_snapshots'&&like)cbbClauses.push(['lte',key,value]);return q;},abortSignal(){return q;},then(resolve:any){let data:unknown[]=[];
+  if(table==='prediction_records_tracking_projection')data=cbbLedger;
+  else if(table==='games'&&!census)data=[cbbGame];
+  else if(table==='prediction_grades')data=[cbbGrade];
+  else if(table==='lab_response_snapshots'&&like){data=[cbbManifest];for(const [op,key,value]of cbbClauses)data=data.filter((r:any)=>r[key]!==null&&(op==='gte'?r[key]>=value!:r[key]<=value!));}
+  return Promise.resolve({data,error:null}).then(resolve);}};return q;}} as unknown as SupabaseClient;
+ const cbbReport=await runTrackingIntegrityAudit({client:cbbClient,now:'2026-11-08T14:00:00Z',from:'2026-11-07'});
+ assert.equal(cbbReport.sports.cbb.publishedActionableLocks,1,'null relational slate date must not hide a published CBB call');assert.equal(cbbReport.errors,0);
+ assert(cbbClauses.every(([,key])=>key==='generated_at'),'bound CBB reads by its writer publication clock');
+ cbbManifest.starts='2026-11-07T02:00:00Z';
+ const oldEtReport=await runTrackingIntegrityAudit({client:cbbClient,now:'2026-11-08T14:00:00Z',from:'2026-11-07'});assert.equal(oldEtReport.sports.cbb.publishedActionableLocks,0,'Thursday ET late game must stay outside Friday window');
+ assert(oldEtReport.findings.some(f=>f.kind==='cbb_published_source_missing'),'a zero-source result with real CBB actionables must fail visibly');
+ cbbManifest.starts='2026-11-08T02:00:00Z';cbbLedger=[];
+ const missingWholeCbb=await runTrackingIntegrityAudit({client:cbbClient,now:'2026-11-08T14:00:00Z',from:'2026-11-07'});
+ assert.equal(missingWholeCbb.sports.cbb.publishedActionableLocks,1);assert(missingWholeCbb.findings.some(f=>f.kind==='published_lock_missing_tracking'),'detect an entirely missing tracked CBB game from its independent member source');
  const cron = readFileSync(new URL("../app/api/cron/tracking-refresh/route.ts", import.meta.url), "utf8");
  assert(cron.includes("sport === sports.at(-1)")); assert(cron.includes("tracking_integrity_errors:"));
  const endpoint = readFileSync(new URL("../app/api/internal/tracking-integrity-audit/route.ts", import.meta.url), "utf8");
