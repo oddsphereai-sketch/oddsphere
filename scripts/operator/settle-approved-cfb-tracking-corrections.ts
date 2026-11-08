@@ -13,7 +13,7 @@ async function main() {
  if(apply){
   const local=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
   const r=await fetch('https://www.oddsphereai.com/api/admin/cbb/contextual-readiness',{headers:{Authorization:`Bearer ${process.env.CRON_SECRET}`}});
-  const body=await r.json();if(!r.ok||body.data?.deployment?.commit!==local)throw new Error('Refusing apply before this exact clean protected production commit is deployed.');
+  const body=await r.json();if(!r.ok||body.deployment?.commit!==local)throw new Error('Refusing apply before this exact clean protected production commit is deployed.');
   if(execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim())throw new Error('Refusing apply from dirty checkout.');
  }
  const jobName='prediction_pipeline:cfb',runId=`approved-cfb-tracking-settlement:${Date.now()}`;
