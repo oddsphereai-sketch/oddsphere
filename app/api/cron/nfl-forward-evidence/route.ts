@@ -1,3 +1,4 @@
+import {hasDuePropsAiReview} from "@/lib/playerPropsAi/dueReview";
 import { cronHandler } from "@/lib/cron/runCron";
 import { supabase } from "@/lib/db/supabase";
 import { OpenWeatherProvider } from "@/lib/providers/real_api/OpenWeatherProvider";
@@ -103,6 +104,7 @@ export async function GET(request: Request): Promise<Response> {
       try {
         playerPropsCadence = planNflPlayerPropsRefresh({
           now: cycleNow,
+          propsAiReviewDue: await hasDuePropsAiReview({client:supabase,sport:"nfl",now:new Date().toISOString()}),
           previous: await readNflPlayerPropsSnapshot({ client: supabase, season, week }),
         });
       } catch (error) {

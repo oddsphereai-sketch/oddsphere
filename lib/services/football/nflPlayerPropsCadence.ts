@@ -2,7 +2,7 @@ import type { NflPlayerPropsProductionSnapshot } from "./nflPlayerPropsProductio
 import { NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE } from "./nflPlayerPropsProductionContract";
 
 export const NFL_PLAYER_PROPS_CADENCE_RELEASE =
-  "nfl_player_props_cadence_2026_10_27_r4_release_aware_refresh" as const;
+  "nfl_player_props_cadence_2026_11_08_r5_ai_review_windows" as const;
 
 const FIFTEEN_MINUTES_MS = 15 * 60_000;
 const THIRTY_MINUTES_MS = 30 * 60_000;
@@ -19,6 +19,7 @@ export type NflPlayerPropsCadencePlan = {
   release: typeof NFL_PLAYER_PROPS_CADENCE_RELEASE;
   run: boolean;
   reason:
+    | "ai_review_due"
     | "missing_snapshot"
     | "invalid_snapshot_time"
     | "release_refresh_due"
@@ -39,10 +40,14 @@ export type NflPlayerPropsCadencePlan = {
  */
 export function planNflPlayerPropsRefresh(args: {
   now: string;
+  propsAiReviewDue?: boolean;
   previous: (Pick<NflPlayerPropsProductionSnapshot, "generatedAt" | "board"> & { release: string }) | null;
 }): NflPlayerPropsCadencePlan {
   const nowMs = Date.parse(args.now);
   if (!Number.isFinite(nowMs)) throw new Error("NFL player props cadence now is invalid.");
+  if (args.propsAiReviewDue) return plan(true, "ai_review_due", 15,
+    args.previous&&Number.isFinite(Date.parse(args.previous.generatedAt))?(nowMs-Date.parse(args.previous.generatedAt))/60_000:null,
+    args.previous?nearestLockMinutes(args.previous,nowMs):null);
   if (!args.previous) return plan(true, "missing_snapshot", 60, null, null);
 
   const generatedAtMs = Date.parse(args.previous.generatedAt);
