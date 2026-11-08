@@ -4,6 +4,8 @@ on:
     paths:
       - 'app/api/cron/cfb-forward-evidence/route.ts'
       - 'lib/services/football/cfbOfficialTrackingRecord.ts'
+      - 'lib/services/football/cfbPublishedTrackingCorrection.ts'
+      - 'scripts/test-tracking-integrity-audit.ts'
       - 'lib/services/football/cfbForwardEvidenceWriter.ts'
       - 'lib/services/football/cfbTrackingRecordStore.ts'
       - 'scripts/operator/audit-cfb-published-tracking-denominators.ts'
@@ -26,3 +28,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node --import tsx scripts/test-cfb-v1-production.ts
+      - run: node --import tsx scripts/test-tracking-integrity-audit.ts

@@ -15,7 +15,7 @@ import {
   uclLockManifestCohortKey,
   type UclLockManifestRow,
 } from "../ucl/uclLockManifest";
-import { nflTrackingCorrectionSupersededRecordId } from "../football/nflPublishedTrackingCorrection";
+import { trackingCorrectionSupersededRecordId } from "./trackingCorrectionPrecedence";
 
 export const WINNER_ACCURACY_QUERY_PAGE_SIZE = 1_000;
 export const WINNER_ACCURACY_DAILY_RECORD_CAP = 2_000;
@@ -406,7 +406,7 @@ export function preferAppendOnlyWinnerTrackingCorrections<T extends Pick<
   "id" | "model_version" | "tracking_correction_release" | "supersedes_prediction_record_id"
 >>(records: T[]): T[] {
   const superseded = new Set(records.flatMap((record) => {
-    const id = nflTrackingCorrectionSupersededRecordId({
+    const id = trackingCorrectionSupersededRecordId({
       modelVersion: record.model_version,
       correctionRelease: record.tracking_correction_release,
       supersedesPredictionRecordId: record.supersedes_prediction_record_id,

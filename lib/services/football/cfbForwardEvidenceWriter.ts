@@ -1,3 +1,4 @@
+import { writeApprovedCfbTrackingCorrections } from "./cfbPublishedTrackingCorrection";
 import { readCfbExistingTrackingRecords } from "./cfbTrackingRecordStore";
 import {qualifyMoneylinePrice} from "../dailyEdge/moneylinePricePolicy";
 import {CFB_V1_PRICE_BOUNDARY_PREVIOUS_DECISION_RELEASE} from "./cfbV1Decision";
@@ -192,7 +193,7 @@ import { fetchCfbOwlsProvider } from "./cfbOwlsProvider";
 import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_11_08_r154_complete_tracking_identity_read" as const;
+  "cfb_forward_evidence_writer_2026_11_08_r155_owner_approved_tracking_corrections" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -2489,7 +2490,12 @@ export async function writeCfbOfficialTracking(args: {
 async function writeOfficialTrackingSafely(
   args: Parameters<typeof writeCfbOfficialTracking>[0],
 ): Promise<TrackingResult> {
-  return runCfbOfficialTrackingSafely(() => writeCfbOfficialTracking(args));
+  return runCfbOfficialTrackingSafely(async () => {
+    const corrections = args.apply ? await writeApprovedCfbTrackingCorrections(args.client) : 0;
+    const result = await writeCfbOfficialTracking(args);
+    return { ...result, trackingAttempted: result.trackingAttempted || corrections > 0,
+      trackingRecordsInserted: result.trackingRecordsInserted + corrections };
+  });
 }
 
 export function planCfbTrackingRecordInsert(args: {

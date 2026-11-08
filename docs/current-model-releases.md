@@ -1,8 +1,46 @@
 # Current production model releases and qualified research candidates
 
+## November 8 owner-approved historical CFB T60 corrections
+
+Daniel explicitly approved adding all nine reviewed October 24/31 calls after
+reviewing their dates, exact saved T60 picks and 8-1 settled outcome (Best 1-0,
+Leans 7-1). This is a fixed nine-record authorization, not a general legacy
+rewrite. Canonical CFB writer is
+`cfb_forward_evidence_writer_2026_11_08_r155_owner_approved_tracking_corrections`.
+Its append-only correction release/model are
+`cfb_published_tracking_correction_2026_11_08_r1_owner_approved_t60` /
+`cfb_tracking_original_t60_correction_2026_11_08_r1`. Original records and payloads
+remain unchanged. Pinned source IDs/hashes, exact T60 eligibility and original
+accuracy-only record IDs are required. One authoritative serializer copies the
+original tuple; no model or postgame price reconstruction occurs. Member,
+legacy and winner-accuracy readers prefer explicit correction markers once.
+Current board promotions/demotions: 0/0; history restores 1 Best and 8 Leans.
+See `docs/model-audits/2026-11-08-legacy-cfb-tracking-owner-review.md`.
+
+## November 8 cross-sport tracking integrity and original FI lock authority
+
+Tracking aggregate is `tracking_aggregate_v22_original_lock_correction_authority_2026_11_08`;
+member cache v16 and foundation snapshot r13 end in `original-lock-authority`.
+Eight legacy MLB FI rows already retain their original actionable member lock
+but indexed Held/Toss-Up fields suppressed their grade cuts. Seven have settled win/loss results; one July 11 Lean retains its original Void pending separate owner review.
+The reader now uses the same exact stored lock authority as canonical grading,
+with a narrow bounded subobject read. Original rows/payloads remain unchanged:
+visibility restores 1 stored Best Angle and 7 stored Leans; current board grade
+promotions/demotions are 0/0. A failed grade query cannot publish an empty ledger.
+
+The existing tracking-refresh publication owner is r4
+`tracking_refresh_publication_2026_11_08_r4_all_sport_integrity_guard`. It runs the
+SELECT-only `tracking_integrity_audit_2026_11_08_r1_published_locks_and_settlement`
+once at the final scheduled sport (or a one-sport operator cycle), covering
+all Daily Edge sports/competitions over a bounded recent window. Independent
+saved football/CBB/member/native manifests detect calls absent from Tracking;
+settlement checks detect overdue/mismatched results. Findings/failures persist
+as partial cron health, with a private read-only proof endpoint. No provider,
+new schedule, prediction writer, grade write, model or stake change is added.
+
 ## November 8 CFB complete tracking identity reads
 
-Sole writer is `cfb_forward_evidence_writer_2026_11_08_r154_complete_tracking_identity_read`.
+The preceding coverage repair was writer `cfb_forward_evidence_writer_2026_11_08_r154_complete_tracking_identity_read`; r155 above preserves that complete identity read.
 Its existing-record lookup uses bounded, ordered, complete identity-only pages;
 the season ledger exceeds the production REST 1,000-row response cap. The old
 truncated lookup retried existing immutable keys, causing duplicate-key rejection
