@@ -92,6 +92,10 @@ const stalePacket={...nflPacket,quotes:nflPacket.quotes.map(q=>({...q,receivedAt
 assert.strictEqual(applyNflSiteAi({...nflBoard,decisions:[sourceRow]},stalePacket,nflChoices,now).decisions[0],sourceRow);
 const livePacket={...nflPacket,quotes:nflPacket.quotes.map(q=>({...q,live:true}))};
 assert.strictEqual(applyNflSiteAi({...nflBoard,decisions:[sourceRow]},livePacket,nflChoices,now).decisions[0],sourceRow);
+const distinctReceiptPacket={...nflPacket,quotes:nflPacket.quotes.map(q=>({...q,receivedAt:q.side==='under'?'2026-11-07T20:00:30Z':now}))};
+const receiptApplied=applyNflSiteAi({...nflBoard,decisions:[sourceRow,underRow]},distinctReceiptPacket,nflChoices,'2026-11-07T20:01:00Z');
+assert.equal(receiptApplied.decisions.find(r=>r.side==='over')?.aiReview?.quoteConfirmedAt,now);
+assert.equal(receiptApplied.decisions.find(r=>r.side==='under')?.aiReview?.quoteConfirmedAt,'2026-11-07T20:00:30Z');
 const mlbPacket={...packet,sport:"mlb" as const,players:[{...packet.players[0],markets:["batter_hits"]}],quotes:packet.quotes.map(q=>({...q,market:"batter_hits"}))};
 const mlbChoices=choices.map(c=>({...c,market:"batter_hits"}));
 const mlbRow={id:"legacy",providerIds:{gameId:"native",mlbStatsPlayerId:"p",bdlPlayerId:1},market:"batter_hits",line:12.5,book:"one",side:"over",marketProbability:.4,independentProbability:.6,units:1,lockStatus:null,oddsMovement:null,missingFeatures:[],oddsSanity:[]} as unknown as Parameters<typeof applyMlbSiteAi>[0][number];
