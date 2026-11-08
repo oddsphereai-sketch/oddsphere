@@ -579,12 +579,16 @@ assert.equal(NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_JSON_BYTES, 192_000_000);
 assert.equal(NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_OBSERVATIONS, 250_000);
 assert.equal(
   NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE,
-  "nba_player_props_private_store_2026_10_28_r6_expanded_bounded_market_history_capacity",
+  "nba_player_props_private_store_2026_11_08_r8_interned_ai_coverage",
 );
 assert.deepEqual(decodeNbaPlayerPropsPrivatePayload({
   ...envelope,
   release: "nba_player_props_private_store_2026_10_23_r5_bounded_market_history_capacity",
 }, "market_history"), initialHistory.history, "the deployed r5 private payload must migrate without losing observations");
+
+for(const release of ["nba_player_props_private_store_2026_10_28_r6_expanded_bounded_market_history_capacity","nba_player_props_private_store_2026_11_07_r7_native_reconfirmation"]){
+ assert.deepEqual(decodeNbaPlayerPropsPrivatePayload({...envelope,release},"market_history"),initialHistory.history,"legacy source confirmation and quote history remain exact");
+}
 
 let boundedHistory = initialHistory.history;
 for (let index = 1; index <= 8; index += 1) {

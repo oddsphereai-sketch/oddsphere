@@ -1,3 +1,4 @@
+import { stringifyPropsAiCoverage, parsePropsAiCoverage } from "../../playerPropsAi/coverageCodec";
 import { createHash } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -14,7 +15,8 @@ import {
 
 export const NFL_PLAYER_PROPS_SNAPSHOT_KEY_PREFIX = "nfl::player-props" as const;
 export const NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE =
-  "nfl_player_props_snapshot_envelope_2026_09_02_r1_gzip_deduplicated_member" as const;
+  "nfl_player_props_snapshot_envelope_2026_11_08_r2_interned_ai_coverage" as const;
+const LEGACY_ENVELOPE_RELEASE = "nfl_player_props_snapshot_envelope_2026_09_02_r1_gzip_deduplicated_member";
 // The canonical snapshot retains prior-date locked rows for tracking and
 // settlement after those rows roll off the member board. It therefore needs a
 // larger decoded ceiling than the current/future member transport. Every write
@@ -34,7 +36,7 @@ type NflPlayerPropsStoredSnapshot = Omit<NflPlayerPropsProductionSnapshot, "memb
 
 export type NflPlayerPropsSnapshotEnvelope = {
   kind: "nfl_player_props_snapshot_v1";
-  envelopeRelease: typeof NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE;
+  envelopeRelease: typeof NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE | typeof LEGACY_ENVELOPE_RELEASE;
   encoding: "gzip-base64";
   memberDecisionsStorage: "derived_from_board_non_held" | "embedded";
   checksum: string;
@@ -181,7 +183,7 @@ export async function writeNflPlayerPropsSnapshot(args: {
 }): Promise<void> {
   const generatedAt = args.snapshot.generatedAt;
   const memberSnapshot = buildNflPlayerPropsMemberSnapshot(args.snapshot, generatedAt);
-  const memberJson = JSON.stringify(memberSnapshot);
+  const memberJson = stringifyPropsAiCoverage(memberSnapshot);
   const memberJsonBytes = Buffer.byteLength(memberJson);
   if (memberJsonBytes > NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES) {
     throw new Error(
@@ -253,12 +255,12 @@ export function encodeNflPlayerPropsSnapshotPayload(
   snapshot: NflPlayerPropsProductionSnapshot,
 ): NflPlayerPropsSnapshotEnvelope {
   const derivedMemberDecisions = deriveNflPlayerPropsMemberDecisions(snapshot.board);
-  const canDeriveMemberDecisions = JSON.stringify(snapshot.memberDecisions) === JSON.stringify(derivedMemberDecisions);
+  const canDeriveMemberDecisions = stringifyPropsAiCoverage(snapshot.memberDecisions) === stringifyPropsAiCoverage(derivedMemberDecisions);
   const { memberDecisions, ...withoutMemberDecisions } = snapshot;
   const stored: NflPlayerPropsStoredSnapshot = canDeriveMemberDecisions
     ? withoutMemberDecisions
     : { ...withoutMemberDecisions, memberDecisions };
-  const json = JSON.stringify(stored);
+  const json = stringifyPropsAiCoverage(stored);
   const jsonBytes = Buffer.byteLength(json);
   if (jsonBytes > NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES) {
     throw new Error(`NFL player props snapshot exceeds the ${NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES}-byte JSON limit.`);
@@ -298,7 +300,7 @@ export function decodeNflPlayerPropsSnapshotPayload(value: unknown): NflPlayerPr
     if (decoded.byteLength !== value.uncompressedBytes) return null;
     const json = decoded.toString("utf8");
     if (createHash("sha256").update(json).digest("hex") !== value.checksum) return null;
-    const stored = JSON.parse(json) as unknown;
+    const stored = parsePropsAiCoverage(json);
     if (!isStoredSnapshot(stored)) return null;
     if (stored.release !== value.snapshotRelease || stored.season !== value.season
       || stored.week !== value.week || stored.generatedAt !== value.generatedAt) return null;
@@ -333,7 +335,7 @@ export function measureNflPlayerPropsSnapshotPayload(
 function isEnvelope(value: unknown): value is NflPlayerPropsSnapshotEnvelope {
   if (!isRecord(value)) return false;
   return value.kind === "nfl_player_props_snapshot_v1"
-    && value.envelopeRelease === NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE
+    && (value.envelopeRelease === NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE || value.envelopeRelease === LEGACY_ENVELOPE_RELEASE)
     && value.encoding === "gzip-base64"
     && (value.memberDecisionsStorage === "derived_from_board_non_held" || value.memberDecisionsStorage === "embedded")
     && typeof value.checksum === "string"

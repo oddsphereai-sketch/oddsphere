@@ -1,3 +1,4 @@
+import { stringifyPropsAiCoverage, parsePropsAiCoverage } from "../../playerPropsAi/coverageCodec";
 import { createHash } from "node:crypto";
 import { isUtf8 } from "node:buffer";
 import { gunzipSync, gzipSync, createGzip } from "node:zlib";
@@ -9,8 +10,9 @@ import type { NbaPlayerPropPriceObservation } from "./nbaPlayerPropsContract";
 import type { NbaPlayerPropsMemberSnapshot } from "./nbaPlayerPropsProductContract";
 
 export const NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE =
-  "nba_player_props_private_store_2026_11_07_r7_native_reconfirmation" as const;
+  "nba_player_props_private_store_2026_11_08_r8_interned_ai_coverage" as const;
 const NBA_PLAYER_PROPS_PRIVATE_STORE_LEGACY_RELEASES = new Set([
+  "nba_player_props_private_store_2026_11_07_r7_native_reconfirmation",
   "nba_player_props_private_store_2026_10_28_r6_expanded_bounded_market_history_capacity",
   "nba_player_props_private_store_2026_10_23_r5_bounded_market_history_capacity",
   "nba_player_props_private_store_2026_10_21_r4_bounded_quote_chronology",
@@ -287,7 +289,7 @@ export function decodeNbaPlayerPropsPrivatePayload<T>(
 }
 
 function encode(payload: unknown, payloadKind: Envelope["payloadKind"]): Envelope {
-  const json = JSON.stringify(payload);
+  const json = payloadKind === "candidate_snapshot" ? stringifyPropsAiCoverage(payload) : JSON.stringify(payload);
   const uncompressedBytes = Buffer.byteLength(json);
   const limits = payloadLimits(payloadKind);
   if (uncompressedBytes > limits.json) {
@@ -336,7 +338,7 @@ function decode<T>(value: unknown, payloadKind: Envelope["payloadKind"]): T | nu
     // Preserve legacy replacement-character semantics for malformed UTF-8.
     const hashInput = isUtf8(decoded) ? decoded : decoded.toString("utf8");
     if (createHash("sha256").update(hashInput).digest("hex") !== value.checksum) return null;
-    return JSON.parse(decoded.toString("utf8")) as T;
+    return (payloadKind === "candidate_snapshot" ? parsePropsAiCoverage(decoded.toString("utf8")) : JSON.parse(decoded.toString("utf8"))) as T;
   } catch {
     return null;
   }

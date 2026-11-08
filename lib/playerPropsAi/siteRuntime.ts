@@ -1,3 +1,4 @@
+import {propsAiGenerationPool} from "./completionWindow";
 /** Invoked only by the existing sport-scoped prediction writer. Never owns a timer or member write. */
 import type {SupabaseClient} from "@supabase/supabase-js";
 import type {GamePacket,Sport} from "./evidenceContract";
@@ -9,7 +10,7 @@ import {loadPropsCalendar,calendarWalletPlan,matchPropsCalendarGame} from "./cal
 import {runPropsReview,type AcceptedGameReview} from "./reviewer";
 import {selectSiteReview,siteAiDecisions,type SiteAiDecision} from "./publication";
 import {instant} from "./evidence";
-import {PROPS_AI_RELEASE} from "./releases";
+import {PROPS_AI_RELEASE,PROPS_AI_SCHEDULE_RELEASE,PROPS_AI_MIN_REVIEW_WINDOW_MS} from "./releases";
 export type SiteReviewResult={game:LivePropsGame;packet:GamePacket;decisions:SiteAiDecision[]};
 export type SiteReviewOutcome={status:string;games:SiteReviewResult[];findings:string[]};
 export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport;games:LivePropsGame[];writerRunId?:string;load:(game:LivePropsGame,window:CapturedReviewWindow)=>Promise<GamePacket>|GamePacket;fetchImpl?:typeof fetch;clock?:()=>string;deadline?:number}):Promise<SiteReviewOutcome>{
@@ -17,7 +18,7 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
   // Counterfactual gate: zero database, calendar, provider, token-count or generation I/O.
   if(!config.integrated)return {status:"disabled",games:[],findings:[]};
   const clock=args.clock??(()=>new Date().toISOString()),now=clock(),deadline=args.deadline??Date.now()+230000,findings:string[]=[],results:SiteReviewResult[]=[];
-  const finish=(outcome:SiteReviewOutcome)=>{console.info(`PLAYER_PROPS_AI_SITE ${JSON.stringify({release:PROPS_AI_RELEASE,sport:args.sport,status:outcome.status,reviewedGames:outcome.games.length,findings:outcome.findings.slice(0,16)})}`);return outcome;};
+  const finish=(outcome:SiteReviewOutcome)=>{console.info(`PLAYER_PROPS_AI_SITE ${JSON.stringify({release:PROPS_AI_RELEASE,scheduleRelease:PROPS_AI_SCHEDULE_RELEASE,sport:args.sport,status:outcome.status,reviewedGames:outcome.games.length,findings:outcome.findings.slice(0,16)})}`);return outcome;};
   const store=new PropsAiStore(args.client);
   try{
     const control=await args.client.from("player_props_ai_control").select("release,paid_enabled").eq("singleton",true).single();
@@ -31,6 +32,7 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
       if(!plan.funded){findings.push(`ai_unavailable:${plan.reason??"month_not_funded"}`);calendar=null;}
       await store.reap();
     }
+    const generationSlot=propsAiGenerationPool(16);
     const active=args.games.filter(g=>instant(g.start)-3600000>instant(clock()));
     const nativeByFundedId=new Map<string,LivePropsGame>();
     if(calendar)for(const g of active){try{nativeByFundedId.set(matchPropsCalendarGame(calendar,args.sport,g).id,g);}catch{findings.push(`calendar_identity_unavailable:${g.id}`);}}
@@ -41,15 +43,15 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
       const finalDue=new Set((due.data??[]).filter(j=>j.stage==="final").map(j=>j.game_id));
       const runnable=(due.data??[]).filter(j=>j.stage!=="early"||!finalDue.has(j.game_id));
       if(runnable.length!==(due.data??[]).length)findings.push("early_window_missed_final_only");
-      // Global SQL concurrency is two. Whole game coverage is accepted atomically.
-      for(let i=0;i<runnable.length;i+=2){
-        if(deadline-Date.now()<40000){findings.push("review_deferred_writer_deadline");break;}
-        await Promise.all(runnable.slice(i,i+2).map(async job=>{
+      // v66 bounds claims to sixteen whole games; one sport-wide pool bounds generation to sixteen requests.
+      for(let i=0;i<runnable.length;i+=16){
+        if(i>0||deadline-Date.now()<PROPS_AI_MIN_REVIEW_WINDOW_MS){findings.push("review_deferred_writer_deadline");break;}
+        await Promise.all(runnable.slice(i,i+16).map(async job=>{
           const native=nativeByFundedId.get(job.game_id)!;
           try{
             const packet=await args.load(native,{gameId:native.id,stage:job.stage,cutoff:clock(),lock:job.lock_at});
             // Funding identity is separate from the collector's exact native identity.
-            const result=await runPropsReview({packet:{...packet,sourceGameId:native.id,gameId:job.game_id},job,store,key:config.key,writerRunId:args.writerRunId!,preferStronger:job.stage==="final"&&packet.players.some(p=>p.missing.length>0),fetchImpl:args.fetchImpl,clock,deadline});
+            const result=await runPropsReview({packet:{...packet,sourceGameId:native.id,gameId:job.game_id},job,store,key:config.key,writerRunId:args.writerRunId!,generationSlot,preferStronger:job.stage==="final"&&packet.players.some(p=>p.missing.length>0),fetchImpl:args.fetchImpl,clock,deadline});
             if(result.status!=="completed")findings.push(`review_unavailable:${native.id}:${"reason" in result?result.reason:result.status}`);
           }catch{findings.push(`source_or_review_unavailable:${native.id}`);}
         }));
