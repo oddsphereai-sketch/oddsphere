@@ -1,5 +1,31 @@
 # Current production model releases and qualified research candidates
 
+## November 8 NFL output headroom and retained R15 authority
+
+Future AI generations are R16 `player_props_ai_2026_11_08_r16_nfl_output_headroom`;
+sole NFL writer R75 is `nfl_player_props_writer_2026_11_08_r75_nfl_output_headroom`.
+A normal R15 final returned one incomplete 7,000-token part. NFL requests
+target four actors where possible, with an adaptive count up to eight to keep
+ordinary games within eight parts and the existing completion allowance. All
+individual evidence/markets and full peer baselines remain exact. Larger games
+retain the preceding sixteen-part/128-actor capacity.
+The per-request output ceiling remains 7,000. NBA/MLB batching and all instructions,
+physical coordinates, law/grade formulas, prices, model choices and two slots stay
+exact. New generations use R16 for forward attribution; accepted R15 laws remain
+readable under R15 with exact values, never relabeled or repurchased. Failed and
+completed slots are not reset. Existing locks retain exact reader/writer authority.
+
+The full-month NFL default envelope changes from four 115k-input parts to eight
+60k-input parts at the same output ceiling: 7.6 cents versus 6 cents reserved per
+primary slot at configured rates, not a bill. Real model-specific input counts
+and the serialized wallet still fund actual full requests before sending. No
+monthly limit or stronger quota increases: target $50, emergency $60. Source
+calendar capture/cadence and NBA/MLB envelopes stay exact. Member R57/lifecycle
+R39/source decision R8/selection R1/transport and envelope R3/reader R4 remain
+authoritative. MLB independent R44 remains exact. See
+`model-audits/2026-11-08-props-nfl-output-headroom.md` for tests and limits.
+
+
 ## November 8 NFL full-board member transport capacity
 
 NFL member transport R3 and canonical envelope R3 end in `review_metadata`; sole

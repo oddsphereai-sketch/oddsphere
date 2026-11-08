@@ -1,5 +1,7 @@
 /** One authoritative identity path for the AI-assisted player-prop product. */
-export const PROPS_AI_RELEASE = "player_props_ai_2026_11_08_r15_review_window_handoff" as const;
+export const PROPS_AI_RELEASE = "player_props_ai_2026_11_08_r16_nfl_output_headroom" as const;
+export const PROPS_AI_ACCEPTED_RELEASES=[PROPS_AI_RELEASE,"player_props_ai_2026_11_08_r15_review_window_handoff"] as const;
+export const PROPS_AI_NFL_TARGET_ACTORS_PER_PART=4;
 export const PROPS_AI_NFL_DECISION_RELEASE="player_props_ai_nfl_decision_2026_11_08_r8_player_scope_publication" as const;
 export const PROPS_AI_SELECTION_RELEASE="player_props_ai_selection_2026_11_08_r1_reviewed_player_scopes" as const;
 export const PROPS_AI_NFL_EXACT_RECEIPT_RELEASES:readonly string[]=[PROPS_AI_NFL_DECISION_RELEASE,"player_props_ai_nfl_decision_2026_11_08_r7_verified_current_actors","player_props_ai_nfl_decision_2026_11_08_r6_exact_quote_receipts"];

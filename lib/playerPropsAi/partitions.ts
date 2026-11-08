@@ -2,7 +2,7 @@ import type { GamePacket, Json } from "./evidenceContract";
 import { digest, invariant, validatePacket } from "./evidence";
 import { jointReviewRequest } from "./request";
 import { countAiInput } from "./openai";
-import { PROPS_AI_MAX_INPUT_PER_REQUEST, PROPS_AI_MAX_OUTPUT_PER_REQUEST, PROPS_AI_MAX_PARTS, PROPS_AI_PRIMARY_MODEL, type PropsAiModel } from "./releases";
+import { PROPS_AI_NFL_TARGET_ACTORS_PER_PART, PROPS_AI_MAX_INPUT_PER_REQUEST, PROPS_AI_MAX_OUTPUT_PER_REQUEST, PROPS_AI_MAX_PARTS, PROPS_AI_PRIMARY_MODEL, type PropsAiModel } from "./releases";
 export function playerSubset(packet: GamePacket, ids: string[]): GamePacket {
   const included = new Set(ids);
   const markets: string[] = [], times: string[] = [], sources: string[] = [];
@@ -19,7 +19,8 @@ export async function prepareReviewParts(packet: GamePacket, args: { key: string
   validatePacket(packet); const model = args.model ?? PROPS_AI_PRIMARY_MODEL;
   const count = args.count ?? ((p, m) => countAiInput(jointReviewRequest(p, m, PROPS_AI_MAX_OUTPUT_PER_REQUEST), args));
   // Coverage notes plus joint scenarios need a bounded output envelope too.
-  const structurallySafe = (p: GamePacket) => p.players.length <= 8 && p.players.reduce((n,player)=>n+player.evidence.length,0)<=800;
+  const actorLimit=packet.sport==="nfl"?Math.min(8,Math.max(PROPS_AI_NFL_TARGET_ACTORS_PER_PART,Math.ceil(packet.players.length/8))):8;
+  const structurallySafe = (p: GamePacket) => p.players.length <= actorLimit && p.players.reduce((n,player)=>n+player.evidence.length,0)<=800;
   let parts: {packet:GamePacket;inputTokens:number}[] = [];
   if (structurallySafe(packet)) {
     const tokens=await count(packet,model);
@@ -30,9 +31,9 @@ export async function prepareReviewParts(packet: GamePacket, args: { key: string
     // Size estimates choose whole-player bins; the actual model-specific count is
     // still authoritative. No source, player or market is truncated to fit.
     const weighted=packet.players.map(p=>({id:p.id,weight:JSON.stringify(jointReviewRequest(playerSubset(packet,[p.id]),model,PROPS_AI_MAX_OUTPUT_PER_REQUEST)).length})).sort((a,b)=>b.weight-a.weight);
-    for (let numberOfBins=2;numberOfBins<=Math.min(PROPS_AI_MAX_PARTS,packet.players.length);numberOfBins++) {
+    for (let numberOfBins=Math.max(2,Math.ceil(packet.players.length/actorLimit));numberOfBins<=Math.min(PROPS_AI_MAX_PARTS,packet.players.length);numberOfBins++) {
       const bins:string[][]=Array.from({length:numberOfBins},()=>[]),loads=Array(numberOfBins).fill(0) as number[];
-      for(const p of weighted){const i=loads.indexOf(Math.min(...loads));bins[i].push(p.id);loads[i]+=p.weight;}
+      for(const p of weighted){const available=loads.map((load,i)=>({load,i})).filter(({i})=>bins[i].length<actorLimit);const i=available.sort((a,b)=>a.load-b.load)[0].i;bins[i].push(p.id);loads[i]+=p.weight;}
       if(bins.some(b=>!b.length))continue;
       const seen=new Set<string>();
       for(let iteration=0;iteration<6;iteration++){
@@ -41,7 +42,8 @@ export async function prepareReviewParts(packet: GamePacket, args: { key: string
         if(!packets.every(structurallySafe))break;
         const tokens=await Promise.all(packets.map(p=>count(p,model)));
         if(tokens.every(n=>n<=PROPS_AI_MAX_INPUT_PER_REQUEST)){parts=packets.map((p,i)=>({packet:p,inputTokens:tokens[i]}));break;}
-        const from=tokens.indexOf(Math.max(...tokens)),to=tokens.indexOf(Math.min(...tokens));
+        const from=tokens.indexOf(Math.max(...tokens)),available=tokens.map((load,i)=>({load,i})).filter(({i})=>i!==from&&bins[i].length<actorLimit).sort((a,b)=>a.load-b.load);
+        if(!available.length)break;const to=available[0].i;
         const moved=weighted.filter(p=>bins[from].includes(p.id)).sort((a,b)=>Math.abs((loads[from]-a.weight)-(loads[to]+a.weight))-Math.abs((loads[from]-b.weight)-(loads[to]+b.weight)))[0];
         if(!moved||bins[from].length<=1)break;
         bins[from]=bins[from].filter(id=>id!==moved.id);bins[to].push(moved.id);loads[from]-=moved.weight;loads[to]+=moved.weight;

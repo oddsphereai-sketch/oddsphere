@@ -15,7 +15,7 @@ const paths={nba:"basketball/nba",nfl:"football/nfl",mlb:"baseball/mlb"};
 /** Cost envelopes are configurable ceilings, not truncated evidence. Actual larger packets need new full-month funding. */
 export const DEFAULT_PROPS_SOURCE_BOUNDS:Record<Sport,RequestBound[]>={
   nba:Array.from({length:3},()=>({input_tokens:70000,max_output_tokens:7000})),
-  nfl:Array.from({length:4},()=>({input_tokens:115000,max_output_tokens:7000})),
+  nfl:Array.from({length:8},()=>({input_tokens:60000,max_output_tokens:7000})),
   mlb:Array.from({length:3},()=>({input_tokens:75000,max_output_tokens:7000})),
 };
 function record(v:unknown):Record<string,unknown>{return v&&typeof v==="object"&&!Array.isArray(v)?v as Record<string,unknown>:{};}
