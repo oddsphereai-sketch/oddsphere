@@ -4,6 +4,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PredictionRecordRow, PredictionGradeRow } from "../lib/types/domain/Tracking";
 import { readFrozenFirstInningTrackingAuthority, fetchGradesForRecordIds, effectiveTrackingPlayGrade, isTrackingPlayGradeCutEligible } from "../lib/services/trackingAggregateService";
 import { compareTrackingLockExpectations, inspectTrackingSettlements, trackingManifestInSlateWindow, type TrackingLockExpectation } from "../lib/services/audit/trackingIntegrityAudit";
+import { dedupePredictionRecordsForTracking } from "../lib/services/trackingAggregateService";
+import { preferAppendOnlyWinnerTrackingCorrections } from "../lib/services/tracking/winnerAccuracyScorecardQuery";
+import { CFB_APPROVED_TRACKING_CORRECTIONS, CFB_PUBLISHED_TRACKING_CORRECTION_MODEL_VERSION as CM, CFB_PUBLISHED_TRACKING_CORRECTION_RELEASE as CR, cfbTrackingCorrectionSupersededRecordId, buildApprovedCfbTrackingCorrection, writeApprovedCfbTrackingCorrections } from "../lib/services/football/cfbPublishedTrackingCorrection";
 import { gradeStoredTrackingRecord } from "../lib/services/predictionGradingService";
 
 async function main() {
@@ -52,6 +55,33 @@ async function main() {
  assert.equal(inspectTrackingSettlements({ records: [restored], games: new Map([[10, { ...outcome, status: "STATUS_POSTPONED" }]]), grades: new Map([[1, postponed]]), now }).length, 0);
  const wnba = { ...restored, sport: "wnba", market: "spread", slate_date: "2026-07-09" } as PredictionRecordRow;
  assert.equal(gradeStoredTrackingRecord(wnba, outcome).result, "void", "audit and writer share legacy slate-void semantics");
+ const approvals=CFB_APPROVED_TRACKING_CORRECTIONS;
+ assert.equal(approvals.length,9);assert.equal(new Set(approvals.map(a=>a.originalId)).size,9);
+ assert.equal(new Set(approvals.map(a=>a.sourceId)).size,6);
+ for(const a of approvals){
+  assert.match(a.sourceSha256,/^[a-f0-9]{64}$/);
+  assert.equal(cfbTrackingCorrectionSupersededRecordId({modelVersion:CM,correctionRelease:CR,supersedesPredictionRecordId:a.originalId}),a.originalId);
+ }
+ for(const bad of [{modelVersion:'wrong',correctionRelease:CR,supersedesPredictionRecordId:478269},{modelVersion:CM,correctionRelease:'wrong',supersedesPredictionRecordId:478269},{modelVersion:CM,correctionRelease:CR,supersedesPredictionRecordId:999}])assert.equal(cfbTrackingCorrectionSupersededRecordId(bad),null);
+ const fakePayload={capturedAt:'2026-10-24T18:30:15.741Z',game:{scheduledStart:'2026-10-24T19:30:00Z'},decisions:{evaluatedBets:[]}} as never;
+ const fakeOriginal={id:478269,sport:'cfb',external_id:457744,market:'total',prediction_source:'cfb_forward_evidence_published_pregame_accuracy_recovery',play_grade:'no_play',locked_at:'2026-10-18T04:00:16.340Z',odds_american:null} as PredictionRecordRow;
+ assert.throws(()=>buildApprovedCfbTrackingCorrection({source:fakeOriginal,payload:fakePayload,evidenceId:approvals[8].sourceId,evidenceSha256:'0'.repeat(64)}),/refuses unapproved or changed source/);
+ assert.throws(()=>buildApprovedCfbTrackingCorrection({source:{...fakeOriginal,id:123},payload:fakePayload,evidenceId:approvals[8].sourceId,evidenceSha256:approvals[8].sourceSha256}),/refuses unapproved or changed source/);
+ const original={...restored,sport:'cfb',id:478269,market:'total',play_grade:'no_play',member_facing_grade:'no_play',model_version:'original',snapshot_json:{}} as PredictionRecordRow;
+ const corrected={...original,id:999999,play_grade:'best_angle',member_facing_grade:'best_angle',model_version:CM,snapshot_json:{tracking_correction_release:CR,supersedes_prediction_record_id:478269}} as PredictionRecordRow;
+ const originalCopy=structuredClone(original);
+ for(const ordered of [[original,corrected],[corrected,original]]){
+  const unique=dedupePredictionRecordsForTracking(ordered);assert.equal(unique.length,1);assert.equal(unique[0].id,999999);
+ }
+ assert.deepEqual(original,originalCopy);
+ const winnerRows=[{id:478269,model_version:'original',tracking_correction_release:null,supersedes_prediction_record_id:null},{id:999999,model_version:CM,tracking_correction_release:CR,supersedes_prediction_record_id:478269}];
+ assert.deepEqual(preferAppendOnlyWinnerTrackingCorrections(winnerRows),[winnerRows[1]]);
+ let correctionWrites=0;
+ const alreadyDone={from(){const query={select(){return query;},eq(_key:string,_value:string){return query;},then(resolve:any){return Promise.resolve({data:approvals.map(a=>({id:a.originalId+100000,external_id:a.externalId,market:a.market,model_version:CM,release:CR,supersedes:a.originalId})),error:null}).then(resolve);},insert(){correctionWrites++;throw new Error('must not insert twice');},update(){throw new Error('immutable');},delete(){throw new Error('immutable');}};return query;}} as unknown as SupabaseClient;
+ assert.equal(await writeApprovedCfbTrackingCorrections(alreadyDone),0);assert.equal(correctionWrites,0);
+ const writer=readFileSync(new URL('../lib/services/football/cfbForwardEvidenceWriter.ts',import.meta.url),'utf8');assert(writer.includes('args.apply ? await writeApprovedCfbTrackingCorrections(args.client) : 0'));
+ const append=readFileSync(new URL('../lib/services/football/cfbPublishedTrackingCorrection.ts',import.meta.url),'utf8');assert(!/\.(update|upsert|delete)\(/.test(append));assert(append.includes('matchesCfbForwardEvidencePayloadHash(payload, approval.sourceSha256)'));
+ const operator=readFileSync(new URL('./operator/settle-approved-cfb-tracking-corrections.ts',import.meta.url),'utf8');assert(operator.includes("jobName='prediction_pipeline:cfb'"));assert(operator.includes('recordIds:q.data.filter'));assert(!operator.includes('ingestCfbFinalScores'));
  const cron = readFileSync(new URL("../app/api/cron/tracking-refresh/route.ts", import.meta.url), "utf8");
  assert(cron.includes("sport === sports.at(-1)")); assert(cron.includes("tracking_integrity_errors:"));
  const endpoint = readFileSync(new URL("../app/api/internal/tracking-integrity-audit/route.ts", import.meta.url), "utf8");
