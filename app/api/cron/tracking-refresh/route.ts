@@ -1,3 +1,4 @@
+import { runTrackingIntegrityAudit } from "@/lib/services/audit/trackingIntegrityAudit";
 /**
  * /api/cron/tracking-refresh — Push 4c (MLB) · Phase 7H (NBA)
  *
@@ -62,7 +63,7 @@ import { assertMlbChampionRuntime } from "@/lib/automodel/mlbChampionRuntime";
 export const maxDuration = 300;
 
 const TRACKING_REFRESH_PUBLICATION_RELEASE =
-  "tracking_refresh_publication_2026_10_20_r3_cfb_collision_avoidance";
+  "tracking_refresh_publication_2026_11_08_r4_all_sport_integrity_guard";
 
 // The active EPL pipeline stores under sport="soccer" and is competition-
 // scoped in snapshot_json. Include soccer in the scheduled cycle so EPL
@@ -120,6 +121,17 @@ export async function GET(request: Request) {
           }
         : null;
 
+      // Once per existing hourly cycle, reconcile every Daily Edge sport,
+      // including CBB and both club competitions. This is SELECT-only and
+      // shares the scheduled owner's log; it never becomes a second writer.
+      let trackingIntegrity = null;
+      let trackingIntegrityError: string | null = null;
+      if (apply && sport === sports.at(-1)) {
+        try { trackingIntegrity = await runTrackingIntegrityAudit({ client: supabase }); }
+        catch (error) { trackingIntegrityError = error instanceof Error ? error.message : String(error); }
+      }
+      const integrityFailure = trackingIntegrityError !== null || (trackingIntegrity?.errors ?? 0) > 0;
+
       return {
         records_updated:
           summary.totals.records_created +
@@ -127,7 +139,10 @@ export async function GET(request: Request) {
           summary.totals.final_scores_updated +
           summary.totals.grades_upserted,
         api_calls_made: summary.datesProcessed,
-        partial: summary.totals.errors > 0,
+        partial: summary.totals.errors > 0 || integrityFailure,
+        error_message: trackingIntegrityError ? "tracking_integrity_audit_failed" :
+          integrityFailure ? `tracking_integrity_errors:${trackingIntegrity!.errors}:` +
+            trackingIntegrity!.findings.filter(f => f.severity === "error").slice(0, 8).map(f => `${f.sport}/${f.kind}/${f.game}/${f.market}`).join(",") : null,
         details: {
           sport,
           apply,
@@ -142,6 +157,8 @@ export async function GET(request: Request) {
           trackingPublicationRelease: TRACKING_REFRESH_PUBLICATION_RELEASE,
           stalePendingRepair: summary.stalePendingRepair,
           responseSnapshot,
+          trackingIntegrity,
+          trackingIntegrityError,
         },
       };
     },

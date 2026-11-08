@@ -213,7 +213,7 @@ check(
 );
 check(
   "online tracking publishes after NBA and again after the final sport",
-  trackingCronSource.includes('"tracking_refresh_publication_2026_10_20_r3_cfb_collision_avoidance"') &&
+  trackingCronSource.includes('"tracking_refresh_publication_2026_11_08_r4_all_sport_integrity_guard"') &&
     trackingCronSource.includes('new Set<Sport>(["nba", "nhl"])') &&
     trackingCronSource.includes("publishAfterSports.has(sport)") &&
     trackingCronSource.includes("export const maxDuration = 300"),
