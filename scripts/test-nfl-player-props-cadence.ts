@@ -36,7 +36,7 @@ assert.deepEqual(
   {
     run: true,
     reason: "release_refresh_due",
-    release: "nfl_player_props_cadence_2026_10_27_r4_release_aware_refresh",
+    release: "nfl_player_props_cadence_2026_11_08_r5_ai_review_windows",
   },
   "a newly deployed model family immediately recomputes unlocked rows instead of waiting for snapshot age",
 );
@@ -50,7 +50,7 @@ assert.deepEqual(
   {
     run: true,
     reason: "hourly_refresh_due",
-    release: "nfl_player_props_cadence_2026_10_27_r4_release_aware_refresh",
+    release: "nfl_player_props_cadence_2026_11_08_r5_ai_review_windows",
   },
   "the observed 1.494-second scheduler lead cannot stretch an hourly refresh to 75 minutes",
 );
