@@ -39,14 +39,14 @@ export function dailyEdgeSnapshotKey(input: DailyEdgeSnapshotKeyInput): string {
 }
 
 export function trackingSnapshotKey(): string {
-  return "tracking::all::nba-spread-official-r3";
+  return "tracking::all::original-lock-corrections-r4";
 }
 
 export function trackingFoundationSnapshotKey(input: {
   sport?: string | null;
   date: string;
 }): string {
-  return ["tracking-foundation-r12-locked-grade-precedence", input.sport ?? "all", input.date].join("::");
+  return ["tracking-foundation-r13-original-lock-authority", input.sport ?? "all", input.date].join("::");
 }
 
 export async function readLabResponseSnapshot<T extends LabResponseSnapshotPayload>(

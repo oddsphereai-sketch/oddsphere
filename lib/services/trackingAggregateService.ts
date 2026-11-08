@@ -23,7 +23,9 @@
  * counts by default; the admin page can opt-in to view them.
  */
 
+import { resolveRecordForGrading } from "./predictionGradingService";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isMissingRpcFunction } from "../db/missingRpcFunction";
 import {
   bucketForConfidence,
   type ConfidenceBucket,
@@ -36,7 +38,7 @@ import {
 import { isPublicallyTracked } from "../config/officialTrackingStart";
 import { UCL_CALIBRATION_RELEASE, UCL_MODEL_RELEASE } from "./ucl/uclModel";
 import { filterCompleteUclLockManifestCohorts } from "./ucl/uclLockManifest";
-import { nflTrackingCorrectionSupersededRecordId } from "./football/nflPublishedTrackingCorrection";
+import { trackingCorrectionSupersededRecordId } from "./tracking/trackingCorrectionPrecedence";
 import {
   NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES,
   NHL_REGULAR_TRANSITION_MODEL_RELEASES,
@@ -89,7 +91,7 @@ export type DimensionRow<K extends string = string> = {
 export type TrackingDisplaySport = TrackedSport | "epl";
 
 export const TRACKING_AGGREGATE_CONTRACT_VERSION =
-  "tracking_aggregate_v21_locked_grade_precedence_2026_11_05" as const;
+  "tracking_aggregate_v22_original_lock_correction_authority_2026_11_08" as const;
 
 /**
  * Sport+market joint split with the Best Angle / Lean cuts most members
@@ -401,6 +403,7 @@ const TRACKING_PROJECTED_RECORD_SELECT = TRACKING_RECORD_SELECT
   .map((column) => column.split(":")[0])
   .join(",");
 const TRACKING_RECORD_PROJECTION_VIEW = "prediction_records_tracking_projection";
+const TRACKING_RECORD_PAGE_RPC = "tracking_prediction_records_page";
 
 function trackingProjectionViewMissing(error: { code?: string; message?: string } | null): boolean {
   return error !== null
@@ -541,12 +544,12 @@ function chooseCanonicalTrackingRecord(
 ): PredictionRecordRow {
   const currentCorrection = current as TrackingRecordProjection;
   const candidateCorrection = candidate as TrackingRecordProjection;
-  const currentSupersedes = nflTrackingCorrectionSupersededRecordId({
+  const currentSupersedes = trackingCorrectionSupersededRecordId({
     modelVersion: current.model_version,
     correctionRelease: currentCorrection.tracking_correction_release ?? current.snapshot_json?.tracking_correction_release,
     supersedesPredictionRecordId: currentCorrection.supersedes_prediction_record_id ?? current.snapshot_json?.supersedes_prediction_record_id,
   });
-  const candidateSupersedes = nflTrackingCorrectionSupersededRecordId({
+  const candidateSupersedes = trackingCorrectionSupersededRecordId({
     modelVersion: candidate.model_version,
     correctionRelease: candidateCorrection.tracking_correction_release ?? candidate.snapshot_json?.tracking_correction_release,
     supersedesPredictionRecordId: candidateCorrection.supersedes_prediction_record_id ?? candidate.snapshot_json?.supersedes_prediction_record_id,
@@ -635,6 +638,43 @@ export function isTrackingPlayGradeCutEligible(record: PredictionRecordRow): boo
   return record.sport === "cfb" || record.no_bet !== true;
 }
 
+/** Restore only fields already stored on the original public FI lock. The
+ * indexed legacy Held row remains untouched; canonical grading uses this same
+ * frozen authority. Read a small subobject only for contradictory actionables. */
+export async function readFrozenFirstInningTrackingAuthority(
+  client: SupabaseClient,
+  rows: PredictionRecordRow[],
+  signal?: AbortSignal,
+): Promise<PredictionRecordRow[]> {
+  const candidates = rows.filter(row => row.sport === "mlb" && row.market === "first_inning" &&
+    row.locked_at !== null && ["best_angle", "lean"].includes(effectiveTrackingPlayGrade(row)) &&
+    (row.held === true || row.no_bet === true || row.side === null || row.prediction_type === "toss_up"));
+  if (candidates.length === 0) return rows;
+  const frozen = new Map<number, Record<string, unknown>>();
+  const ids = candidates.map(row => row.id!);
+  for (let i = 0; i < ids.length; i += 100) {
+    const batch = ids.slice(i, i + 100);
+    let query = client.from("prediction_records")
+      .select("id,frozen:snapshot_json->member_facing_at_lock").in("id", batch);
+    if (signal) query = query.abortSignal(signal);
+    const { data, error } = await query;
+    if (error) throw new Error(`tracking frozen FI read failed: ${error.message}`);
+    if ((data ?? []).length !== batch.length) throw new Error("tracking frozen FI read incomplete");
+    for (const raw of data ?? []) {
+      if (!raw.frozen || typeof raw.frozen !== "object" || Array.isArray(raw.frozen)) {
+        throw new Error("tracking frozen FI authority missing");
+      }
+      frozen.set(raw.id, raw.frozen as Record<string, unknown>);
+    }
+  }
+  return rows.map(row => {
+    const authority = frozen.get(row.id!);
+    return authority ? resolveRecordForGrading({ ...row,
+      snapshot_json: { ...row.snapshot_json, member_facing_at_lock: authority },
+    }) : row;
+  });
+}
+
 export async function fetchAllPredictionRecords(
   supabase: SupabaseClient,
   opts: {
@@ -642,10 +682,12 @@ export async function fetchAllPredictionRecords(
     from?: string;
     to?: string;
     competition?: string;
+    signal?: AbortSignal;
   },
 ): Promise<{ rows: PredictionRecordRow[]; error: unknown | null }> {
   const out: PredictionRecordRow[] = [];
   let useLegacyProjection = false;
+  let useRpc = typeof supabase.rpc === "function";
   for (let fromRow = 0; ; fromRow += TRACKING_PAGE_SIZE) {
     const pageQuery = () => {
       let query = supabase
@@ -653,38 +695,64 @@ export async function fetchAllPredictionRecords(
         .select(useLegacyProjection ? TRACKING_RECORD_SELECT : TRACKING_PROJECTED_RECORD_SELECT)
         .order("id", { ascending: true })
         .range(fromRow, fromRow + TRACKING_PAGE_SIZE - 1);
+      if (opts.signal) query = query.abortSignal(opts.signal);
       if (opts.sport !== undefined) query = query.eq("sport", opts.sport);
       if (opts.from !== undefined) query = query.gte("slate_date", opts.from);
       if (opts.to !== undefined) query = query.lte("slate_date", opts.to);
       if (opts.competition !== undefined) query = query.contains("snapshot_json", { competition: opts.competition });
       return query;
     };
-    let { data, error } = await pageQuery();
+    // Page narrow IDs before decoding immutable JSON. An OFFSET on the view
+    // decodes all skipped records again for every later history page.
+    const rpcQuery = () => {
+      let query = supabase.rpc(TRACKING_RECORD_PAGE_RPC, {
+        p_sport: opts.sport ?? null,
+        p_from: opts.from ?? null,
+        p_to: opts.to ?? null,
+        p_competition: opts.competition ?? null,
+        p_offset: fromRow,
+        p_limit: TRACKING_PAGE_SIZE,
+      });
+      if (opts.signal) query = query.abortSignal(opts.signal);
+      return query;
+    };
+    let { data, error } = useRpc ? await rpcQuery() : await pageQuery();
+    if (useRpc && isMissingRpcFunction(error, TRACKING_RECORD_PAGE_RPC)) {
+      useRpc = false;
+      ({ data, error } = await pageQuery());
+    }
     if (!useLegacyProjection && trackingProjectionViewMissing(error)) {
       // Retry this page against the unchanged legacy projection, then remain
       // on it for this entire read. Never retry a timeout/permission failure.
       useLegacyProjection = true;
+      useRpc = false;
       ({ data, error } = await pageQuery());
     }
     if (error) return { rows: out, error };
+    if ((useRpc && !Array.isArray(data))
+      || (data !== null && (!Array.isArray(data) || data.length > TRACKING_PAGE_SIZE))) {
+      return { rows: out, error: new Error("Tracking history returned an invalid bounded page.") };
+    }
     const page = ((data ?? []) as unknown) as PredictionRecordRow[];
-    out.push(...page);
+    try { out.push(...await readFrozenFirstInningTrackingAuthority(supabase, page, opts.signal)); }
+    catch (error) { return { rows: out, error }; }
     if (page.length < TRACKING_PAGE_SIZE) break;
   }
   return { rows: out, error: null };
 }
 
-async function fetchGradesForRecordIds(
+export async function fetchGradesForRecordIds(
   supabase: SupabaseClient,
   recordIds: number[],
 ): Promise<PredictionGradeRow[]> {
   const out: PredictionGradeRow[] = [];
   for (let i = 0; i < recordIds.length; i += TRACKING_GRADE_ID_CHUNK_SIZE) {
     const ids = recordIds.slice(i, i + TRACKING_GRADE_ID_CHUNK_SIZE);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("prediction_grades")
       .select(TRACKING_GRADE_SELECT)
       .in("prediction_record_id", ids);
+    if (error) throw new Error(`tracking grades read failed: ${error.message}`);
     out.push(...(((data ?? []) as unknown) as PredictionGradeRow[]));
   }
   return out;

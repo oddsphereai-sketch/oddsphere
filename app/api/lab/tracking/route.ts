@@ -1,3 +1,4 @@
+import { trackingCorrectionSupersededRecordId } from "@/lib/services/tracking/trackingCorrectionPrecedence";
 /**
  * GET /api/lab/tracking
  *
@@ -555,20 +556,26 @@ async function loadWnbaGradeRows(): Promise<ResultRow[]> {
 async function loadLockedGradeRows(sport: "nfl" | "cfb" | "cbb"): Promise<ResultRow[]> {
   const start = officialTrackingStart(sport);
   if (start == null) return [];
-  const records: Array<{id:string;market:string;slate_date:string}>=[];
+  const records: Array<{id:string;market:string;slate_date:string;model_version:string;correction_release:unknown;supersedes:unknown}>=[];
   for(let offset=0;offset<100_000;offset+=500){
     const {data,error}=await supabase.from("prediction_records")
-      .select("id, market, slate_date").eq("sport",sport).gte("slate_date",start)
+      .select("id,market,slate_date,model_version,correction_release:snapshot_json->>tracking_correction_release,supersedes:snapshot_json->supersedes_prediction_record_id").eq("sport",sport).gte("slate_date",start)
       .not("locked_at","is",null).order("id",{ascending:true}).range(offset,offset+499);
     if(error)throw new Error(`${sport} locked tracking read failed: ${error.message}`);
-    records.push(...(data??[]) as Array<{id:string;market:string;slate_date:string}>);
+    records.push(...(data??[]) as typeof records);
     if((data??[]).length<500)break;
   }
   if(records.length===100_000)throw new Error(`${sport} locked tracking page budget exhausted`);
   if(records.length===0)return [];
 
+  const superseded = new Set(records.flatMap(row => {
+    const id = trackingCorrectionSupersededRecordId({ modelVersion: row.model_version,
+      correctionRelease: row.correction_release, supersedesPredictionRecordId: row.supersedes });
+    return id === null ? [] : [id];
+  }));
   const byId = new Map<string, { market: string; slate_date: string }>();
   for (const record of records) {
+    if (superseded.has(Number(record.id))) continue;
     byId.set(String(record.id), {
       market: record.market,
       slate_date: String(record.slate_date).slice(0, 10),
@@ -583,7 +590,8 @@ async function loadLockedGradeRows(sport: "nfl" | "cfb" | "cbb"): Promise<Result
       .select("prediction_record_id, result")
       .in("prediction_record_id", ids.slice(index, index + CHUNK))
       .in("result", ["win", "loss", "push"]);
-    if (gradeError || !grades) continue;
+    if (gradeError) throw new Error(`${sport} locked grades read failed: ${gradeError.message}`);
+    if (!grades) continue;
     for (const grade of grades as Array<{ prediction_record_id: string; result: string }>) {
       const record = byId.get(String(grade.prediction_record_id));
       if (!record) continue;

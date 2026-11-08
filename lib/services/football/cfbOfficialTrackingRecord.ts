@@ -106,11 +106,15 @@ export function cfbPublishedPregameRecoveryMarkets(payload: CfbForwardEvidencePa
     return Boolean(outlook && (market === "moneyline" || outlook.line !== null));
   });
 }
-export function buildCfbOfficialTrackingRecords(args: { payload: CfbForwardEvidencePayload; gameId: number }): PredictionRecordRow[] {
-  assertCfbTrackingPayload(args.payload);
-  assertMarketScopedFootballDecisions(args.payload.decisions.evaluatedBets, "CFB tracking");
+/** Exact serialization only. Normal callers validate current T60 eligibility;
+ * the owner-approved historical path separately verifies its pinned source hash. */
+export function serializeCfbOfficialTrackingDecision(args: {
+  payload: CfbForwardEvidencePayload;
+  decision: CfbForwardEvidencePayload["decisions"]["evaluatedBets"][number];
+  gameId: number;
+}): PredictionRecordRow {
+  const decision = args.decision;
   const externalId = providerIntegerId(args.payload.game.providerGameId, "game");
-  const evaluated = args.payload.decisions.evaluatedBets.map((decision): PredictionRecordRow => {
     const predictiveActionable = decision.grade === "Best Angle" || decision.grade === "Lean";
     const actionable = predictiveActionable && decision.expectedValue >= 0;
     const playGrade = decision.grade.toLowerCase().replace(/\s+/g, "_");
@@ -174,7 +178,14 @@ export function buildCfbOfficialTrackingRecords(args: { payload: CfbForwardEvide
       },
       calibration_version: decision.calibrationRelease,
     };
-  });
+}
+
+export function buildCfbOfficialTrackingRecords(args: { payload: CfbForwardEvidencePayload; gameId: number }): PredictionRecordRow[] {
+  assertCfbTrackingPayload(args.payload);
+  const externalId = providerIntegerId(args.payload.game.providerGameId, "game");
+  assertMarketScopedFootballDecisions(args.payload.decisions.evaluatedBets, "CFB tracking");
+  const evaluated = args.payload.decisions.evaluatedBets.map(decision =>
+    serializeCfbOfficialTrackingDecision({ ...args, decision }));
   const evaluatedMarkets = new Set(evaluated.map((record) => record.market));
   const held = args.payload.decisions.heldMarkets.flatMap((heldMarket) => {
     if (evaluatedMarkets.has(heldMarket.market)) return [];
