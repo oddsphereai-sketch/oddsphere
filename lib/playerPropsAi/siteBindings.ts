@@ -18,6 +18,15 @@ function nbaMovement(packet:GamePacket,c:SiteAiDecision):NbaPlayerPropsMemberDec
   const prior=quotes.filter(q=>!q.opening&&instant(q.observedAt)<instant(c.quote.observedAt)).at(-1);
   return {sportsbook:c.book,openingLine:opening.line,openingPrice:opening.american,priorLine:prior?.line??null,priorPrice:prior?.american??null,currentLine:c.line,currentPrice:c.american};
 }
+function nbaAiPrices(packet:GamePacket,c:SiteAiDecision,now:string):NbaPlayerPropsMemberDecision["priceLadder"]{
+  const latest=new Map<string,GamePacket["quotes"][number]>();
+  for(const q of packet.quotes){
+    if(q.playerId!==c.playerId||q.market!==c.market||q.opening||q.live||q.side==="yes"||q.receivedAtProvenance!=="provider_response"||instant(q.receivedAt)>instant(now)||instant(now)-instant(q.receivedAt)>15*60000)continue;
+    const key=`${book(q.book)}|${q.line}|${q.side}`,prior=latest.get(key);
+    if(!prior||instant(q.receivedAt)>instant(prior.receivedAt))latest.set(key,q);
+  }
+  return [...latest.values()].map(q=>({sportsbook:q.book,side:q.side as "over"|"under",line:q.line,americanPrice:q.american,observedAt:q.observedAt}));
+}
 export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:GamePacket,choices:SiteAiDecision[],now:string):NbaPlayerPropsMemberSnapshot{
   let changed=false;
   const decisions=snapshot.decisions.map((row):NbaPlayerPropsMemberDecision=>{
@@ -26,7 +35,7 @@ export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:Game
     changed=true;
     return {...row,decisionKey:[c.evidence.release,row.gameId,row.playerId,row.market,c.line].join("|"),projection:c.projection,probability:c.probability,side:c.side,grade:c.grade,sportsbook:c.book,americanPrice:c.american,expectedValue:c.expectedValue,
       modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:c.evidence.publicationRelease,targetExcludedProbability:null,targetExcludedBooks:0,targetExcludedReferenceBooks:0,marketEvidenceMode:"ai_joint_law" as const,gradePolicySource:"ai_source_review" as const,evaluatedAt:now,aiReview:c.evidence,
-      priceLadder:packet.quotes.filter(q=>q.playerId===c.playerId&&q.market===c.market&&q.side===c.side&&!q.opening&&q.receivedAtProvenance==="provider_response").map(q=>({sportsbook:q.book,side:q.side as "over"|"under",line:q.line,americanPrice:q.american,observedAt:q.observedAt})),movement:nbaMovement(packet,c)};
+      priceLadder:nbaAiPrices(packet,c,now),movement:nbaMovement(packet,c)};
   });
   for(const player of packet.players)for(const market of player.markets){
     if(decisions.some(r=>r.gameId===packet.gameId&&r.playerId===player.id&&r.market===market))continue;
@@ -35,7 +44,7 @@ export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:Game
     decisions.push({decisionKey:[c.evidence.release,game.gameId,player.id,market,c.line].join("|"),gameId:game.gameId,scheduledStart:game.scheduledStart,homeTeam:game.homeTeam,awayTeam:game.awayTeam,
       playerId:player.id,playerName:player.name,team:player.team,opponent:player.opponent,market:market as NbaPlayerPropsMemberDecision["market"],line:c.line,projection:c.projection,independentProjection:null,independentProbability:null,
       modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:c.evidence.publicationRelease,aiReview:c.evidence,side:c.side as "over"|"under",probability:c.probability,grade:c.grade,sportsbook:c.book,americanPrice:c.american,expectedValue:c.expectedValue,
-      targetExcludedProbability:null,targetExcludedBooks:0,targetExcludedReferenceBooks:0,marketEvidenceMode:"ai_joint_law",gradePolicySource:"ai_source_review",role:[],production:[],matchup:[],priceLadder:[],movement:nbaMovement(packet,c),evaluatedAt:now,lockedAt:null});changed=true;
+      targetExcludedProbability:null,targetExcludedBooks:0,targetExcludedReferenceBooks:0,marketEvidenceMode:"ai_joint_law",gradePolicySource:"ai_source_review",role:[],production:[],matchup:[],priceLadder:nbaAiPrices(packet,c,now),movement:nbaMovement(packet,c),evaluatedAt:now,lockedAt:null});changed=true;
   }
   return changed?buildNbaPlayerPropsMemberSnapshot({...snapshot,generatedAt:now,decisions,inputRows:snapshot.diagnostics.inputRows}):snapshot;
 }

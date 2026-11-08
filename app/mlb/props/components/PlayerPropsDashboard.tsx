@@ -1,6 +1,8 @@
 "use client";
 
 import {AiPropReader} from "@/app/player-props/components/AiPropReader";
+import {PropsAiEvidence} from "@/app/player-props/components/PropsAiEvidence";
+import {needsLegacyLockedAiReader} from "@/lib/playerPropsAi/publicationContract";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -1015,7 +1017,7 @@ function PlayerSummaryMetric({ label, value }: { label: string; value: string })
 }
 
 export function PropDetailDrawer({ row, comparisons, onClose, showDiagnostics = false, researchPending = false }: { row: PlayerPropPreviewRow; comparisons: PlayerPropPreviewRow[]; onClose: () => void; showDiagnostics?: boolean; researchPending?: boolean }) {
-  if(row.aiReview)return <AiPropReader evidence={row.aiReview} title={`${row.player} · ${row.marketLabel}`} selection={`${row.side} ${row.line}`} projection={row.projection} probability={row.finalProbability??0} price={`${row.book} ${signed(row.odds)}`} grade={getPropGradeLabel(row.playGrade)} lockedAt={row.lockStatus?.lockedAt} onClose={onClose} />;
+  if(row.aiReview&&needsLegacyLockedAiReader(row.aiReview,row.lockStatus?.status==="locked"))return <AiPropReader evidence={row.aiReview} title={`${row.player} · ${row.marketLabel}`} selection={`${row.side} ${row.line}`} projection={row.projection} probability={row.finalProbability??0} price={`${row.book} ${signed(row.odds)}`} grade={getPropGradeLabel(row.playGrade)} lockedAt={row.lockStatus?.lockedAt} onClose={onClose} />;
   const prices = [...comparisons].sort((a, b) => b.odds - a.odds);
   return <PlayerPropReaderDialog ariaLabel={`${row.player} prop details`} title={row.player} leading={<PlayerAvatar player={row.player} team={row.team} headshotUrl={row.headshotUrl} compact />} onClose={onClose}>
       <div className="grid min-w-0 gap-4 p-4 sm:p-6 lg:grid-cols-2">
@@ -1028,7 +1030,7 @@ export function PropDetailDrawer({ row, comparisons, onClose, showDiagnostics = 
         <DrawerSection title="Best Available Price"><BookPriceLadder prices={prices} allBooks={unique(comparisons.map((price) => price.book))} /></DrawerSection>
         <DrawerSection title="Odds Movement"><OddsMovementPanel row={row} /></DrawerSection>
         <DrawerSection title="Signal Context"><p className="text-sm leading-6 text-gray-200">{cardReason(row)}</p><p className="mt-3 text-xs leading-5 text-gray-500">{memberGradeDescription(row.playGrade)}</p></DrawerSection>
-        <DrawerSection title="Evidence Strength"><ConfidenceMeter row={row} /><FeatureConfidenceChecklist row={row} /></DrawerSection>
+        <DrawerSection title="Evidence Strength">{row.aiReview?<PropsAiEvidence evidence={row.aiReview} />:<><ConfidenceMeter row={row} /><FeatureConfidenceChecklist row={row} /></>}</DrawerSection>
         <DrawerSection title="What Could Change"><DetailList title="Still watching" items={row.missingFeatures.map(memberFeatureLabel)} empty="No major pregame questions are currently flagged." /></DrawerSection>
         <div className="min-w-0 lg:col-span-2"><DrawerSection title="Game Environment">{researchPending ? <ResearchLoadingState title="Verified venue and game-time conditions" /> : <EnvironmentPanel row={row} />}</DrawerSection></div>
         {showDiagnostics ? <div className="min-w-0 lg:col-span-2"><details className="group border-t border-violet-400/20 pt-4"><summary className="cursor-pointer text-xs font-black uppercase text-violet-300">Admin diagnostics</summary><div className="mt-4 grid gap-4 lg:grid-cols-2"><DrawerSection title="Reason Codes"><DetailList title="Raw flags" items={row.reasonCodes} mono /></DrawerSection><DrawerSection title="Feature Inputs"><DetailList title="Verified model inputs" items={row.keyFeatures} /></DrawerSection><DrawerSection title="Missing Features"><DetailList title="Unavailable inputs" items={row.missingFeatures} /><div className="mt-3 text-xs text-gray-500">Odds sanity: {row.oddsSanity.length ? row.oddsSanity.join(", ") : "Passed"}</div></DrawerSection><DrawerSection title="Model Diagnostics"><div className="grid grid-cols-2 gap-2"><Metric label="Independent probability" value={row.independentProbability === null ? "-" : pct(row.independentProbability)} /><Metric label="Market probability" value={row.marketProbability === null ? "-" : pct(row.marketProbability)} /><Metric label="Shrinkage weight" value={pct(row.shrinkageWeight)} /><Metric label="Settlement / CLV" value={`${sentenceCase(row.settlementStatus)} / ${sentenceCase(row.clvStatus)}`} /></div><p className="mt-3 text-xs text-gray-500">Source {row.source} · Updated <LocalTime style="date-time" value={row.lastUpdated} /></p></DrawerSection></div></details></div> : null}
@@ -1896,6 +1898,7 @@ function memberGradeDescription(grade: PropGrade): string {
 }
 
 function propReaderSummary(row: PlayerPropPreviewRow, prices: PlayerPropPreviewRow[]): string {
+  if(row.aiReview)return row.aiReview.assessment;
   const bestPrice = prices[0] ?? row;
   if (isHomeRunMarket(row)) {
     const chance = homeRunProbability(row);
