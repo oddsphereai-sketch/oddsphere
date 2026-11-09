@@ -7,6 +7,7 @@ import {PROPS_AI_SITE_RELEASE} from "./siteConfig";
 import {priceAiLaw,type PropsAiGrade} from "./pricing";
 import {lawForecast} from "./law";
 import {instant} from "./evidence";
+import {unqualifiedEventTail} from "./forecastSanity";
 
 export type SiteAiDecision={playerId:string;market:string;line:number;side:Quote["side"];book:string;provider:string;american:number;projection:number;probability:number;over:number;under:number;push:number;expectedValue:number;fairAmerican:number|null;grade:PropsAiGrade;quote:Quote;evidence:PropsAiMemberEvidence};
 function sameReviewGame(packet:GamePacket,review:AcceptedGameReview,now:string){
@@ -48,7 +49,7 @@ export function siteReviewQualification(packet:GamePacket,review:AcceptedGameRev
     for(const q of packet.quotes){
       if(q.playerId!==current.playerId||!current.markets.includes(q.market)||declined.includes(q.market)||q.opening||q.live||q.receivedAtProvenance!=="provider_response"||instant(q.receivedAt)>instant(now)||instant(now)-instant(q.receivedAt)>maxQuoteAgeMs)continue;
       const f=lawForecast(player.law,q.market,q.line,q.offerContract==="milestone"||q.side==="yes");
-      if(f.over===0||f.under===0)tails.add(`${q.playerId}|${q.market}|${q.line}|${q.offerContract??"two_way"}`);
+      if(unqualifiedEventTail(f,q.side==="yes"))tails.add(`${q.playerId}|${q.market}|${q.line}|${q.offerContract??"two_way"}`);
     }
   }
   return {qualifiedLawPlayers,sourceDeclinedScopes,unqualifiedTailScopes:tails.size};
@@ -77,6 +78,7 @@ export function siteAiDecisions(packet:GamePacket,review:AcceptedGameReview,now:
         if(propsReviewHasSemanticChecks(review.release)&&(priced.probability<=0||priced.probability>=1))continue;
         const quote=selected.find(q=>q.id===priced.quote.id)!;
         const law=lawForecast(reviewed.law,market,line,contract==="milestone"||quote.side==="yes"||market==="anytime_td");
+        if(propsReviewHasSemanticChecks(review.release)&&unqualifiedEventTail(law,quote.side==="yes"))continue;
         result.push({playerId:player.id,market,line,side:priced.side as Quote["side"],book,provider,american:quote.american,projection:law.mean,probability:priced.probability,over:law.over,under:law.under,push:law.push,expectedValue:priced.expectedValue,fairAmerican:priced.fairAmerican,grade:priced.grade,quote,
           evidence:{release:review.release,selectionRelease:PROPS_AI_SELECTION_RELEASE,lawRelease:reviewed.law.release,gradeRelease:PROPS_AI_GRADE_RELEASE,publicationRelease:PROPS_AI_SITE_RELEASE,reviewId:`${review.gameId}|${review.stage}|${review.issuedAt}`,lawHash:reviewed.law.hash,inputHash:review.inputHash??review.inputEvidence.digest,reviewedAt:review.issuedAt!,stage:review.stage,model:review.partProvenance.find(p=>p.playerIds.includes(player.id))?.model??review.model,confidence:reviewed.confidence[index] as 0|1|2,confidenceMeaning:"AI-estimated evidence strength; not empirical calibration",quoteConfirmedAt:quote.receivedAt,selectedSide:priced.side as Quote["side"],assessment:reviewed.assessment,coverage:Object.fromEntries(Object.entries(reviewed.coverage).map(([area,value])=>[area,{...value,facts:value.facts.map(f=>({id:f.id,hash:f.hash,label:f.label,availableAt:f.availableAt,sourceIds:f.sourceIds}))}])),exception:reviewed.exceptions[index]}});
       }

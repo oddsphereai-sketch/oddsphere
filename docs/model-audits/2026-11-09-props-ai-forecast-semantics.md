@@ -23,7 +23,12 @@ unknown. Canonical stat identities and combination derivation are unchanged.
 
 New source admission compares a proposed mean with supplied played-game support
 when at least three reconciled qualifying observations exist, expanded to include
-all supplied independent means for that exact primitive. This is an admission
+all supplied independent means for that exact primitive or derived event.
+MLB support joins the exact market-tagged individual game/start logs; it does not
+confuse pitcher and batter strikeouts or outs and innings. Nested hit/total-base
+contracts inherit a failing primitive scope. Repeated zero rare-event samples do
+not create a zero ceiling, and integer-line push mass is not invented into an
+impossible losing event. This is an admission
 boundary, not a learned calibration, numerical clamp, or instruction to anchor on
 the native mean. A genuinely changed role beyond that evidence remains unqualified
 until a supported quantitative input is supplied. Sparse one/two-game samples do
@@ -32,6 +37,12 @@ supplied production are checked separately. Conflicting duplicate provider value
 are excluded rather than resolved arbitrarily. NBA DNP zero-minute records do not
 become ordinary conditional production; offensive plus defensive rebounds are
 summarized explicitly.
+
+Combination checks also require both concordant and discordant scenario pairs
+when at least three source games establish both patterns for the contributing
+statistics. They preserve source-observed dependence rather than impose a fitted
+correlation threshold. An unqualified pair affects only combinations containing
+both primitives; valid standalone markets remain eligible.
 
 The mean/support check is conservative and can flag legitimate future changes when
 source inputs do not quantify them. It must not be described as a general proof of

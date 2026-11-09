@@ -5,7 +5,9 @@ named canonical wire R3 `props_scenario_named_2026_11_09_r3_canonical_statistics
 Reader input R11 spells out independent Over/Under probabilities and the favored
 event; a retained contract side is not an endorsement. An explicit typed prior
 read must agree with those source probabilities. NBA rebound summaries include
-both offensive and defensive boards. NFL source R2 still owns actor/context
+both offensive and defensive boards. MLB checks use exact market-tagged
+individual game/start values, preserving rare-event uncertainty and push semantics.
+NFL source R2 still owns actor/context
 identity; native MLB champion `mlb_props_2026_10_21_r44` remains exact.
 
 Named integer stat arrays replace positional residual coordinates for new
@@ -13,7 +15,9 @@ requests. Canonical totals already include their components; net yards are signe
 Existing physical identities, common weights and exact-event pricing stay in force.
 New admission checks reject unsupported source-range means, nonpositive yardage
 laws contradicting positive source production, and zero opposing tails at supplied
-uncertain/actual offered events. They do not clamp forecasts or calibrate probability.
+uncertain/actual offered events. Combo laws must retain the opposing as well as
+higher-together variation observed in paired source games. These checks do not
+clamp forecasts or calibrate probability.
 Explicitly excepted source scopes remain recorded as reviewed-but-unqualified and
 cannot publish the invalid law. Later unqualified quote events are accounted for
 separately. Complete assessment sentences are required.

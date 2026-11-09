@@ -11,7 +11,7 @@ const NFL_FIELDS: Record<string, string[]> = {
   passing_attempts: ["passing_attempts", "attempts"],
   passing_completions: ["passing_completions", "completions"],
   passing_yards: ["passing_yards"], passing_tds: ["passing_tds", "passing_touchdowns"],
-  interceptions: ["passing_interceptions", "interceptions"],
+  interceptions: ["passing_interceptions"], // Generic interceptions can mean defensive interceptions.
   rushing_attempts: ["rushing_attempts", "carries"], rushing_yards: ["rushing_yards"],
   receiving_targets: ["receiving_targets", "targets"], receptions: ["receptions"],
   receiving_yards: ["receiving_yards"], rushing_tds: ["rushing_tds", "rushing_touchdowns"],
@@ -56,13 +56,22 @@ export function readerLogWindows(sport: Sport, logs: Evidence[], cutoff?: string
       return values.length ? [[field, { n: values.length, mean: values.reduce((a, b) => a + b, 0) / values.length }]] : [];
     })) }];
   }));
+  const jointStats=sport==="nba"?["points","rebounds","assists","threes"]:[];
+  const observedPairOrderings=jointStats.flatMap((first,i)=>jointStats.slice(i+1).flatMap(second=>{
+    const pairs=active.flatMap(row=>row.values[first]?.size===1&&row.values[second]?.size===1?[[[...row.values[first]][0],[...row.values[second]][0]]]:[]);
+    let concordant=0,discordant=0;
+    for(let a=0;a<pairs.length;a++)for(let b=a+1;b<pairs.length;b++){
+      const product=(pairs[a][0]-pairs[b][0])*(pairs[a][1]-pairs[b][1]);if(product>0)concordant++;if(product<0)discordant++;
+    }
+    return pairs.length>=3&&concordant&&discordant?[{first,second,records:pairs.length,concordant,discordant}]:[];
+  }));
   return {
     recordedSourceRows: logs.length, distinctGames: ordered.length, summarizedGames: active.length,
     newestGameAt:ordered[0]?.at?new Date(ordered[0].at).toISOString():null,
     oldestGameAt:ordered.at(-1)?.at?new Date(ordered.at(-1)!.at).toISOString():null,
     newestGameAgeDays:cutoff&&ordered[0]?.at?(Date.parse(cutoff)-ordered[0].at)/86400000:null,
     newestQualifyingGameAgeDays:cutoff&&active[0]?.at?(Date.parse(cutoff)-active[0].at)/86400000:null,
-    windows, conflicts,
+    windows, conflicts,observedPairOrderings,
     observedSupport:Object.fromEntries(Object.keys(fields).flatMap(field=>{
       const values=active.flatMap(row=>row.values[field]?.size===1?[...row.values[field]]:[]);
       return values.length?[[field,{n:values.length,minimum:Math.min(...values),maximum:Math.max(...values),mean:values.reduce((a,b)=>a+b,0)/values.length}]]:[];

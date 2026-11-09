@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {PRODUCT_RELEASE,type GamePacket,type Evidence} from "../lib/playerPropsAi/evidenceContract";
 import {validateLaw,lawForecast,primitives} from "../lib/playerPropsAi/law";
-import {sourceForecastIssues,validateSourceForecast} from "../lib/playerPropsAi/forecastSanity";
+import {sourceForecastIssues,validateSourceForecast,unqualifiedEventTail} from "../lib/playerPropsAi/forecastSanity";
 import {independentPriorEvent} from "../lib/playerPropsAi/priorEvents";
 import {readerLogWindows} from "../lib/playerPropsAi/readerLogs";
 import {decodeNamedScenarioLaw,PROPS_AI_LEGACY_WIRE_RELEASE,PROPS_AI_WIRE_RELEASE} from "../lib/playerPropsAi/scenarioCoordinates";
@@ -31,6 +31,13 @@ assert.equal(JSON.stringify(center),before);assert.equal(JSON.stringify(accepted
 const quotes=["over","under"].map(side=>({id:side,book:"synthetic",provider:"synthetic",line:11.5,side:side as "over"|"under",american:side==="over"?150:-170,availableAt:at,confirmedAt:at,current:true,actionRule:"qualifying_participation" as const}));
 assert.equal(priceAiLaw({law:goodCenter,market:"rebounds",quotes,now:at,maxAgeMs:1000,confidence:2,exception:null})?.grade,"Best Angle"); // Corrected supported forecast remains promotable, no side quota.
 assert.equal(priceAiLaw({law:acceptedBad,market:"rebounds",quotes,now:at,maxAgeMs:1000,confidence:2,exception:"Contradicts source."})?.grade,"No Play");
+const supportedUnder=validateLaw("nba",center.players[0],{weights:[3,1,...Array(14).fill(0)],outcomes:{points:vector(12),rebounds:[8,13,...Array(14).fill(8)],assists:vector(2),threes:vector(0)}});
+assert.doesNotThrow(()=>validateSourceForecast(center,center.players[0],supportedUnder,[null,null]));assert.equal(priceAiLaw({law:supportedUnder,market:"rebounds",quotes,now:at,maxAgeMs:1000,confidence:2,exception:null})?.grade,"Best Angle");
+const joint=packet("nba",["points","points_rebounds"],[log(0,{minutes:30,points:10,oreb:0,dreb:8}),log(1,{minutes:30,points:20,oreb:0,dreb:4}),log(2,{minutes:30,points:30,oreb:0,dreb:10})]);
+const jointRaw={weights:[1,1,1,...Array(13).fill(0)],outcomes:{points:[10,20,30,...Array(13).fill(20)],rebounds:[4,8,10,...Array(13).fill(8)],assists:vector(0),threes:vector(0)}};
+assert.throws(()=>validateSourceForecast(joint,joint.players[0],validateLaw("nba",joint.players[0],jointRaw),[null,null]),/combo_dependence/);
+const sourceJoint=validateLaw("nba",joint.players[0],{...jointRaw,outcomes:{...jointRaw.outcomes,rebounds:[8,4,10,...Array(13).fill(8)]}});
+assert.doesNotThrow(()=>validateSourceForecast(joint,joint.players[0],sourceJoint,[null,null]));
 const receiver=packet("nfl",["receptions","receiving_yards"],[log(0,{receptions:1,receiving_yards:4}),log(1,{receptions:3,receiving_yards:25}),log(2,{receptions:4,receiving_yards:37}),prior("receptions",2.2,2.5),prior("receiving_yards",34,30.5)]);
 const badReceiver=validateLaw("nfl",receiver.players[0],{weights:vector(1),outcomes:{receptions:vector(26),receiving_yards:vector(-2)}});
 const receiverCodes=sourceForecastIssues(receiver,receiver.players[0],badReceiver).map(x=>x.code);
@@ -42,9 +49,16 @@ const negatives=packet("nfl",["rushing_yards"],[log(0,{rushing_yards:-3}),log(1,
 assert.doesNotThrow(()=>validateSourceForecast(negatives,negatives.players[0],validateLaw("nfl",negatives.players[0],{weights:vector(1),outcomes:{rushing_yards:vector(-2)}}),[null])); // Signed net yards are legitimate; no generic zero clamp.
 const event=independentPriorEvent(prior("passing_yards",262.8,245.5,.35));
 assert.equal(event.referenceContractSide,"under");assert.equal(event.preferredOutcome,"over");assert.equal(event.overProbability,.65);
+assert.equal(unqualifiedEventTail({over:.6,under:0,push:.4}),false,"integer pushes retain uncertainty without an impossible negative count");
+assert.equal(unqualifiedEventTail({over:.9999999999999999,under:0,push:0}),true,"rounded weight sums cannot disguise a missing tail");
 const integer=independentPriorEvent(prior("passing_yards",262,245,.35));assert.equal(integer.overProbability,null);assert.equal(integer.preferredOutcome,"unavailable");
+const pushSource=packet("nba",["points"],[{id:"integer",kind:"independent_model",source:"synthetic known push event",availableAt:at,value:{market:"points",line:0,independentOver:.6,independentUnder:0}}]);
+const pushLaw=validateLaw("nba",pushSource.players[0],{weights:[6,4,...Array(14).fill(0)],outcomes:{points:[1,0,...Array(14).fill(0)],rebounds:vector(0),assists:vector(0),threes:vector(0)}});
+assert.doesNotThrow(()=>validateSourceForecast(pushSource,pushSource.players[0],pushLaw,[null]),"explicit push mass must not be fabricated into an impossible negative-count event");
 const active=readerLogWindows("nba",[...center.players[0].evidence.filter(e=>e.kind==="recent_games"),log(3,{minutes:0,oreb:0,dreb:0})],at);
 assert.equal(active.observedSupport.rebounds.minimum,4);assert.equal(active.observedSupport.rebounds.n,3);
+assert.equal(readerLogWindows("nfl",[log(0,{passing_interceptions:1,interceptions:5})],at).observedSupport.interceptions.mean,1);
+assert.equal(readerLogWindows("nfl",[log(0,{interceptions:5})],at).observedSupport.interceptions,undefined,"defensive or ambiguous interceptions cannot become a passing stat or a fabricated zero");
 const reorder={outcomes:{threes:vector(0),assists:vector(1),rebounds:vector(2),points:vector(12)},weights:vector(1)};
 assert.equal(validateLaw("nba",center.players[0],decodeNamedScenarioLaw("nba",center.players[0],reorder)).hash,acceptedBad.hash);
 assert.throws(()=>decodeNamedScenarioLaw("nba",center.players[0],Array.from({length:16},()=>[1,12,2,1,0])),/Named scenario/);
@@ -75,4 +89,15 @@ const batter={markets:["batter_hits","batter_home_runs","batter_hits_runs_rbis"]
 const batterOutcomes=Object.fromEntries(primitives("mlb",batter).map(k=>[k,vector(["batter_singles","batter_home_runs","batter_runs_scored","batter_rbis"].includes(k)?1:0)]));
 const namedBatter=validateLaw("mlb",batter,decodeNamedScenarioLaw("mlb",batter,{weights:vector(1),outcomes:batterOutcomes}));
 assert.equal(lawForecast(namedBatter,"batter_hits",.5).mean,2);assert.equal(lawForecast(namedBatter,"batter_hits_runs_rbis",.5).mean,4,"canonical runs/RBIs already include home runs; never add them twice");
+const mlbHistory=(market:string,values:number[]):Evidence=>({id:`p:${market}:recentForm`,kind:"recent_games",source:"synthetic stored MLB recentForm",availableAt:at,value:{statLabel:"Canonical stat",sampleLabel:market.startsWith("pitcher_")?"starts":"games",logs:values.map((value,i)=>({gameId:i,date:`2026-11-0${i+1}`,value,plateAppearances:4}))}});
+const pitcher=packet("mlb",["pitcher_outs"],[mlbHistory("pitcher_outs",[15,18,21])]);
+const pitcherStats=Object.fromEntries(primitives("mlb",pitcher.players[0]).map(k=>[k,vector(k==="pitcher_outs"?400:0)]));
+assert.throws(()=>validateSourceForecast(pitcher,pitcher.players[0],validateLaw("mlb",pitcher.players[0],{weights:vector(1),outcomes:pitcherStats}),[null]),/outside_supplied_support/);
+const sparse=packet("mlb",["batter_triples"],[mlbHistory("batter_triples",[0,0,0])]);
+const rareStats=Object.fromEntries(primitives("mlb",sparse.players[0]).map(k=>[k,k==="batter_triples"?[1,...Array(15).fill(0)]:vector(0)]));
+assert.doesNotThrow(()=>validateSourceForecast(sparse,sparse.players[0],validateLaw("mlb",sparse.players[0],{weights:vector(1),outcomes:rareStats}),[null]),"no observed rare event is not an established zero ceiling");
+const singles=packet("mlb",["batter_singles","batter_hits","batter_total_bases","batter_hits_runs_rbis"],[mlbHistory("batter_singles",[0,1,0])]);
+const singlesStats=Object.fromEntries(primitives("mlb",singles.players[0]).map(k=>[k,vector(k==="batter_singles"?4:0)]));
+const allDependent=sourceForecastIssues(singles,singles.players[0],validateLaw("mlb",singles.players[0],{weights:vector(1),outcomes:singlesStats})).find(i=>i.code==="forecast_mean_outside_supplied_support")!;
+assert.deepEqual(allDependent.markets.slice().sort(),singles.players[0].markets.slice().sort(),"a bad primitive must not leak through nested hit/total-base combinations");
 console.log("Forecast semantics: named units/order, source contradictions, negative-yard controls, prior side reversal, tail checks, combos, correction budget, promotions/exceptions and legacy-law immutability passed. No network calls.");
