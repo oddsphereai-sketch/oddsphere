@@ -14,7 +14,7 @@ const pending = [
 const updates: Array<{ values: Record<string, unknown>; id: number | null }> = [];
 let settlementCutoff: string | null = null;
 function clientFor(
-  rows: ReadonlyArray<{ id: number; provider_game_id: string; provider_player_id: string | null; market: string; line: number; side: "under" | "over" | "yes"; locked_at: string }>,
+  rows: ReadonlyArray<{ id: number; provider_game_id: string; provider_player_id: string | null; market: string; line: number; side: "under" | "over" | "yes"; locked_at: string; result?:string }>,
   recordedUpdates: Array<{ values: Record<string, unknown>; id: number | null }>,
   onCutoff?: (value: string) => void,
 ): SupabaseClient {
@@ -26,15 +26,16 @@ function clientFor(
           let cutoff = "";
           let requireIdentity = false;
           let approvedIds: Set<number> | null = null;
+          let expectedResult = "pending";
           const query = {
-            eq() { return query; },
+            eq(field:string,value:string) { assert.equal(field,"result");expectedResult=value;return query; },
             not(field: string, operator: string, value: unknown) { assert.deepEqual([field, operator, value], ["provider_player_id", "is", null]); requireIdentity = true; return query; },
             in(field: string, values: number[]) { assert.equal(field, "id"); approvedIds = new Set(values); return query; },
             lte(field: string, value: string) { assert.equal(field, "locked_at"); cutoff = value; onCutoff?.(value); return query; },
             order(field: string, options: { ascending: boolean }) { assert.equal(field, "locked_at"); assert.equal(options.ascending, true); return query; },
             async limit(value: number) {
               assert.equal(value, NFL_PLAYER_PROPS_SETTLEMENT_MAX_RECORDS_PER_CYCLE);
-              return { data: rows.filter((row) => row.locked_at <= cutoff && (!requireIdentity || row.provider_player_id !== null)
+              return { data: rows.filter((row) => (row.result??"pending")===expectedResult && row.locked_at <= cutoff && (!requireIdentity || row.provider_player_id !== null)
                 && (!approvedIds || approvedIds.has(row.id))).slice(0, value), error: null };
             },
           };
@@ -218,6 +219,32 @@ async function main(): Promise<void> {
     const {changes}=await qbRun({passing_touchdowns:invalid,passing_tds:undefined,passing_interceptions:invalid});
     assert.deepEqual(changes.map(r=>r.id),[205],"missing/invalid QB values stay pending without inventing zero");
   }
+  const dnpGame={id:100,status_state:"final",season:2026,week:9,postseason:false,home_team:{id:17,abbreviation:"LAC"},visitor_team:{id:10,abbreviation:"HOU"}};
+  const dnpRow={...pending[0],id:301,provider_game_id:"100",player_name:"Ladd McConkey",team:"LAC"};
+  const dnp={game_id:100,season:2026,week:9,season_type:"regular",player:{id:7,first_name:"Ladd",last_name:"McConkey"},team:{id:17,abbreviation:"LAC"},active:true,starter:false,did_not_play:true};
+  const dnpRun=async (declarations:unknown[],options:{stat?:boolean;snap?:boolean;nonfinal?:boolean;cursor?:boolean;apply?:boolean;legacy?:boolean;settled?:boolean}={})=>{
+    const changes:typeof updates=[];const paths:string[]=[];const proposals:unknown[]=[];
+    const row={...dnpRow,provider_player_id:options.legacy?null:dnpRow.provider_player_id,...(options.settled?{result:"win"}:{})};
+    const result=await settleNflPlayerPropsRecords({client:clientFor([row],changes),apiKey:"test",now:"2026-11-09T13:00:00Z",apply:options.apply,
+      ...(options.legacy?{recoverMissingIdentityRecordIds:[row.id]}:{}),onProposal:p=>proposals.push(p),fetchImpl:async request=>{
+      const url=new URL(String(request));paths.push(url.pathname);let body:unknown;
+      if(url.pathname.endsWith('/stats'))body={data:[{player:{id:options.stat?7:8},team:dnp.team,game:{...dnpGame,...(options.nonfinal?{status_state:'in_progress'}:{})},receptions:0}]};
+      else if(url.pathname.endsWith('/snap_counts'))body={data:options.snap?[{player:dnp.player,team:dnp.team,game:dnpGame,offense_snaps:0,defense_snaps:0,special_teams_snaps:2}]:[]};
+      else {assert.equal(url.pathname,'/nfl/v1/player_designations');assert.equal(url.searchParams.get('season'),'2026');assert.equal(url.searchParams.get('week'),'9');assert.equal(url.searchParams.get('season_types[]'),'2');assert.deepEqual(url.searchParams.getAll('team_ids[]'),['17']);body={data:declarations,meta:options.cursor?{next_cursor:1}:{}};}
+      return Response.json(body);
+    }});
+    for(const change of changes)assert.deepEqual(Object.keys(change.values).sort(),['actual_value','result','settled_at','updated_at']);
+    return{changes,paths,result,proposals,row};
+  };
+  const voided=await dnpRun([dnp]);assert.equal(voided.result.settled,1);assert.equal(voided.changes[0].values.result,'void');assert.equal(voided.changes[0].values.actual_value,null,'DNP is not a zero-stat Under win');assert.equal(voided.paths.length,3);
+  for(const declarations of [[],[{...dnp,did_not_play:null}],[{...dnp,did_not_play:false}],[{...dnp,did_not_play:'true'}],[{...dnp,starter:true}],[{...dnp,game_id:101}],[{...dnp,season:2025}],[{...dnp,week:8}],[{...dnp,season_type:'postseason'}],[{...dnp,team:{id:10,abbreviation:'HOU'}}],[{...dnp,team:{id:99,abbreviation:'LAC'}}],[dnp,{...dnp,did_not_play:false}]]){
+    assert.equal((await dnpRun(declarations)).changes.length,0,'unknown, conflicting or foreign participation cannot invent void/zero');
+  }
+  for(const options of [{stat:true},{snap:true}]){const played=await dnpRun([dnp],options);assert.equal(played.changes[0].values.result,'win');assert.equal(played.changes[0].values.actual_value,0);assert.ok(!played.paths.some(p=>p.endsWith('/player_designations')),'actual played evidence requires no extra DNP lookup');}
+  assert.equal((await dnpRun([dnp],{nonfinal:true})).changes.length,0);
+  assert.equal((await dnpRun([dnp],{settled:true})).paths.length,0,'already settled records are never reprocessed');
+  const dry=await dnpRun([dnp],{apply:false,legacy:true});assert.equal(dry.changes.length,0);assert.deepEqual(dry.proposals,[{id:301,gameId:'100',resolvedPlayerId:'7',actual:null,result:'void'}]);assert.equal(dry.row.provider_player_id,null,'approved recovery never edits original identity');
+  await assert.rejects(dnpRun([dnp],{cursor:true}),/page bound/);
   console.log("NFL player-props exact-market settlement and push semantics passed.");
 }
 
