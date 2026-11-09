@@ -13,6 +13,11 @@ export function unqualifiedEventTail(f:{over:number;under:number;push:number},on
   // An integer-line push is a real opposing outcome, not a losing Under.
   return win<=0||f.push===0&&(f.over===0||f.under===0);
 }
+/** A numerical identity cannot be waived by a prose market exception. Legacy accepted laws are not reparsed. */
+export function validateScenarioOpportunities(sport:GamePacket["sport"],law:AcceptedPlayerLaw){
+  if(sport!=="nfl"||!law.outcomes.passing_yards)return;
+  invariant(law.outcomes.passing_yards.every((yards,i)=>law.outcomes.passing_completions[i]!==0||yards===0),"NFL passing yards require a completed pass in the same scenario; correct the named passing opportunity statistics.");
+}
 export function sourceForecastIssues(packet:GamePacket,player:Player,law:AcceptedPlayerLaw):ForecastSanityIssue[]{
   const issues:ForecastSanityIssue[]=[],priors=independentPriorEvents(player);
   const logs=player.evidence.filter(e=>e.kind==="recent_games"&&e.value&&typeof e.value==="object"&&!Array.isArray(e.value)&&e.value.box);

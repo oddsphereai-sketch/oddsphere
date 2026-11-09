@@ -13,7 +13,7 @@ export function playerSubset(packet: GamePacket, ids: string[]): GamePacket {
       return [typeof value.market === "string" ? index(markets,value.market) : null,value.independentProjection ?? null,index(times,e.availableAt),index(sources,e.source)];
     })]);
   const context: Json = {format:"peer_baseline_table_v1",schema:{row:"[playerId,name,team,opponent,heads]",head:"[marketIndex,independentMeanOrNull,availabilityTimeIndex,sourceIndex]"},markets,times,sources,rows};
-  return { ...packet, players: packet.players.filter(p => included.has(p.id)), quotes: packet.quotes.filter(q => included.has(q.playerId)), sharedGameContext: context };
+  return { ...packet, players: packet.players.filter(p => included.has(p.id)), quotes: packet.quotes.filter(q => included.has(q.playerId)), ...(packet.executionQuotes?{executionQuotes:packet.executionQuotes.filter(q=>included.has(q.playerId))}:{}), sharedGameContext: context };
 }
 export async function prepareReviewParts(packet: GamePacket, args: { key: string; model?: PropsAiModel; fetchImpl?: typeof fetch; count?: (packet: GamePacket, model: PropsAiModel) => Promise<number> }) {
   validatePacket(packet); const model = args.model ?? PROPS_AI_PRIMARY_MODEL;

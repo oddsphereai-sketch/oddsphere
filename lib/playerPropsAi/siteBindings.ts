@@ -6,6 +6,9 @@ import type {PlayerPropPreviewRow} from "../../app/mlb/props/components/PlayerPr
 import {isSignalOptionalMemberFeature} from "../mlb/props/researchEnrichment";
 import {assessPropPrice} from "../mlb/props/pricePolicy";
 import type {SiteAiDecision} from "./publication";
+import {executionQuotes,quoteContract} from "./executionQuotes";
+import {gradeAiEvent} from "./pricing";
+import {MLB_PROPS_STANDARD_STAKE_UNITS} from "../mlb/props/actionabilityPolicy";
 import {nflAiSourceBinding} from "./nflSourceBinding";
 import {PROPS_AI_ESTIMATE_RELEASE,PROPS_AI_NFL_DECISION_RELEASE} from "./releases";
 import type {GamePacket} from "./evidenceContract";
@@ -13,6 +16,12 @@ import {digest,instant} from "./evidence";
 
 const book=(value:string)=>value.toLowerCase().replace(/[^a-z0-9]/g,"");
 const choice=(all:SiteAiDecision[],id:string,market:string,line:number,sportsbook:string,provider?:string)=>all.find(c=>c.playerId===id&&c.market===market&&c.line===line&&book(c.book)===book(sportsbook)&&(!provider||c.provider===provider));
+function currentGrade(packet:GamePacket,c:SiteAiDecision,q:GamePacket["quotes"][number],now:string){
+  if(c.evidence.exception)return "No Play" as const;
+  if(q.side!==c.side)return "Watchlist" as const;
+  const opposite=executionQuotes(packet,now).find(o=>o.playerId===q.playerId&&o.market===q.market&&o.line===q.line&&book(o.book)===book(q.book)&&o.provider===q.provider&&quoteContract(o)===quoteContract(q)&&o.side!==q.side&&o.side!=="yes"&&Math.abs(instant(o.receivedAt)-instant(q.receivedAt))<=5*60000);
+  return gradeAiEvent({win:q.side==="under"?c.under:c.over,loss:q.side==="under"?c.over:c.under,american:q.american,opposingAmerican:opposite?.american??null,confidence:c.evidence.confidence,exception:c.evidence.exception}).grade;
+}
 function nbaMovement(packet:GamePacket,c:SiteAiDecision):NbaPlayerPropsMemberDecision["movement"]{
   const quotes=packet.quotes.filter(q=>q.playerId===c.playerId&&q.market===c.market&&book(q.book)===book(c.book)&&q.provider===c.provider&&q.side===c.side).sort((a,b)=>instant(a.observedAt)-instant(b.observedAt));
   const opening=quotes.find(q=>q.opening);if(!opening)return null;
@@ -21,7 +30,7 @@ function nbaMovement(packet:GamePacket,c:SiteAiDecision):NbaPlayerPropsMemberDec
 }
 function nbaAiPrices(packet:GamePacket,c:SiteAiDecision,now:string):NbaPlayerPropsMemberDecision["priceLadder"]{
   const latest=new Map<string,GamePacket["quotes"][number]>();
-  for(const q of packet.quotes){
+  for(const q of executionQuotes(packet,now)){
     if(q.playerId!==c.playerId||q.market!==c.market||q.opening||q.live||q.side==="yes"||q.receivedAtProvenance!=="provider_response"||instant(q.receivedAt)>instant(now)||instant(now)-instant(q.receivedAt)>15*60000)continue;
     const key=`${book(q.book)}|${q.line}|${q.side}`,prior=latest.get(key);
     if(!prior||instant(q.receivedAt)>instant(prior.receivedAt))latest.set(key,q);
@@ -58,7 +67,7 @@ export function applyNflSiteAi(board:NflPlayerPropsRuntimeBoard,packet:GamePacke
     const ev=probability*(q.american>0?q.american/100:100/-q.american)-loss;
     const marketProbability=q.american>0?100/(100+q.american):-q.american/(100-q.american);
     changed=true;
-    const next={...row,providerPlayerId:bound.id.replace(/^nfl-bdl-player:/,""),americanPrice:q.american,observedAt:q.observedAt,projection:c.projection,projectionRange:null,rawModelProbability:probability,finalProbability:probability,expectedValue:ev,marketProbability,probabilityEdge:probability-marketProbability,bookEvidence:row.bookEvidence.map(b=>book(b.sportsbook)===book(q.book)&&b.provider===q.provider?{...b,americanPrice:q.american,observedAt:q.observedAt}:b),grade:c.grade==="No Play"?"No Play" as const:row.side===c.side?c.grade:"Watchlist" as const,
+    const next={...row,providerPlayerId:bound.id.replace(/^nfl-bdl-player:/,""),americanPrice:q.american,observedAt:q.observedAt,projection:c.projection,projectionRange:null,rawModelProbability:probability,finalProbability:probability,expectedValue:ev,marketProbability,probabilityEdge:probability-marketProbability,bookEvidence:row.bookEvidence.map(b=>book(b.sportsbook)===book(q.book)&&b.provider===q.provider?{...b,americanPrice:q.american,observedAt:q.observedAt}:b),grade:currentGrade(packet,c,q,now),
       modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:PROPS_AI_NFL_DECISION_RELEASE,aiReview:{...c.evidence,quoteConfirmedAt:q.receivedAt}};
     // These predecessor explanations describe a different forecast. Raw market evidence remains intact.
     delete next.projectionEvidence;delete next.decisionSupport;delete next.passingMarketEvidence;delete next.qualifiedReferenceEvidence;delete next.marketEvidenceId;
@@ -72,13 +81,13 @@ export function applyNflSiteAi(board:NflPlayerPropsRuntimeBoard,packet:GamePacke
     const template=board.decisions.find(r=>r.gameId===packet.gameId&&source.playerId(r)===c.playerId&&r.state!=="locked");
     if(instant(now)>=instant(packet.lock))continue;
     const context: NflPlayerPropsRuntimeDecision["forecastContext"]=template?{...template.forecastContext,recentProduction:null,opponentAllowance:null,modelInputTrends:[]}:{featureAsOf:packet.cutoff,position:null,expectedQuarterback:null,availability:{listed:false,status:null,detail:"No independent player availability estimate supplied",reportedAt:null,reportUpdatedAt:null,source:"unavailable"},teamImpliedPoints:null,teamImpliedTouchdowns:null,recentProduction:null,roleOpportunity:[],opponentAllowance:null};
-    for(const q of packet.quotes.filter(q=>q.playerId===c.playerId&&q.market===c.market&&q.line===c.line&&book(q.book)===book(c.book)&&q.provider===c.provider&&(q.side==="yes"||q.offerContract==="milestone")===(c.quote.side==="yes"||c.quote.offerContract==="milestone")&&(q.offerContract??"two_way")===(c.quote.offerContract??"two_way")&&!q.opening&&!q.live&&q.receivedAtProvenance==="provider_response"&&instant(q.observedAt)<=instant(q.receivedAt)&&instant(q.receivedAt)<=instant(now)&&instant(now)-instant(q.receivedAt)<=15*60000)){
+    for(const q of executionQuotes(packet,now).filter(q=>q.playerId===c.playerId&&q.market===c.market&&q.line===c.line&&book(q.book)===book(c.book)&&q.provider===c.provider&&(q.side==="yes"||q.offerContract==="milestone")===(c.quote.side==="yes"||c.quote.offerContract==="milestone")&&quoteContract(q)===quoteContract(c.quote)&&!q.opening&&!q.live&&q.receivedAtProvenance==="provider_response"&&instant(q.observedAt)<=instant(q.receivedAt)&&instant(q.receivedAt)<=instant(now)&&instant(now)-instant(q.receivedAt)<=15*60000)){
       if(decisions.some(r=>r.gameId===packet.gameId&&(r.providerPlayerId===providerPlayerId||source.binding(r)?.id===c.playerId)&&r.market===q.market&&r.line===q.line&&r.side===q.side&&book(r.sportsbook)===book(q.book)&&r.provider===q.provider))continue;
       const probability=q.side==="under"?c.under:c.over,loss=q.side==="under"?c.over:c.under;
       const marketProbability=q.american>0?100/(100+q.american):-q.american/(100-q.american);
       const next:NflPlayerPropsRuntimeDecision={...template,gameId:packet.gameId,providerPlayerId,scheduledStart:packet.start,lockAt:packet.lock,state:"unlocked",roleFingerprint:template?.roleFingerprint??digest({player:c.playerId,context:packet.cutoff}),participationProbability:template?.participationProbability??null,provisional:false,market:q.market as NflPlayerPropsRuntimeDecision["market"],line:q.line,side:q.side,sportsbook:q.book,provider:q.provider,americanPrice:q.american,observedAt:q.observedAt,
         playerName:player.name,team:player.team,opponent:player.opponent,projection:c.projection,projectionRange:null,rawModelProbability:probability,finalProbability:probability,marketProbability,probabilityEdge:probability-marketProbability,
-        expectedValue:probability*(q.american>0?q.american/100:100/-q.american)-loss,grade:!template||c.grade==="No Play"?"No Play":q.side===c.side?c.grade:"Watchlist",marketMovement:"neutral",healthHolds:[],
+        expectedValue:probability*(q.american>0?q.american/100:100/-q.american)-loss,grade:!template?"No Play":currentGrade(packet,c,q,now),marketMovement:"neutral",healthHolds:[],
         bookEvidence:[{sportsbook:q.book,provider:q.provider,americanPrice:q.american,observedAt:q.observedAt,openingObservedAt:null,openingLine:null,openingAmericanPrice:null}],
         forecastContext:context,modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:PROPS_AI_NFL_DECISION_RELEASE,aiReview:{...c.evidence,quoteConfirmedAt:q.receivedAt}};
       delete next.projectionEvidence;delete next.decisionSupport;delete next.passingMarketEvidence;delete next.qualifiedReferenceEvidence;delete next.marketEvidenceId;
@@ -96,23 +105,24 @@ export function applyMlbSiteAi(rows:PlayerPropPreviewRow[],packet:GamePacket,cho
   const next=rows.map(row=>{
     if(row.lockStatus?.status==="locked"||row.providerIds?.gameId!==packet.gameId||instant(now)>=instant(packet.lock))return row;
     const id=row.providerIds.mlbStatsPlayerId??`bdl:${row.providerIds.bdlPlayerId}`;
-    const c=choices.find(c=>c.playerId===id&&c.market===row.market&&c.line===row.line&&book(c.book)===book(row.book)&&(c.quote.offerContract??"two_way")===(row.offerContract??"two_way"));
+    const c=choices.find(c=>c.playerId===id&&c.market===row.market&&c.line===row.line&&book(c.book)===book(row.book)&&quoteContract(c.quote)===(row.offerContract??"two_way"));
     if(!c)return row;
-    const q=packet.quotes.filter(q=>q.playerId===id&&q.market===c.market&&q.line===c.line&&book(q.book)===book(c.book)&&q.provider===c.provider&&(q.offerContract??"two_way")===(row.offerContract??"two_way")&&(q.side==="yes"?"over":q.side)===row.side&&!q.opening&&q.receivedAtProvenance==="provider_response"&&instant(q.observedAt)<=instant(q.receivedAt)&&instant(q.receivedAt)<=instant(now)&&instant(now)-instant(q.receivedAt)<=15*60000).sort((a,b)=>instant(b.receivedAt)-instant(a.receivedAt))[0];
+    const q=executionQuotes(packet,now).filter(q=>q.playerId===id&&q.market===c.market&&q.line===c.line&&book(q.book)===book(c.book)&&q.provider===c.provider&&quoteContract(q)===(row.offerContract??"two_way")&&(q.side==="yes"?"over":q.side)===row.side&&!q.opening&&q.receivedAtProvenance==="provider_response"&&instant(q.observedAt)<=instant(q.receivedAt)&&instant(q.receivedAt)<=instant(now)&&instant(now)-instant(q.receivedAt)<=15*60000).sort((a,b)=>instant(b.receivedAt)-instant(a.receivedAt))[0];
     if(!q)return row;
     const favored=c.side==="yes"?"over":c.side;
     const probability=row.side==="over"?c.over:c.under,loss=row.side==="over"?c.under:c.over;
     const implied=(american:number)=>american>0?100/(100+american):-american/(100-american);
-    const opposing=packet.quotes.filter(o=>o.playerId===id&&o.market===c.market&&o.line===c.line&&book(o.book)===book(c.book)&&o.provider===c.provider&&(o.offerContract??"two_way")===(row.offerContract??"two_way")&&o.side!==q.side&&!o.opening&&o.receivedAtProvenance==="provider_response"&&instant(o.receivedAt)<=instant(now)&&instant(now)-instant(o.receivedAt)<=15*60000).sort((a,b)=>instant(b.receivedAt)-instant(a.receivedAt))[0];
+    const opposing=executionQuotes(packet,now).filter(o=>o.playerId===id&&o.market===c.market&&o.line===c.line&&book(o.book)===book(c.book)&&o.provider===c.provider&&quoteContract(o)===(row.offerContract??"two_way")&&o.side!==q.side&&!o.opening&&o.receivedAtProvenance==="provider_response"&&instant(o.receivedAt)<=instant(now)&&instant(now)-instant(o.receivedAt)<=15*60000).sort((a,b)=>instant(b.receivedAt)-instant(a.receivedAt))[0];
     const marketProbability=opposing?implied(q.american)/(implied(q.american)+implied(opposing.american)):null;
-    let grade:PlayerPropPreviewRow["playGrade"]=c.grade==="No Play"?"NO_PLAY":row.side!==favored?"WATCHLIST":({"Best Angle":"BEST_ANGLE",Lean:"LEAN",Watchlist:"WATCHLIST"} as const)[c.grade];
+    const exactGrade=currentGrade(packet,c,q,now);
+    let grade:PlayerPropPreviewRow["playGrade"]=exactGrade==="No Play"?"NO_PLAY":row.side!==favored?"WATCHLIST":({"Best Angle":"BEST_ANGLE",Lean:"LEAN",Watchlist:"WATCHLIST"} as const)[exactGrade as "Best Angle"|"Lean"|"Watchlist"];
     if(row.missingFeatures.some(f=>!isSignalOptionalMemberFeature(f)))grade="PENDING_DATA";
     if((grade==="BEST_ANGLE"||grade==="LEAN")&&(row.oddsSanity.length||!assessPropPrice(q.american).signalEligible))grade="WATCHLIST";
     changed=true;
     return {...row,id:digest({preceding:row.id,release:c.evidence.release,market:row.market,line:c.line,book:c.book,side:row.side}),projection:c.projection,projectionSource:"model" as const,
       modelProbability:probability,finalProbability:probability,overProbability:c.over,underProbability:c.under,expectedValue:probability*(q.american>0?q.american/100:100/-q.american)-loss,
       fairOdds:probability>0&&loss>0?probability>=loss?-100*probability/loss:100*loss/probability:null,marketProbability,shrinkageWeight:0,modelEdge:marketProbability===null?null:probability-marketProbability,
-      odds:q.american,book:q.book,playGrade:grade,units:grade==="BEST_ANGLE"||grade==="LEAN"?row.units:0,
+      odds:q.american,book:q.book,playGrade:grade,units:grade==="BEST_ANGLE"||grade==="LEAN"?MLB_PROPS_STANDARD_STAKE_UNITS:0,
       confidence:probability,confidenceBucket:c.evidence.confidence===2?"high" as const:c.evidence.confidence===1?"medium" as const:"low" as const,
       source:"AI source review; conditional estimated outcome law",lastUpdated:q.observedAt,aiReview:c.evidence};
   });

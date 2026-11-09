@@ -13,6 +13,7 @@ import {fromCachedExport,type CachedExport} from "./cachedAdapters";
 import {enrichCachedPacket,mlbPackets,type EnrichedSource} from "./cachedEnrichment";
 import {attachGameReaderContext,type ReaderGameContext} from "./gameContext";
 import {attachNflReaderMarkets} from "./nflMarkets";
+import {latestExecutionQuotes,quoteBook} from "./executionQuotes";
 import {compileMarketReport} from "./marketReport";
 import {CATALOG,PRODUCT_RELEASE,type GamePacket,type Json,type Quote,type Player} from "./evidenceContract";
 import type {CapturedReviewWindow} from "./liveWindow";
@@ -26,22 +27,23 @@ export function emptyCapturedSource(at:string):CachedExport{
   const state={games:[],boxes:[],advanced:[],players:[],updatedAt:at} as unknown as NbaPlayerPropsCurrentState;
   return {readOnly:true,generatedAt:at,priorNba:state,currentNba:state,nba:[],nfl:[]};
 }
-function finish(packet:GamePacket,at:string){
+function finish(packet:GamePacket,at:string,currentOffers:Quote[]){
   invariant(instant(packet.cutoff)===instant(at),"Live packet cutoff mismatch");
   const clean={...packet,quotes:[...new Map(packet.quotes.map(q=>[q.id,q])).values()],players:packet.players.map(p=>({...p,missing:p.missing.filter(s=>s!=="qualified joint outcome law not attached")})),sourceLimitations:[
     ...(packet.sourceInputRelease===PROPS_AI_NFL_SOURCE_RELEASE?packet.sourceLimitations:[]),
     "Captured pre-lock collector input; no later source or recalled news may be introduced.",
     "Opening/current quotes and retained chronology are bounded evidence, not every market tick. Odds movement does not prove money or bettor identity.",
   ]};
-  return compileMarketReport(clean);
+  return {...compileMarketReport(clean),executionQuotes:latestExecutionQuotes(currentOffers,at).map(q=>({...q,id:`execution:${digest(q)}`}))};
 }
-export function liveNbaPacket(args:{game:LivePropsGame;window:CapturedReviewWindow;snapshot:NbaPlayerPropsMemberSnapshot;market:NbaPlayerPropsMarketHistory;prior:NbaPlayerPropsCurrentState;current:NbaPlayerPropsCurrentState;context?:EnrichedSource["nbaContext"]}):GamePacket{
+export function liveNbaPacket(args:{game:LivePropsGame;window:CapturedReviewWindow;snapshot:NbaPlayerPropsMemberSnapshot;market:NbaPlayerPropsMarketHistory;prior:NbaPlayerPropsCurrentState;current:NbaPlayerPropsCurrentState;context?:EnrichedSource["nbaContext"];currentObservations:NbaPlayerPropsMarketHistory["observations"]}):GamePacket{
   const at=args.window.cutoff;
   const source:EnrichedSource={readOnly:true,generatedAt:at,priorNba:args.prior,currentNba:args.current,nba:[{date:args.snapshot.slateDate,snapshot:{...args.snapshot,generatedAt:at},market:args.market}],nfl:[],nbaContext:args.context};
   const packet=fromCachedExport(source,args.window).packets[0];invariant(packet,"NBA live game missing from captured source");
   invariant(!args.market.observations.some(q=>q.canonicalGameId===args.game.id&&(CATALOG.nba.required as readonly string[]).includes(q.market)&&q.provider!=="owls"&&!q.canonicalPlayerId),"NBA retail offered-player identity incomplete");
   for(const p of packet.players){p.team=propsTeam(p.team);p.opponent=propsTeam(p.opponent);invariant([propsTeam(args.game.home),propsTeam(args.game.away)].includes(p.team)&&[propsTeam(args.game.home),propsTeam(args.game.away)].includes(p.opponent)&&p.team!==p.opponent,"NBA player/team matchup identity incomplete");}
-  return finish(enrichCachedPacket(packet,source),at);
+  const current=fromCachedExport({...source,nba:[{...source.nba[0],market:{...args.market,observations:args.currentObservations}}]},args.window).packets[0]?.quotes??[];
+  return finish(enrichCachedPacket(packet,source),at,current);
 }
 export function liveNflPacket(args:{game:LivePropsGame;window:CapturedReviewWindow;snapshot:NflPlayerPropsProductionSnapshot;observations:NflPlayerPropsObservationSnapshot;history:NflPlayerPropsCurrentSeasonState;context:NflPlayerPropsInferenceContext;retainedQuotes?:Quote[];marketHistory?:Parameters<typeof attachNflReaderMarkets>[1]}):GamePacket{
   const at=args.window.cutoff,source:EnrichedSource={...emptyCapturedSource(at),nfl:[{week:args.snapshot.week,snapshot:{...args.snapshot,generatedAt:at}}],nflHistory:args.history};
@@ -84,7 +86,7 @@ export function liveNflPacket(args:{game:LivePropsGame;window:CapturedReviewWind
   const enriched=enrichCachedPacket(current,source);
   const contexts:ReaderGameContext[]=args.context.games.map(g=>({id:`live:${g.canonicalGameId}`,gameId:g.canonicalGameId,start:g.scheduledStart,awayTeam:g.awayTeam,homeTeam:g.homeTeam,availableAt:args.context.capturedAt,source:"existing exact-game NFL collector",injuries:json(g.injuries),depth:json({away:g.awayDepth,home:g.homeDepth}),weather:json(g.weather??null)}));
   const contextual=attachGameReaderContext(enriched,contexts);
-  return finish(args.marketHistory?attachNflReaderMarkets(contextual,args.marketHistory):contextual,at);
+  return finish(args.marketHistory?attachNflReaderMarkets(contextual,args.marketHistory):contextual,at,quotes);
 }
 export function liveMlbPacket(args:{game:LivePropsGame;window:CapturedReviewWindow;snapshot:MlbPropsBoardSnapshot;currentOdds:readonly PropOddsSnapshot[];openingOdds:readonly PropOddsSnapshot[]}):GamePacket{
   const at=args.window.cutoff,source=emptyCapturedSource(at);
@@ -97,9 +99,17 @@ export function liveMlbPacket(args:{game:LivePropsGame;window:CapturedReviewWind
     const matching=nativeRows.filter(r=>String(r.providerIds?.bdlGameId)===q.gameId.replace(/^balldontlie-game-/,"")&&r.providerIds?.bdlPlayerId!==null&&String(r.providerIds?.bdlPlayerId)===q.playerId.replace(/^balldontlie-player-/,"")&&r.market===q.marketKey);
     const ids=new Set(matching.map(r=>r.providerIds?.mlbStatsPlayerId??`bdl:${r.providerIds?.bdlPlayerId}`));
     invariant(ids.size>0,"Offered MLB player identity missing from complete captured rows");invariant(ids.size===1,"Ambiguous MLB provider player identity");
+    const raw=q.rawPayload&&typeof q.rawPayload==="object"&&!Array.isArray(q.rawPayload)?q.rawPayload as Record<string,unknown>:{};
+    const declared=raw.market_kind==="milestone"?"milestone":raw.market_kind==="over_under"?"two_way":null;
+    const exact=matching.filter(r=>quoteBook(r.book)===quoteBook(q.sportsbook)&&r.line===q.line&&r.side===q.side);
+    const contracts=new Set(exact.map(r=>r.offerContract??"two_way"));
+    invariant(declared!==null||contracts.size===1,"MLB source quote event contract is not uniquely declared");
+    const offerContract=declared??[...contracts][0];
+    // Declared raw contract owns its event. Identity is independently reconciled
+    // across native rows; row order cannot relabel Over as an at-least milestone.
     const received=q.providerResponseAt;if(!received||instant(received)>instant(at)||instant(q.asOfTimestamp)>instant(received))continue;
-    const value={playerId:[...ids][0],market:q.marketKey,provider:q.provider,book:q.sportsbook.toLowerCase().replace(/[^a-z0-9]/g,""),line:q.line,offerContract:matching[0].offerContract??"two_way",side:matching[0].offerContract==="milestone"?"yes" as const:q.side as Quote["side"],american:q.americanOdds,observedAt:q.asOfTimestamp,receivedAt:received,receivedAtProvenance:"provider_response" as const,opening,live:false};
+    const value={playerId:[...ids][0],market:q.marketKey,provider:q.provider,book:q.sportsbook.toLowerCase().replace(/[^a-z0-9]/g,""),line:q.line,offerContract,side:offerContract==="milestone"?"yes" as const:q.side as Quote["side"],american:q.americanOdds,observedAt:q.asOfTimestamp,receivedAt:received,receivedAtProvenance:"provider_response" as const,opening,live:false};
     quotes.push({...value,id:digest(value)});
   }
-  return finish({...packet,quotes:[...packet.quotes,...quotes]},at);
+  return finish({...packet,quotes:[...packet.quotes,...quotes]},at,quotes);
 }

@@ -12,7 +12,7 @@ export type PropsAiMemberEvidence={
   assessment:string;coverage:PublicAiCoverage;exception:string|null;
 };
 
-export const PROPS_AI_FAMILIAR_READER_RELEASE="player_props_ai_site_2026_11_08_r4_familiar_readers" as const;
+export const PROPS_AI_FAMILIAR_READER_RELEASE="player_props_ai_site_2026_11_09_r5_current_execution" as const;
 export function needsLegacyLockedAiReader(evidence:PropsAiMemberEvidence|undefined,locked:boolean){
-  return Boolean(evidence&&locked&&evidence.publicationRelease!==PROPS_AI_FAMILIAR_READER_RELEASE);
+  return Boolean(evidence&&locked&&![PROPS_AI_FAMILIAR_READER_RELEASE,"player_props_ai_site_2026_11_08_r4_familiar_readers"].includes(evidence.publicationRelease));
 }
