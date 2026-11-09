@@ -1,5 +1,20 @@
 # Current production model releases and qualified research candidates
 
+## November 9 NFL quarterback prop result settlement
+
+Settlement R6 `nfl_player_props_settlement_2026_11_09_r6_quarterback_markets`
+and sole writer R78 `nfl_player_props_writer_2026_11_09_r78_quarterback_settlement`
+add stored outcome support for the already offered passing-TD and thrown-
+interception markets. Provider passing touchdown fields and passing interceptions
+are distinct from defensive interceptions and anytime scoring touchdowns.
+Explicit finite nonnegative integer results, including zero, settle normally;
+missing or invalid fields remain pending. No added stats request, snap lookup,
+timer, manual review or paid test. Normal settlement may fill pending outcome
+fields only; original locked predictions, grades, identities, prices, evidence
+and all existing settled results remain exact. Generation R17/source R2,
+selection R1/decision R8, tracking R43, budgets, readers and review slots stay
+unchanged. See `model-audits/2026-11-09-nfl-props-quarterback-settlement.md`.
+
 ## November 8 truthful NFL model-context status
 
 Future generation R17 `player_props_ai_2026_11_08_r17_nfl_input_status`, NFL source

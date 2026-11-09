@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { nflPlayerPropsSettlementNameKey, nflPlayerPropsSettlementTeamKey } from "./nflPlayerPropsSettlementIdentity";
 
 export const NFL_PLAYER_PROPS_SETTLEMENT_RELEASE =
-  "nfl_player_props_settlement_2026_11_04_r5_verified_participation" as const;
+  "nfl_player_props_settlement_2026_11_09_r6_quarterback_markets" as const;
 export const NFL_PLAYER_PROPS_SETTLEMENT_MINIMUM_HOURS_AFTER_LOCK = 5 as const;
 export const NFL_PLAYER_PROPS_SETTLEMENT_MAX_RECORDS_PER_CYCLE = 1_000 as const;
 export const NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE = 18 as const;
@@ -170,6 +170,13 @@ function exactFinalGamePlayer(stats: ReadonlyMap<string, Record<string, unknown>
 }
 
 function actualValue(market: string, stat: Record<string, unknown>): number | null {
+  // These offered AI heads use provider passing fields, never defensive
+  // interceptions or a passing TD's contribution to an anytime scorer market.
+  // An absent/invalid field stays pending; participation alone cannot supply it.
+  if (market === "passing_tds" || market === "interceptions") {
+    const value = market === "passing_tds" ? stat.passing_touchdowns ?? stat.passing_tds : stat.passing_interceptions;
+    return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+  }
   if (!ZERO_ELIGIBLE_MARKETS.has(market)) return null;
   if (market === "anytime_td") return sum(stat, ["rushing_touchdowns", "receiving_touchdowns", "kick_return_touchdowns", "punt_return_touchdowns", "fumbles_touchdowns"]);
   const value = stat[market];
