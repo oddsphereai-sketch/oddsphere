@@ -11,6 +11,7 @@ on:
       - "lib/services/football/**"
       - "lib/services/marketBrain/**"
       - "lib/playerPropsAi/**"
+      - "lib/db/schema-migration-v6*-player-props-ai-*.sql"
       - "scripts/test-player-props-ai-**"
       - "scripts/fixtures/nfl-market-brain-v45-installed.sql"
       - "scripts/fixtures/nfl-market-brain-v46-lifecycle-proof.sql"
@@ -64,5 +65,11 @@ jobs:
         run: node --import tsx scripts/test-nfl-player-props-settlement.ts && node --import tsx scripts/test-nfl-props-reviewed-dnp-recovery.ts
       - name: Prove source-grounded forecast semantics and retained legacy law authority
         run: node --import tsx scripts/test-player-props-ai-generative-coordinates.ts && node --import tsx scripts/test-player-props-ai-generative-admission.ts && node --import tsx scripts/test-player-props-ai-source-events.ts && node --import tsx scripts/test-player-props-ai-complete-sentences.ts && node --import tsx scripts/test-player-props-ai-openai.ts && node --import tsx scripts/test-player-props-ai-rejection-evidence.ts && node --import tsx scripts/test-player-props-ai-current-execution.ts && node --import tsx scripts/test-player-props-ai-forecast-semantics.ts && node --import tsx scripts/test-player-props-ai-reader.ts && node --import tsx scripts/test-player-props-ai-core.ts && node --import tsx scripts/test-player-props-ai-site.ts && node --import tsx scripts/test-player-props-ai-output-headroom.ts
+      - name: Install isolated PostgreSQL client for props wallet proof
+        run: npm install --prefix "$RUNNER_TEMP/props-pg-deps" --ignore-scripts --package-lock=false pg@8.16.3
+      - name: Prove exact props wallet installation, Standard funding, correction escrow and mocked reviewer
+        run: |
+          node scripts/test-player-props-ai-standard-escrow.mjs "$RUNNER_TEMP/props-pg-deps/node_modules/pg/lib/index.js" --ci-disposable 5432 "$GITHUB_WORKSPACE"
+          node --import tsx scripts/test-player-props-ai-wallet.ts "$RUNNER_TEMP/props-pg-deps/node_modules/pg/lib/index.js" --ci-disposable
       - name: Run mandatory model-change gate and real PostgreSQL proof
         run: npm run verify:model-change

@@ -2,7 +2,7 @@ import {encodeCanonicalScenarioLaw} from "../lib/playerPropsAi/generativeCoordin
 /** Real PostgreSQL + real reviewer + mock HTTP. No credentials, Internet or paid calls. */
 import assert from "node:assert/strict";
 import {gunzipSync} from "node:zlib";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { PropsAiStore, usageMicroUsd, type PropsAiJob } from "../lib/playerPropsAi/budget";
 import { dispatchFundedPropsReviews } from "../lib/playerPropsAi/dispatch";
@@ -19,11 +19,14 @@ import { digest } from "../lib/playerPropsAi/evidence";
 
 async function main(){
 const modulePath=process.argv[2];
-assert.ok(modulePath?.startsWith("/private/tmp/"),"Only a private local pg module is allowed");
+const ci=process.env.GITHUB_ACTIONS==="true"&&process.env.MARKET_BRAIN_POSTGRES_PROOF_DISPOSABLE==="YES"&&process.argv[3]==="--ci-disposable";
+assert.ok(ci?modulePath&&realpathSync(modulePath).startsWith(realpathSync(process.env.RUNNER_TEMP!)+"/"):modulePath?.startsWith("/private/tmp/"),"Only explicitly disposable PostgreSQL dependencies are allowed");
 const {default:pg}=await import(pathToFileURL(modulePath).href);
 const host=process.argv[3]??"/private/tmp/oddsphere-props-wallet-pg-20261107/socket",port=Number(process.argv[4]??55587);
-assert.ok(host.startsWith("/private/tmp/")&&Number.isSafeInteger(port)&&port>=1024&&port<=65535,"Only a disposable local Unix-socket test database is allowed");
-const config={host,port,user:"postgres"};
+assert.ok(ci||(host.startsWith("/private/tmp/")&&Number.isSafeInteger(port)&&port>=1024&&port<=65535),"Only a disposable local test database is allowed");
+const url=ci?new URL(process.env.MARKET_BRAIN_POSTGRES_URL!):null;
+if(url){assert.equal(url.protocol,"postgresql:");assert.equal(url.hostname,"127.0.0.1");assert.equal(url.port,"5432");assert.equal(url.pathname,"/oddsphere_market_brain_test");assert.equal(url.username,"postgres");assert.equal(url.search,"");}
+const config=url?{host:url.hostname,port:5432,user:"postgres",password:decodeURIComponent(url.password)}:{host,port,user:"postgres"};
 const admin=new pg.Client({...config,database:"postgres"});await admin.connect();
 const database=`props_wallet_${Date.now()}`;await admin.query(`CREATE DATABASE ${database}`);
 const db=new pg.Client({...config,database}),other=new pg.Client({...config,database});await db.connect();await other.connect();
@@ -87,6 +90,7 @@ try{
   const targetMigration=readFileSync("lib/db/schema-migration-v64-player-props-ai-budget-target.sql","utf8");await db.query(targetMigration);await db.query(targetMigration);
   await db.query(readFileSync("lib/db/schema-migration-v63-player-props-ai-site-control.sql","utf8"));
   await db.query(readFileSync("lib/db/schema-migration-v66-player-props-ai-slate-capacity.sql","utf8"));
+  await db.query(readFileSync("lib/db/schema-migration-v68-player-props-ai-standard-primary-escrow.sql","utf8"));
   await db.query("UPDATE player_props_ai_control SET paid_enabled=true");
   await db.query("CREATE TABLE test_clock(at timestamptz); INSERT INTO test_clock VALUES('2026-11-07T21:40:00Z'); CREATE FUNCTION props_ai_test_clock() RETURNS timestamptz LANGUAGE sql VOLATILE AS 'SELECT at FROM test_clock'");
   const functions=await db.query("SELECT pg_get_functiondef(oid) body FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname LIKE 'player_props_ai_%'");
@@ -97,13 +101,13 @@ try{
     assert.equal(Number(sql),usageMicroUsd(strong?"gpt-6.1-terra":"gpt-6-luna",{input_tokens:input+2048,output_tokens:output},flex?"flex":"default"));
   }
   const full=plan(20),before=digest(full);assert.equal((await wallet.plan(full)).funded,true);const first=await budget();
-  assert.equal(Number(first.core_reserved_micro),20*(3806+7610));assert.equal(Number(first.fallback_remaining_micro),15220);
+  assert.equal(Number(first.core_reserved_micro),20*(7610+7610));assert.equal(Number(first.fallback_remaining_micro),15220);
   assert.equal((await wallet.plan(full)).funded,true);assert.equal(Number((await budget()).core_reserved_micro),Number(first.core_reserved_micro));assert.equal(digest(full),before);
   await assert.rejects(wallet.plan({...full,jobs:full.jobs.slice(1)}),/omits_review|drop_pending/);
   await assert.rejects(wallet.plan({...full,sources:{...sources,nfl:{complete:false,source:"incomplete"}} as unknown as CalendarSources}),/calendar_sources_required/);
-  // No optional balance: temporary Standard escrow must draw and restore the protected pool.
+  // No optional balance: a known paid invalid Standard draft corrects using unused whole-job escrow.
   await db.query("UPDATE player_props_ai_budgets SET cap_micro=core_reserved_micro+consumed_micro+fallback_remaining_micro+recovery_remaining_micro WHERE month_key='2026-11'");
-  const capacity=await run("g0","early","capacity",true);assert.equal(capacity.result.status,"completed");
+  const capacity=await run("g0","early","invalid",true);assert.equal(capacity.result.status,"completed");
   assert.equal(Number((await budget()).fallback_remaining_micro),Number(first.fallback_remaining_micro));
   assert.equal(Number((await budget()).recovery_remaining_micro),3_000_000);
   await db.query("UPDATE player_props_ai_budgets SET cap_micro=50000000 WHERE month_key='2026-11'");
@@ -128,8 +132,8 @@ try{
   }
   for(const [id,kind]of [["g11","missingusage"],["g12","invalidusage"]] as const){const failed=await run(id,"early",kind);assert.equal(failed.result.status,"failed");assert.equal(failed.calls.length,2);const receipt=(await db.query("SELECT * FROM player_props_ai_attempts WHERE job_key=$1 AND part=2",[keys(id)[0]])).rows[0];assert.equal(receipt.actual_micro,null);assert.equal(receipt.state,"unknown");assert.ok(receipt.usage.failureEvidence.draft.data);}
   const combined=await run("g14","final","physicalformat");assert.equal(combined.result.status,"completed");assert.equal(combined.calls.length,3);assert.equal(combined.calls.filter(c=>c.player==="a").length,1);
-  const alias=await run("g13","early","capacityalias");assert.equal(alias.result.status,"completed");assert.equal(alias.calls.length,3);assert.equal(alias.calls.filter(c=>c.player==="a").length,1);assert.equal(alias.calls.at(-1)!.tier,"default");
-  const freeCapacity=(await db.query("SELECT * FROM player_props_ai_attempts WHERE job_key=$1 AND phase=1 AND part=2",[keys("g13")[0]])).rows[0];assert.equal(Number(freeCapacity.actual_micro),0);assert.equal(freeCapacity.state,"completed");assert.equal(freeCapacity.usage.kind,"known_unbilled");assert.equal(freeCapacity.usage.transport.code,"flex_unavailable");assert.equal(freeCapacity.usage.transport.type,"resource_unavailable");assert.equal((await run("g13","early")).calls.length,0,"closed successful slot cannot replay");
+  const alias=await run("g13","early","capacityalias");assert.equal(alias.result.status,"failed");assert.equal(alias.calls.length,2);assert.ok(alias.calls.every(c=>c.tier==="default"));
+  const standardCapacity=(await db.query("SELECT * FROM player_props_ai_attempts WHERE job_key=$1 AND phase=1 AND part=2",[keys("g13")[0]])).rows[0];assert.equal(standardCapacity.actual_micro,null);assert.equal(standardCapacity.state,"unknown");assert.equal(standardCapacity.usage.kind,"unknown_transport_outcome");assert.equal(standardCapacity.usage.transport.code,"flex_unavailable");assert.equal(standardCapacity.usage.transport.type,"resource_unavailable");assert.equal((await run("g13","early")).calls.length,0,"closed failed slot cannot replay");
   const strong=await run("g2","final","invalid",true);assert.equal(strong.result.status,"completed");assert.equal(strong.calls.filter(c=>c.player==="a").length,1);assert.equal(strong.calls[0].model,"gpt-6.1-terra");assert.equal(strong.calls.at(-1)!.model,"gpt-6-luna");
   assert.equal(((await job(keys("g2")[1])).result as {model:string}).model,"mixed_recorded_per_part");
   assert.equal((await run("g3","final","none",true)).calls[0].model,"gpt-6.1-terra");assert.equal((await run("g4","final","none",true)).calls[0].model,"gpt-6-luna");
@@ -156,7 +160,7 @@ try{
   await wallet.reap();assert.equal(Number((await budget()).core_reserved_micro),0);
   const boundaryGames=[...Array.from({length:20},(_,i)=>game(`g${i}`)),boundaryGame];
   const novemberCarry=makePropsWalletPlan({month:"2026-11",now:"2026-11-07T22:00:00Z",games:boundaryGames,bounds:{...Object.fromEntries(Array.from({length:20},(_,i)=>[`nba|g${i}`,bounds])),"nba|utc-boundary":bounds},sources});
-  assert.equal((await wallet.plan(novemberCarry)).funded,true);assert.equal(Number((await budget()).core_reserved_micro),3806);
+  assert.equal((await wallet.plan(novemberCarry)).funded,true);assert.equal(Number((await budget()).core_reserved_micro),7610);
   await db.query("UPDATE test_clock SET at='2026-12-01T00:05:00Z'");
   const carry=makePropsWalletPlan({month:"2026-12",now:"2026-12-01T00:05:00Z",games:[boundaryGame],bounds:{"nba|utc-boundary":bounds},sources});
   assert.equal(carry.jobs.length,2);assert.equal((await wallet.plan(carry)).funded,true);assert.equal(Number((await budget()).core_reserved_micro),0);
@@ -165,7 +169,7 @@ try{
   const carried=await wallet.claim(carryKey,"carry",requests,false,"synthetic-owner");assert.equal(carried.claimed,true);await wallet.finish(carryKey,carried.token!,null,"synthetic_unsent");
   // Tight complete month: optional upgrades exhaust their own money, never core funds.
   const tightBounds=Array.from({length:3},()=>({input_tokens:120000,max_output_tokens:7000}));
-  const tight=makePropsWalletPlan({month:"2027-04",now:"2027-04-06T21:40:00Z",games:Array.from({length:600},(_,i)=>({...game(`large${i}`),start:"2027-04-06T23:00:00Z",lock:"2027-04-06T22:00:00Z"})),bounds:Object.fromEntries(Array.from({length:600},(_,i)=>[`nba|large${i}`,tightBounds])),sources});
+  const tight=makePropsWalletPlan({month:"2027-04",now:"2027-04-06T21:40:00Z",games:Array.from({length:455},(_,i)=>({...game(`large${i}`),start:"2027-04-06T23:00:00Z",lock:"2027-04-06T22:00:00Z"})),bounds:Object.fromEntries(Array.from({length:455},(_,i)=>[`nba|large${i}`,tightBounds])),sources});
   await db.query("UPDATE test_clock SET at='2027-04-06T21:40:00Z';UPDATE cron_job_leases SET lease_expires_at='2027-05-01T00:00:00Z'");assert.equal((await wallet.plan(tight)).funded,true);
   let upgraded=0;
   for(let i=0;i<5;i++){
@@ -217,7 +221,7 @@ try{
   assert.equal((await dispatchFundedPropsReviews(dispatchArgs)).length,0);assert.equal(dispatchCalls,5);
   // Coverage may use the approved emergency band; optional stronger work may not.
   const emergencyBounds=Array.from({length:3},()=>({input_tokens:145000,max_output_tokens:7000}));
-  const emergencyGames=Array.from({length:600},(_,i)=>({...game(`emergency${i}`),start:"2030-04-06T23:00:00Z",lock:"2030-04-06T22:00:00Z"}));
+  const emergencyGames=Array.from({length:480},(_,i)=>({...game(`emergency${i}`),start:"2030-04-06T23:00:00Z",lock:"2030-04-06T22:00:00Z"}));
   const emergencyPlan=makePropsWalletPlan({month:"2030-04",now:"2030-04-06T21:40:00Z",games:emergencyGames,bounds:Object.fromEntries(emergencyGames.map(g=>[`nba|${g.id}`,emergencyBounds])),sources});
   await db.query("UPDATE test_clock SET at='2030-04-06T21:40:00Z';UPDATE cron_job_leases SET lease_expires_at='2030-05-01T00:00:00Z'");
   const emergencyFunding=await wallet.plan(emergencyPlan);assert.equal(emergencyFunding.funded,true);
@@ -249,7 +253,7 @@ try{
   for(const c of batchClaims)await wallet.finish(c.key,c.token,null,"synthetic_unsent");
   console.log("Native slate capacity proof passed: up to sixteen funded games claim atomically; the seventeenth is deferred; no generation or added spending.");
   console.log("Target/emergency proof passed: all core reviews fund above $50, optional upgrades stay below target and daily/monthly 10%, $60 authorizations stop, no AI HTTP for these cases.");
-  console.log("Native wallet/reviewer integration passed: exact request funding, full coverage, two stages, partial Flex/strong fallback, unknown charges, duplicates/concurrency, immutable results, cap rejection, UTC boundaries, 40-player partitioning, lock cutoff and RLS. All AI HTTP was mocked; zero paid calls.");
+  console.log("Native wallet/reviewer integration passed: exact request funding, full coverage, two stages, Standard primary/strong fallback, unknown charges, duplicates/concurrency, immutable results, cap rejection, UTC boundaries, 40-player partitioning, lock cutoff and RLS. All AI HTTP was mocked; zero paid calls.");
 }finally{await other.end();await db.end();await admin.query(`DROP DATABASE ${database} WITH (FORCE)`);await admin.end();}
 }
 void main().catch(error=>{console.error(error);process.exitCode=1;});

@@ -1,3 +1,41 @@
+## November 9 Standard-primary funding and escrow R25
+
+Future generation `player_props_ai_2026_11_09_r25_standard_primary_escrow`, budget
+`player_props_ai_budget_2026_11_09_r5_standard_primary_and_early`, migrationv68 and
+sole NFL writer `nfl_player_props_writer_2026_11_09_r87_standard_primary_escrow`
+fund both remaining primary slots at Standard bounds and request Standard for
+both. Early remains the same Luna model. Final stronger selection remains optional
+and limited to10% daily/monthly beneath target after all protected core obligations.
+The$50 target/$60 emergency ceiling, two slots, two phases, sixteen-game claim
+bound, source/forecast/grade semantics, existing sport lease and locks remain.
+
+Known-charge correction reuses whole-job escrow: additional reservation equals
+max(0, ALL known primary actuals + failed-parts Standard bound - current escrow).
+Every primary receipt must be complete/known; unknown charges, overruns, stale
+leases, duplicate/closed phases and lock boundaries still refuse. Standard429s
+remain unknown and cannot masquerade as free Flex rejection. All remaining
+primary funding is Standard only after a genuine new-release full-calendar plan;
+the old R4 discounted early plan is not retrospectively relabeled.
+
+Migration requires an ordinary no-due maintenance window, zero running reviews,
+paid-off control, exact installed function bodies, then matching runtime and real
+complete-calendar reconciliation. Drain BEFORE pausing: off blocks future sends
+of running jobs. Old cached-paid invocations must finish before final funding
+verification. No review replay, manual cron, paid proof or locked-field change.
+R24 wireR4/sourceR3/selectionR3/decisionR10/memberR58/lifecycleR40, gradeR2/lawR1,
+settlementR7/trackingR43 and native MLB `mlb_props_2026_10_21_r44` stay exact.
+Accepted R15–R24 values retain exact legacy authority.
+
+Disposable native PostgreSQL covers all570 synthetic Standard primary slots,
+sixteen concurrent claims, known/unknown/mixed correction escrow, immutable
+history, install guards and truthful infeasible funding. The actual reviewer is
+tested with ALL model HTTP mocked. Paired positive/negative forecast and lock
+controls remain; same valid law has zero promotions/demotions/side/stake changes.
+Full/focused/integration/protected-PR gates and natural live funding/publication
+proof remain mandatory. Standard early can cost more than successful Flex;
+forecasts from old observed samples are estimates, not a monthly guarantee.
+See `model-audits/2026-11-09-props-ai-standard-primary-wallet.md`.
+
 ## November 9 player-prop named generative coordinates R24
 
 Future `player_props_ai_2026_11_09_r24_generative_coordinates`, wire
