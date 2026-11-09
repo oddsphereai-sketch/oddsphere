@@ -5,7 +5,7 @@ import { type GameReview, type PlayerReview, validateGameReview,primitives } fro
 import { verifiedReaderSource } from "./sourceCodec";
 import type { Json } from "./evidenceContract";
 import {decodeNamedScenarioLaw,PROPS_AI_WIRE_RELEASE} from "./scenarioCoordinates";
-import {validateSourceForecast} from "./forecastSanity";
+import {validateSourceForecast,validateScenarioOpportunities} from "./forecastSanity";
 import {independentPriorEvents} from "./priorEvents";
 import { PROPS_AI_RELEASE, PROPS_AI_SCENARIOS, type PropsAiModel } from "./releases";
 import { coverageSchema, readerEvidence, validatePlayerCoverage, type ReaderCoverage } from "./readerCoverage";
@@ -14,7 +14,7 @@ const READER_INSTRUCTIONS = `For EACH player review ALL eight readerAreas: recen
 
 export function sourceInput(packet:GamePacket){
   const input=readableInput(packet,{compactClocks:true,readerCoverage:true});
-  const value={...input,players:input.players.map(p=>({...p,scenarioStatistics:primitives(packet.sport,p),scenarioMeaning:"Named canonical game statistics; all arrays share the same sixteen scenario indices. Points include made threes, completions include passing TDs, net yards are signed yards, and runs/RBIs include home runs."}))};
+  const value={...input,players:input.players.map(p=>({...p,scenarioStatistics:primitives(packet.sport,p),scenarioMeaning:"Named canonical game statistics; all arrays share the same sixteen scenario indices. Points include made threes, completions include passing TDs, passing yards require a completion in the same scenario, net yards are signed yards, and runs/RBIs include home runs."}))};
   return JSON.stringify(verifiedReaderSource(value as unknown as Json));
 }
 
@@ -64,6 +64,7 @@ export function parseJointReview(packet: GamePacket, value: unknown) {
   const players=validateGameReview(packet,expanded);
   const checked=players.map(row=>{
     invariant(/[.!?]$/.test(row.assessment.trim()),"Assessment must be a complete sentence, not clipped prose");
+    if(row.law)validateScenarioOpportunities(packet.sport,row.law);
     const sourceDeclinedMarkets=row.law?validateSourceForecast(packet,packet.players.find(p=>p.id===row.playerId)!,row.law,row.exceptions):packet.players.find(p=>p.id===row.playerId)!.markets;
     return {...row,sourceDeclinedMarkets};
   });

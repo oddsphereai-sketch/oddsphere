@@ -53,7 +53,7 @@ export function validatePacket(packet: GamePacket) {
       stable(e.value);
     }
   }
-  for (const q of packet.quotes) {
+  for (const q of [...packet.quotes,...(packet.executionQuotes??[]).filter(q=>!packet.quotes.some(old=>old.id===q.id&&stable(old)===stable(q)))]) {
     invariant(q.id && !quoteIds.has(q.id), "Duplicate/empty quote identity"); quoteIds.add(q.id);
     invariant(ids.has(q.playerId) && packet.players.find(p => p.id === q.playerId)!.markets.includes(q.market), "Quote outside declared player/market scope");
     invariant(!q.live && q.book && q.provider, "Live/unattributed quote");

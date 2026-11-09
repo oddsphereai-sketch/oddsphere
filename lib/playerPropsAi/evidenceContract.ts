@@ -55,6 +55,8 @@ export type GamePacket = {
   sharedGameContext?: Json;
   /** Native collector identity when the funding calendar uses a separately bound fixture ID. */
   sourceGameId?:string;
+  /** Complete offers in the current collector response, separate from compressed history. Never sent as additional AI tokens. */
+  executionQuotes?:Quote[];
 };
 
 /** Source-of-truth mathematical definitions; count/event units must be retained by adapters. */

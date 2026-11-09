@@ -1,3 +1,37 @@
+## November 9 player-prop AI current execution R19
+
+Future generation `player_props_ai_2026_11_09_r19_current_execution` retains R18
+named wire R3 / reader R11 and adds a non-waivable physical identity: a scenario
+with zero completed passes has zero individual passing yards. Genuine negative
+completed-pass yards remain valid. Existing accepted R18 and older laws are
+never reparsed, relabeled or rewritten.
+
+Selection R2 `player_props_ai_selection_2026_11_09_r2_current_execution`, grade R2
+`player_props_ai_grade_2026_11_09_r2_current_price`, publication R5
+`player_props_ai_site_2026_11_09_r5_current_execution` and NFL decision R9
+`player_props_ai_nfl_decision_2026_11_09_r9_current_execution` separate the complete
+current collector offers from compressed research history. Superseded prices,
+removed offers, unknown opening states and equal-clock conflicting prices cannot
+become executable offers. Current simultaneous lines survive compression.
+Canonical ordinary versus at-least contracts remain distinct through pricing and
+all adapters; exact current price/pair, EV and grade agree. Future unlocked MLB
+AI promotions use the existing standard stake, retaining native eligibility holds.
+
+NBA sole writer R13 `nba_player_props_private_writer_2026_11_09_r13_current_ai_execution`
+passes the actual current response separately from its retained history. NFL sole
+writer R81 `nfl_player_props_writer_2026_11_09_r81_current_execution` retains
+settlement R7, source R2, member R57/lifecycle R39/tracking R43 and the sport lease.
+MLB native champion `mlb_props_2026_10_21_r44` remains unchanged. No provider call,
+extra review, phase, request/output cap, stronger quota or budget increase; paired
+early/final slots and $50 target/$60 emergency ceiling remain exact.
+
+All locked payloads and rendering precedence remain exact, including the R4
+familiar reader. Current-contract accounting distinguishes player/market review
+from priced and unpriced exact executable contracts. This engineering repair does
+not establish calibrated probabilities, prose entailment or book-specific action
+rules. Open contract/semantic limitations and synthetic regression evidence are in
+`model-audits/2026-11-09-props-ai-current-execution.md`.
+
 ## November 9 player-prop AI forecast semantics R18
 
 Future generations use `player_props_ai_2026_11_09_r18_forecast_semantics` and

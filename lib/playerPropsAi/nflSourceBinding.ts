@@ -1,3 +1,4 @@
+import {executionQuotes} from "./executionQuotes";
 import {sameNflPropActorName} from "./nflPlayerIdentity";
 /** Verified current source identity and one forecast authority per unlocked scope. */
 import type {NflPlayerPropsRuntimeDecision as Row} from "../services/football/nflPlayerPropsRuntime";
@@ -10,7 +11,7 @@ import {PROPS_AI_NFL_DECISION_RELEASE} from "./releases";
 const book=(s:string)=>s.toLowerCase().replace(/[^a-z0-9]/g,"");
 const contract=(side:string,offer?:string)=>side==="yes"||offer==="milestone"?"milestone":"two_way";
 export function nflAiSourceBinding(packet:GamePacket,choices:SiteAiDecision[],now:string){
-  const at=instant(now);
+  const at=instant(now),current=executionQuotes(packet,now);
   const playerId=(row:Row):string|null=>{
     if(row.gameId!==packet.gameId||instant(row.scheduledStart)!==instant(packet.start)
       ||instant(row.lockAt)!==instant(packet.lock)||!row.team||!row.opponent)return null;
@@ -27,7 +28,7 @@ export function nflAiSourceBinding(packet:GamePacket,choices:SiteAiDecision[],no
       &&book(c.book)===book(row.sportsbook)&&c.provider===row.provider
       &&contract(c.quote.side,c.quote.offerContract)===contract(row.side));
     if(!c)return null;
-    const quote=packet.quotes.filter(q=>q.playerId===id&&q.market===row.market&&q.line===row.line
+    const quote=current.filter(q=>q.playerId===id&&q.market===row.market&&q.line===row.line
       &&q.side===row.side&&book(q.book)===book(row.sportsbook)&&q.provider===row.provider
       &&contract(q.side,q.offerContract)===contract(row.side)&&!q.opening&&!q.live
       &&q.receivedAtProvenance==="provider_response"&&instant(q.observedAt)<=instant(q.receivedAt)&&instant(q.receivedAt)<=at
