@@ -2,7 +2,7 @@ import { invariant } from "./evidence";
 import type { PropsAiModel } from "./releases";
 import {requireRealPropsAiPermission} from "./siteConfig";
 export type AiUsage = { input_tokens: number; output_tokens: number; input_tokens_details?: { cache_write_tokens?: number; cache_write_tokens_details?: { ttl_12h_tokens?: number } }; output_tokens_details?: { reasoning_tokens?: number } };
-export type AiTransportDiagnostics={status:number;code:string|null;type:string|null;requestId:string|null;retryAfter:string|null;rateLimits:Record<string,string>};
+export type AiTransportDiagnostics={unrecognizedErrorFields?:("code"|"type")[];status:number;code:string|null;type:string|null;requestId:string|null;retryAfter:string|null;rateLimits:Record<string,string>};
 export type AiResponse = { transportDiagnostics?:AiTransportDiagnostics; id: string; status: string; model: string; service_tier?:string; usage?: AiUsage; output?: { content?: { type: string; text?: string }[] }[] };
 export type AiRequest = { model: PropsAiModel; instructions: string; input: string; text: unknown; max_output_tokens: number; store: false };
 export class AiGenerationError extends Error {
@@ -14,6 +14,12 @@ function transportDiagnostics(response:Response,code:string|null=null,type:strin
  const rateLimits=Object.fromEntries(rateHeaders.flatMap(name=>{const value=response.headers.get(name);const valid=name.includes("-reset-")?/^(?:\d+(?:\.\d+)?(?:ms|s|m|h|d))+$/.test(value??""):/^\d{1,20}$/.test(value??"");return value&&value.length<=96&&valid?[[name,value]]:[];}));
  const retry=response.headers.get("retry-after");
  return {status:response.status,code,type,requestId:safeCode(response.headers.get("x-request-id")),retryAfter:retry&&retry.length<=96&&(/^[0-9]+(?:\.[0-9]+)?$/.test(retry)||/^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), [0-9]{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT$/.test(retry)&&Number.isFinite(Date.parse(retry))&&new Date(retry).toUTCString()===retry)?retry:null,rateLimits};
+}
+/** Explicit Flex capacity rejection only; billing/rate/conflicting errors stay unknown. */
+export function unbilledFlexCapacity(status:number,tier:string|undefined,code:string|null,type:string|null,explicitCode=code!==null,explicitType=type!==null){
+ if(status!==429||tier!=="flex"||explicitType&&type===null)return false;
+ const types=["resource_unavailable","resource_unavailable_error"],codes=[...types,"flex_unavailable"];
+ return explicitCode?code!==null&&codes.includes(code)&&(type===null||types.includes(type)):types.includes(type??"");
 }
 export function serializeAiRequest(body:AiRequest,args:{serviceTier?:"default"|"flex";stream?:boolean}={}){
  return JSON.stringify({...body,stream:args.stream??false,service_tier:args.serviceTier??"default",truncation:"disabled",reasoning:{effort:"low"},prompt_cache_options:{mode:"explicit"}});
@@ -43,9 +49,9 @@ export async function generateAiReview(body: AiRequest, args: { key: string; tim
     signal: AbortSignal.timeout(args.timeoutMs),
   });
   if(!response.ok){
-    let code:string|null=null,type:string|null=null;
-    try{const error=JSON.parse(await boundedErrorText(response))?.error;code=safeCode(error?.code)??safeCode(error?.type);type=safeCode(error?.type);}catch{}
-    throw new AiGenerationError(response.status,code,args.serviceTier==="flex"&&response.status===429&&["resource_unavailable","resource_unavailable_error"].includes(code??""),transportDiagnostics(response,code,type));
+    let code:string|null=null,type:string|null=null,explicitCode=false,explicitType=false;
+    try{const error=JSON.parse(await boundedErrorText(response))?.error;explicitCode=error?.code!==null&&error?.code!==undefined;explicitType=error?.type!==null&&error?.type!==undefined;code=safeCode(error?.code);type=safeCode(error?.type);}catch{}
+    throw new AiGenerationError(response.status,code??(explicitCode?null:type),unbilledFlexCapacity(response.status,args.serviceTier,code,type,explicitCode,explicitType),{...transportDiagnostics(response,code,type),unrecognizedErrorFields:[...(explicitCode&&code===null?["code" as const]:[]),...(explicitType&&type===null?["type" as const]:[])]});
   }
   if (!response.headers.get("content-type")?.includes("text/event-stream")) {
     invariant(response.body,"missing_response_body");

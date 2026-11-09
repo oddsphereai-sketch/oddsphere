@@ -36,7 +36,7 @@ export function jointReviewSchema(packet: GamePacket) {
   })]))) });
 }
 /** ASCII feedback fits within the wallet's existing 2,048-token retry cushion. */
-export function correctionFeedback(reason:string){return `\nYour previous draft failed the independent backend checks below. Re-read the original sources and correct the complete affected player forecast; keep every requested player/market. Do not hide a failure with a rounded probability or invented facts. Backend findings: ${reason.replace(/[^\x20-\x7e]/g," ").slice(0,1024)}`;}
+export function correctionFeedback(reason:string){if(reason==="generation_http_429_resource_unavailable")return "\nThe previous discounted Flex request was rejected for unavailable capacity, with no accepted draft. This is the existing bounded Standard recovery. Review the original supplied evidence and return every requested player and market; no new evidence or confidence boost is implied.";return `\nYour previous draft failed the independent backend checks below. Re-read the original sources and correct the complete affected player forecast; keep every requested player/market. Do not hide a failure with a rounded probability or invented facts. Backend findings: ${reason.replace(/[^\x20-\x7e]/g," ").slice(0,1024)}`;}
 export function jointReviewRequest(packet: GamePacket, model: PropsAiModel, maxOutput: number, previousFailure?:string) {
   validatePacket(packet);
   invariant(packet.players.every(p => p.evidence.length > 0), "Player without any source evidence cannot be sent as an evaluable scope");
