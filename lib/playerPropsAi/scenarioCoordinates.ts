@@ -3,7 +3,16 @@ import type {GamePacket,Player} from "./evidenceContract";
 import {primitives,type PlayerLaw} from "./law";
 import {invariant} from "./evidence";
 import {PROPS_AI_SCENARIOS} from "./releases";
-export const PROPS_AI_WIRE_RELEASE="props_scenario_rows_2026_11_07_r2_physical_coordinates";
+export const PROPS_AI_WIRE_RELEASE="props_scenario_named_2026_11_09_r3_canonical_statistics";
+/** R2 remains an explicit historical decoder, never an interpretation of R3. */
+export const PROPS_AI_LEGACY_WIRE_RELEASE="props_scenario_rows_2026_11_07_r2_physical_coordinates";
+export function decodeNamedScenarioLaw(sport:GamePacket["sport"],player:Pick<Player,"markets">,value:unknown):PlayerLaw{
+  invariant(value!==null&&typeof value==="object"&&!Array.isArray(value),"Named scenario law required; positional rows are not R3");
+  const law=value as PlayerLaw;
+  invariant(Object.keys(law).sort().join("|")==="outcomes|weights"&&law.outcomes!==null&&typeof law.outcomes==="object"&&!Array.isArray(law.outcomes),"Named law fields mismatch");
+  invariant(Object.keys(law.outcomes).sort().join("|")===primitives(sport,player).sort().join("|"),"Named scenario statistics mismatch");
+  return law;
+}
 export function scenarioColumns(sport:GamePacket["sport"],player:Pick<Player,"markets">){
   return ["relativeWeight",...primitives(sport,player).flatMap(key=>{
     if(sport==="nba"&&key==="points")return ["points_excluding_made_threes"];

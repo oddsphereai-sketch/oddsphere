@@ -11,12 +11,13 @@ import {criticalContextHashes} from "./criticalContext";
 import { PROPS_AI_MAX_OUTPUT_PER_REQUEST, PROPS_AI_PART_CONCURRENCY, PROPS_AI_STRONG_MODEL, PROPS_AI_RELEASE, PROPS_AI_ACCEPTED_RELEASES, type PropsAiModel } from "./releases";
 
 type PreparedPart = Awaited<ReturnType<typeof prepareReviewParts>>[number];
-type PartProvenance = { part:number; phase:number; model:PropsAiModel; requestedTier:string; actualTier:string; responseId:string; playerIds:string[] };
+type PartProvenance = { part:number; phase:number; model:PropsAiModel; requestedTier:string; actualTier:string; responseId:string; playerIds:string[]; correctionReason?:string };
 export type AcceptedGameReview = { release: (typeof PROPS_AI_ACCEPTED_RELEASES)[number]; gameId: string; start: string; lock: string; cutoff: string;
   criticalContextHashes:Record<string,string>;
   marketScopes:Record<string,string[]>;
   sourceGameId?:string;
-  model: string; partProvenance:PartProvenance[]; stage: "early" | "final"; issuedAt?: string; inputHash?: string; players: ReturnType<typeof parseJointReview>["players"];
+  model: string; partProvenance:PartProvenance[]; stage: "early" | "final"; issuedAt?: string; inputHash?: string;
+  players:Array<Omit<ReturnType<typeof parseJointReview>["players"][number],"sourceDeclinedMarkets">&{sourceDeclinedMarkets?:string[]}>;
   inputEvidence: { encoding: "gzip-base64"; digest: string; bytes: number; data: string } };
 export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob; store: PropsAiReviewStore; key: string;
   preferStronger: boolean; writerRunId:string; fetchImpl?: typeof fetch; clock?: () => string; deadline?: number;
@@ -39,6 +40,7 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
   const job = claimed.job!, token = claimed.token!;
   const accepted=new Map<number,ReturnType<typeof parseJointReview>>(),provenance=new Map<number,PartProvenance>();
   let phase=1, pending=parts.map((_,i)=>i), failure="unknown_review_failure";
+  const feedback=new Map<number,string>();
   try {
     while(phase<=2){
       const failures:{index:number;reason:string;known:boolean}[]=[];
@@ -49,7 +51,7 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
           invariant(timeoutMs>=90000,"review_completion_window_exhausted");
           const attempt=await args.store.send(job.job_key,token,phase,index+1);
           let response;
-          try{response=await generateAiReview(jointReviewRequest(part.packet,attempt.model,PROPS_AI_MAX_OUTPUT_PER_REQUEST),{key:args.key,timeoutMs,fetchImpl:args.fetchImpl,serviceTier:attempt.requested_tier});}
+          try{response=await generateAiReview(jointReviewRequest(part.packet,attempt.model,PROPS_AI_MAX_OUTPUT_PER_REQUEST,phase===2?feedback.get(index):undefined),{key:args.key,timeoutMs,fetchImpl:args.fetchImpl,serviceTier:attempt.requested_tier});}
           catch(error){
             const unbilled=error instanceof AiGenerationError&&error.knownUnbilled;
             await args.store.receipt(attempt.id,token,unbilled?0:null,null,unbilled?{kind:"known_unbilled",http_status:429,code:error.code,requested_tier:attempt.requested_tier}:null);
@@ -62,7 +64,7 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
           await args.store.receipt(attempt.id,token,actual,response.id,{...response.usage,service_tier:response.service_tier??"unknown",response_status:response.status,response_model:response.model});
           try{
             accepted.set(index,parseJointReview(part.packet,structuredAiText(response)));
-            provenance.set(index,{part:index+1,phase,model:attempt.model,requestedTier:attempt.requested_tier,actualTier:response.service_tier??"unknown",responseId:response.id,playerIds:part.packet.players.map(p=>p.id)});
+            provenance.set(index,{part:index+1,phase,model:attempt.model,requestedTier:attempt.requested_tier,actualTier:response.service_tier??"unknown",responseId:response.id,playerIds:part.packet.players.map(p=>p.id),...(phase===2?{correctionReason:feedback.get(index)?.slice(0,200)}:{})});
             return null;
           }catch(error){return {index,reason:(error as Error).message,known:true};}
         })));
@@ -85,6 +87,7 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
       }
       failure=failures[0].reason;
       if(phase===1&&failures.every(f=>f.known)&&deadline-Date.now()>propsAiCompletionWindowMs(failures.length)&&instant(args.packet.lock)-instant(clock())>propsAiCompletionWindowMs(failures.length)&&await args.store.fallback(job.job_key,token,failures.map(f=>f.index+1),failure)){
+        for(const f of failures)feedback.set(f.index,f.reason);
         pending=failures.map(f=>f.index);phase=2;continue;
       }
       break;

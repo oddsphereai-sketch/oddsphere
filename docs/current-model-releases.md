@@ -1,3 +1,43 @@
+## November 9 player-prop AI forecast semantics R18
+
+Future generations use `player_props_ai_2026_11_09_r18_forecast_semantics` and
+named canonical wire R3 `props_scenario_named_2026_11_09_r3_canonical_statistics`.
+Reader input R11 spells out independent Over/Under probabilities and the favored
+event; a retained contract side is not an endorsement. An explicit typed prior
+read must agree with those source probabilities. NBA rebound summaries include
+both offensive and defensive boards. MLB checks use exact market-tagged
+individual game/start values, preserving rare-event uncertainty and push semantics.
+NFL source R2 still owns actor/context
+identity; native MLB champion `mlb_props_2026_10_21_r44` remains exact.
+
+Named integer stat arrays replace positional residual coordinates for new
+requests. Canonical totals already include their components; net yards are signed.
+Existing physical identities, common weights and exact-event pricing stay in force.
+New admission checks reject unsupported source-range means, nonpositive yardage
+laws contradicting positive source production, and zero opposing tails at supplied
+uncertain/actual offered events. Combo laws must retain the opposing as well as
+higher-together variation observed in paired source games. These checks do not
+clamp forecasts or calibrate probability.
+Explicitly excepted source scopes remain recorded as reviewed-but-unqualified and
+cannot publish the invalid law. Later unqualified quote events are accounted for
+separately. Complete assessment sentences are required.
+
+The existing bounded failed-part retry receives its exact validation finding,
+within the wallet's existing 2,048-token cushion; successful parts are not bought
+again. No third phase, extra review, manual run, provider call, output-cap increase
+or spending-limit increase. Two day-of slots and the 10% stronger-final allowance,
+$50 monthly target/$60 emergency ceiling remain unchanged. Sole NFL writer R80
+`nfl_player_props_writer_2026_11_09_r80_forecast_semantics` retains settlement R7,
+source decision R8, member R57/lifecycle R39 and tracking R43. Existing NBA/MLB
+writers and their sport-scoped leases remain authoritative.
+
+Accepted R15/R16/R17 laws and every stored locked/member/tracking payload retain
+their original values, identities and semantics. These are prospective correctness
+checks; private outcome audits and player exports are excluded from publication.
+No empirical calibration or accuracy improvement is claimed. Evidence, gate
+limits and paired promotion/exception controls:
+`model-audits/2026-11-09-props-ai-forecast-semantics.md`.
+
 # Current production model releases and qualified research candidates
 
 ## November 9 explicit NFL completed-game DNP results

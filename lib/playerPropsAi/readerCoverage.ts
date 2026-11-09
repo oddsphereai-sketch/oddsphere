@@ -2,6 +2,7 @@
 import type {Evidence,GamePacket,Json,Player} from "./evidenceContract";
 import {digest,invariant,instant,stable} from "./evidence";
 import {readerLogWindows} from "./readerLogs";
+import {independentPriorEvents} from "./priorEvents";
 export const READER_AREAS=["recent_form","opportunity_role","matchup","head_to_head","availability","game_environment","market","independent_model"] as const;
 export type ReaderArea=typeof READER_AREAS[number];
 export type SourceCoverage="available"|"partial"|"missing";
@@ -110,10 +111,9 @@ export function playerReaderEvidence(packet:GamePacket,player:Player,allocate:(n
     }else if(v.movement)add("market","Stored same-book movement (derived; not a second independent price source)",v,[e],"partial");
     else if(Array.isArray(v.verifiedBookSplits)&&v.verifiedBookSplits.length)add("market","Actually supplied split records; no money inferred from odds",v,[e],"partial");
   }
-  const baselines=heads.map(e=>{const v=obj(e.value);return {market:v.market??null,line:v.line??null,mean:v.independentProjection??null,
-    selectedSide:v.selectedSide??null,selectedSideProbability:v.independentSelectedSideProbability??null,over:v.independentOver??null,under:v.independentUnder??null,source:e.source};});
-  if(baselines.length){const usable=baselines.some(b=>typeof b.mean==="number"||typeof b.selectedSideProbability==="number"||typeof b.over==="number");
-    add("independent_model","Independent forecast inputs; published market-adjusted fields are not substituted",baselines,heads,usable?baselines.every(b=>typeof b.mean==="number")?"available":"partial":"missing");}
+  const baselines=independentPriorEvents(player);
+  if(baselines.length){const usable=baselines.some(b=>b.independentMean!==null||b.probabilityOfReferenceSide!==null||b.overProbability!==null);
+    add("independent_model","Independent event probabilities; a retained side is not a directional endorsement",baselines,heads,usable?baselines.every(b=>b.independentMean!==null)?"available":"partial":"missing");}
   for(const area of READER_AREAS)if(result[area].status==="missing")result[area].limitations.push(`No usable ${area.replaceAll("_"," ")} source was supplied; never invent it`);
   const ages=result.recent_form.facts.flatMap(f=>{const v=obj(f.value),age=v.newestQualifyingGameAgeDays??v.newestGameAgeDays;return typeof age==="number"?[age]:[];});
   if(ages.length&&Math.min(...ages)>(packet.sport==="nfl"?30:14))result.recent_form.limitations.push("old_game_history: Last qualifying recorded performance is old; explicitly say this history is dated and cannot establish current form or workload. Do not invent an injury/absence explanation.");

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {PRODUCT_RELEASE,type GamePacket,type Player} from "../lib/playerPropsAi/evidenceContract";
 import {criticalContextHashes} from "../lib/playerPropsAi/criticalContext";
 import {validateLaw} from "../lib/playerPropsAi/law";
-import {PROPS_AI_RELEASE,PROPS_AI_SELECTION_RELEASE} from "../lib/playerPropsAi/releases";
+import {PROPS_AI_SELECTION_RELEASE} from "../lib/playerPropsAi/releases";
 import {selectSiteReview,siteAiDecisions,siteReviewCoverage} from "../lib/playerPropsAi/publication";
 import type {AcceptedGameReview} from "../lib/playerPropsAi/reviewer";
 import {reviewPropsForSite} from "../lib/playerPropsAi/siteRuntime";
@@ -17,7 +17,7 @@ const packet:GamePacket={release:PRODUCT_RELEASE,sport:"nba",gameId:"native",sta
   quotes:["a","b"].flatMap(playerId=>["points","rebounds"].flatMap(market=>["over","under"].map(side=>({id:[playerId,market,side].join(":"),playerId,market,provider:"synthetic",book:"one",line:market==="points"?12.5:3.5,side:side as "over"|"under",american:-110,observedAt:now,receivedAt:now,receivedAtProvenance:"provider_response" as const,opening:false,live:false}))))};
 const vector=(n:number)=>Array(16).fill(n);
 const law=(p:Player)=>validateLaw("nba",p,{weights:[9,1,...Array(14).fill(0)],outcomes:{points:[10,40,...Array(14).fill(10)],rebounds:vector(2),assists:vector(3),threes:vector(0)}});
-const review={release:PROPS_AI_RELEASE,gameId:"funded",sourceGameId:"native",start,lock,cutoff:now,stage:"early",issuedAt:now,inputHash:"synthetic",model:"synthetic",criticalContextHashes:criticalContextHashes(packet),marketScopes:{a:["points","rebounds"],b:["points","rebounds"]},partProvenance:[],inputEvidence:{digest:"synthetic"},
+const review={release:"player_props_ai_2026_11_08_r17_nfl_input_status",gameId:"funded",sourceGameId:"native",start,lock,cutoff:now,stage:"early",issuedAt:now,inputHash:"synthetic",model:"synthetic",criticalContextHashes:criticalContextHashes(packet),marketScopes:{a:["points","rebounds"],b:["points","rebounds"]},partProvenance:[],inputEvidence:{digest:"synthetic"},
   players:packet.players.map(p=>({playerId:p.id,assessment:"Synthetic",law:law(p),confidence:[2,0],exceptions:[null,"Unresolved rebound source"],coverage:{}}))} as unknown as AcceptedGameReview;
 const frozen=JSON.stringify(review),original=siteAiDecisions(packet,review,now);
 for(const release of ["player_props_ai_2026_11_08_r15_review_window_handoff","player_props_ai_2026_11_08_r16_nfl_output_headroom"] as const){
