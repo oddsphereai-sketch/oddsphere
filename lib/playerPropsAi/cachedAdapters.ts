@@ -1,3 +1,4 @@
+import {resolveNbaOfferedPlayerTeam,nbaIndependentProbabilityEvent,PROPS_AI_NBA_SOURCE_RELEASE} from './nbaSourceIdentity';
 /** Pure adapters for a LOCAL read-only export. No provider, database, writer or cron imports. */
 import type { NbaPlayerPropsCurrentState } from "../services/nba/nbaPlayerPropsCurrentState";
 import type { NbaPlayerPropsMarketHistory } from "../services/nba/nbaPlayerPropsPrivateStore";
@@ -42,8 +43,7 @@ export function fromCachedExport(source: CachedExport,window?:CapturedReviewWind
         const players: Player[] = ids.map(id => {
           const rows = decisions.filter(d => d.playerId === id), first = rows[0];
           const raw = observations.find(q => q.canonicalPlayerId === id);
-          const team = first?.team ?? teamNames.get(raw?.playerTeam ?? "") ?? raw?.playerTeam ?? "unknown";
-          const opponent = first?.opponent ?? (team === game.homeTeam ? game.awayTeam : team === game.awayTeam ? game.homeTeam : "unknown");
+          const {team,opponent}=resolveNbaOfferedPlayerTeam({native:rows,offers:observations.filter(q=>q.canonicalPlayerId===id),teamNames,home:game.homeTeam,away:game.awayTeam,snapshotAt:snapshot.generatedAt,archiveAt:day.market?.updatedAt??source.generatedAt,cutoff:slot.at});
           const numericId = Number(id.replace(/^.*:/, ""));
           const knownHistory = boxes.filter(b => b.playerId === numericId && games.has(b.gameId) && instant(games.get(b.gameId)!.startTime) < cutoff);
           const history = knownHistory.filter(b => {
@@ -66,7 +66,7 @@ export function fromCachedExport(source: CachedExport,window?:CapturedReviewWind
           const valid = rows.filter(r => instant(r.evaluatedAt) <= cutoff && instant(snapshot.generatedAt) <= cutoff);
           for (const row of valid) {
             values.push(evidence(`${id}:model:${row.market}`, "independent_model", new Date(Math.max(instant(row.evaluatedAt), instant(snapshot.generatedAt))).toISOString(), row.modelRelease ?? "unversioned-source",
-              { market: row.market, line: row.line, selectedSide: row.side, independentProjection: row.independentProjection, independentSelectedSideProbability: row.independentProbability, evaluatedAt: row.evaluatedAt, snapshotAvailableAt: snapshot.generatedAt, calibrationRelease: row.calibrationRelease, role: row.role, production: row.production, matchup: row.matchup }));
+              { market: row.market, line: row.line, ...nbaIndependentProbabilityEvent(row), finalArbitratedSide:row.side,independentProjection: row.independentProjection, evaluatedAt: row.evaluatedAt, snapshotAvailableAt: snapshot.generatedAt, calibrationRelease: row.calibrationRelease, role: row.role, production: row.production, matchup: row.matchup }));
             if(row.movement) values.push(evidence(`${id}:stored-movement:${row.market}`,"market",new Date(Math.max(instant(row.evaluatedAt),instant(snapshot.generatedAt))).toISOString(),"stored NBA same-book movement; derived from existing quotes, not an independent source",{
               market:row.market,side:row.side,movement:row.movement,limitation:"Stored opening/prior/current values; individual observation/receipt clocks not supplied by this derived member field. Do not infer who moved first or a confirmed main-line change."}));
           }
@@ -92,7 +92,7 @@ export function fromCachedExport(source: CachedExport,window?:CapturedReviewWind
             side: q.side as Quote["side"], american: q.americanPrice, observedAt: q.observedAt, receivedAt: quoteAvailableAt, receivedAtProvenance: q.receivedAt ? "provider_response" as const : "snapshot_availability" as const, live: false, ...(typeof q.isOpening === "boolean" ? { opening: q.isOpening } : {}) };
           const id = digest(value); quotes.set(id, { id, ...value });
         }
-        packets.push({ release: PRODUCT_RELEASE, sport: "nba", gameId: game.gameId, start: game.scheduledStart, lock,
+        packets.push({ release: PRODUCT_RELEASE, sourceInputRelease:PROPS_AI_NBA_SOURCE_RELEASE,sport: "nba", gameId: game.gameId, start: game.scheduledStart, lock,
           stage: slot.stage, cutoff: slot.at, players, quotes: [...quotes.values()].map((q, i) => ({ ...q, id: `q${i}` })),
           sourceLimitations: ["local archive, not complete early/final historical evidence", "NBA legacy fetchedAt is collection-start time, not response completion; quote availability uses archive updatedAt, with original source clocks retained in source export", "source retains opening plus bounded later quote states, not every tick", `source quotes excluded for cutoff/identity/validity: ${rejected}`, ...(locks.length !== 1 ? ["lock assumed start minus 60 minutes; live contract not verified"] : []), ...(cutoff > instant(source.generatedAt) ? ["planned future slot: latest day-of changes unavailable"] : [])] });
       }

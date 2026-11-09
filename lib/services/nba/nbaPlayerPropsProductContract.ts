@@ -43,6 +43,8 @@ export type NbaPlayerPropsMemberDecision = Readonly<{
   projection: number;
   independentProjection: number | null;
   independentProbability?: number | null;
+  /** Original native reference event; absent on immutable legacy payloads. */
+  independentSide?: Extract<NbaPlayerPropSide, "over" | "under">;
   modelRelease?: string;
   calibrationRelease?: string;
   decisionRelease?: string;

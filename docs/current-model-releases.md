@@ -1,3 +1,34 @@
+## November 9 NBA exact source evidence R27
+
+Generation `player_props_ai_2026_11_09_r27_nba_source_evidence`, NBA input
+`player_props_ai_nba_source_2026_11_09_r1_exact_source_evidence` and sole NBA
+writer `nba_player_props_private_writer_2026_11_09_r14_exact_ai_source_evidence` resolve
+team identity across all available observations for the exact canonical actor and
+game. A first feed's missing team cannot hide a separately supplied provider team
+ID. Available native team/opponent and provider declarations must agree; conflicts,
+wrong-game teams, unknown identities, live observations and future availability
+remain refused. Roster membership is not inferred and actors/scopes are not dropped.
+A player without an independent head remains explicitly without that head.
+
+The same fresh native writer now retains `independentSide`, the exact reference
+event for `independentProbability`. The adapter uses that side instead of the
+final market-arbitrated pick; an independent Over probability cannot be relabelled
+Under merely because the final pick changed. Missing legacy reference sides stay
+unavailable, with their stored probability retained as explicitly untyped source
+data, never complemented or reconstructed. Actual event probabilities determine
+the preferred prior; the reference side alone does not establish preference.
+
+The existing source identity guard remains. All prior accepted R15–R26 laws and
+stored locks retain exact release/values and reader precedence. No forecast/grade
+formula, new source request, review slot, phase, output/concurrency cap, writer,
+lease, provider budget or wallet limit changes. NFL R88/memberR59/lifecycleR41,
+selectionR4/decisionR11, Standard budgetR5, settlementR7/trackingR43 and native MLB
+champion `mlb_props_2026_10_21_r44` remain exact. Actual adapter/live-packet positive
+recovery and conflict refusal, complete actor/scope retention, cached-source
+immutability and legacy writer/reader controls accompany the required full model,
+clean integration, protected CI/build and natural live checks. No paid proof or
+closed-slot replay. See `model-audits/2026-11-09-props-ai-nba-source-identity.md`.
+
 ## November 9 NFL prelock review authority R26
 
 Future generation `player_props_ai_2026_11_09_r26_prelock_authority`, selectionR4,
