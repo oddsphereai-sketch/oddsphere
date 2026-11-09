@@ -196,8 +196,8 @@ assert.equal(JSON.stringify(legacyAliasSnapshot), lockedAliasBefore, "reader ali
 const lockedAliasWriter = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 9, evaluatedAt: "2026-11-04T13:00:00Z",
   previous: { ...legacyAliasSnapshot, board: { ...boardRows([resolvedAliasDecision, lockedAlias]), publicationEnabled: true, trackingEnabled: true } }, nextBoard: boardRows([resolvedAliasDecision]) });
 assert.deepEqual(lockedAliasWriter.board.decisions.find(row => row.playerName === "Chigoziem Okonkwo"), lockedAlias, "the writer preserves the complete prior locked alias record even when the current feed omits it");
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_11_09_r58_source_event_contracts");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_11_09_r87_standard_primary_escrow");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_11_09_r59_prelock_authority");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_11_09_r88_prelock_authority");
 assert.equal(NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES, 60);
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_11_08_r43_exact_quote_evidence");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_11_09_r7_confirmed_dnp");

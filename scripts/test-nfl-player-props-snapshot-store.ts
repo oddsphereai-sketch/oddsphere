@@ -52,7 +52,7 @@ const snapshot = productionSnapshot([actionable, held]);
 const memberBefore = buildNflPlayerPropsMemberSnapshot(snapshot);
 
 assert.equal(memberBefore.lifecycleRelease,
-  "nfl_player_props_member_lifecycle_2026_11_09_r40_source_event_contracts");
+  "nfl_player_props_member_lifecycle_2026_11_09_r41_prelock_authority");
 assert.equal(memberBefore.lifecycleRelease, NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE);
 const atKickoff = buildNflPlayerPropsMemberSnapshot(snapshot, actionable.scheduledStart);
 assert.equal(atKickoff.memberDecisions.length, 2,
@@ -130,6 +130,10 @@ assert.deepEqual(decoded.board.decisions.find((row) => row.state === "locked"), 
 const oldReleaseSnapshot={...snapshot,release:"nfl_player_props_member_2026_11_08_r57_player_scope_publication"} as unknown as NflPlayerPropsProductionSnapshot;
 assert.strictEqual(decodeNflPlayerPropsSnapshotPayload(oldReleaseSnapshot),oldReleaseSnapshot,"actual legacy release wrapper and stored member list remain authoritative");
 assert.deepEqual(decodeNflPlayerPropsSnapshotPayload(encodeNflPlayerPropsSnapshotPayload(oldReleaseSnapshot)),oldReleaseSnapshot,"v57 wrapper and locked values survive current storage codec without relabeling");
+const previousR58={...snapshot,release:"nfl_player_props_member_2026_11_09_r58_source_event_contracts",memberDecisions:[]};
+assert.strictEqual(decodeNflPlayerPropsSnapshotPayload(previousR58),previousR58,"R58 stored legacy wrapper/member payload remains authoritative under R59");
+const privateProofSnapshot={...snapshot,lockHandoffEvidence:{synthetic:{release:"synthetic",at:snapshot.generatedAt,capture:{authorities:[],nativeProofs:[],candidateProofs:[],sourceFrames:[]}}}};
+assert.ok(!Object.hasOwn(buildNflPlayerPropsMemberSnapshot(privateProofSnapshot),"lockHandoffEvidence"),"private handoff frames never enter the public member DTO");
 const legacyWithDifferentMemberList = { ...snapshot, memberDecisions: [] };
 assert.equal(decodeNflPlayerPropsSnapshotPayload(legacyWithDifferentMemberList), legacyWithDifferentMemberList,
   "legacy snapshots retain their stored member list and take precedence over new derivation semantics");
