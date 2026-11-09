@@ -3,9 +3,11 @@ import type {GamePacket,Player} from "./evidenceContract";
 import {primitives,type PlayerLaw} from "./law";
 import {invariant} from "./evidence";
 import {PROPS_AI_SCENARIOS} from "./releases";
-export const PROPS_AI_WIRE_RELEASE="props_scenario_named_2026_11_09_r3_canonical_statistics";
+export {GENERATIVE_WIRE_RELEASE as PROPS_AI_WIRE_RELEASE} from "./generativeCoordinates";
+export const PROPS_AI_LEGACY_NAMED_WIRE_RELEASE="props_scenario_named_2026_11_09_r3_canonical_statistics";
 /** R2 remains an explicit historical decoder, never an interpretation of R3. */
 export const PROPS_AI_LEGACY_WIRE_RELEASE="props_scenario_rows_2026_11_07_r2_physical_coordinates";
+/** Historical R3 named canonical decoder only. Future R4 uses explicit generative decoding. */
 export function decodeNamedScenarioLaw(sport:GamePacket["sport"],player:Pick<Player,"markets"|"sourceEventContracts">,value:unknown):PlayerLaw{
   invariant(value!==null&&typeof value==="object"&&!Array.isArray(value),"Named scenario law required; positional rows are not R3");
   const law=value as PlayerLaw;
