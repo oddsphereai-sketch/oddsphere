@@ -196,8 +196,8 @@ assert.equal(JSON.stringify(legacyAliasSnapshot), lockedAliasBefore, "reader ali
 const lockedAliasWriter = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 9, evaluatedAt: "2026-11-04T13:00:00Z",
   previous: { ...legacyAliasSnapshot, board: { ...boardRows([resolvedAliasDecision, lockedAlias]), publicationEnabled: true, trackingEnabled: true } }, nextBoard: boardRows([resolvedAliasDecision]) });
 assert.deepEqual(lockedAliasWriter.board.decisions.find(row => row.playerName === "Chigoziem Okonkwo"), lockedAlias, "the writer preserves the complete prior locked alias record even when the current feed omits it");
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_11_08_r57_player_scope_publication");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_11_09_r84_complete_sentences");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_11_09_r58_source_event_contracts");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_11_09_r85_source_event_contracts");
 assert.equal(NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES, 60);
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_11_08_r43_exact_quote_evidence");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_11_09_r7_confirmed_dnp");
@@ -839,3 +839,18 @@ for(const [retainedGrade,nativeGrade] of [['Lean','No Play'],['Watchlist','Lean'
  assert.equal(refused.board.decisions[0].projection,99,'stale provider confirmation does not retain an AI tuple');
 }
 console.log("NFL player-props one-writer lifecycle, T-60 freeze, tracking, and CLV contract passed.");
+
+// Prospective source-event lock handoff: preserve locked history; never newly
+// freeze a prior ambiguous AI interception contract after the source cutover.
+const sourceEventRelease="player_props_source_event_2026_11_09_r1_interception_contract";
+const oldInt={...decision,market:"interceptions" as const,line:.5,scheduledStart:"2026-11-09T23:00:00Z",lockAt:"2026-11-09T22:00:00Z",observedAt:"2026-11-09T21:58:00Z",decisionRelease:"player_props_ai_nfl_decision_2026_11_09_r9_current_execution",aiReview:{release:"player_props_ai_2026_11_09_r22_complete_sentences",quoteConfirmedAt:"2026-11-09T21:58:00Z",selectedSide:"over",assessment:"Legacy exact evidence."} as unknown as NonNullable<NflPlayerPropsRuntimeDecision["aiReview"]>};
+const oldIntPrevious=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:10,evaluatedAt:"2026-11-09T21:59:00Z",nextBoard:board(oldInt)});
+for(const [at,next]of [["2026-11-09T21:59:30Z",emptyBoard()],["2026-11-09T22:00:00Z",emptyBoard()],["2026-11-09T22:00:00Z",board(oldInt)]] as const){
+ const held=reconcileNflPlayerPropsProductionSnapshot({requireVerifiedInterceptionSource:true,season:2026,week:10,evaluatedAt:at,nextBoard:next,previous:oldIntPrevious});assert.equal(held.board.decisions.length,0,"unverified prior AI row cannot carry forward or become a new lock");
+}
+const verifiedInt={...oldInt,decisionRelease:PROPS_AI_NFL_DECISION_RELEASE,aiReview:{...oldInt.aiReview!,sourceEventRelease,sourceEventStatistic:"interceptions"}};
+const qualifiedIntPrevious=reconcileNflPlayerPropsProductionSnapshot({requireVerifiedInterceptionSource:true,season:2026,week:10,evaluatedAt:"2026-11-09T21:59:00Z",nextBoard:board(verifiedInt)});
+const qualifiedIntLock=reconcileNflPlayerPropsProductionSnapshot({requireVerifiedInterceptionSource:true,season:2026,week:10,evaluatedAt:"2026-11-09T22:00:00Z",nextBoard:emptyBoard(),previous:qualifiedIntPrevious});assert.equal(qualifiedIntLock.board.decisions.length,1);assert.equal(qualifiedIntLock.board.decisions[0].grade,"Best Angle");assert.equal(qualifiedIntLock.board.decisions[0].state,"locked");
+const alreadyLockedInt=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:10,evaluatedAt:"2026-11-09T22:00:00Z",nextBoard:board(oldInt),previous:oldIntPrevious});
+const protectedInt=reconcileNflPlayerPropsProductionSnapshot({requireVerifiedInterceptionSource:true,season:2026,week:10,evaluatedAt:"2026-11-09T22:01:00Z",nextBoard:emptyBoard(),previous:alreadyLockedInt});assert.deepEqual(protectedInt.board.decisions,alreadyLockedInt.board.decisions);assert.deepEqual(protectedInt.memberDecisions,alreadyLockedInt.memberDecisions);
+console.log("Interception source cutover: verified promotion/new-lock path retained, ambiguous unlocked carry refused, exact already-locked reader and writer payloads preserved.");

@@ -1,3 +1,36 @@
+## November 9 NFL player-prop source-event qualification R23
+
+Future generation `player_props_ai_2026_11_09_r23_source_event_contracts`, NFL
+source `player_props_ai_nfl_source_2026_11_09_r3_event_qualification`, named
+reader R12, selection `player_props_ai_selection_2026_11_09_r3_source_event_contracts`
+and NFL decision `player_props_ai_nfl_decision_2026_11_09_r10_source_event_contracts`
+preserve exact provider market declarations and qualify interception semantics.
+Documented BALLDONTLIE `interceptions` retains thrown-interception semantics;
+generic/absent/unverified declarations and conflicting defensive-role context
+remain unresolved, never relabeled by position. Every actor/market remains in
+coverage. Unresolved-only actors retain eight-area reviews with null laws and
+explicit exceptions; mixed actors keep qualified forecasts. Individual unresolved
+quotes cannot pair, confirm or execute a qualified event. Raw provenance survives
+named inputs and exact trace v3; legacy v2 keeps exact absence.
+
+Sole writer `nfl_player_props_writer_2026_11_09_r85_source_event_contracts`, member
+`nfl_player_props_member_2026_11_09_r58_source_event_contracts` and lifecycle
+`nfl_player_props_member_lifecycle_2026_11_09_r40_source_event_contracts` prevent
+old ambiguous unlocked AI rows from acquiring a newly verified lock through
+carry-forward. Existing locked board/member payloads remain exact and take
+precedence. Semantic hashes exclude book/observation churn but bind real event
+qualification changes. R1 laws, grade R2, settlement R7, publication R5/tracking
+R43, two slots, leased writers and $50 target/$60 ceiling stay unchanged. MLB
+native champion `mlb_props_2026_10_21_r44` remains exact.
+
+Paired qualified-promotion/unresolved-demotion controls retain all synthetic
+actors/scopes; qualified/unresolved/declined/priced counts remain distinct.
+Old private inputs lack raw declarations, so no historical source relabel or
+invented actual board counterfactual is permitted. This does not resolve the
+separate numerical-generation failures. Required full/focused/protected-PR gates
+and normal live proof remain; no paid tests or closed-slot replay. See
+`model-audits/2026-11-09-props-ai-source-event-contracts.md`.
+
 ## November 9 player-prop complete-sentence admission R22
 
 Future generation `player_props_ai_2026_11_09_r22_complete_sentences` and sole

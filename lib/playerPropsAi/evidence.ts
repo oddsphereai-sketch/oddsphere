@@ -1,3 +1,5 @@
+import {latestExecutionQuotes} from "./executionQuotes";
+import {assertSourceEventQualifications,sourceEventUsable,qualifiedForecastMarkets} from "./sourceEvents";
 import { createHash } from "node:crypto";
 import { CATALOG, COMBOS, PRODUCT_RELEASE, type GamePacket, type Json, type Stage } from "./evidenceContract";
 
@@ -37,6 +39,7 @@ export function slots(game: Pick<GamePacket, "sport" | "gameId" | "start" | "loc
 }
 
 export function validatePacket(packet: GamePacket) {
+  assertSourceEventQualifications(packet);
   invariant(packet.release === PRODUCT_RELEASE && packet.sport in CATALOG, "Unknown packet release/sport");
   invariant(packet.stage === "early" || packet.stage === "final", "Unknown review stage");
   const cutoff = instant(packet.cutoff);
@@ -135,7 +138,8 @@ export function pack(packet: GamePacket) {
     const signature = JSON.stringify(key), group = groups.get(signature) ?? { key, events: [] };
     group.events.push([i, time(q.observedAt), time(q.receivedAt), q.american]); groups.set(signature, group);
   });
-  return { codec: "player_props_exact_trace_v2", meta: encode(rest as unknown as Json), players, markets, sources, sides,
+  const quoteMetadata=quotes.flatMap((q,index)=>q.sourceEvent||q.offerContract?[{index,...(q.sourceEvent?{sourceEvent:q.sourceEvent}:{}),...(q.offerContract?{offerContract:q.offerContract}:{})}]:[]);
+  return { codec: quoteMetadata.length?"player_props_exact_trace_v3_source_events":"player_props_exact_trace_v2", ...(quoteMetadata.length?{quoteMetadata:encode(quoteMetadata as unknown as Json)}:{}), meta: encode(rest as unknown as Json), players, markets, sources, sides,
     quoteIds: quotes.every((q, i) => q.id === `q${i}`) ? null : quotes.map(q => q.id),
     quoteGroups: [...groups.values()] };
 }
@@ -150,6 +154,7 @@ export function unpack(value: ReturnType<typeof pack>): GamePacket {
       line, side: value.sides[side] as GamePacket["quotes"][number]["side"], live, ...(opening == null ? {} : { opening }), ...(receivedAtProvenance == null ? {} : { receivedAtProvenance }), observedAt: time(observed), receivedAt: time(received), american,
     };
   }
+  if(value.quoteMetadata){const metadata=decode(value.quoteMetadata) as unknown as {index:number;sourceEvent?:GamePacket["quotes"][number]["sourceEvent"];offerContract?:GamePacket["quotes"][number]["offerContract"]}[];for(const row of metadata){invariant(Number.isInteger(row.index)&&Boolean(quotes[row.index]),"Invalid exact quote metadata index");quotes[row.index]={...quotes[row.index],...(row.sourceEvent?{sourceEvent:row.sourceEvent}:{}),...(row.offerContract?{offerContract:row.offerContract}:{})};}}
   return { ...rest, quotes };
 }
 
@@ -200,7 +205,7 @@ export function price(law: JointLaw, market: string, line: number, side: "over" 
 export function referencePairs(packet: GamePacket, target: { playerId: string; market: string; line: number; book: string }, maxAgeMs: number) {
   invariant(Number.isFinite(maxAgeMs) && maxAgeMs >= 0, "Invalid freshness limit");
   const latest = new Map<string, GamePacket["quotes"][number]>();
-  for (const q of packet.quotes) {
+  for (const q of latestExecutionQuotes(packet.quotes,packet.cutoff,maxAgeMs).filter(sourceEventUsable)) {
     if (q.playerId !== target.playerId || q.market !== target.market || q.line !== target.line || q.book === target.book || q.side === "yes") continue;
     if (q.opening !== false || q.receivedAtProvenance !== "provider_response" || instant(packet.cutoff) - instant(q.receivedAt) > maxAgeMs) continue;
     const key = `${q.provider}|${q.book}|${q.side}`, old = latest.get(key);
@@ -233,7 +238,7 @@ export function eventTarget(packet: GamePacket, playerId: string, market: string
   const selected = model?.independentSelectedSideProbability;
   const baselineProbability = typeof model?.independentOver === "number" ? model.independentOver : typeof selected === "number" && model?.selectedSide !== "under" ? selected : typeof selected === "number" && line !== null && !Number.isInteger(line) ? 1 - selected : null;
   return { line, event, baselineProbability, baselineProjection: typeof model?.independentProjection === "number" ? model.independentProjection : null,
-    probabilityBenchmarkEligible: line !== null && (event === "at_least" || !Number.isInteger(line)), source: head?.source ?? null };
+    probabilityBenchmarkEligible: qualifiedForecastMarkets(player).includes(market) && line !== null && (event === "at_least" || !Number.isInteger(line)), source: head?.source ?? null };
 }
 export function requiredReviewSchema(packet: GamePacket, aliasCitations = false) {
   const aliases = new Map(packet.players.flatMap(p => p.evidence).map((e, i) => [e.id, `e${i}`]));

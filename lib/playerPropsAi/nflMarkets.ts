@@ -1,3 +1,4 @@
+import {qualifyNflSourceEvent} from "./sourceEvents";
 import {sameNflPropActorName,PROPS_AI_NFL_SOURCE_RELEASE} from "./nflPlayerIdentity";
 import type {NflPlayerPropsMarketObserverHistory} from "../services/football/nflPlayerPropsMarketObserverStore";
 import type {NflPlayerPropsExactOffer} from "../services/football/nflPlayerPropsMarketBoard";
@@ -16,7 +17,8 @@ export function attachNflReaderMarkets(packet:GamePacket,source:{availableAt:str
   const add=(id:string,market:string,provider:string,book:string,line:number,side:Quote["side"],american:number|null,observedAt:string,opening:boolean)=>{
     if(!(CATALOG.nfl.required as readonly string[]).includes(market)||american===null||!Number.isFinite(american)||Math.abs(american)<100||!Number.isFinite(line)||instant(observedAt)>instant(source.availableAt))return;
     if(packet.sourceInputRelease===PROPS_AI_NFL_SOURCE_RELEASE&&!packet.players.find(p=>p.id===id)?.markets.includes(market))return;
-    const row={playerId:id,market,provider,book,line,side,american,observedAt,receivedAt:source.availableAt,receivedAtProvenance:"snapshot_availability" as const,opening,live:false};
+    const sourceEvent=qualifyNflSourceEvent({market,provider,providerMarket:null,rosterPosition:null});
+    const row={...(sourceEvent?{sourceEvent}:{}),playerId:id,market,provider,book,line,side,american,observedAt,receivedAt:source.availableAt,receivedAtProvenance:"snapshot_availability" as const,opening,live:false};
     const key=`nfl-retained:${digest(row)}`;if(added.has(key)||quotes.some(q=>q.id===key))return;added.add(key);quotes.push({...row,id:key});
   };
   for(const row of source.observer?.rows??[]){
