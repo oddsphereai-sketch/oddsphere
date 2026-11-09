@@ -17,7 +17,7 @@ const NFL_FIELDS: Record<string, string[]> = {
   receiving_yards: ["receiving_yards"], rushing_tds: ["rushing_tds", "rushing_touchdowns"],
   receiving_tds: ["receiving_tds", "receiving_touchdowns"],
 };
-const NBA_FIELDS = Object.fromEntries(["minutes", "points", "fgm", "fga", "fg3m", "fg3a", "ftm", "fta", "oreb", "dreb", "ast"].map(key => [key, [key]]));
+const NBA_FIELDS:Record<string,string[]> = {...Object.fromEntries(["minutes", "points", "fgm", "fga", "fg3m", "fg3a", "ftm", "fta", "oreb", "dreb", "ast"].map(key => [key, [key]])),rebounds:["rebounds","reb"],assists:["ast"],threes:["fg3m"]};
 
 /** Multiple provider IDs for the same game must not become extra recent games. */
 export function readerLogWindows(sport: Sport, logs: Evidence[], cutoff?: string) {
@@ -37,6 +37,9 @@ export function readerLogWindows(sport: Sport, logs: Evidence[], cutoff?: string
         const n = box[alias];
         if (typeof n === "number" && Number.isFinite(n)) (row.values[field] ??= new Set()).add(n);
       }
+    }
+    if(sport==="nba"&&typeof box.oreb==="number"&&typeof box.dreb==="number"&&Number.isFinite(box.oreb)&&Number.isFinite(box.dreb)){
+      (row.values.rebounds??=new Set()).add(box.oreb+box.dreb);
     }
     games.set(key, row);
   }
@@ -60,6 +63,10 @@ export function readerLogWindows(sport: Sport, logs: Evidence[], cutoff?: string
     newestGameAgeDays:cutoff&&ordered[0]?.at?(Date.parse(cutoff)-ordered[0].at)/86400000:null,
     newestQualifyingGameAgeDays:cutoff&&active[0]?.at?(Date.parse(cutoff)-active[0].at)/86400000:null,
     windows, conflicts,
+    observedSupport:Object.fromEntries(Object.keys(fields).flatMap(field=>{
+      const values=active.flatMap(row=>row.values[field]?.size===1?[...row.values[field]]:[]);
+      return values.length?[[field,{n:values.length,minimum:Math.min(...values),maximum:Math.max(...values),mean:values.reduce((a,b)=>a+b,0)/values.length}]]:[];
+    })),
     denominator: sport === "nba"
       ? "Distinct games with positive minutes or nonzero recorded production; zero/unknown participation rows remain in raw evidence, excluded from conditional summaries"
       : "Distinct recorded player-game rows; zero production does not establish nonparticipation",

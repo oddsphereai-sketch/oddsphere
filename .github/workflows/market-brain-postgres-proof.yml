@@ -10,6 +10,8 @@ on:
       - "lib/db/schema-migration-v49-market-brain-attempt-claims.sql"
       - "lib/services/football/**"
       - "lib/services/marketBrain/**"
+      - "lib/playerPropsAi/**"
+      - "scripts/test-player-props-ai-**"
       - "scripts/fixtures/nfl-market-brain-v45-installed.sql"
       - "scripts/fixtures/nfl-market-brain-v46-lifecycle-proof.sql"
       - "scripts/build-nfl-market-brain-v46-lifecycle-prelude.ts"
@@ -60,5 +62,7 @@ jobs:
         run: node --import tsx scripts/test-player-props-ai-nfl-identity.ts && node --import tsx scripts/test-player-props-ai-scoped-publication.ts
       - name: Prove all offered NFL quarterback markets settle without changing locked predictions
         run: node --import tsx scripts/test-nfl-player-props-settlement.ts && node --import tsx scripts/test-nfl-props-reviewed-dnp-recovery.ts
+      - name: Prove source-grounded forecast semantics and retained legacy law authority
+        run: node --import tsx scripts/test-player-props-ai-forecast-semantics.ts && node --import tsx scripts/test-player-props-ai-reader.ts && node --import tsx scripts/test-player-props-ai-core.ts && node --import tsx scripts/test-player-props-ai-site.ts && node --import tsx scripts/test-player-props-ai-output-headroom.ts
       - name: Run mandatory model-change gate and real PostgreSQL proof
         run: npm run verify:model-change

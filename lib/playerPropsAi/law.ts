@@ -18,7 +18,7 @@ export function primitives(sport: Sport, player: Pick<Player, "markets">): strin
   return [...(player.markets.some(m => m.startsWith("pitcher_")) ? MLB_PITCHER : []), ...(player.markets.some(m => m.startsWith("batter_")) ? MLB_BATTER : [])];
 }
 export type PlayerLaw = { weights: number[]; outcomes: Record<string, number[]> };
-export type PlayerReview = { assessment: string; coverage: ReaderCoverage; evidenceIds: string[]; gaps: string[]; law: PlayerLaw | null; confidence: number[]; exceptions: (string | null)[] };
+export type PlayerReview = { assessment: string; coverage: ReaderCoverage; evidenceIds: string[]; gaps: string[]; law: PlayerLaw | null; confidence: number[]; exceptions: (string | null)[]; priorRead?:Record<string,string> };
 export type GameReview = { players: Record<string, PlayerReview> };
 export type AcceptedPlayerLaw = { release: typeof PROPS_AI_LAW_RELEASE; hash: string; weights: number[]; outcomes: Record<string, number[]> };
 

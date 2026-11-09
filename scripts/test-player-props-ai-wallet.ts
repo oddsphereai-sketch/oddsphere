@@ -19,7 +19,9 @@ async function main(){
 const modulePath=process.argv[2];
 assert.ok(modulePath?.startsWith("/private/tmp/"),"Only a private local pg module is allowed");
 const {default:pg}=await import(pathToFileURL(modulePath).href);
-const config={host:"/private/tmp/oddsphere-props-wallet-pg-20261107/socket",port:55587,user:"postgres"};
+const host=process.argv[3]??"/private/tmp/oddsphere-props-wallet-pg-20261107/socket",port=Number(process.argv[4]??55587);
+assert.ok(host.startsWith("/private/tmp/")&&Number.isSafeInteger(port)&&port>=1024&&port<=65535,"Only a disposable local Unix-socket test database is allowed");
+const config={host,port,user:"postgres"};
 const admin=new pg.Client({...config,database:"postgres"});await admin.connect();
 const database=`props_wallet_${Date.now()}`;await admin.query(`CREATE DATABASE ${database}`);
 const db=new pg.Client({...config,database}),other=new pg.Client({...config,database});await db.connect();await other.connect();
@@ -40,27 +42,32 @@ wallet.plan=(plan)=>wallet.rpc("player_props_ai_plan_v2",{p_month:plan.month,p_j
 const budget=async()=> (await db.query("SELECT * FROM player_props_ai_budgets WHERE month_key='2026-11'")).rows[0];
 const job=async(key:string)=>(await db.query("SELECT to_jsonb(r) v FROM player_props_ai_reviews r WHERE job_key=$1",[key])).rows[0].v as PropsAiJob;
 const clock=()=>"2026-11-07T21:40:00Z";
-const packet=(id:string,stage:"early"|"final"):GamePacket=>({release:PRODUCT_RELEASE,sport:"nba",gameId:id,start:game(id).start,lock:game(id).lock,cutoff:clock(),stage,sourceLimitations:[],quotes:[],players:["a","b"].map(p=>({id:p,name:`Synthetic ${p}`,team:"A",opponent:"B",markets:["points"],missing:[],evidence:[{id:`${p}:log`,kind:"recent_games",availableAt:"2026-11-07T17:00:00Z",source:"synthetic",value:{game:{startTime:"2026-11-05T23:00:00Z",homeTeam:"A",awayTeam:"B"},box:{minutes:30,points:20}}}]}))});
+const packet=(id:string,stage:"early"|"final"):GamePacket=>({release:PRODUCT_RELEASE,sport:"nba",gameId:id,start:game(id).start,lock:game(id).lock,cutoff:clock(),stage,sourceLimitations:[],quotes:[],players:["a","b"].map(p=>({id:p,name:`Synthetic ${p}`,team:"A",opponent:"B",markets:["points"],missing:[],evidence:[18,20,22].map((points,i)=>({id:`${p}:log:${i}`,kind:"recent_games" as const,availableAt:"2026-11-07T17:00:00Z",source:"synthetic",value:{game:{startTime:`2026-11-0${i+3}T23:00:00Z`,homeTeam:"A",awayTeam:"B"},box:{minutes:30,points}}}))}))});
 function response(part:GamePacket,model:string,tier:string,id:string){
   const facts=readerEvidence(part),aliases=evidenceAliases(part);
-  const players=Object.fromEntries(part.players.map(p=>[p.id,{assessment:"Conditional forecast using the supplied performance sample.",coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[p.id][area].status,factIds:facts[p.id][area].facts.slice(0,1).map(f=>f.id),effect:facts[p.id][area].status==="missing"?"unavailable":"uncertain",observation:area==="recent_form"&&facts[p.id][area].limitations.some(l=>l.includes("old_game_history"))?"The supplied history is dated and cannot establish current workload.":"The supplied sample requires contextual caution."}])),evidenceIds:[...aliases].filter(([,value])=>value===p.evidence[0].id).map(([alias])=>alias),gaps:[],law:Array.from({length:16},()=>[1,14,4,3,2]),confidence:[1],exceptions:[null]}]));
+  const players=Object.fromEntries(part.players.map(p=>[p.id,{assessment:"Conditional forecast using the supplied performance sample.",priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[p.id][area].status,factIds:facts[p.id][area].facts.slice(0,1).map(f=>f.id),effect:facts[p.id][area].status==="missing"?"unavailable":"uncertain",observation:area==="recent_form"&&facts[p.id][area].limitations.some(l=>l.includes("old_game_history"))?"The supplied history is dated and cannot establish current workload.":"The supplied sample requires contextual caution."}])),evidenceIds:[...aliases].filter(([,value])=>value===p.evidence[0].id).map(([alias])=>alias),gaps:[],law:{weights:Array(16).fill(1),outcomes:{points:Array(16).fill(20),rebounds:Array(16).fill(4),assists:Array(16).fill(3),threes:Array(16).fill(2)}},confidence:[1],exceptions:[null]}]));
   return {id,model,status:"completed",service_tier:tier,usage:{input_tokens:1000,output_tokens:100},output:[{content:[{type:"output_text",text:JSON.stringify({wireRelease:PROPS_AI_WIRE_RELEASE,players})}]}]};
 }
-async function run(id:string,stage:"early"|"final",failure:"none"|"capacity"|"timeout"|"invalid"="none",strong=false){
-  const p=packet(id,stage),parts=p.players.map(player=>({packet:playerSubset(p,[player.id]),inputTokens:1000})),calls:{player:string;model:string;tier:string}[]=[];
+async function run(id:string,stage:"early"|"final",failure:"none"|"capacity"|"timeout"|"invalid"|"semantic"="none",strong=false){
+  const reviewNow=stage==="early"?"2026-11-07T21:00:00Z":clock();
+  await db.query("UPDATE test_clock SET at=$1",[reviewNow]);
+  const p={...packet(id,stage),cutoff:reviewNow},parts=p.players.map(player=>({packet:playerSubset(p,[player.id]),inputTokens:1000})),calls:{player:string;model:string;tier:string}[]=[];
   const seen=new Map<string,number>();
   const fetchImpl=(async(url,options)=>{
     assert.equal(String(url),"https://api.openai.com/v1/responses");
     const request=JSON.parse(String(options?.body)),input=JSON.parse(request.input),player=input.document.players[0].id as string;
     calls.push({player,model:request.model,tier:request.service_tier});seen.set(player,(seen.get(player)??0)+1);
+    if(player==="b"&&seen.get(player)===2&&failure==="invalid")assert.match(request.instructions,/Forecast wire release mismatch/);
+    if(player==="b"&&seen.get(player)===2&&failure==="semantic")assert.match(request.instructions,/forecast_mean_outside_supplied_support/);
     if(player==="b"&&seen.get(player)===1){
       if(failure==="timeout")throw new Error("synthetic_transport_unknown");
       if(failure==="capacity")return Response.json({error:{code:"resource_unavailable"}},{status:429});
+      if(failure==="semantic"){const value=response(parts[1].packet,request.model,request.service_tier,"semantic-paid");const bad=JSON.parse(value.output[0].content[0].text);bad.players.b.law.outcomes.points=Array(16).fill(100);value.output[0].content[0].text=JSON.stringify(bad);return Response.json(value);}
       if(failure==="invalid"){const value=response(parts[1].packet,request.model,request.service_tier,"invalid-paid");value.output[0].content[0].text="{}";return Response.json(value);}
     }
     return Response.json(response(parts.find(part=>part.packet.players[0].id===player)!.packet,request.model,request.service_tier,`r-${id}-${player}-${seen.get(player)}`));
   }) as typeof fetch;
-  const result=await runPropsReview({packet:p,job:await job(keys(id)[stage==="early"?0:1]),store:wallet,key:"synthetic-never-real",writerRunId:"synthetic-owner",preferStronger:strong,clock,prepare:async()=>parts,countStrong:async()=>7000,fetchImpl});
+  const result=await runPropsReview({packet:p,job:await job(keys(id)[stage==="early"?0:1]),store:wallet,key:"synthetic-never-real",writerRunId:"synthetic-owner",preferStronger:strong,clock:()=>reviewNow,prepare:async()=>parts,countStrong:async()=>7000,fetchImpl});
   return {result,calls};
 }
 try{
@@ -98,6 +105,8 @@ try{
   await wallet.receipt(held.id,(await job(keys("g1")[0])).claim_token!,123,"late-receipt",{late:true});
   assert.equal(Number((await budget()).consumed_micro),spent-Number(held.reserved_micro)+123);
   await assert.rejects(wallet.receipt(held.id,(await job(keys("g1")[0])).claim_token!,100,"different",{}),/immutable_usage_receipt_conflict/);
+  const semantic=await run("g7","early","semantic");assert.equal(semantic.result.status,"completed");assert.equal(semantic.calls.length,3);assert.equal(semantic.calls.filter(c=>c.player==="a").length,1);
+  const semanticReview=(await job(keys("g7")[0])).result as {partProvenance:{correctionReason?:string}[]};assert.match(semanticReview.partProvenance[1].correctionReason!,/forecast_mean_outside_supplied_support/);
   const strong=await run("g2","final","invalid",true);assert.equal(strong.result.status,"completed");assert.equal(strong.calls.filter(c=>c.player==="a").length,1);assert.equal(strong.calls[0].model,"gpt-6.1-terra");assert.equal(strong.calls.at(-1)!.model,"gpt-6-luna");
   assert.equal(((await job(keys("g2")[1])).result as {model:string}).model,"mixed_recorded_per_part");
   assert.equal((await run("g3","final","none",true)).calls[0].model,"gpt-6.1-terra");assert.equal((await run("g4","final","none",true)).calls[0].model,"gpt-6-luna");
@@ -159,10 +168,10 @@ try{
   const overBudget=(await db.query("SELECT * FROM player_props_ai_budgets WHERE month_key='2027-04'")).rows[0];assert.equal(Number(overBudget.unexpected_overrun_micro),1);assert.equal(overBudget.full_calendar,false);
   // A complete forty-player game goes through all five funded request parts.
   const bigGame={...game("all-players"),start:"2027-05-06T23:00:00Z",lock:"2027-05-06T22:00:00Z"};
-  const bigNow="2027-05-06T21:40:00Z",bigPacket={...largePacket,start:bigGame.start,lock:bigGame.lock,cutoff:bigNow};
+  const bigNow="2027-05-06T21:00:00Z",bigPacket={...largePacket,start:bigGame.start,lock:bigGame.lock,cutoff:bigNow};
   const bigParts=largeParts.map(part=>({...part,packet:{...part.packet,start:bigGame.start,lock:bigGame.lock,cutoff:bigNow}}));
   const bigPlan=makePropsWalletPlan({month:"2027-05",now:bigNow,games:[bigGame],bounds:{"nba|all-players":bigParts.map(()=>({input_tokens:1000,max_output_tokens:7000}))},sources});
-  await db.query("UPDATE test_clock SET at='2027-05-06T21:40:00Z';UPDATE cron_job_leases SET lease_expires_at='2027-06-01T00:00:00Z'");assert.equal((await wallet.plan(bigPlan)).funded,true);
+  await db.query("UPDATE test_clock SET at='2027-05-06T21:00:00Z';UPDATE cron_job_leases SET lease_expires_at='2027-06-01T00:00:00Z'");assert.equal((await wallet.plan(bigPlan)).funded,true);
   let bigCalls=0;
   const bigResult=await runPropsReview({packet:bigPacket,job:await job(reviewSlots(bigGame)[0].key),store:wallet,key:"synthetic",writerRunId:"synthetic-owner",preferStronger:false,clock:()=>bigNow,prepare:async()=>bigParts,fetchImpl:(async(_url,options)=>{
     bigCalls++;const request=JSON.parse(String(options?.body)),input=JSON.parse(request.input);const part=bigParts.find(p=>p.packet.players[0].id===input.document.players[0].id)!;
@@ -171,12 +180,14 @@ try{
   assert.equal(bigResult.status,"completed",JSON.stringify(bigResult));assert.equal(bigCalls,5);assert.equal((bigResult.review as {players:unknown[]}).players.length,40);
   // Existing-writer dispatch hook, including its count API, also stays entirely mocked.
   wallet.due=async(sport,now,limit)=>(await db.query("SELECT to_jsonb(r) v FROM player_props_ai_reviews r WHERE sport=$1 AND state='pending' AND due_at<=$2 AND lock_at>$2 ORDER BY due_at LIMIT $3",[sport,now,limit])).rows.map((r:{v:PropsAiJob})=>r.v);
+  await db.query("UPDATE test_clock SET at='2027-05-06T21:40:00Z'");
+  const dispatchNow="2027-05-06T21:40:00Z",finalPacket={...bigPacket,stage:"final" as const,cutoff:dispatchNow};
   let dispatchCalls=0,countCalls=0;
-  const dispatchArgs={sport:"nba" as const,writerRunId:"synthetic-owner",store:wallet,key:"synthetic",clock:()=>bigNow,loadFrozenPacket:async()=>({...bigPacket,stage:"final" as const}),fetchImpl:(async(url,options)=>{
+  const dispatchArgs={sport:"nba" as const,writerRunId:"synthetic-owner",store:wallet,key:"synthetic",clock:()=>dispatchNow,loadFrozenPacket:async()=>finalPacket,fetchImpl:(async(url,options)=>{
     if(String(url).endsWith("/input_tokens")){countCalls++;return Response.json({input_tokens:1000});}
     assert.equal(String(url),"https://api.openai.com/v1/responses");dispatchCalls++;
     const request=JSON.parse(String(options?.body)),input=JSON.parse(request.input),ids=input.document.players.map((p:{id:string})=>p.id);
-    return Response.json(response(playerSubset({...bigPacket,stage:"final"},ids),request.model,request.service_tier,`dispatch-${dispatchCalls}`));
+    return Response.json(response(playerSubset(finalPacket,ids),request.model,request.service_tier,`dispatch-${dispatchCalls}`));
   }) as typeof fetch};
   const deferred=await dispatchFundedPropsReviews({...dispatchArgs,deadline:Date.now()+1000});assert.equal(deferred[0].status,"deferred");assert.equal(dispatchCalls,0);
   const dispatched=await dispatchFundedPropsReviews(dispatchArgs);assert.equal(dispatched.length,1);assert.equal(dispatched[0].status,"completed",JSON.stringify(dispatched));assert.equal(dispatched[0].review!.players.length,40);assert.equal(dispatchCalls,5);assert.ok(countCalls>=5);
