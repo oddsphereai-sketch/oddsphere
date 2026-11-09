@@ -14,7 +14,7 @@ const pending = [
 const updates: Array<{ values: Record<string, unknown>; id: number | null }> = [];
 let settlementCutoff: string | null = null;
 function clientFor(
-  rows: ReadonlyArray<(typeof pending)[number] | { id: number; provider_game_id: string; provider_player_id: string | null; market: string; line: number; side: "under"; locked_at: string }>,
+  rows: ReadonlyArray<{ id: number; provider_game_id: string; provider_player_id: string | null; market: string; line: number; side: "under" | "over" | "yes"; locked_at: string }>,
   recordedUpdates: Array<{ values: Record<string, unknown>; id: number | null }>,
   onCutoff?: (value: string) => void,
 ): SupabaseClient {
@@ -187,6 +187,37 @@ async function main(): Promise<void> {
   assert.equal(zeroUpdates.length, 0, "an incomplete participation response cannot write outcomes");
   assert.equal((await zeroRun([snap], { stats: [] })).settled, 0, "an empty stats feed cannot be interpreted as a final zero-stat game");
   assert.equal((await zeroRun([snap], { stats: [{ ...zeroStat, game: { id: "wrong", status_state: "final" } }] })).settled, 0, "a foreign final game cannot authorize settlement");
+
+  const qbRows = [
+    { ...pending[0], id: 201, market: "passing_tds", line: 1.5 },
+    { ...pending[0], id: 202, market: "interceptions", line: 0.5 },
+    { ...pending[0], id: 203, market: "passing_tds", line: 2 },
+    { ...pending[0], id: 204, market: "interceptions", line: 1.5 },
+    { ...pending[0], id: 205, market: "anytime_td", side: "yes" as const, line: 0.5 },
+  ];
+  const qbBefore = JSON.stringify(qbRows);
+  const qbRun = async (fields: Record<string, unknown>) => {
+    const changes: typeof updates = [];
+    let calls = 0;
+    const result = await settleNflPlayerPropsRecords({client: clientFor(qbRows, changes), apiKey: "test", now: "2026-09-02T17:00:00Z",
+      fetchImpl: async request => {calls++;assert.equal(new URL(String(request)).pathname,"/nfl/v1/stats");return new Response(JSON.stringify({data:[{
+        player:{id:7},game:{id:"game",status_state:"final"},passing_touchdowns:2,passing_interceptions:1,
+        rushing_touchdowns:0,receiving_touchdowns:0,interceptions:9,...fields,
+      }],meta:{}}),{status:200});}});
+    assert.equal(calls, 1, "new markets reuse the same bounded exact-game stats request");
+    for(const update of changes)assert.deepEqual(Object.keys(update.values).sort(),["actual_value","result","settled_at","updated_at"],"settlement cannot change locked prediction, grade, price, evidence or identity");
+    assert.equal(JSON.stringify(qbRows),qbBefore,"locked source rows remain exact");
+    return {result,changes};
+  };
+  assert.deepEqual((await qbRun({})).changes.map(r=>[r.id,r.values.result,r.values.actual_value]),[
+    [201,"loss",2],[202,"loss",1],[203,"push",2],[204,"win",1],[205,"loss",0],
+  ],"passing TDs and thrown interceptions settle independently of anytime TDs and defensive interceptions");
+  assert.deepEqual((await qbRun({passing_touchdowns:0,passing_interceptions:0})).changes.slice(0,4).map(r=>r.values.actual_value),[0,0,0,0],"explicit official zeros settle normally");
+  assert.equal((await qbRun({passing_touchdowns:undefined,passing_tds:3})).changes[0]?.values.actual_value,3,"provider's normalized passing TD field is accepted");
+  for(const invalid of [undefined,null,"1",-1,0.5,NaN,Infinity]){
+    const {changes}=await qbRun({passing_touchdowns:invalid,passing_tds:undefined,passing_interceptions:invalid});
+    assert.deepEqual(changes.map(r=>r.id),[205],"missing/invalid QB values stay pending without inventing zero");
+  }
   console.log("NFL player-props exact-market settlement and push semantics passed.");
 }
 
