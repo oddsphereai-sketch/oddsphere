@@ -1,4 +1,4 @@
-# Exact offered-player NBA team evidence
+# Exact NBA offered identity and independent event evidence
 
 Started from exact main `829398d77c4fea3273d25c6363eb1c8769d9e8ed` in a new
 isolated task worktree. A normal final review was blocked before claim because
@@ -15,6 +15,18 @@ and row clocks, provider response/native observation/collection clocks and live
 status are checked. A fallback archive clock does not prove reconfirmation.
 No current roster membership or historical team is substituted for a source
 membership declaration. Provider team IDs use the existing team-ID dictionary.
+
+A second exact archived-input audit found that the native selected-side probability
+was labelled with the final market-arbitrated side, while the frozen native model
+computes it for its separate `independentSide`. The existing source schema faithfully
+repeated that incorrect label. The fresh writer now preserves the native reference
+side and the adapter binds that exact side to the stored independent probability.
+For example, an independent Over at80% stays Over at80% even when the final native
+pick is Under. Preferred direction still compares the actual probabilities.
+Missing legacy reference sides remain unknown, with the original probability
+explicitly labelled untyped; no side is reconstructed or old locked field changed.
+Existing archived reviews remain exact evidence of the old inputs, not corrected
+retroactively. Both forward fixes belong to generationR27/sourceR1/writerR14.
 
 The actor and every market remain present, including absence of an independent
 head and missing statistics/context. No model head or projection is fabricated.

@@ -38,3 +38,19 @@ assert.equal(live.players[0].evidence.filter(e=>e.kind==='independent_model').le
 const disputed:CachedExport={...source,nba:[{...source.nba[0],market:{...source.nba[0].market!,observations:[...source.nba[0].market!.observations,{...source.nba[0].market!.observations[1],playerTeam:'6',providerObservationId:'conflict'}]}}]};
 assert.throws(()=>liveNbaPacket({game:{id:gameId,start,home:'CHA',away:'CLE'},window,snapshot:disputed.nba[0].snapshot!,market:disputed.nba[0].market!,prior:disputed.priorNba,current:disputed.currentNba,currentObservations:disputed.nba[0].market!.observations}),/NBA player\/team matchup identity incomplete/);
 console.log('Actual cached adapter and live packet retain the unmodelled offered actor, both providers, market and missing-head status; conflicting team remains blocked; source bytes unchanged.');
+
+import{nbaIndependentProbabilityEvent}from'../lib/playerPropsAi/nbaSourceIdentity';
+import{independentPriorEvent}from'../lib/playerPropsAi/priorEvents';
+import type{NbaPlayerPropsMemberDecision}from'../lib/services/nba/nbaPlayerPropsProductContract';
+const nativeRow={gameId,playerId:id,playerName:'Synthetic offered actor',team:'CHA',opponent:'CLE',market:'rebounds',line:6.5,side:'under',independentSide:'over',independentProbability:.8,independentProjection:8.4,evaluatedAt:past,modelRelease:'synthetic-native',role:[],production:[],matchup:[],lockedAt:null}as unknown as NbaPlayerPropsMemberDecision;
+const modelSource:CachedExport={...source,nba:[{...source.nba[0],snapshot:{...source.nba[0].snapshot!,decisions:[nativeRow]}}]};
+const modelInput=fromCachedExport(modelSource,window).packets[0],head=modelInput.players[0].evidence.find(e=>e.kind==='independent_model')!;
+assert.deepEqual([independentPriorEvent(head).preferredOutcome,independentPriorEvent(head).overProbability,independentPriorEvent(head).underProbability],['over',.8,1-.8],'Actual adapter must not relabel independent Over probability as final Under probability');
+for(const[side,probability,preferred]of [['over',.8,'over'],['under',.8,'under'],['over',.4,'under']]as const){const values=nbaIndependentProbabilityEvent({independentSide:side,independentProbability:probability});const event=independentPriorEvent({...head,value:{market:'rebounds',line:6.5,...values}});assert.equal(event.preferredOutcome,preferred,'Compare actual probabilities, not the reference label alone');}
+const legacyNative={...nativeRow};delete legacyNative.independentSide;
+const legacyBefore=digest(legacyNative),legacySource:CachedExport={...source,nba:[{...source.nba[0],snapshot:{...source.nba[0].snapshot!,decisions:[legacyNative]}}]};
+const legacyHead=fromCachedExport(legacySource,window).packets[0].players[0].evidence.find(e=>e.kind==='independent_model')!;
+assert.equal(independentPriorEvent(legacyHead).preferredOutcome,'unavailable');assert.equal(independentPriorEvent(legacyHead).probabilityOfReferenceSide,null);assert.equal((legacyHead.value as Record<string,unknown>).probabilityOfUnspecifiedIndependentSide,.8);assert.equal(digest(legacyNative),legacyBefore,'Missing legacy side stays missing; no reconstruction/reinterpretation');
+console.log('Native prior event: opposite final side cannot reverse the independent event; missing legacy reference side stays unknown with original untyped probability retained.');
+import{encodeNbaPlayerPropsPrivatePayload,decodeNbaPlayerPropsPrivatePayload}from'../lib/services/nba/nbaPlayerPropsPrivateStore';
+const stored={decisions:[nativeRow,{...legacyNative,lockedAt:lock}]};const restored=decodeNbaPlayerPropsPrivatePayload<typeof stored>(encodeNbaPlayerPropsPrivatePayload(stored,'candidate_snapshot'),'candidate_snapshot');assert.deepEqual(restored,stored);assert(!Object.hasOwn(restored!.decisions[1],'independentSide'),'Lossless storage cannot fabricate legacy reference side');

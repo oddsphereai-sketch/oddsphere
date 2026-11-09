@@ -1,4 +1,4 @@
-import {resolveNbaOfferedPlayerTeam,PROPS_AI_NBA_SOURCE_RELEASE} from './nbaSourceIdentity';
+import {resolveNbaOfferedPlayerTeam,nbaIndependentProbabilityEvent,PROPS_AI_NBA_SOURCE_RELEASE} from './nbaSourceIdentity';
 /** Pure adapters for a LOCAL read-only export. No provider, database, writer or cron imports. */
 import type { NbaPlayerPropsCurrentState } from "../services/nba/nbaPlayerPropsCurrentState";
 import type { NbaPlayerPropsMarketHistory } from "../services/nba/nbaPlayerPropsPrivateStore";
@@ -66,7 +66,7 @@ export function fromCachedExport(source: CachedExport,window?:CapturedReviewWind
           const valid = rows.filter(r => instant(r.evaluatedAt) <= cutoff && instant(snapshot.generatedAt) <= cutoff);
           for (const row of valid) {
             values.push(evidence(`${id}:model:${row.market}`, "independent_model", new Date(Math.max(instant(row.evaluatedAt), instant(snapshot.generatedAt))).toISOString(), row.modelRelease ?? "unversioned-source",
-              { market: row.market, line: row.line, selectedSide: row.side, independentProjection: row.independentProjection, independentSelectedSideProbability: row.independentProbability, evaluatedAt: row.evaluatedAt, snapshotAvailableAt: snapshot.generatedAt, calibrationRelease: row.calibrationRelease, role: row.role, production: row.production, matchup: row.matchup }));
+              { market: row.market, line: row.line, ...nbaIndependentProbabilityEvent(row), finalArbitratedSide:row.side,independentProjection: row.independentProjection, evaluatedAt: row.evaluatedAt, snapshotAvailableAt: snapshot.generatedAt, calibrationRelease: row.calibrationRelease, role: row.role, production: row.production, matchup: row.matchup }));
             if(row.movement) values.push(evidence(`${id}:stored-movement:${row.market}`,"market",new Date(Math.max(instant(row.evaluatedAt),instant(snapshot.generatedAt))).toISOString(),"stored NBA same-book movement; derived from existing quotes, not an independent source",{
               market:row.market,side:row.side,movement:row.movement,limitation:"Stored opening/prior/current values; individual observation/receipt clocks not supplied by this derived member field. Do not infer who moved first or a confirmed main-line change."}));
           }

@@ -39,7 +39,7 @@ import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
 import { buildNbaPlayerPropsMemberPrices } from "./nbaPlayerPropsMemberPrices";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_11_09_r14_source_identity" as const;
+  "nba_player_props_private_writer_2026_11_09_r14_exact_ai_source_evidence" as const;
 
 export function nbaPlayerPropsForecastIsPublishable(
   row: Pick<NbaPlayerPropsForwardDecision, "independentProjection" | "finalProjection">,
@@ -273,6 +273,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       projection: row.finalProjection,
       independentProjection: row.independentProjection,
       independentProbability: row.independentProbability,
+      independentSide: row.independentSide,
       modelRelease: row.modelRelease,
       calibrationRelease: row.calibrationRelease,
       decisionRelease: row.decisionRelease,

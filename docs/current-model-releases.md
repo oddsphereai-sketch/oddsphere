@@ -1,14 +1,22 @@
-## November 9 NBA offered-player source identity R27
+## November 9 NBA exact source evidence R27
 
-Generation `player_props_ai_2026_11_09_r27_nba_source_identity`, NBA input
-`player_props_ai_nba_source_2026_11_09_r1_all_offered_team_evidence` and sole NBA
-writer `nba_player_props_private_writer_2026_11_09_r14_source_identity` resolve
+Generation `player_props_ai_2026_11_09_r27_nba_source_evidence`, NBA input
+`player_props_ai_nba_source_2026_11_09_r1_exact_source_evidence` and sole NBA
+writer `nba_player_props_private_writer_2026_11_09_r14_exact_ai_source_evidence` resolve
 team identity across all available observations for the exact canonical actor and
 game. A first feed's missing team cannot hide a separately supplied provider team
 ID. Available native team/opponent and provider declarations must agree; conflicts,
 wrong-game teams, unknown identities, live observations and future availability
 remain refused. Roster membership is not inferred and actors/scopes are not dropped.
 A player without an independent head remains explicitly without that head.
+
+The same fresh native writer now retains `independentSide`, the exact reference
+event for `independentProbability`. The adapter uses that side instead of the
+final market-arbitrated pick; an independent Over probability cannot be relabelled
+Under merely because the final pick changed. Missing legacy reference sides stay
+unavailable, with their stored probability retained as explicitly untyped source
+data, never complemented or reconstructed. Actual event probabilities determine
+the preferred prior; the reference side alone does not establish preference.
 
 The existing source identity guard remains. All prior accepted R15–R26 laws and
 stored locks retain exact release/values and reader precedence. No forecast/grade

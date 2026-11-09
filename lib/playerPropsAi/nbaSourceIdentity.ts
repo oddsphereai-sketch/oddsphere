@@ -3,7 +3,7 @@
  * No roster inference, provider request, omitted actor or historical backfill. */
 import {instant} from './evidence';
 import {propsTeam} from './teamIdentity';
-export const PROPS_AI_NBA_SOURCE_RELEASE='player_props_ai_nba_source_2026_11_09_r1_all_offered_team_evidence' as const;
+export const PROPS_AI_NBA_SOURCE_RELEASE='player_props_ai_nba_source_2026_11_09_r1_exact_source_evidence' as const;
 type Native={team:string;opponent:string;evaluatedAt:string};
 type Offer={playerTeam:string|null;observedAt:string;fetchedAt:string;receivedAt?:string|null;isLive?:boolean};
 export function resolveNbaOfferedPlayerTeam(args:{native:readonly Native[];offers:readonly Offer[];teamNames:ReadonlyMap<string,string>;home:string;away:string;snapshotAt:string;archiveAt:string;cutoff:string}){
@@ -21,4 +21,13 @@ export function resolveNbaOfferedPlayerTeam(args:{native:readonly Native[];offer
  }
  const team=teams.size===1?[...teams][0]:'unknown',home=propsTeam(args.home),away=propsTeam(args.away);
  return{team,opponent:team===home?away:team===away?home:'unknown'};
+}
+
+/** The final arbitrated pick is not the independent probability's event. Never
+ * infer an unstored legacy reference side or complement its unknown probability. */
+export function nbaIndependentProbabilityEvent(row:{independentSide?:'over'|'under';independentProbability?:number|null}){
+ const side=row.independentSide==='over'||row.independentSide==='under'?row.independentSide:null;
+ return{selectedSide:side,independentSelectedSideProbability:side?row.independentProbability??null:null,
+  probabilityOfUnspecifiedIndependentSide:side?null:row.independentProbability??null,
+  independentEventStatus:side?'stored_native_reference_side':'original_native_reference_side_not_stored'};
 }
