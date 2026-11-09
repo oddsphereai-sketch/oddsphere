@@ -1,3 +1,14 @@
+# November 9 Standard primary policy supersedes Flex early funding
+
+R25/budgetR5 and append-onlyv68 fund all remaining primary reviews at Standard
+bounds and request Standard for early/final. Early remains Luna. Known-charge
+correction reuses existing job escrow, without relaxing unknown-cost guards or
+the two-phase limit. Target$50/emergency$60 and stronger quotas remain exact.
+The prior R4 plan discounted early Flex and is historical; a genuine new complete
+calendar plan is required. Deployment alone is not installed/funded proof.
+See `model-audits/2026-11-09-props-ai-standard-primary-wallet.md` for installation
+sequencing and validation. All prior law/locked/receipt records remain unchanged.
+
 # November 8 activation policy supersedes the original $50 stop
 
 The operating target is $50 and the owner-approved emergency ceiling is $60.
