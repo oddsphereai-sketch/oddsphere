@@ -57,12 +57,12 @@ jobs:
       - name: Prepare nonsecret test environment
         run: cp .env.example .env.local
       - name: Prove exact NFL tracking quote evidence and immutable legacy records
-        run: node --import tsx scripts/test-nfl-player-props-tracking-identity.ts
+        run: node --import tsx scripts/test-nfl-player-props-snapshot-store.ts && node --import tsx scripts/test-nfl-player-props-tracking-identity.ts
       - name: Prove truthful NFL input status and retained review authority
         run: node --import tsx scripts/test-player-props-ai-nfl-identity.ts && node --import tsx scripts/test-player-props-ai-scoped-publication.ts
       - name: Prove all offered NFL quarterback markets settle without changing locked predictions
         run: node --import tsx scripts/test-nfl-player-props-settlement.ts && node --import tsx scripts/test-nfl-props-reviewed-dnp-recovery.ts
       - name: Prove source-grounded forecast semantics and retained legacy law authority
-        run: node --import tsx scripts/test-player-props-ai-complete-sentences.ts && node --import tsx scripts/test-player-props-ai-openai.ts && node --import tsx scripts/test-player-props-ai-rejection-evidence.ts && node --import tsx scripts/test-player-props-ai-current-execution.ts && node --import tsx scripts/test-player-props-ai-forecast-semantics.ts && node --import tsx scripts/test-player-props-ai-reader.ts && node --import tsx scripts/test-player-props-ai-core.ts && node --import tsx scripts/test-player-props-ai-site.ts && node --import tsx scripts/test-player-props-ai-output-headroom.ts
+        run: node --import tsx scripts/test-player-props-ai-source-events.ts && node --import tsx scripts/test-player-props-ai-complete-sentences.ts && node --import tsx scripts/test-player-props-ai-openai.ts && node --import tsx scripts/test-player-props-ai-rejection-evidence.ts && node --import tsx scripts/test-player-props-ai-current-execution.ts && node --import tsx scripts/test-player-props-ai-forecast-semantics.ts && node --import tsx scripts/test-player-props-ai-reader.ts && node --import tsx scripts/test-player-props-ai-core.ts && node --import tsx scripts/test-player-props-ai-site.ts && node --import tsx scripts/test-player-props-ai-output-headroom.ts
       - name: Run mandatory model-change gate and real PostgreSQL proof
         run: npm run verify:model-change

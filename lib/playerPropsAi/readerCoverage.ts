@@ -103,6 +103,7 @@ export function playerReaderEvidence(packet:GamePacket,player:Player,allocate:(n
   }
   for(const e of player.evidence.filter(e=>e.kind==="market")){
     const v=obj(e.value);
+    if(v.sourceEventQualification)add("market","Exact provider event declaration and unresolved-contract boundary",v,[e],"partial");
     if(Array.isArray(v.books)&&v.books.length){
       add("market","Retained book/line/price evidence",{market:v.market??null,anchorLine:v.anchorLine??null,anchorSource:v.anchorSource??null,
         books:v.books.map(raw=>{const b=obj(raw);return {book:b.book,provider:b.provider,openingPairs:b.openingPairs??null,

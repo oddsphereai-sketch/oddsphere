@@ -1,3 +1,4 @@
+import type {SourceEventQualification,MarketEventQualification} from "./sourceEvents";
 /** Product inventory, NOT a production market-selection policy. */
 export const PRODUCT_RELEASE = "player_props_ai_offline_full_product_2026_11_06_r1";
 export const CATALOG = {
@@ -30,6 +31,8 @@ export type Evidence = {
   value: Json;
 };
 export type Quote = {
+  /** Exact provider declaration, qualified prospectively; absent on immutable legacy quotes. */
+  sourceEvent?:SourceEventQualification;
   id: string; playerId: string; market: string; provider: string; book: string;
   line: number; side: "over" | "under" | "yes"; american: number;
   observedAt: string; receivedAt: string; live: boolean;
@@ -40,6 +43,7 @@ export type Quote = {
   receivedAtProvenance?: "provider_response" | "collection_start" | "snapshot_availability";
 };
 export type Player = {
+  sourceEventContracts?:Record<string,MarketEventQualification>;
   id: string; name: string; team: string; opponent: string;
   /** All offered scopes, including explicitly unsupported heads. Never infer applicability from position alone. */
   markets: string[];
