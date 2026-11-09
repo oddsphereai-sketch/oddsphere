@@ -71,6 +71,10 @@ const nbaContractSnapshot=buildNbaPlayerPropsMemberSnapshot({mode:"private_forwa
 const yesFirst=[integerChoices.find(c=>c.side==="yes")!,integerChoices.find(c=>c.side!=="yes")!];
 assert.ok(applyNbaSiteAi(nbaContractSnapshot,mixed,yesFirst,now).decisions[0].aiReview,"an implicit milestone arriving first cannot hide the ordinary NBA choice");
 const nbaLock={...nbaContractSnapshot,decisions:[{...nbaContractRow,lockedAt:old}]};assert.strictEqual(applyNbaSiteAi(nbaLock,mixed,yesFirst,now),nbaLock);
+const evaluated=integerChoices.find(c=>c.side!=="yes")!;
+const duplicateFeedPacket={...mixed,quotes:[...mixed.quotes,{...evaluated.quote,id:"second-feed",provider:"other-feed",american:-200,receivedAt:"2026-11-09T18:00:10Z",observedAt:"2026-11-09T18:00:10Z"}]};
+const ownPrice=applyNbaSiteAi(nbaContractSnapshot,duplicateFeedPacket,[evaluated],"2026-11-09T18:00:15Z").decisions[0];
+assert.ok(ownPrice.priceLadder.some(q=>q.sportsbook===ownPrice.sportsbook&&q.side===ownPrice.side&&q.line===ownPrice.line&&q.americanPrice===ownPrice.americanPrice),"evaluated provider retains its own exact display slot across duplicate sportsbook feeds");
 const nflMix={...nfl,quotes:(["over","under","yes"] as const).map(side=>({...nfl.quotes[0],id:side,side,line:1,american:side==="yes"?-200:-110,receivedAt:now,observedAt:now}))};
 const tdLaw=validateLaw("nfl",nflMix.players[0],{weights:[4,4,2,...vector(0).slice(3)],outcomes:{passing_attempts:vector(20),passing_completions:vector(15),passing_tds:[0,1,2,...vector(0).slice(3)],interceptions:vector(0)}});
 const tdReview={...review,criticalContextHashes:criticalContextHashes(nflMix),marketScopes:{"nfl-bdl-player:1":["passing_tds"]},players:[{...review.players[0],playerId:"nfl-bdl-player:1",law:tdLaw}]};

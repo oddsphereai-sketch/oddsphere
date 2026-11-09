@@ -35,6 +35,10 @@ function nbaAiPrices(packet:GamePacket,c:SiteAiDecision,now:string):NbaPlayerPro
     const key=`${book(q.book)}|${q.line}|${q.side}`,prior=latest.get(key);
     if(!prior||instant(q.receivedAt)>instant(prior.receivedAt))latest.set(key,q);
   }
+  // Match the native member-price contract: the evaluated provider owns its
+  // exact book/line/side slot even when a second feed reports that same book.
+  const exact=executionQuotes(packet,now).find(q=>q.id===c.quote.id);
+  if(exact&&exact.side!=="yes"&&quoteContract(exact)==="two_way")latest.set(`${book(exact.book)}|${exact.line}|${exact.side}`,exact);
   return [...latest.values()].map(q=>({sportsbook:q.book,side:q.side as "over"|"under",line:q.line,americanPrice:q.american,observedAt:q.observedAt}));
 }
 export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:GamePacket,choices:SiteAiDecision[],now:string):NbaPlayerPropsMemberSnapshot{
