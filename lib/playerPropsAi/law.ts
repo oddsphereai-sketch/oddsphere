@@ -1,3 +1,4 @@
+import {qualifiedForecastMarkets} from "./sourceEvents";
 import type { GamePacket, Player, Sport } from "./evidenceContract";
 import { COMBOS } from "./evidenceContract";
 import { invariant, digest } from "./evidence";
@@ -8,10 +9,10 @@ const NBA = ["points", "rebounds", "assists", "threes"] as const;
 const NFL = ["passing_attempts", "passing_completions", "passing_yards", "passing_tds", "interceptions", "rushing_attempts", "rushing_yards", "receptions", "receiving_yards", "touchdowns"] as const;
 const MLB_PITCHER = ["pitcher_strikeouts", "pitcher_outs", "pitcher_hits_allowed", "pitcher_walks", "pitcher_earned_runs"] as const;
 const MLB_BATTER = ["batter_singles", "batter_doubles", "batter_triples", "batter_home_runs", "batter_walks", "batter_strikeouts", "batter_rbis", "batter_runs_scored", "batter_stolen_bases"] as const;
-export function primitives(sport: Sport, player: Pick<Player, "markets">): string[] {
+export function primitives(sport: Sport, player: Pick<Player, "markets"|"sourceEventContracts">): string[] {
   if (sport === "nba") return [...NBA];
   if (sport === "nfl") {
-    const required = new Set(player.markets.flatMap(m => m === "anytime_td" ? ["touchdowns"] : COMBOS[m] ?? [m]));
+    const required = new Set(qualifiedForecastMarkets(player).flatMap(m => m === "anytime_td" ? ["touchdowns"] : COMBOS[m] ?? [m]));
     if ([...required].some(m => m.startsWith("passing_") || m === "interceptions")) for (const m of ["passing_attempts", "passing_completions", "passing_tds", "interceptions"]) required.add(m);
     return NFL.filter(m => required.has(m));
   }
@@ -30,7 +31,7 @@ export function marketUsesStatistic(market:string,statistic:string):boolean{
   return Boolean(COMBOS[market]?.some(component=>marketUsesStatistic(component,statistic)));
 }
 
-export function validateLaw(sport: Sport, player: Pick<Player, "markets">, law: PlayerLaw): AcceptedPlayerLaw {
+export function validateLaw(sport: Sport, player: Pick<Player, "markets"|"sourceEventContracts">, law: PlayerLaw): AcceptedPlayerLaw {
   const keys = primitives(sport, player);
   invariant(keys.length > 0 && Object.keys(law.outcomes).sort().join("|") === keys.slice().sort().join("|"), "Wrong/missing scenario primitives");
   invariant(law.weights.length === PROPS_AI_SCENARIOS && law.weights.every(w => Number.isSafeInteger(w) && w >= 0 && w <= 10000), "Invalid relative scenario weights");
