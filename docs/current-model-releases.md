@@ -1,3 +1,32 @@
+## November 9 player-prop rejected-output and transport evidence R20
+
+Future generation `player_props_ai_2026_11_09_r20_rejection_evidence` retains R19
+numerical/selection/grade/price behavior and named wire R3. A forward preflight
+collects physical contradictions across every submitted actor/scenario before
+existing strict parsing. The single existing correction phase receives compact
+player/scenario references, all failed identity rules, example values and counts,
+within its unchanged feedback cushion. No law is repaired, clamped or silently
+accepted. Historical R1 law validation and accepted R15–R19 records remain exact.
+
+Operational diagnostics R2 and private failure-evidence R1 retain bounded exact
+submitted part/request bytes and rejected draft text, hashes and physical findings
+inside the first immutable private attempt receipt. A bounded archive failure
+cannot prevent billing settlement. Allowlisted HTTP status/code/type/request ID,
+Retry-After and documented rate headers are retained on errors and success;
+raw error messages and authorization headers are excluded. Ordinary 429 billing
+remains unknown and cannot authorize a retry. Only the documented explicit Flex
+capacity rejection retains its existing unbilled path.
+
+Sole NFL writer R82 `nfl_player_props_writer_2026_11_09_r82_rejection_evidence`
+retains settlement R7/source R2/decision R9/member R57/lifecycle R39/tracking R43.
+NBA sole writer R13, publication R5, selection/grade R2, two slots, phase limit,
+concurrency, output/input ceilings, stronger quota and $50/$60 budget settings
+are unchanged. Private receipts never enter member DTOs, logs or public results.
+This is a diagnostic/correction repair, not proof that API capacity or quota is
+fixed. Closed failed slots are never replayed. Normal scheduled response headers
+and publication remain required live evidence; no paid proof is authorized.
+See `model-audits/2026-11-09-props-ai-rejection-evidence.md`.
+
 ## November 9 player-prop AI current execution R19
 
 Future generation `player_props_ai_2026_11_09_r19_current_execution` retains R18

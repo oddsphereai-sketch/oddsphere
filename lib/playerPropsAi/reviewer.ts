@@ -1,3 +1,5 @@
+import {physicalLawFindings} from "./physicalDiagnostics";
+import {failureEvidence} from "./failureEvidence";
 import {isMissedPropsEarlyWindow} from "./schedule";
 import {propsAiCompletionWindowMs} from "./completionWindow";
 import { gzipSync } from "node:zlib";
@@ -5,7 +7,7 @@ import type { GamePacket } from "./evidenceContract";
 import { digest, invariant, instant, etDate } from "./evidence";
 import { usageMicroUsd, type PropsAiJob, type PropsAiReviewStore } from "./budget";
 import { jointReviewRequest, parseJointReview } from "./request";
-import { countAiInput, generateAiReview, structuredAiText, AiGenerationError } from "./openai";
+import { countAiInput, generateAiReview,serializeAiRequest, structuredAiText, AiGenerationError } from "./openai";
 import { prepareReviewParts } from "./partitions";
 import {criticalContextHashes} from "./criticalContext";
 import { PROPS_AI_MAX_OUTPUT_PER_REQUEST, PROPS_AI_PART_CONCURRENCY, PROPS_AI_STRONG_MODEL, PROPS_AI_RELEASE, PROPS_AI_ACCEPTED_RELEASES, type PropsAiModel } from "./releases";
@@ -50,23 +52,31 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
           const part=parts[index], timeoutMs=Math.floor(Math.min(180000,deadline-Date.now()-10000,instant(args.packet.lock)-instant(clock())-10000));
           invariant(timeoutMs>=90000,"review_completion_window_exhausted");
           const attempt=await args.store.send(job.job_key,token,phase,index+1);
+          const request=jointReviewRequest(part.packet,attempt.model,PROPS_AI_MAX_OUTPUT_PER_REQUEST,phase===2?feedback.get(index):undefined),requestBody=serializeAiRequest(request,{serviceTier:attempt.requested_tier});
           let response;
-          try{response=await generateAiReview(jointReviewRequest(part.packet,attempt.model,PROPS_AI_MAX_OUTPUT_PER_REQUEST,phase===2?feedback.get(index):undefined),{key:args.key,timeoutMs,fetchImpl:args.fetchImpl,serviceTier:attempt.requested_tier});}
+          try{response=await generateAiReview(request,{key:args.key,timeoutMs,fetchImpl:args.fetchImpl,serviceTier:attempt.requested_tier});}
           catch(error){
             const unbilled=error instanceof AiGenerationError&&error.knownUnbilled;
-            await args.store.receipt(attempt.id,token,unbilled?0:null,null,unbilled?{kind:"known_unbilled",http_status:429,code:error.code,requested_tier:attempt.requested_tier}:null);
+            await args.store.receipt(attempt.id,token,unbilled?0:null,null,{kind:unbilled?"known_unbilled":"unknown_transport_outcome",...(error instanceof AiGenerationError?{http_status:error.status,code:error.code,transport:error.diagnostics??null}:{}),requested_tier:attempt.requested_tier,failureEvidence:failureEvidence({packet:part.packet,requestBody,draftText:null,reason:(error as Error).message,physical:[]})});
             return {index,reason:(error as Error).message,known:unbilled};
           }
-          if(!response.usage){await args.store.receipt(attempt.id,token,null,response.id,null);return {index,reason:"missing_billed_usage",known:false};}
+          const texts=response.output?.flatMap(o=>o.content??[]).filter(c=>c.type==="output_text").map(c=>c.text??"")??[];
+          if(!response.usage){await args.store.receipt(attempt.id,token,null,response.id,{kind:"missing_usage",transport:response.transportDiagnostics??null,failureEvidence:failureEvidence({packet:part.packet,requestBody,draftText:texts.length===1?texts[0]:null,reason:"missing_billed_usage",physical:[]})});return {index,reason:"missing_billed_usage",known:false};}
           let actual:number;
           try{actual=usageMicroUsd(attempt.model,response.usage,response.service_tier);}
-          catch{await args.store.receipt(attempt.id,token,null,response.id,response.usage);return {index,reason:"invalid_billed_usage",known:false};}
-          await args.store.receipt(attempt.id,token,actual,response.id,{...response.usage,service_tier:response.service_tier??"unknown",response_status:response.status,response_model:response.model});
-          try{
-            accepted.set(index,parseJointReview(part.packet,structuredAiText(response)));
-            provenance.set(index,{part:index+1,phase,model:attempt.model,requestedTier:attempt.requested_tier,actualTier:response.service_tier??"unknown",responseId:response.id,playerIds:part.packet.players.map(p=>p.id),...(phase===2?{correctionReason:feedback.get(index)?.slice(0,200)}:{})});
-            return null;
-          }catch(error){return {index,reason:(error as Error).message,known:true};}
+          catch{await args.store.receipt(attempt.id,token,null,response.id,{...response.usage,transport:response.transportDiagnostics??null,failureEvidence:failureEvidence({packet:part.packet,requestBody,draftText:texts.length===1?texts[0]:null,reason:"invalid_billed_usage",physical:[]})});return {index,reason:"invalid_billed_usage",known:false};}
+          let parsed:ReturnType<typeof parseJointReview>|null=null,reason:string|null=null,draft:unknown;
+          try{draft=structuredAiText(response);parsed=parseJointReview(part.packet,draft);}
+          catch(error){reason=(error as Error).message;}
+          // Settle billing exactly once, even for rejected drafts. Complete failure
+          // evidence is built before this immutable receipt's first write.
+          const usage={...response.usage,service_tier:response.service_tier??"unknown",response_status:response.status,response_model:response.model,transport:response.transportDiagnostics??null,
+            ...(reason?{failureEvidence:failureEvidence({packet:part.packet,requestBody,draftText:texts.length===1?texts[0]:null,reason,physical:physicalLawFindings(part.packet,draft)})}:{})};
+          await args.store.receipt(attempt.id,token,actual,response.id,usage);
+          if(!parsed)return {index,reason:reason??"unparsed_draft",known:true};
+          accepted.set(index,parsed);
+          provenance.set(index,{part:index+1,phase,model:attempt.model,requestedTier:attempt.requested_tier,actualTier:response.service_tier??"unknown",responseId:response.id,playerIds:part.packet.players.map(p=>p.id),...(phase===2?{correctionReason:feedback.get(index)?.slice(0,200)}:{})});
+          return null;
         })));
         for(let i=0;i<results.length;i++){
           const result=results[i];

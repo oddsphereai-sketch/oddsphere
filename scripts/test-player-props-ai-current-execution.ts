@@ -92,7 +92,7 @@ const physicalPacket:GamePacket={...packet,sport:"nfl",players:[{...nflPlayer,ev
 const facts=readerEvidence(physicalPacket).p,aliases=new Map([...evidenceAliases(physicalPacket)].map(([alias,id])=>[id,alias]));
 const coverage=Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[area].status,factIds:facts[area].facts.slice(0,1).map(f=>f.id),effect:facts[area].status==="missing"?"unavailable":"uncertain",observation:"The supplied evidence requires contextual caution."}]));
 const response={wireRelease:PROPS_AI_WIRE_RELEASE,players:{p:{assessment:"The forecast uses the supplied evidence.",coverage,priorRead:Object.fromEntries(independentPriorEvents(physicalPacket.players[0]).map(p=>[aliases.get(p.sourceId)!,p.preferredOutcome])),evidenceIds:[aliases.get("prior")!],gaps:[],law:raw,confidence:[2],exceptions:["A prose exception cannot make an impossible passing scenario valid."]}}};
-assert.throws(()=>parseJointReview(physicalPacket,response),/completed pass/);
+assert.throws(()=>parseJointReview(physicalPacket,response),/CMP0=>YDS0/);
 // The live collector/packet handoff keeps current offers separate from retained history.
 const nbaSource=emptyCapturedSource(now);
 const nbaRow={gameId:"native",playerId:"p",playerName:"Synthetic",team:"BOS",opponent:"NYK",market:"points",line:12.5,side:"over",projection:16,independentProjection:16,independentProbability:.6,modelRelease:"synthetic",evaluatedAt:now,lockedAt:null,role:[],production:[],matchup:[]} as unknown as Parameters<typeof liveNbaPacket>[0]["snapshot"]["decisions"][number];

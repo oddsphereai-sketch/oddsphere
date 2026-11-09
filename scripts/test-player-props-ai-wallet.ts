@@ -1,5 +1,6 @@
 /** Real PostgreSQL + real reviewer + mock HTTP. No credentials, Internet or paid calls. */
 import assert from "node:assert/strict";
+import {gunzipSync} from "node:zlib";
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { PropsAiStore, usageMicroUsd, type PropsAiJob } from "../lib/playerPropsAi/budget";
@@ -48,18 +49,23 @@ function response(part:GamePacket,model:string,tier:string,id:string){
   const players=Object.fromEntries(part.players.map(p=>[p.id,{assessment:"Conditional forecast using the supplied performance sample.",priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[p.id][area].status,factIds:facts[p.id][area].facts.slice(0,1).map(f=>f.id),effect:facts[p.id][area].status==="missing"?"unavailable":"uncertain",observation:area==="recent_form"&&facts[p.id][area].limitations.some(l=>l.includes("old_game_history"))?"The supplied history is dated and cannot establish current workload.":"The supplied sample requires contextual caution."}])),evidenceIds:[...aliases].filter(([,value])=>value===p.evidence[0].id).map(([alias])=>alias),gaps:[],law:{weights:Array(16).fill(1),outcomes:{points:Array(16).fill(20),rebounds:Array(16).fill(4),assists:Array(16).fill(3),threes:Array(16).fill(2)}},confidence:[1],exceptions:[null]}]));
   return {id,model,status:"completed",service_tier:tier,usage:{input_tokens:1000,output_tokens:100},output:[{content:[{type:"output_text",text:JSON.stringify({wireRelease:PROPS_AI_WIRE_RELEASE,players})}]}]};
 }
-async function run(id:string,stage:"early"|"final",failure:"none"|"capacity"|"timeout"|"invalid"|"semantic"="none",strong=false){
+async function run(id:string,stage:"early"|"final",failure:"none"|"capacity"|"timeout"|"invalid"|"semantic"|"physical"|"rate"|"quota"|"missingusage"|"invalidusage"="none",strong=false){
   const reviewNow=stage==="early"?"2026-11-07T21:00:00Z":clock();
   await db.query("UPDATE test_clock SET at=$1",[reviewNow]);
   const p={...packet(id,stage),cutoff:reviewNow},parts=p.players.map(player=>({packet:playerSubset(p,[player.id]),inputTokens:1000})),calls:{player:string;model:string;tier:string}[]=[];
-  const seen=new Map<string,number>();
+  const seen=new Map<string,number>(),bodies:string[]=[];
   const fetchImpl=(async(url,options)=>{
     assert.equal(String(url),"https://api.openai.com/v1/responses");
+    bodies.push(String(options?.body));
     const request=JSON.parse(String(options?.body)),input=JSON.parse(request.input),player=input.document.players[0].id as string;
     calls.push({player,model:request.model,tier:request.service_tier});seen.set(player,(seen.get(player)??0)+1);
     if(player==="b"&&seen.get(player)===2&&failure==="invalid")assert.match(request.instructions,/Forecast wire release mismatch/);
+    if(player==="b"&&seen.get(player)===2&&failure==="physical")assert.match(request.instructions,/P0 S0 PTS=1,3PM=2/);
     if(player==="b"&&seen.get(player)===2&&failure==="semantic")assert.match(request.instructions,/forecast_mean_outside_supplied_support/);
     if(player==="b"&&seen.get(player)===1){
+      if(failure==="rate"||failure==="quota")return Response.json({error:{code:failure==="rate"?"rate_limit_exceeded":"insufficient_quota"}},{status:429,headers:{"x-request-id":"req_synthetic","retry-after":"60","x-ratelimit-limit-tokens":"1000000"}});
+      if(failure==="missingusage"||failure==="invalidusage"){const value=response(parts[1].packet,request.model,request.service_tier,"unknown-usage");return Response.json({...value,usage:failure==="missingusage"?undefined:{input_tokens:-1,output_tokens:100}});}
+      if(failure==="physical"){const value=response(parts[1].packet,request.model,request.service_tier,"physical-paid");const bad=JSON.parse(value.output[0].content[0].text);bad.players.b.law.outcomes.points=Array(16).fill(1);value.output[0].content[0].text=JSON.stringify(bad);return Response.json(value);}
       if(failure==="timeout")throw new Error("synthetic_transport_unknown");
       if(failure==="capacity")return Response.json({error:{code:"resource_unavailable"}},{status:429});
       if(failure==="semantic"){const value=response(parts[1].packet,request.model,request.service_tier,"semantic-paid");const bad=JSON.parse(value.output[0].content[0].text);bad.players.b.law.outcomes.points=Array(16).fill(100);value.output[0].content[0].text=JSON.stringify(bad);return Response.json(value);}
@@ -68,7 +74,7 @@ async function run(id:string,stage:"early"|"final",failure:"none"|"capacity"|"ti
     return Response.json(response(parts.find(part=>part.packet.players[0].id===player)!.packet,request.model,request.service_tier,`r-${id}-${player}-${seen.get(player)}`));
   }) as typeof fetch;
   const result=await runPropsReview({packet:p,job:await job(keys(id)[stage==="early"?0:1]),store:wallet,key:"synthetic-never-real",writerRunId:"synthetic-owner",preferStronger:strong,clock:()=>reviewNow,prepare:async()=>parts,countStrong:async()=>7000,fetchImpl});
-  return {result,calls};
+  return {result,calls,bodies};
 }
 try{
   for(const role of ["anon","authenticated","service_role"])await admin.query(`DO $$ BEGIN CREATE ROLE ${role}; EXCEPTION WHEN duplicate_object THEN NULL; END $$`);
@@ -107,6 +113,15 @@ try{
   await assert.rejects(wallet.receipt(held.id,(await job(keys("g1")[0])).claim_token!,100,"different",{}),/immutable_usage_receipt_conflict/);
   const semantic=await run("g7","early","semantic");assert.equal(semantic.result.status,"completed");assert.equal(semantic.calls.length,3);assert.equal(semantic.calls.filter(c=>c.player==="a").length,1);
   const semanticReview=(await job(keys("g7")[0])).result as {partProvenance:{correctionReason?:string}[]};assert.match(semanticReview.partProvenance[1].correctionReason!,/forecast_mean_outside_supplied_support/);
+  const physical=await run("g8","early","physical");assert.equal(physical.result.status,"completed");assert.equal(physical.calls.length,3);assert.equal(physical.calls.filter(c=>c.player==="a").length,1);
+  const rejected=(await db.query("SELECT * FROM player_props_ai_attempts WHERE job_key=$1 AND phase=1 AND part=2",[keys("g8")[0]])).rows[0];
+  assert.ok(rejected.actual_micro>0);assert.equal(rejected.usage.failureEvidence.physical.length,16);
+  const archived=rejected.usage.failureEvidence;assert.equal(gunzipSync(Buffer.from(archived.request.data,"base64")).toString(),physical.bodies[1]);assert.equal(JSON.parse(gunzipSync(Buffer.from(archived.input.data,"base64")).toString()).players[0].id,"b");assert.equal(JSON.parse(gunzipSync(Buffer.from(archived.draft.data,"base64")).toString()).players.b.law.outcomes.points[0],1);
+  await assert.rejects(wallet.receipt(rejected.id,(await job(keys("g8")[0])).claim_token!,Number(rejected.actual_micro),rejected.response_id,{...rejected.usage,changed:true}),/immutable_usage_receipt_conflict/);
+  for(const [id,kind,code]of [["g9","rate","rate_limit_exceeded"],["g10","quota","insufficient_quota"]] as const){
+    const failed=await run(id,"early",kind);assert.equal(failed.result.status,"failed");assert.equal(failed.calls.length,2);const attempt=(await db.query("SELECT * FROM player_props_ai_attempts WHERE job_key=$1 AND part=2",[keys(id)[0]])).rows[0];assert.equal(attempt.state,"unknown");assert.equal(attempt.actual_micro,null);assert.equal(attempt.usage.transport.code,code);assert.equal(attempt.usage.transport.rateLimits["x-ratelimit-limit-tokens"],"1000000");assert.equal(attempt.phase,1);assert.equal(await wallet.fallback(keys(id)[0],(await job(keys(id)[0])).claim_token!,[2],"no blind retry"),false);
+  }
+  for(const [id,kind]of [["g11","missingusage"],["g12","invalidusage"]] as const){const failed=await run(id,"early",kind);assert.equal(failed.result.status,"failed");assert.equal(failed.calls.length,2);const receipt=(await db.query("SELECT * FROM player_props_ai_attempts WHERE job_key=$1 AND part=2",[keys(id)[0]])).rows[0];assert.equal(receipt.actual_micro,null);assert.equal(receipt.state,"unknown");assert.ok(receipt.usage.failureEvidence.draft.data);}
   const strong=await run("g2","final","invalid",true);assert.equal(strong.result.status,"completed");assert.equal(strong.calls.filter(c=>c.player==="a").length,1);assert.equal(strong.calls[0].model,"gpt-6.1-terra");assert.equal(strong.calls.at(-1)!.model,"gpt-6-luna");
   assert.equal(((await job(keys("g2")[1])).result as {model:string}).model,"mixed_recorded_per_part");
   assert.equal((await run("g3","final","none",true)).calls[0].model,"gpt-6.1-terra");assert.equal((await run("g4","final","none",true)).calls[0].model,"gpt-6-luna");
