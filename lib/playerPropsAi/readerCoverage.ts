@@ -129,7 +129,7 @@ export function coverageSchema(evidence:Record<ReaderArea,ReaderAreaEvidence>){
   const fields=Object.fromEntries(READER_AREAS.map(area=>{const e=evidence[area],ids=e.facts.map(f=>f.id);return [area,{type:"object",additionalProperties:false,required:["status","factIds","effect","observation"],properties:{
     status:{type:"string",enum:[e.status]},factIds:{type:"array",items:ids.length?{type:"string",enum:ids}:{type:"string"},minItems:ids.length?1:0,maxItems:Math.min(4,ids.length)},
     effect:{type:"string",enum:e.status==="missing"?["uncertain","unavailable"]:["upward","downward","mixed","neutral","uncertain","unavailable"]},
-    observation:{type:"string",minLength:1,maxLength:300}}}];}));
+    observation:{type:"string",minLength:1,maxLength:300,pattern:"^[^0-9]*[.!?]$",description:"One short complete qualitative sentence, target under 100 characters; finish with punctuation and no digits."}}}];}));
   return {type:"object",additionalProperties:false,required:[...READER_AREAS],properties:fields};
 }
 export function validateCoverage(evidence:Record<ReaderArea,ReaderAreaEvidence>,coverage:ReaderCoverage){
