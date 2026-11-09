@@ -1,3 +1,39 @@
+## November 9 NFL prelock review authority R26
+
+Future generation `player_props_ai_2026_11_09_r26_prelock_authority`, selectionR4,
+NFL decisionR11, sole writerR88, memberR59 and lifecycleR41 separate source/review
+observation from numerical candidate construction. A final law genuinely known
+before lock cannot revive an older early law in its declined scope merely because
+publication crosses lock. Exact current native source/row bundles are captured
+before generation; a qualified AI overlay has a separate actual readiness capture.
+Unknown/stale/postlock construction cannot become prelock evidence. Source context,
+actor/event/price/receipt, model-context lineage, submitted digest and actual-law
+arithmetic are bound, with deterministic newest authority and conflict refusal.
+
+The existing leased writer immediately prepares a completed local review before a
+later accepted-review GET. That GET/source reload may fail or cross lock; genuine
+local results/captured packets keep their exact cutoffs and actual observation
+clocks. No timestamp is backdated. Lookup unavailable/missing, source-unresolved,
+changed-context, unreviewed and explicitly declined scopes remain distinct. A
+current supported native baseline is independent fallback, not part of the AI
+joint law. An unchanged valid early AI survives routine native refresh.
+
+Stored locked rows/members are protected before optional metadata. New private
+append-only handoff evidence includes unavailable-only outcomes and never enters
+the member DTO. All historical R15–R25 laws/locks retain exact release/values.
+No new inference/provider call, phase, slot, output/concurrency cap, writer, timer
+or budget change. R25 budgetR5/Standard tiers, wireR4/readerR13/sourceR3, gradeR2,
+lawR1/publicationR5, settlementR7/trackingR43 and MLBchampionR44 stay exact.
+
+The actual synthetic counterexample retains6member rows, reduces mixed AI laws
+2->1 and unsafe actionables3->2, while promoting2supported final Best Angles from
+native0actionables. Two declined-scope rows remain native. Full source/runtime
+boundary controls, exact legacy reader/writer/transport precedence, fresh-main
+integration, complete protected CI/build and normal live proof remain required.
+No paid proof/replay. NBA/MLB lifecycle changes and unverified book action-rule
+qualification are outside this scoped repair; do not claim all process gaps solved.
+See `model-audits/2026-11-09-props-ai-prelock-authority.md`.
+
 ## November 9 Standard-primary funding and escrow R25
 
 Future generation `player_props_ai_2026_11_09_r25_standard_primary_escrow`, budget

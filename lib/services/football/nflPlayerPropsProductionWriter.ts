@@ -1,7 +1,9 @@
+import {siteAiDecisions} from "../../playerPropsAi/publication";
+import {captureNflHandoffBundle,observeNflSourceAuthority,mergeNflHandoffs,type NflLockHandoff} from "../../playerPropsAi/nflLockAuthority";
 import {propsAiSiteConfig} from "../../playerPropsAi/siteConfig";
 import {reviewPropsForSite} from "../../playerPropsAi/siteRuntime";
 import {liveNflPacket} from "../../playerPropsAi/liveSources";
-import {applyNflSiteAi} from "../../playerPropsAi/siteBindings";
+import {applyNflSiteAi,restoreNflNativeGame} from "../../playerPropsAi/siteBindings";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NflPlayerPropMarket } from "./nflPlayerPropsContract";
 import {
@@ -77,7 +79,7 @@ import {
 } from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_11_09_r87_standard_primary_escrow" as const;
+  "nfl_player_props_writer_2026_11_09_r88_prelock_authority" as const;
 export const NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES = 60 as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
@@ -415,20 +417,23 @@ export async function runNflPlayerPropsProductionWriter(args: {
       .map((sportsbook) => [sportsbook, (referenceResearchMarketEvidence?.i ?? [])
         .reduce((count, identity) => count + identity[2].filter((book) => book[0] === sportsbook).length, 0)]),
   );
+  const aiLockFrames:NflLockHandoff[]=[];
+  const nativeAiBaseline=nextBoard;
   if(args.apply&&propsAiSiteConfig().integrated){
     const observer=await readNflPlayerPropsMarketObserverHistory({client:args.client,season:args.season,week:args.week}).catch(()=>null);
     const marketHistory={observer,references:effectiveReferenceOffers,availableAt:new Date().toISOString()};
     const aiBaseline=reconcileNflPlayerPropsProductionSnapshot({requireVerifiedInterceptionSource:true,season:args.season,week:args.week,evaluatedAt:args.now,nextBoard,previous});
-    const ai=await reviewPropsForSite({client:args.client,sport:"nfl",writerRunId:args.writerRunId,deadline:Date.parse(args.now)+390000,
+    const ai=await reviewPropsForSite({client:args.client,sport:"nfl",writerRunId:args.writerRunId,onSourceReady:(packet,review,_observedAt,lookupAvailable)=>{aiLockFrames.push(observeNflSourceAuthority(packet,review,lookupAvailable));aiLockFrames.push(captureNflHandoffBundle(nextBoard.decisions,packet,review,"native"));},onReviewObserved:(packet,review,lookupAvailable)=>{aiLockFrames.push(observeNflSourceAuthority(packet,review,lookupAvailable));},onReviewReady:(packet,review)=>{const at=new Date().toISOString();nextBoard=restoreNflNativeGame(nextBoard,nativeAiBaseline,packet,at);nextBoard=applyNflSiteAi(nextBoard,packet,siteAiDecisions(packet,review,at),at);aiLockFrames.push(captureNflHandoffBundle(nextBoard.decisions,packet,review,"ai"));},deadline:Date.parse(args.now)+390000,
       games:context.games.map(g=>({id:g.canonicalGameId,start:g.scheduledStart,away:g.awayTeam,home:g.homeTeam})),
       load:(game,window)=>liveNflPacket({game,window,snapshot:aiBaseline,observations:collection.snapshot,history:currentSeason.state,context,marketHistory})});
-    for(const game of ai.games)nextBoard=applyNflSiteAi(nextBoard,game.packet,game.decisions,new Date().toISOString());
+    for(const game of ai.games){const applyAt=new Date().toISOString();if(Date.parse(applyAt)>=Date.parse(game.packet.lock))continue;nextBoard=restoreNflNativeGame(nextBoard,nativeAiBaseline,game.packet,applyAt);nextBoard=applyNflSiteAi(nextBoard,game.packet,game.decisions,new Date().toISOString());aiLockFrames.push(captureNflHandoffBundle(nextBoard.decisions,game.packet,game.authorityReview,"ai"));}
   }
   const publicationNow=args.apply&&propsAiSiteConfig().integrated?new Date().toISOString():args.now;
   const snapshot = reconcileNflPlayerPropsProductionSnapshot({requireVerifiedInterceptionSource:true,
     season: args.season,
     week: args.week,
     evaluatedAt: publicationNow,
+    ...(args.apply&&propsAiSiteConfig().integrated?{lockHandoff:mergeNflHandoffs(aiLockFrames)}:{}),
     nextBoard,
     previous,
   });

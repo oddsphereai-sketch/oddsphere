@@ -1,3 +1,5 @@
+import {digest} from "../../playerPropsAi/evidence";
+import {prepareNflLockHandoff,type NflLockHandoff} from "../../playerPropsAi/nflLockAuthority";
 import {PROPS_AI_SOURCE_EVENT_RELEASE} from "../../playerPropsAi/sourceEvents";
 import {PROPS_AI_NFL_EXACT_RECEIPT_RELEASES} from "../../playerPropsAi/releases";
 import {propsTeam} from "../../playerPropsAi/teamIdentity";
@@ -18,9 +20,9 @@ import { selectNflPlayerPropsCanonicalLines } from "./nflPlayerPropsCanonicalLin
 import { withoutUnresolvedNflPlayerAliasDuplicates } from "./nflPlayerPropsMemberAliasIdentity";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_11_09_r58_source_event_contracts" as const;
+  "nfl_player_props_member_2026_11_09_r59_prelock_authority" as const;
 export const NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE =
-  "nfl_player_props_member_lifecycle_2026_11_09_r40_source_event_contracts" as const;
+  "nfl_player_props_member_lifecycle_2026_11_09_r41_prelock_authority" as const;
 const NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE =
   "nfl_player_props_decision_2026_10_27_r38_passing_yards_direction" as const;
 export const NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET = 2 as const;
@@ -31,6 +33,8 @@ export type NflPlayerPropsProductionSnapshot = {
   season: number; week: number; generatedAt: string;
   writerLeaseGroup: typeof NFL_PLAYER_PROPS_WRITER_LEASE_GROUP;
   publicationEligible: true; trackingEligible: true; riskLabel: "forward_monitoring_2025_exact_price_confirmation";
+  /** Private append-only construction proof; member DTOs expose no source frames. */
+  lockHandoffEvidence?:Record<string,{release:string;at:string;capture:Omit<NflLockHandoff,"nativeRows">}>;
   board: Omit<NflPlayerPropsRuntimeBoard, "publicationEnabled" | "trackingEnabled"> & {
     publicationEnabled: true;
     trackingEnabled: true;
@@ -41,6 +45,7 @@ export type NflPlayerPropsProductionSnapshot = {
     retainedStillFreshUnlocked: number;
     frozenAtLock: number;
     retainedPreviouslyLocked: number;
+    reviewAuthority?:{qualifiedAi:number;nativeBaseline:number;unavailable:number};
   };
 };
 
@@ -84,19 +89,34 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
   nextBoard: NflPlayerPropsRuntimeBoard;
   requireVerifiedInterceptionSource?:boolean;
   previous?: NflPlayerPropsProductionSnapshot | null;
+  lockHandoff?:NflLockHandoff;
 }): NflPlayerPropsProductionSnapshot {
   const evaluatedAt = Date.parse(args.evaluatedAt);
   if (!Number.isFinite(evaluatedAt)) throw new Error("NFL props production evaluatedAt is invalid.");
-  const priorRows=args.previous?.board.decisions??[];
+  const originalPrevious=args.previous;
+  // Stored public locks are protected before optional forward metadata is read.
+  const storedLocks=[...(originalPrevious?.board.decisions??[]),...(originalPrevious?.memberDecisions??[])].filter(row=>row.state==="locked");
+  const storedScopes=new Set(storedLocks.map(outcomeScopeKey));
+  const currentUnlocked=args.nextBoard.decisions.filter(row=>!storedScopes.has(outcomeScopeKey(row)));
+  const fullyProtectedGames=new Set(storedLocks.map(row=>row.gameId).filter(game=>!currentUnlocked.some(row=>row.gameId===game)));
+  const actorKey=(row:NflPlayerPropsRuntimeDecision)=>JSON.stringify([row.gameId,row.providerPlayerId]);
+  const fullyProtectedActors=new Set(storedLocks.filter(row=>row.providerPlayerId!==null).map(actorKey).filter(key=>!currentUnlocked.some(row=>actorKey(row)===key)));
+  const irrelevant=(game:string,actorId?:string)=>fullyProtectedGames.has(game)||Boolean(actorId&&fullyProtectedActors.has(JSON.stringify([game,actorId.replace(/^nfl-bdl-player:/,"")])));
+  const effective=args.lockHandoff?{...args.lockHandoff,authorities:args.lockHandoff.authorities.filter(a=>!irrelevant(a.gameId,a.actorId)),nativeRows:args.lockHandoff.nativeRows.filter(row=>!storedScopes.has(outcomeScopeKey(row))),nativeProofs:args.lockHandoff.nativeProofs.filter(p=>!irrelevant(p.gameId,p.actorId)),candidateProofs:args.lockHandoff.candidateProofs.filter(p=>!irrelevant(p.gameId,p.actorId)),sourceFrames:(args.lockHandoff.sourceFrames??[]).filter(f=>!fullyProtectedGames.has(f.gameId))}:undefined;
+  const handoff=effective?prepareNflLockHandoff({...effective,nextRows:currentUnlocked,previousRows:originalPrevious?.board.decisions??[],previousGeneratedAt:originalPrevious?.generatedAt,now:args.evaluatedAt}):null;
+  const maySuppress=(row:NflPlayerPropsRuntimeDecision)=>!storedScopes.has(outcomeScopeKey(row))&&Boolean(handoff?.suppressPrevious(row));
+  const previous=handoff&&originalPrevious?{...originalPrevious,board:{...originalPrevious.board,decisions:originalPrevious.board.decisions.filter(row=>!maySuppress(row))},memberDecisions:originalPrevious.memberDecisions.filter(row=>!maySuppress(row))}:originalPrevious;
+  const nextBoard=handoff?{...args.nextBoard,decisions:handoff.nextRows}:args.nextBoard;
+  const priorRows=previous?.board.decisions??[];
   const canRetainUnlocked=(row:NflPlayerPropsRuntimeDecision)=>!args.requireVerifiedInterceptionSource||row.market!=="interceptions"||!row.aiReview||row.aiReview.sourceEventRelease===PROPS_AI_SOURCE_EVENT_RELEASE&&row.aiReview.sourceEventStatistic==="interceptions";
   const priorLocked=priorRows.filter(row=>row.state==="locked");
   const protectedScopes=new Set([
     ...priorLocked.map(outcomeScopeKey),
-    ...(args.previous?.memberDecisions??[]).filter(row=>row.state==="locked").map(outcomeScopeKey),
+    ...(previous?.memberDecisions??[]).filter(row=>row.state==="locked").map(outcomeScopeKey),
   ]);
   // Exact stored member fields are the public authority, even if their legacy
   // board projection differs. Never reconstruct them from a current model.
-  const priorLockedMembers=(args.previous?.memberDecisions??[])
+  const priorLockedMembers=(previous?.memberDecisions??[])
     .filter(row=>row.state==="locked"||protectedScopes.has(outcomeScopeKey(row)));
   const priorAi=new Map<string,NflPlayerPropsRuntimeDecision[]>();
   for(const row of priorRows)if(row.aiReview&&row.state!=="locked"&&canRetainUnlocked(row)){
@@ -108,7 +128,7 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
   let recomputedUnlocked = 0;
   // Preserve every legacy locked book and its original field values/order.
   const decisions:NflPlayerPropsRuntimeDecision[]=[...priorLocked];
-  for(const next of args.nextBoard.decisions){
+  for(const next of nextBoard.decisions){
     if(protectedScopes.has(outcomeScopeKey(next))||!canRetainUnlocked(next))continue;
     if(evaluatedAt>=Date.parse(next.lockAt)){
       const candidates=(priorAi.get(quoteScopeKey(next))??[]).filter(row=>
@@ -123,7 +143,7 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
     }else{decisions.push(next);recomputedUnlocked++;}
   }
   const nextKeys = new Set(decisions.map(offerKey));
-  const nextOutcomeScopes = new Set(args.nextBoard.decisions.map(outcomeScopeKey));
+  const nextOutcomeScopes = new Set(nextBoard.decisions.map(outcomeScopeKey));
   for (const prior of priorRows) {
     if(prior.state==="locked"||protectedScopes.has(outcomeScopeKey(prior))||!canRetainUnlocked(prior))continue;
     if (!nextKeys.has(offerKey(prior)) && evaluatedAt >= Date.parse(prior.lockAt)
@@ -148,20 +168,20 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
     }
   }
   const mergedEvidence = mergeNflPlayerPropsMarketEvidenceCaptures({
-    current: args.nextBoard.marketEvidence,
-    previous: args.previous?.board.marketEvidence,
+    current: nextBoard.marketEvidence,
+    previous: previous?.board.marketEvidence,
     decisions,
   });
   const capturedDecisions = mergedEvidence.capture
     ? decisions.map((row) => row.state==="locked"&&priorLocked.includes(row)?row:withoutUnretainedNflPlayerPropsEvidenceReference(row, mergedEvidence.retainedIds))
     : decisions;
   const board = {
-    ...args.nextBoard,
+    ...nextBoard,
     publicationEnabled: true as const,
     trackingEnabled: true as const,
     decisions: capturedDecisions,
     counts: recount(capturedDecisions),
-    diagnostics: recountOperationalDiagnostics(args.nextBoard.diagnostics, capturedDecisions),
+    diagnostics: recountOperationalDiagnostics(nextBoard.diagnostics, capturedDecisions),
     ...(mergedEvidence.capture ? { marketEvidence: mergedEvidence.capture } : {}),
   };
   const derivedMemberDecisions = deriveNflPlayerPropsMemberDecisions(board);
@@ -169,16 +189,23 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
     derivedMemberDecisions.filter(row=>!protectedScopes.has(outcomeScopeKey(row))),
   );
   const selectedMemberKeys=new Set(canonicalCurrentDecisions.map(decisionKey));
+  const lockHandoffEvidence={...(originalPrevious?.lockHandoffEvidence??{})};
+  if(effective){
+    const games=new Set([...capturedDecisions.filter(row=>row.state==="locked"&&!protectedScopes.has(outcomeScopeKey(row))).map(row=>row.gameId),...(effective.sourceFrames??[]).filter(f=>Date.parse(f.lockAt)<=evaluatedAt).map(f=>f.gameId)]);
+    const capture:Omit<NflLockHandoff,"nativeRows">={authorities:effective.authorities.filter(a=>games.has(a.gameId)),nativeProofs:effective.nativeProofs.filter(p=>games.has(p.gameId)),candidateProofs:effective.candidateProofs.filter(p=>games.has(p.gameId)),sourceFrames:(effective.sourceFrames??[]).filter(f=>games.has(f.gameId))};
+    if(capture.sourceFrames?.length){const record={release:"nfl_props_lock_authority_2026_11_09_r1_prelock_capture",at:args.evaluatedAt,capture};lockHandoffEvidence[digest(record)]??=record;}
+  }
   return {
     release: NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, season: args.season, week: args.week,
     generatedAt: new Date(evaluatedAt).toISOString(), writerLeaseGroup: NFL_PLAYER_PROPS_WRITER_LEASE_GROUP,
     publicationEligible: true, trackingEligible: true, riskLabel: "forward_monitoring_2025_exact_price_confirmation",
     board,
+    ...(Object.keys(lockHandoffEvidence).length?{lockHandoffEvidence}:{}),
     // Internal alternate ladders and operational exceptions remain auditable
     // on the stored board. The member DTO selects one main line for every new
     // scope while preserving every previously locked member row exactly.
     memberDecisions: [...priorLockedMembers,...derivedMemberDecisions.filter(row=>!protectedScopes.has(outcomeScopeKey(row))&&selectedMemberKeys.has(decisionKey(row)))],
-    lifecycle: { recomputedUnlocked, retainedStillFreshUnlocked, frozenAtLock, retainedPreviouslyLocked },
+    lifecycle: { recomputedUnlocked, retainedStillFreshUnlocked, frozenAtLock, retainedPreviouslyLocked,...(handoff?{reviewAuthority:{qualifiedAi:handoff.diagnostics.filter(d=>d.kind==="qualified_ai").length,nativeBaseline:handoff.diagnostics.filter(d=>d.kind==="native_baseline").length,unavailable:handoff.diagnostics.filter(d=>d.kind==="unavailable").length}}:{}) },
   };
 }
 

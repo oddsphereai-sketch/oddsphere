@@ -62,6 +62,16 @@ export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:Game
   }
   return changed?buildNbaPlayerPropsMemberSnapshot({...snapshot,generatedAt:now,decisions,inputRows:snapshot.diagnostics.inputRows}):snapshot;
 }
+/** Reapply a game only from its actual fresh native construction. A local
+ * accepted review can prepare its overlay before a later database read, while
+ * a changed/declined final observation can restore the same native baseline. */
+export function restoreNflNativeGame(board:NflPlayerPropsRuntimeBoard,baseline:NflPlayerPropsRuntimeBoard,packet:GamePacket,now:string):NflPlayerPropsRuntimeBoard{
+ const gameId=packet.sourceGameId??packet.gameId;
+ const rows=[...board.decisions.filter(r=>r.gameId!==gameId||r.state==="locked"),...baseline.decisions.filter(r=>r.gameId===gameId&&r.state!=="locked")];
+ const coherent=nflAiSourceBinding(packet,[],now).coherent(rows),counts={"Best Angle":0,Lean:0,Watchlist:0,"No Play":0,Held:0,actionable:0};
+ for(const r of coherent.decisions){counts[r.grade]++;if(r.grade==="Best Angle"||r.grade==="Lean")counts.actionable++;}
+ return{...board,decisions:coherent.decisions,counts,aiSourceCoherence:coherent.report};
+}
 export function applyNflSiteAi(board:NflPlayerPropsRuntimeBoard,packet:GamePacket,choices:SiteAiDecision[],now:string):NflPlayerPropsRuntimeBoard{
   let changed=false;const source=nflAiSourceBinding(packet,choices,now);
   const decisions=board.decisions.map((row):NflPlayerPropsRuntimeDecision=>{
