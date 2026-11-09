@@ -2,15 +2,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { nflPlayerPropsSettlementNameKey, nflPlayerPropsSettlementTeamKey } from "./nflPlayerPropsSettlementIdentity";
 
 export const NFL_PLAYER_PROPS_SETTLEMENT_RELEASE =
-  "nfl_player_props_settlement_2026_11_09_r6_quarterback_markets" as const;
+  "nfl_player_props_settlement_2026_11_09_r7_confirmed_dnp" as const;
 export const NFL_PLAYER_PROPS_SETTLEMENT_MINIMUM_HOURS_AFTER_LOCK = 5 as const;
 export const NFL_PLAYER_PROPS_SETTLEMENT_MAX_RECORDS_PER_CYCLE = 1_000 as const;
 export const NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE = 18 as const;
 export const NFL_PLAYER_PROPS_SETTLEMENT_MAX_SNAP_PAGES = 2 as const;
+export const NFL_PLAYER_PROPS_SETTLEMENT_MAX_DESIGNATION_PAGES = 2 as const;
 const ZERO_ELIGIBLE_MARKETS = new Set(["passing_attempts", "passing_completions", "passing_yards", "rushing_attempts", "rushing_yards", "receptions", "receiving_yards", "anytime_td"]);
 
 type Pending = { id: number; provider_game_id: string; provider_player_id: string | null; player_name?: string; team?: string | null; market: string; line: number; side: "over" | "under" | "yes"; locked_at: string };
-export type NflPropsSettlementProposal = { id: number; gameId: string; resolvedPlayerId: string; actual: number; result: "win" | "loss" | "push" };
+export type NflPropsSettlementProposal = { id: number; gameId: string; resolvedPlayerId: string; actual: number | null; result: "win" | "loss" | "push" | "void" };
 
 export async function countNflPlayerPropsUnresolvedSettlementIdentities(client: SupabaseClient, now: string): Promise<number> {
   const cutoff = new Date(Date.parse(now) - NFL_PLAYER_PROPS_SETTLEMENT_MINIMUM_HOURS_AFTER_LOCK * 3_600_000).toISOString();
@@ -81,11 +82,13 @@ export async function settleNflPlayerPropsRecords(args: {
     const body = await response.json() as { data?: unknown; meta?: { next_cursor?: unknown } };
     if (!Array.isArray(body.data) || body.meta?.next_cursor) throw new Error("BALLDONTLIE NFL stats settlement payload exceeded its exact-game safety contract.");
     const stats = new Map<string, Record<string, unknown>>(); let final = false;
+    let finalGame: Record<string, unknown> | null = null;
     for (const value of body.data) {
       if (!value || typeof value !== "object") continue;
       const stat = value as Record<string, unknown>; const player = stat.player as Record<string, unknown> | undefined; const game = stat.game as Record<string, unknown> | undefined;
       if (String(game?.id) !== gameId || game?.status_state !== "final") continue;
       final = true;
+      finalGame = game!;
       if (typeof player?.id === "number") stats.set(String(player.id), stat);
     }
     if (!final) continue;
@@ -124,18 +127,53 @@ export async function settleNflPlayerPropsRecords(args: {
         if (page === NFL_PLAYER_PROPS_SETTLEMENT_MAX_SNAP_PAGES - 1) throw new Error("NFL settlement participation exceeded its exact-game page bound.");
       }
     }
+    // Explicit completed-game DNP is different from a missing stat/snap row.
+    // Only query when the existing sources cannot establish participation.
+    const unresolved = rows.filter(row => !row.provider_player_id
+      ? Boolean(recoveryIds && !exactFinalGamePlayer(stats, row) && !(snaps && exactFinalGamePlayer(snaps, row)))
+      : !stats.has(row.provider_player_id) && !snaps?.has(row.provider_player_id));
+    const designations: Record<string, unknown>[] = [];
+    const season = finalGame?.season, week = finalGame?.week;
+    const gameTeams = [finalGame?.home_team, finalGame?.visitor_team]
+      .filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object"));
+    const teamIds = [...new Set(unresolved.flatMap(row => gameTeams.filter(team => row.team
+      && nflPlayerPropsSettlementTeamKey(String(team.abbreviation ?? "")) === nflPlayerPropsSettlementTeamKey(row.team))
+      .map(team => team.id).filter((id): id is number => typeof id === "number" && Number.isSafeInteger(id) && id > 0)))];
+    if (unresolved.length && teamIds.length && typeof season === "number" && Number.isSafeInteger(season)
+      && typeof week === "number" && Number.isSafeInteger(week)) {
+      let cursor: string | null = null;
+      for (let page = 0; page < NFL_PLAYER_PROPS_SETTLEMENT_MAX_DESIGNATION_PAGES; page += 1) {
+        const url = new URL("https://api.balldontlie.io/nfl/v1/player_designations");
+        url.searchParams.set("season", String(season)); url.searchParams.set("week", String(week));
+        url.searchParams.set("per_page", "100");
+        url.searchParams.append("season_types[]", finalGame?.postseason === true ? "3" : "2");
+        for (const id of teamIds) url.searchParams.append("team_ids[]", String(id));
+        if (cursor) url.searchParams.set("cursor", cursor);
+        const response = await (args.fetchImpl ?? fetch)(url, { headers: { Authorization: args.apiKey, accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(20_000) });
+        apiCalls += 1;
+        if (!response.ok) throw new Error(`BALLDONTLIE NFL settlement designations failed with HTTP ${response.status}.`);
+        const body = await response.json() as { data?: unknown; meta?: { next_cursor?: unknown } };
+        if (!Array.isArray(body.data)) throw new Error("NFL settlement designation payload is invalid.");
+        designations.push(...body.data.filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object")));
+        cursor = body.meta?.next_cursor == null ? null : String(body.meta.next_cursor);
+        if (!cursor) break;
+        if (page === NFL_PLAYER_PROPS_SETTLEMENT_MAX_DESIGNATION_PAGES - 1) throw new Error("NFL settlement designations exceeded the page bound.");
+      }
+    }
     for (const row of rows) {
       const recovered = !row.provider_player_id && recoveryIds
         ? exactFinalGamePlayer(stats, row) ?? (snaps && exactFinalGamePlayer(snaps, row)) : null;
-      const playerId = row.provider_player_id ?? recovered?.playerId;
+      const dnp = confirmedDnpPlayer(designations, row, finalGame, Boolean(recoveryIds));
+      const playerId = row.provider_player_id ?? recovered?.playerId ?? (dnp?.player as Record<string, unknown> | undefined)?.id?.toString();
       if (!playerId) continue;
       const stat = stats.get(playerId);
       const snap = snaps?.get(playerId);
-      const identity = stat ?? snap;
+      const confirmedDnp = !stat && !snap && dnp;
+      const identity = stat ?? snap ?? confirmedDnp;
       if (!identity || row.team && nflPlayerPropsSettlementTeamKey(String((identity.team as Record<string, unknown> | undefined)?.abbreviation ?? "")) !== nflPlayerPropsSettlementTeamKey(row.team)) continue;
       const actual = stat ? actualValue(row.market, stat) : snap && ZERO_ELIGIBLE_MARKETS.has(row.market) ? 0 : null;
-      if (actual === null) continue;
-      const result = row.side === "yes" ? (actual >= 1 ? "win" : "loss") : actual === Number(row.line) ? "push" : row.side === "over" ? (actual > Number(row.line) ? "win" : "loss") : (actual < Number(row.line) ? "win" : "loss");
+      if (actual === null && !confirmedDnp) continue;
+      const result = confirmedDnp ? "void" : row.side === "yes" ? (actual! >= 1 ? "win" : "loss") : actual === Number(row.line) ? "push" : row.side === "over" ? (actual! > Number(row.line) ? "win" : "loss") : (actual! < Number(row.line) ? "win" : "loss");
       args.onProposal?.({ id: row.id, gameId, resolvedPlayerId: playerId, actual, result });
       if (args.apply === false) continue;
       const { error: updateError } = await args.client.from("nfl_player_prop_records").update({ result, actual_value: actual, settled_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id).eq("result", "pending");
@@ -153,6 +191,25 @@ export async function settleNflPlayerPropsRecords(args: {
     settled,
     apiCalls,
   };
+}
+
+function confirmedDnpPlayer(rows: readonly Record<string, unknown>[], record: Pending,
+  game: Record<string, unknown> | null, approvedRecovery: boolean): Record<string, unknown> | null {
+  if (!game || !record.team) return null;
+  const matches = rows.filter(row => {
+    const player = row.player as Record<string, unknown> | undefined;
+    const team = row.team as Record<string, unknown> | undefined;
+    const expectedTeam = [game.home_team, game.visitor_team].find(value => value && typeof value === "object"
+      && nflPlayerPropsSettlementTeamKey(String((value as Record<string, unknown>).abbreviation ?? "")) === nflPlayerPropsSettlementTeamKey(record.team!)) as Record<string, unknown> | undefined;
+    const name = `${typeof player?.first_name === "string" ? player.first_name : ""} ${typeof player?.last_name === "string" ? player.last_name : ""}`;
+    return String(row.game_id) === record.provider_game_id && row.season === game.season && row.week === game.week
+      && row.season_type === (game.postseason === true ? "postseason" : "regular")
+      && typeof player?.id === "number" && Number.isSafeInteger(player.id) && player.id > 0
+      && (record.provider_player_id ? String(player.id) === record.provider_player_id
+        : approvedRecovery && record.player_name && nflPlayerPropsSettlementNameKey(name) === nflPlayerPropsSettlementNameKey(record.player_name))
+      && expectedTeam && team?.id === expectedTeam.id && typeof team?.abbreviation === "string" && nflPlayerPropsSettlementTeamKey(team.abbreviation) === nflPlayerPropsSettlementTeamKey(record.team!);
+  });
+  return matches.length === 1 && matches[0].did_not_play === true && matches[0].starter !== true ? matches[0] : null;
 }
 
 function exactFinalGamePlayer(stats: ReadonlyMap<string, Record<string, unknown>>, row: Pending): { playerId: string } | null {

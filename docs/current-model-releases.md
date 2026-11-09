@@ -1,5 +1,26 @@
 # Current production model releases and qualified research candidates
 
+## November 9 explicit NFL completed-game DNP results
+
+Settlement R7 `nfl_player_props_settlement_2026_11_09_r7_confirmed_dnp` and
+sole writer R79 `nfl_player_props_writer_2026_11_09_r79_confirmed_dnp` void a
+player prop only when exact final-game participation declares `did_not_play:true`
+and no stat or positive snap evidence establishes action. Active status alone,
+practice DNP, missing stats, false/null/string flags, starter contradictions,
+foreign identity/week/season/team and duplicate declarations cannot invent void
+or zero. Lazy designation reads have a two-page per-game bound, raising the
+theoretical whole-cycle provider request ceiling from 132 to 168; normal played
+records add zero calls. AI budgets, requests, reviews and predictions stay exact.
+
+Historical outcome recovery remains owner-approved and leased; V3 audits can
+bind reviewed league-gamebook PDFs to exact record/player/game/team and file
+hashes, disclosing a provider disagreement. This is an explicit one-off owner
+override, never recurring automatic source substitution. Pending outcomes only
+may be filled; every locked identity, forecast, grade, price, evidence and existing
+settled result remains exact. Source R2/generation R17, selection R1/decision R8,
+member R57/lifecycle R39/tracking R43 and all model/calibration identifiers remain.
+See `model-audits/2026-11-09-nfl-props-confirmed-dnp.md`.
+
 ## November 9 NFL quarterback prop result settlement
 
 Settlement R6 `nfl_player_props_settlement_2026_11_09_r6_quarterback_markets`
