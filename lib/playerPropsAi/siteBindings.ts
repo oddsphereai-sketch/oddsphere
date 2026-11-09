@@ -15,7 +15,7 @@ import type {GamePacket} from "./evidenceContract";
 import {digest,instant} from "./evidence";
 
 const book=(value:string)=>value.toLowerCase().replace(/[^a-z0-9]/g,"");
-const choice=(all:SiteAiDecision[],id:string,market:string,line:number,sportsbook:string,provider?:string)=>all.find(c=>c.playerId===id&&c.market===market&&c.line===line&&book(c.book)===book(sportsbook)&&(!provider||c.provider===provider));
+const choice=(all:SiteAiDecision[],id:string,market:string,line:number,sportsbook:string,provider?:string)=>all.find(c=>c.side!=="yes"&&quoteContract(c.quote)==="two_way"&&c.playerId===id&&c.market===market&&c.line===line&&book(c.book)===book(sportsbook)&&(!provider||c.provider===provider));
 function currentGrade(packet:GamePacket,c:SiteAiDecision,q:GamePacket["quotes"][number],now:string){
   if(c.evidence.exception)return "No Play" as const;
   if(q.side!==c.side)return "Watchlist" as const;
@@ -49,7 +49,7 @@ export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:Game
   });
   for(const player of packet.players)for(const market of player.markets){
     if(decisions.some(r=>r.gameId===packet.gameId&&r.playerId===player.id&&r.market===market))continue;
-    const c=choices.filter(c=>c.playerId===player.id&&c.market===market&&c.side!=="yes").sort((a,b)=>b.expectedValue-a.expectedValue)[0];
+    const c=choices.filter(c=>c.playerId===player.id&&c.market===market&&c.side!=="yes"&&quoteContract(c.quote)==="two_way").sort((a,b)=>b.expectedValue-a.expectedValue)[0];
     const game=snapshot.games.find(g=>g.gameId===packet.gameId);if(!c||!game||instant(now)>=instant(packet.lock))continue;
     decisions.push({decisionKey:[c.evidence.release,game.gameId,player.id,market,c.line].join("|"),gameId:game.gameId,scheduledStart:game.scheduledStart,homeTeam:game.homeTeam,awayTeam:game.awayTeam,
       playerId:player.id,playerName:player.name,team:player.team,opponent:player.opponent,market:market as NbaPlayerPropsMemberDecision["market"],line:c.line,projection:c.projection,independentProjection:null,independentProbability:null,

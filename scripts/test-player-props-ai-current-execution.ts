@@ -8,7 +8,8 @@ import {liveNbaPacket,liveMlbPacket,emptyCapturedSource} from "../lib/playerProp
 import {siteAiDecisions,siteReviewQualification} from "../lib/playerPropsAi/publication";
 import {compileMarketReport} from "../lib/playerPropsAi/marketReport";
 import {executionQuotes,latestExecutionQuotes} from "../lib/playerPropsAi/executionQuotes";
-import {applyNflSiteAi,applyMlbSiteAi} from "../lib/playerPropsAi/siteBindings";
+import {buildNbaPlayerPropsMemberSnapshot} from "../lib/services/nba/nbaPlayerPropsProductContract";
+import {applyNbaSiteAi,applyNflSiteAi,applyMlbSiteAi} from "../lib/playerPropsAi/siteBindings";
 import {needsLegacyLockedAiReader} from "../lib/playerPropsAi/publicationContract";
 import {PROPS_AI_RELEASE} from "../lib/playerPropsAi/releases";
 import type {AcceptedGameReview} from "../lib/playerPropsAi/reviewer";
@@ -65,6 +66,11 @@ const integerLaw=validateLaw("nba",player,{weights:[2,6,2,...vector(0).slice(3)]
 const mixed={...packet,quotes:[quote("ordinary-over","over",-110,now,25),quote("ordinary-under","under",-110,now,25),quote("milestone-yes","yes",-110,now,25)]};
 const integerChoices=siteAiDecisions(mixed,{...review,players:review.players.map(p=>({...p,law:integerLaw}))},now);
 assert.equal(integerChoices.length,2);assert.equal(integerChoices.find(c=>c.side==="yes")!.probability,.8);assert.equal(integerChoices.find(c=>c.side!=="yes")!.probability,.2);assert.equal(integerChoices.find(c=>c.side!=="yes")!.push,.6);
+const nbaContractRow={decisionKey:"native",gameId:"native",scheduledStart:start,homeTeam:"NYK",awayTeam:"BOS",playerId:"p",playerName:"Synthetic",team:"BOS",opponent:"NYK",market:"points" as const,line:25,projection:26,independentProjection:26,independentProbability:.6,modelRelease:"native",calibrationRelease:"native",decisionRelease:"native",side:"over" as const,probability:.6,grade:"Lean" as const,sportsbook:"one",americanPrice:-110,expectedValue:.1,targetExcludedProbability:.5,targetExcludedBooks:2,targetExcludedReferenceBooks:1,marketEvidenceMode:"candidate_projection" as const,gradePolicySource:"forecast_only" as const,role:[],production:[],matchup:[],priceLadder:[],movement:null,evaluatedAt:now,lockedAt:null};
+const nbaContractSnapshot=buildNbaPlayerPropsMemberSnapshot({mode:"private_forward_candidate",generatedAt:now,slateDate:"2026-11-09",games:[{gameId:"native",scheduledStart:start,homeTeam:"NYK",awayTeam:"BOS"}],decisions:[nbaContractRow],inputRows:3});
+const yesFirst=[integerChoices.find(c=>c.side==="yes")!,integerChoices.find(c=>c.side!=="yes")!];
+assert.ok(applyNbaSiteAi(nbaContractSnapshot,mixed,yesFirst,now).decisions[0].aiReview,"an implicit milestone arriving first cannot hide the ordinary NBA choice");
+const nbaLock={...nbaContractSnapshot,decisions:[{...nbaContractRow,lockedAt:old}]};assert.strictEqual(applyNbaSiteAi(nbaLock,mixed,yesFirst,now),nbaLock);
 const nflMix={...nfl,quotes:(["over","under","yes"] as const).map(side=>({...nfl.quotes[0],id:side,side,line:1,american:side==="yes"?-200:-110,receivedAt:now,observedAt:now}))};
 const tdLaw=validateLaw("nfl",nflMix.players[0],{weights:[4,4,2,...vector(0).slice(3)],outcomes:{passing_attempts:vector(20),passing_completions:vector(15),passing_tds:[0,1,2,...vector(0).slice(3)],interceptions:vector(0)}});
 const tdReview={...review,criticalContextHashes:criticalContextHashes(nflMix),marketScopes:{"nfl-bdl-player:1":["passing_tds"]},players:[{...review.players[0],playerId:"nfl-bdl-player:1",law:tdLaw}]};
