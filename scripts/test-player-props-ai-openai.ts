@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {generateAiReview,structuredAiText,AiGenerationError,type AiRequest} from "../lib/playerPropsAi/openai";
+import {generateAiReview,structuredAiText,AiGenerationError,unbilledFlexCapacity,type AiRequest} from "../lib/playerPropsAi/openai";
 const body:AiRequest={model:"gpt-6-luna",instructions:"Synthetic parser test",input:"{}",text:{},max_output_tokens:100,store:false};
 const complete={id:"synthetic",model:"gpt-6-luna",status:"completed",usage:{input_tokens:10,output_tokens:5},output:[{content:[{type:"output_text",text:'{"ok":true}'}]}]};
 async function main(){
@@ -24,6 +24,9 @@ async function main(){
   for(const [tier,code,unbilled] of [["flex","resource_unavailable",true],["flex","rate_limit_exceeded",false],["default","resource_unavailable",false]] as const){
     await assert.rejects(()=>generateAiReview(body,{key:"synthetic-key",timeoutMs:10000,serviceTier:tier,fetchImpl:(async()=>Response.json({error:{code}},{status:429})) as typeof fetch}),error=>error instanceof AiGenerationError&&error.knownUnbilled===unbilled);
   }
+  for(const [status,tier,code,type,expected]of [[429,"flex","flex_unavailable","resource_unavailable",true],[429,"flex",null,"resource_unavailable",true],[429,"default","flex_unavailable","resource_unavailable",false],[503,"flex","flex_unavailable","resource_unavailable",false],[429,"flex","insufficient_quota","resource_unavailable",false],[429,"flex","rate_limit_exceeded","resource_unavailable",false],[429,"flex","flex_unavailable","insufficient_quota",false]] as const)assert.equal(unbilledFlexCapacity(status,tier,code,type),expected);
+  await assert.rejects(()=>generateAiReview(body,{key:"synthetic-key",timeoutMs:10000,serviceTier:"flex",fetchImpl:(async()=>Response.json({error:{code:"flex_unavailable",type:"resource_unavailable"}},{status:429,headers:{"Retry-After":"300"}})) as typeof fetch}),error=>error instanceof AiGenerationError&&error.knownUnbilled&&error.code==="flex_unavailable"&&error.diagnostics?.code==="flex_unavailable"&&error.diagnostics.type==="resource_unavailable");
+  for(const type of ["insufficient quota","rate-limit-exceeded / tokens",123,{code:"insufficient_quota"}])await assert.rejects(()=>generateAiReview(body,{key:"synthetic-key",timeoutMs:10000,serviceTier:"flex",fetchImpl:(async()=>Response.json({error:{code:"flex_unavailable",type}},{status:429})) as typeof fetch}),error=>error instanceof AiGenerationError&&!error.knownUnbilled&&error.diagnostics?.unrecognizedErrorFields?.includes("type")===true);
   let cancelled=false;
   const oversized=async()=>new Response(new ReadableStream({start(controller){controller.enqueue(new Uint8Array(4000001));},cancel(){cancelled=true;}}),{headers:{"content-type":"application/json"}});
   await assert.rejects(()=>generateAiReview(body,{key:"synthetic-key",timeoutMs:10000,fetchImpl:oversized as typeof fetch}),/oversize_response_body/);

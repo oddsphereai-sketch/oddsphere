@@ -1,3 +1,31 @@
+## November 9 player-prop documented Flex capacity recovery R21
+
+Operational diagnostic R3, future generation `player_props_ai_2026_11_09_r21_flex_capacity_alias` and sole
+NFL writer R83 `nfl_player_props_writer_2026_11_09_r83_flex_capacity_alias`
+recognize the documented Flex-unavailable error variant. A request explicitly
+using Flex with HTTP429, code `flex_unavailable` and consistent
+`resource_unavailable` type is the known uncharged capacity rejection. Legacy
+resource-unavailable aliases and type-only responses remain supported. Explicit
+quota/rate/contradicting codes, default-tier errors and other HTTP statuses remain
+unknown and cannot authorize a blind retry.
+
+The existing wallet records zero for this documented rejection, then may authorize
+only the existing failed-part Standard recovery. Successful parts are not repeated;
+there is no third phase or new logical review. Standard prices were already used
+for protected escrow/funding. Capacity feedback states that no draft was accepted,
+instead of inventing a previous numerical draft. All ordinary source/physical
+validation, $50 target/$60 emergency ceiling, two slots, request/output/concurrency
+bounds and upgrade quota remain exact. No closed failed slot or old receipt is
+reclassified, reset or replayed by this cutover. R20 diagnostics/private evidence,
+selection/grade R2, publication R5, NFL decision R9/source R2/settlement R7/member
+R57/lifecycle R39/tracking R43 and native NBA writer R13 remain.
+
+This corrects an evidenced error-classification defect; it does not guarantee
+provider availability, every model response's validity or an exact monthly bill.
+Normal scheduled Standard-recovery coverage, actual tier receipts, member
+publication and locks still require live verification. See
+`model-audits/2026-11-09-props-ai-flex-capacity.md`.
+
 ## November 9 player-prop rejected-output and transport evidence R20
 
 Future generation `player_props_ai_2026_11_09_r20_rejection_evidence` retains R19
