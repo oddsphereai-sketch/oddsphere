@@ -7,7 +7,8 @@ import {lawForecast,scenarioStat,marketUsesStatistic} from "./law";
 import {readerLogWindows} from "./readerLogs";
 import {independentPriorEvents} from "./priorEvents";
 import {invariant} from "./evidence";
-export type ForecastSanityIssue={code:string;markets:string[];detail:string};
+export type SourceEventScope={market:string;line:number;contract:"two_way"|"milestone"};
+export type ForecastSanityIssue={code:string;markets:string[];detail:string;example?:string;events?:SourceEventScope[]};
 export function unqualifiedEventTail(f:{over:number;under:number;push:number},oneWay=false){
   const win=oneWay?f.over:Math.max(f.over,f.under);
   // Zero support is exact; a floating-point weight sum is not a certainty test.
@@ -50,13 +51,13 @@ export function sourceForecastIssues(packet:GamePacket,player:Player,law:Accepte
     // Repeated zero rare-event samples cannot establish a zero production ceiling.
     if(historical?.n>=3&&(historical.minimum!==0||historical.maximum!==0)){
       const minimum=Math.min(historical.minimum,...priorMeans),maximum=Math.max(historical.maximum,...priorMeans);
-      if(mean<minimum-1e-9||mean>maximum+1e-9)issues.push({code:"forecast_mean_outside_supplied_support",markets,
+      if(mean<minimum-1e-9||mean>maximum+1e-9)issues.push({code:"forecast_mean_outside_supplied_support",markets,example:`${primitive} mean=${Number(mean.toFixed(4))}, support=${minimum}..${maximum}`,
         detail:`${player.id} ${primitive} mean ${mean.toFixed(4)} is outside supplied played-game/prior support [${minimum},${maximum}]. Recheck named units and actual role evidence; correct the law or explicitly except the affected markets.`});
     }
     // A sole positive historical game does not define a narrow forecasting range,
     // but cannot support an entirely nonpositive yardage law on its own.
     if(primitive.endsWith("yards")&&historical&&historical.mean>0&&values.every((v,i)=>law.weights[i]===0||v<=0)
-      &&priorMeans.every(n=>n>=0))issues.push({code:"nonpositive_yardage_contradicts_source",markets,
+      &&priorMeans.every(n=>n>=0))issues.push({code:"nonpositive_yardage_contradicts_source",markets,example:`${primitive}: source mean=${historical.mean}, no positive forecast outcome`,
         detail:`${player.id} ${primitive} has no positive outcome despite positive supplied production. Verify canonical net-yard units; do not turn missing data into zero/negative certainty.`});
   }
   for(const pair of history.observedPairOrderings){
@@ -68,7 +69,7 @@ export function sourceForecastIssues(packet:GamePacket,player:Player,law:Accepte
       const product=(law.outcomes[pair.first][i]-law.outcomes[pair.first][j])*(law.outcomes[pair.second][i]-law.outcomes[pair.second][j]);
       if(product>0)concordant=true;if(product<0)discordant=true;
     }
-    if(!concordant||!discordant)issues.push({code:"combo_dependence_erases_source_variation",markets,
+    if(!concordant||!discordant)issues.push({code:"combo_dependence_erases_source_variation",markets,example:`${pair.first}/${pair.second}: retain higher-together AND opposing variation`,
       detail:`${player.id} ${pair.first}/${pair.second} combinations erase observed joint variation. Source games contain both higher-together and opposing outcomes; include that dependence or explicitly except the affected combinations.`});
   }
   for(const prior of priors){
@@ -77,7 +78,7 @@ export function sourceForecastIssues(packet:GamePacket,player:Player,law:Accepte
       :prior.overProbability!==null&&prior.overProbability>0&&prior.underProbability!==null&&prior.underProbability>0;
     if(!uncertain)continue;
     const f=lawForecast(law,prior.market,prior.line);
-    if(f.over===0||f.under===0)issues.push({code:"unsupported_zero_probability_tail",markets:[prior.market],
+    if(f.over===0||f.under===0)issues.push({code:"unsupported_zero_probability_tail",markets:[prior.market],example:`${prior.market}@${prior.line}: missing opposing prior tail`,events:[{market:prior.market,line:prior.line,contract:prior.market==="anytime_td"?"milestone":"two_way"}],
       detail:`${player.id} ${prior.market} at ${prior.line} has zero opposite-event mass although the independent source assigns both outcomes positive probability. Include realistic opposing tails or explicitly except this market; never clip the displayed probability.`});
   }
   const seen=new Set<string>();
@@ -85,7 +86,7 @@ export function sourceForecastIssues(packet:GamePacket,player:Player,law:Accepte
     if(!qualified.includes(q.market)||!sourceEventUsable(q)||q.playerId!==player.id||q.opening||q.live||q.receivedAtProvenance!=="provider_response"||Date.parse(q.receivedAt)>Date.parse(packet.cutoff)||Date.parse(packet.cutoff)-Date.parse(q.receivedAt)>15*60000)continue;
     const key=`${q.market}|${q.line}|${q.offerContract??"two_way"}`;if(seen.has(key))continue;seen.add(key);
     const f=lawForecast(law,q.market,q.line,q.offerContract==="milestone"||q.side==="yes");
-    if(unqualifiedEventTail(f,q.side==="yes"))issues.push({code:"unsupported_priced_event_certainty",markets:[q.market],
+    if(unqualifiedEventTail(f,q.side==="yes"))issues.push({code:"unsupported_priced_event_certainty",markets:[q.market],example:`${q.market}@${q.line}: missing opposing priced tail`,events:[{market:q.market,line:q.line,contract:q.side==="yes"||q.offerContract==="milestone"?"milestone":"two_way"}],
       detail:`${player.id} ${q.market} at offered line ${q.line} has no opposing tail. A finite scenario sample does not establish certainty for an executable event; re-evaluate tails or explicitly except this scope.`});
   }
   return issues;

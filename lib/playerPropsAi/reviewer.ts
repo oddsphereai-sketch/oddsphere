@@ -1,3 +1,4 @@
+import {acceptedResponseEvidence} from "./responseEvidence";
 import {physicalLawFindings} from "./physicalDiagnostics";
 import {failureEvidence} from "./failureEvidence";
 import {isMissedPropsEarlyWindow} from "./schedule";
@@ -13,7 +14,7 @@ import {criticalContextHashes} from "./criticalContext";
 import { PROPS_AI_MAX_OUTPUT_PER_REQUEST, PROPS_AI_PART_CONCURRENCY, PROPS_AI_STRONG_MODEL, PROPS_AI_RELEASE, PROPS_AI_ACCEPTED_RELEASES, type PropsAiModel } from "./releases";
 
 type PreparedPart = Awaited<ReturnType<typeof prepareReviewParts>>[number];
-type PartProvenance = { part:number; phase:number; model:PropsAiModel; requestedTier:string; actualTier:string; responseId:string; playerIds:string[]; correctionReason?:string };
+type PartProvenance = { part:number; phase:number; model:PropsAiModel; requestedTier:string; actualTier:string; responseId:string; playerIds:string[]; correctionReason?:string;wireHash?:string;requestHash?:string;partInputHash?:string;wireRelease?:string };
 export type AcceptedGameReview = { release: (typeof PROPS_AI_ACCEPTED_RELEASES)[number]; gameId: string; start: string; lock: string; cutoff: string;
   criticalContextHashes:Record<string,string>;
   marketScopes:Record<string,string[]>;
@@ -37,6 +38,7 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
     strong_input_tokens:preferStronger ? await slot(()=>(args.countStrong?.(part) ?? countAiInput(jointReviewRequest(part.packet,PROPS_AI_STRONG_MODEL,PROPS_AI_MAX_OUTPUT_PER_REQUEST),{key:args.key,fetchImpl:args.fetchImpl}))).catch(()=>null) : null})));
   if(Math.min(deadline-Date.now(),instant(args.packet.lock)-instant(clock()))<propsAiCompletionWindowMs(parts.length)) return {status:"skipped",reason:"insufficient_completion_window"};
   if(isMissedPropsEarlyWindow(args.job.stage,args.packet.lock,clock()))return {status:"skipped",reason:"early_window_closed_final_only"};
+  const sourcePacketJson=JSON.stringify(args.packet);
   const inputHash = digest(args.packet), claimed = await args.store.claim(args.job.job_key, inputHash, requests, preferStronger,args.writerRunId);
   if (!claimed.claimed) return { status: "skipped", reason: claimed.reason };
   const job = claimed.job!, token = claimed.token!;
@@ -68,14 +70,17 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
           let parsed:ReturnType<typeof parseJointReview>|null=null,reason:string|null=null,draft:unknown;
           try{draft=structuredAiText(response);parsed=parseJointReview(part.packet,draft);}
           catch(error){reason=(error as Error).message;}
-          // Settle billing exactly once, even for rejected drafts. Complete failure
-          // evidence is built before this immutable receipt's first write.
+          // Settle billing once. Successful raw wire and failed diagnostics are
+          // bound before the first immutable receipt, including parts of failed games.
+          const wire=parsed?acceptedResponseEvidence({packet:part.packet,sourcePacket:args.packet,sourcePacketJson,requestBody,draftText:texts[0],players:parsed.players}):null;
+          if(parsed&&wire&&"archiveUnavailable" in wire){parsed=null;reason="accepted_wire_archive_unavailable";}
           const usage={...response.usage,service_tier:response.service_tier??"unknown",response_status:response.status,response_model:response.model,transport:response.transportDiagnostics??null,
+            ...(wire?{responseEvidence:wire}:{}),
             ...(reason?{failureEvidence:failureEvidence({packet:part.packet,requestBody,draftText:texts.length===1?texts[0]:null,reason,physical:physicalLawFindings(part.packet,draft)})}:{})};
           await args.store.receipt(attempt.id,token,actual,response.id,usage);
-          if(!parsed)return {index,reason:reason??"unparsed_draft",known:true};
+          if(!parsed)return {index,reason:reason??"unparsed_draft",known:reason!=="accepted_wire_archive_unavailable"};
           accepted.set(index,parsed);
-          provenance.set(index,{part:index+1,phase,model:attempt.model,requestedTier:attempt.requested_tier,actualTier:response.service_tier??"unknown",responseId:response.id,playerIds:part.packet.players.map(p=>p.id),...(phase===2?{correctionReason:feedback.get(index)?.slice(0,200)}:{})});
+          provenance.set(index,{part:index+1,phase,model:attempt.model,requestedTier:attempt.requested_tier,actualTier:response.service_tier??"unknown",responseId:response.id,playerIds:part.packet.players.map(p=>p.id),...(wire&&"draft" in wire?{wireHash:wire.draft.sha256,requestHash:wire.requestSha256,partInputHash:wire.partInputDigest,wireRelease:wire.wireRelease}:{}),...(phase===2?{correctionReason:feedback.get(index)}:{})});
           return null;
         })));
         for(let i=0;i<results.length;i++){
@@ -88,7 +93,7 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
         const parsed=[...accepted].sort(([a],[b])=>a-b).flatMap(([,r])=>r.players);
         invariant(digest(parsed.map(p=>p.playerId).sort())===digest(args.packet.players.map(p=>p.id).sort()),"accepted_review_coverage_mismatch");
         invariant(instant(clock())<instant(args.packet.lock),"review_completed_after_lock");
-        const input=Buffer.from(JSON.stringify(args.packet)),compressed=gzipSync(input),partProvenance=[...provenance.values()].sort((a,b)=>a.part-b.part);
+        const input=Buffer.from(sourcePacketJson),compressed=gzipSync(input),partProvenance=[...provenance.values()].sort((a,b)=>a.part-b.part);
         invariant(input.byteLength<=16_000_000&&compressed.byteLength<=2_000_000,"oversize_immutable_input_evidence");
         const models=[...new Set(partProvenance.map(p=>p.model))];
         const review:AcceptedGameReview={release:PROPS_AI_RELEASE,gameId:args.packet.gameId,sourceGameId:args.packet.sourceGameId??args.packet.gameId,start:args.packet.start,lock:args.packet.lock,cutoff:args.packet.cutoff,criticalContextHashes:criticalContextHashes(args.packet),marketScopes:Object.fromEntries(args.packet.players.map(p=>[p.id,[...p.markets]])),model:models.length===1?models[0]:"mixed_recorded_per_part",partProvenance,stage:args.packet.stage,players:parsed,inputEvidence:{encoding:"gzip-base64",digest:inputHash,bytes:input.byteLength,data:compressed.toString("base64")}};

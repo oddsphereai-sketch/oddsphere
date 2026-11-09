@@ -5,7 +5,7 @@ import {validateScenarioOpportunities} from "./forecastSanity";
 import {invariant} from "./evidence";
 import {PROPS_AI_SCENARIOS} from "./releases";
 export const GENERATIVE_WIRE_RELEASE="props_scenario_named_2026_11_09_r4_generative_components" as const;
-type Scope=Pick<Player,"markets">;
+type Scope=Pick<Player,"markets"|"sourceEventContracts">;
 const object=(v:unknown):Record<string,unknown>|null=>v!==null&&typeof v==="object"&&!Array.isArray(v)?v as Record<string,unknown>:null;
 function coordinate(sport:GamePacket["sport"],key:string){
  if(sport==="nba"&&key==="points")return "points_excluding_made_threes";

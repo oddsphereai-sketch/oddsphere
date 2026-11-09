@@ -1,3 +1,37 @@
+## November 9 player-prop named generative coordinates R24
+
+Future `player_props_ai_2026_11_09_r24_generative_coordinates`, wire
+`props_scenario_named_2026_11_09_r4_generative_components`, readerR13 and sole NFL
+writer `nfl_player_props_writer_2026_11_09_r86_generative_coordinates` derive
+canonical totals from explicit named components. NBA non-three points, NFL
+non-TD completions/other incomplete passes and MLB non-HR contributions remove
+specified inconsistent totals without positional columns or post-hoc clamping.
+Signed potential TOTAL passing yards activate only when completions occur;
+unrealized potentials remain raw wire evidence, never game projections/prices.
+Existing canonical integer bounds, physical identities and all strict source
+support/dependence/tail checks still apply. Model exceptions remain explicit;
+there is NO backend automatic qualification or relaxed admission in this release.
+
+Complete all-actor coordinate/text/source diagnostics, market indices and bounded
+examples share the existing correction cushion. Successful parts of failed jobs
+now retain self-contained exact private part-input/raw-wire bytes and separate
+request/canonical hashes before immutable billing. Deterministic archive failure
+cannot authorize another model call. Failure evidenceR2 and response evidenceR1
+stay private. No extra review/phase/output/concurrency/quota/provider call or
+wallet limit; selectionR3/gradeR2, NFLsourceR3/decisionR10/memberR58/lifecycleR40,
+canonical lawR1, publicationR5/settlementR7/trackingR43 and MLBchampion
+`mlb_props_2026_10_21_r44` remain exact. Old R15–R23 accepted laws/locks and R2/R3
+wire decoders retain their original interpretation and values.
+
+All-sport exact-hash controls, paired positive Over/Under qualification, strict
+source refusals, exact successful/failed-part evidence and legacy lock/reader
+precedence are required with full/focused/fresh-main/protected-PR gates. Physical
+coherence is not calibration or source support. Normal scheduled coverage/member
+publication still requires proof. Wallet Standard-primary planning/escrow reuse
+is a separate outstanding repair; do not repeat older claims that discounted
+early calendar reserves already guaranteed every Standard recovery. See
+`model-audits/2026-11-09-props-ai-generative-coordinates.md`.
+
 ## November 9 NFL player-prop source-event qualification R23
 
 Future generation `player_props_ai_2026_11_09_r23_source_event_contracts`, NFL

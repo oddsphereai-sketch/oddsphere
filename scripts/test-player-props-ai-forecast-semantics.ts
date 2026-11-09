@@ -1,3 +1,4 @@
+import {encodeCanonicalScenarioLaw} from "../lib/playerPropsAi/generativeCoordinates";
 import assert from "node:assert/strict";
 import {PRODUCT_RELEASE,type GamePacket,type Evidence} from "../lib/playerPropsAi/evidenceContract";
 import {validateLaw,lawForecast,primitives} from "../lib/playerPropsAi/law";
@@ -64,14 +65,14 @@ assert.equal(validateLaw("nba",center.players[0],decodeNamedScenarioLaw("nba",ce
 assert.throws(()=>decodeNamedScenarioLaw("nba",center.players[0],Array.from({length:16},()=>[1,12,2,1,0])),/Named scenario/);
 const facts=readerEvidence(center).p;
 const coverage=Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[area].status,factIds:facts[area].facts.slice(0,1).map(f=>f.id),effect:facts[area].status==="missing"?"unavailable":"uncertain",observation:"The supplied evidence requires contextual review."}]));
-const response={wireRelease:PROPS_AI_WIRE_RELEASE,players:{p:{assessment:"Conditional forecast with source-supported rebound opportunity.",priorRead:{e3:"over"},coverage,evidenceIds:["e0"],gaps:[],law:{weights:vector(1),outcomes:goodCenter.outcomes},confidence:[2,2],exceptions:[null,null]}}};
+const response={wireRelease:PROPS_AI_WIRE_RELEASE,players:{p:{assessment:"Conditional forecast with source-supported rebound opportunity.",priorRead:{e3:"over"},coverage,evidenceIds:["e0"],gaps:[],law:encodeCanonicalScenarioLaw(center.sport,center.players[0],{weights:vector(1),outcomes:goodCenter.outcomes}),confidence:[2,2],exceptions:[null,null]}}};
 assert.equal(parseJointReview(center,response).players.length,1);
 assert.throws(()=>parseJointReview(center,{...response,players:{p:{...response.players.p,priorRead:{e3:"under"}}}}),/prior direction/);
 assert.throws(()=>parseJointReview(center,{...response,wireRelease:PROPS_AI_LEGACY_WIRE_RELEASE}),/wire release/);
-assert.throws(()=>parseJointReview(center,{...response,players:{p:{...response.players.p,assessment:"A clipped thought"}}}),/complete sentence/);
+assert.throws(()=>parseJointReview(center,{...response,players:{p:{...response.players.p,assessment:"A clipped thought"}}}),/T:A/);
 const feedback=correctionFeedback("bad_primitive "+"\u{1f600}".repeat(1000)+"x".repeat(4000));assert.ok(Buffer.byteLength(feedback)<2048);assert.ok(/^[\x00-\x7f]*$/.test(feedback));
 const request=jointReviewRequest(center,"gpt-6-luna",7000,"synthetic_exact_failed_check");assert.match(request.instructions,/synthetic_exact_failed_check/);assert.equal(request.max_output_tokens,7000);
-assert.ok(!request.input.includes("points_excluding_made_threes"));assert.ok(request.input.includes("referenceContractSide"));
+assert.ok(request.input.includes("points_excluding_made_threes"));assert.ok(request.input.includes("canonicalStatistics"));assert.ok(request.input.includes("referenceContractSide"));
 const quoted={...center,quotes:["over","under"].map(side=>({id:side,playerId:"p",market:"rebounds",provider:"synthetic",book:"one",line:11.5,side:side as "over"|"under",american:side==="over"?150:-170,observedAt:at,receivedAt:at,receivedAtProvenance:"provider_response" as const,opening:false,live:false}))};
 const parsed=parseJointReview(quoted,response);
 const review={...parsed,gameId:center.gameId,start,lock,cutoff:at,issuedAt:at,inputHash:"synthetic",model:"synthetic",stage:"final",criticalContextHashes:criticalContextHashes(quoted),marketScopes:{p:center.players[0].markets},partProvenance:[],inputEvidence:{digest:"synthetic"}} as unknown as AcceptedGameReview;
@@ -81,7 +82,7 @@ assert.equal(siteAiDecisions(changedLine,review,at).length,0,"a new current even
 assert.equal(siteReviewQualification(changedLine,review,at).unqualifiedTailScopes,1);
 const legacy={...review,release:"player_props_ai_2026_11_08_r17_nfl_input_status" as const};const frozen=JSON.stringify(legacy);
 assert.equal(siteAiDecisions(changedLine,legacy,at).length,1,"legacy accepted laws retain their original semantics");assert.equal(JSON.stringify(legacy),frozen);
-const declined=parseJointReview(center,{...response,players:{p:{...response.players.p,law:badCenter,exceptions:["Unqualified supplied rebound support.","Unqualified supplied rebound support."]}}});
+const declined=parseJointReview(center,{...response,players:{p:{...response.players.p,law:encodeCanonicalScenarioLaw(center.sport,center.players[0],badCenter),exceptions:["Unqualified supplied rebound support.","Unqualified supplied rebound support."]}}});
 assert.deepEqual(declined.players[0].sourceDeclinedMarkets.slice().sort(),["rebounds","rebounds_assists"]);
 const declinedReview={...review,players:declined.players,release:PROPS_AI_RELEASE};
 assert.equal(siteAiDecisions(quoted,declinedReview,at).length,0);assert.equal(siteReviewQualification(quoted,declinedReview,at).sourceDeclinedScopes,2);
