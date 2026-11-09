@@ -1,3 +1,26 @@
+## November 9 player-prop complete-sentence admission R22
+
+Future generation `player_props_ai_2026_11_09_r22_complete_sentences` and sole
+NFL writer `nfl_player_props_writer_2026_11_09_r84_complete_sentences` put existing
+sentence endings and qualitative reader text requirements into the structured
+output schema. Instructions target shorter complete sentences within unchanged
+maximum lengths. Backend checks still reject clipped text; no punctuation or
+numbers are appended, repaired or normalized after generation. Coverage,
+physical identities, source grounding and historical accepted laws stay exact.
+
+Forward preflight reports every affected actor's assessment, reader-area format
+and physical-identity failures together within the existing correction feedback
+bound. This avoids hiding a format failure behind the first numerical failure.
+R21 Flex alias recognition and existing two-phase failed-part Standard recovery
+remain. No extra review, paid test, phase, request/output cap, concurrency,
+upgrade quota, wallet threshold or writer lease. No selection/grade/law formula
+change: unchanged valid inputs retain zero promotions/demotions. Legacy locks,
+closed failures and old receipts remain immutable. Live proof still requires an
+ordinary scheduled completed review, every actor/scope and actual member rows.
+The separately identified unresolved NFL interception source-event contract is
+not fixed by this text admission cutover. See
+`model-audits/2026-11-09-props-ai-complete-sentences.md`.
+
 ## November 9 player-prop documented Flex capacity recovery R21
 
 Operational diagnostic R3, future generation `player_props_ai_2026_11_09_r21_flex_capacity_alias` and sole
