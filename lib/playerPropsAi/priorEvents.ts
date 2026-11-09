@@ -1,3 +1,4 @@
+import {qualifiedForecastMarkets} from "./sourceEvents";
 /** A retained quote side is not the independent forecast's favored outcome. */
 import type {Evidence,Json,Player} from "./evidenceContract";
 const object=(v:Json):Record<string,Json>=>v&&typeof v==="object"&&!Array.isArray(v)?v:{};
@@ -20,4 +21,4 @@ export function independentPriorEvent(e:Evidence){
     overProbability:over,underProbability:under,yesProbability:yes,preferredOutcome:preferred,
     meaning:"referenceContractSide names the retained contract, not the favored event; compare the actual independent probabilities. Missing push/contract information stays unknown."};
 }
-export function independentPriorEvents(player:Pick<Player,"evidence">){return player.evidence.filter(e=>e.kind==="independent_model").map(independentPriorEvent);}
+export function independentPriorEvents(player:Pick<Player,"evidence">&Partial<Pick<Player,"markets"|"sourceEventContracts">>){return player.evidence.filter(e=>e.kind==="independent_model").map(independentPriorEvent).filter(e=>!e.market||!player.markets||qualifiedForecastMarkets({markets:player.markets,sourceEventContracts:player.sourceEventContracts}).includes(e.market));}

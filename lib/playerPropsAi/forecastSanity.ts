@@ -1,3 +1,4 @@
+import {qualifiedForecastMarkets,unresolvedForecastMarkets,sourceEventUsable} from "./sourceEvents";
 /** Admission checks, not a fitted model or a correction of historical forecasts. */
 import type {GamePacket,Player} from "./evidenceContract";
 import {COMBOS,CATALOG} from "./evidenceContract";
@@ -19,7 +20,7 @@ export function validateScenarioOpportunities(sport:GamePacket["sport"],law:Acce
   invariant(law.outcomes.passing_yards.every((yards,i)=>law.outcomes.passing_completions[i]!==0||yards===0),"NFL passing yards require a completed pass in the same scenario; correct the named passing opportunity statistics.");
 }
 export function sourceForecastIssues(packet:GamePacket,player:Player,law:AcceptedPlayerLaw):ForecastSanityIssue[]{
-  const issues:ForecastSanityIssue[]=[],priors=independentPriorEvents(player);
+  const issues:ForecastSanityIssue[]=[],priors=independentPriorEvents(player),qualified=qualifiedForecastMarkets(player);
   const logs=player.evidence.filter(e=>e.kind==="recent_games"&&e.value&&typeof e.value==="object"&&!Array.isArray(e.value)&&e.value.box);
   const history=readerLogWindows(packet.sport,logs,packet.cutoff),support=history.observedSupport;
   if(packet.sport==="mlb"){
@@ -37,8 +38,8 @@ export function sourceForecastIssues(packet:GamePacket,player:Player,law:Accepte
     }
     for(const [market,games]of byMarket){const values=[...games.values()].flatMap(v=>v.size===1?[...v]:[]);if(values.length)support[market]={n:values.length,minimum:Math.min(...values),maximum:Math.max(...values),mean:values.reduce((a,b)=>a+b,0)/values.length};}
   }
-  const affected=(primitive:string)=>player.markets.filter(m=>marketUsesStatistic(m,primitive));
-  const statistics=[...new Set([...Object.keys(law.outcomes),...(packet.sport==="mlb"?player.markets:[])])];
+  const affected=(primitive:string)=>qualified.filter(m=>marketUsesStatistic(m,primitive));
+  const statistics=[...new Set([...Object.keys(law.outcomes),...(packet.sport==="mlb"?qualified:[])])];
   for(const primitive of statistics){
     const values=law.outcomes[primitive]??law.weights.map((_,i)=>scenarioStat(law,primitive,i));
     const markets=affected(primitive);if(!markets.length)continue;
@@ -59,7 +60,7 @@ export function sourceForecastIssues(packet:GamePacket,player:Player,law:Accepte
         detail:`${player.id} ${primitive} has no positive outcome despite positive supplied production. Verify canonical net-yard units; do not turn missing data into zero/negative certainty.`});
   }
   for(const pair of history.observedPairOrderings){
-    const markets=player.markets.filter(m=>COMBOS[m]?.includes(pair.first)&&COMBOS[m]?.includes(pair.second));
+    const markets=qualified.filter(m=>COMBOS[m]?.includes(pair.first)&&COMBOS[m]?.includes(pair.second));
     if(!markets.length)continue;
     let concordant=false,discordant=false;
     for(let i=0;i<law.weights.length;i++)for(let j=i+1;j<law.weights.length;j++){
@@ -71,7 +72,7 @@ export function sourceForecastIssues(packet:GamePacket,player:Player,law:Accepte
       detail:`${player.id} ${pair.first}/${pair.second} combinations erase observed joint variation. Source games contain both higher-together and opposing outcomes; include that dependence or explicitly except the affected combinations.`});
   }
   for(const prior of priors){
-    if(!prior.market||prior.line===null||!player.markets.includes(prior.market))continue;
+    if(!prior.market||prior.line===null||!qualified.includes(prior.market))continue;
     const uncertain=prior.market==="anytime_td"?prior.yesProbability!==null&&prior.yesProbability>0&&prior.yesProbability<1
       :prior.overProbability!==null&&prior.overProbability>0&&prior.underProbability!==null&&prior.underProbability>0;
     if(!uncertain)continue;
@@ -81,7 +82,7 @@ export function sourceForecastIssues(packet:GamePacket,player:Player,law:Accepte
   }
   const seen=new Set<string>();
   for(const q of packet.quotes){
-    if(q.playerId!==player.id||q.opening||q.live||q.receivedAtProvenance!=="provider_response"||Date.parse(q.receivedAt)>Date.parse(packet.cutoff)||Date.parse(packet.cutoff)-Date.parse(q.receivedAt)>15*60000)continue;
+    if(!qualified.includes(q.market)||!sourceEventUsable(q)||q.playerId!==player.id||q.opening||q.live||q.receivedAtProvenance!=="provider_response"||Date.parse(q.receivedAt)>Date.parse(packet.cutoff)||Date.parse(packet.cutoff)-Date.parse(q.receivedAt)>15*60000)continue;
     const key=`${q.market}|${q.line}|${q.offerContract??"two_way"}`;if(seen.has(key))continue;seen.add(key);
     const f=lawForecast(law,q.market,q.line,q.offerContract==="milestone"||q.side==="yes");
     if(unqualifiedEventTail(f,q.side==="yes"))issues.push({code:"unsupported_priced_event_certainty",markets:[q.market],
@@ -93,5 +94,5 @@ export function validateSourceForecast(packet:GamePacket,player:Player,law:Accep
   const issues=sourceForecastIssues(packet,player,law);
   const unhandled=issues.filter(issue=>issue.markets.some(m=>!exceptions[player.markets.indexOf(m)]));
   invariant(!unhandled.length,unhandled.map(i=>`${i.code}: ${i.detail}`).join(" ").slice(0,900));
-  return [...new Set(issues.flatMap(issue=>issue.markets))];
+  return [...new Set([...unresolvedForecastMarkets(player),...issues.flatMap(issue=>issue.markets)])];
 }

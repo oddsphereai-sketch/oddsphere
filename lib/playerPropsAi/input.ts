@@ -122,7 +122,7 @@ export function readableInput(packet: GamePacket, options: { compactClocks?: boo
         evidence.push([aliases.get(e.id)!, e.kind, time(e.availableAt), source(e.source), value]);
       }
     }
-    return { id: p.id, name: p.name, team: p.team, opponent: p.opponent, markets: p.markets,
+    return { id: p.id, name: p.name, team: p.team, opponent: p.opponent, markets: p.markets, ...(p.sourceEventContracts?{sourceEventContracts:p.sourceEventContracts}:{}),
       targetEvents: Object.fromEntries(p.markets.map(m => { const t = eventTarget(packet, p.id, m); return [m, { line: t.line, event: t.event, probabilityBenchmarkEligible: t.probabilityBenchmarkEligible }]; })), missing: p.missing, logs, evidence,
       ...(reader ? {readerAreas:Object.fromEntries(Object.entries(reader[p.id]).map(([area,entry])=>[area,{status:entry.status,limitations:entry.limitations,
         facts:entry.facts.map(f=>({id:f.id,label:f.label,value:f.label==="Recorded game opportunity/workload labels"
@@ -132,9 +132,11 @@ export function readableInput(packet: GamePacket, options: { compactClocks?: boo
           :share(f.value),evidenceIds:f.sourceIds.map(id=>aliases.get(id)!),availableMs:time(f.availableAt)}))}]))} : {}) };
   });
   const markets = [...new Set(packet.quotes.map(q => q.market))], books = [...new Map(packet.quotes.map(q => [JSON.stringify([q.provider, q.book]), [q.provider, q.book]])).values()];
+  const sourceEventDefinitions:Json[]=[],sourceEventIds=new Map<string,number>(),quoteSourceEventLinks:number[][]=[];
+  const sourceEventIndex=(q:Quote)=>{if(!q.sourceEvent)return null;const key=JSON.stringify(q.sourceEvent);if(!sourceEventIds.has(key)){sourceEventIds.set(key,sourceEventDefinitions.length);sourceEventDefinitions.push(q.sourceEvent as unknown as Json);}return sourceEventIds.get(key)!;};
   const grouped = new Map<string, Quote[]>();
   for (const q of packet.quotes) {
-    const key = JSON.stringify([players.findIndex(p => p.id === q.playerId), markets.indexOf(q.market), books.findIndex(b => b[0] === q.provider && b[1] === q.book), q.line, q.side, q.opening ?? null, q.receivedAtProvenance ?? null]);
+    const key = JSON.stringify([players.findIndex(p => p.id === q.playerId), markets.indexOf(q.market), books.findIndex(b => b[0] === q.provider && b[1] === q.book), q.line, q.side, q.opening ?? null, q.receivedAtProvenance ?? null,sourceEventIndex(q)]);
     const group = grouped.get(key);
     if (group) group.push(q); else grouped.set(key, [q]);
   }
@@ -146,7 +148,8 @@ export function readableInput(packet: GamePacket, options: { compactClocks?: boo
       consumed.push(q.id);
       if (!runs.length || runs.at(-1)![0].american !== q.american) runs.push([q]); else runs.at(-1)!.push(q);
     }
-    quoteTraces.push([...(options.compactClocks ? JSON.parse(key).slice(0,6) : JSON.parse(key)), runs.map(run => {
+    const declaration=JSON.parse(key)[7];if(declaration!==null)quoteSourceEventLinks.push([quoteTraces.length,declaration]);
+    quoteTraces.push([...(options.compactClocks ? JSON.parse(key).slice(0,6) : JSON.parse(key).slice(0,7)), runs.map(run => {
       const first = run[0], last = run.at(-1)!;
       if (options.compactClocks) {
         const low = receipt(new Date(run.reduce((n,q)=>Math.min(n,instant(q.receivedAt)),Infinity)).toISOString(),first.receivedAtProvenance);
@@ -160,11 +163,12 @@ export function readableInput(packet: GamePacket, options: { compactClocks?: boo
   }
   invariant(consumed.length === packet.quotes.length && new Set(consumed).size === consumed.length, "Quote trace coverage failed");
   invariant(records.length === packet.players.reduce((n, p) => n + p.evidence.length, 0), "Evidence coverage failed");
-  return { format: options.readerCoverage ? "player_props_readable_tables_r11_explicit_prior_events" : options.compactClocks ? "player_props_readable_tables_r7_opening_clocks" : "player_props_readable_tables_r6_cross_line_openings", sport: packet.sport, gameId: packet.gameId, start: packet.start, lock: packet.lock, stage: packet.stage, cutoff: packet.cutoff,
+  return { format: options.readerCoverage ? "player_props_readable_tables_r12_source_event_contracts" : options.compactClocks ? "player_props_readable_tables_r7_opening_clocks" : "player_props_readable_tables_r6_cross_line_openings", sport: packet.sport, gameId: packet.gameId, start: packet.start, lock: packet.lock, stage: packet.stage, cutoff: packet.cutoff,
     schema: { time: "evidence/log availability in integer milliseconds relative to cutoff; book/quote times in minutes relative to cutoff rounded to 0.1 minute; ISO dates explicit", evidence: "[id,kind,availableMs,sourceIndex,value]", log: "[id,kind,availableMs,sourceIndex,historicalGameIndex,boxValues,advancedValues]", boxColumns: boxes, advancedColumns: advanced,
       bookRow: "[book,provider,states,lines,latestObservedMinute,anchorEarliestPair,anchorLatestPair,representativeLadderPairs,nonMonotonePairs,oneSidedExamples,latestReceivedMinute,allSuppliedOpeningPairs]", pair: options.compactClocks ? "[line,OverOdds,UnderOdds,overObservedMinute,underObservedMinute,overReceiptId,underReceiptId,openingFlag]" : "[line,OverOdds,UnderOdds,overObservedMinute,underObservedMinute,overReceivedMinute,underReceivedMinute,openingFlag,receiptProvenance]", oneSidedExample: options.compactClocks ? "[line,YesOdds,observedMinute,receiptId,openingFlag]; different lines are NOT price movement" : "[line,YesOdds,observedMinute,receivedMinute,openingFlag,receiptProvenance]; examples on different lines are NOT price movement",
       quoteTrace: options.compactClocks ? "[playerIndex,marketIndex,bookIndex,line,side,openingFlag,priceRuns]; openingFlag=null means legacy unknown" : "[playerIndex,marketIndex,bookIndex,line,side,openingFlag,receiptProvenance,priceRuns]; openingFlag=null means legacy unknown", priceRun: options.compactClocks ? "[firstObservedMinute,lastObservedMinute,receiptSpan,AmericanOdds,sourceRecordCount]; receiptSpan is one receiptClocks index, or [firstID,lastID]" : "[firstObservedMinute,lastObservedMinute,firstReceivedMinute,lastReceivedMinute,AmericanOdds,sourceRecordCount]", ...(options.compactClocks ? {receiptClock: "receiptClocks[index]=[receivedMinute,provenance]; receipt IDs are indices, never timestamps"} : {}), clockMeaning: "Observed is the retained normalized source timestamp; legacy normalizers can use a fetch-time fallback, so it alone is NOT proof of native price-change time. Received is provider response only when provenance=provider_response. collection_start precedes the response and is NOT proof of data availability. snapshot_availability is when we had the export, NOT confirmation the provider still offered that price. null means unknown; never infer confirmation or who moved first from missing provenance. Opening quotes are historical. Fresh unchanged quotes need not have recent native change times.", ref: "{$ref:context_N} refers to sharedContext[context_N]", metricRows: "[metricDefinitions index,value]", mlbLogRows: "[historicalGameIndex,value,plateAppearances,secondaryLabel]; recent games retained individually; season arrays summarized numerically with originals in archive", bookIndependence: "different providers for the same book are correlated feeds, never independent books" },
     ...(options.compactClocks ? {receiptClocks} : {}),
+    ...(sourceEventDefinitions.length?{sourceEventDefinitions,quoteSourceEventLinks,sourceEventSchema:"quoteSourceEventLinks=[quoteTraceIndex,sourceEventDefinitionsIndex]; only verified declarations describe the canonical event. Unresolved quotes cannot pair with, confirm or price that event; do not infer defensive semantics from position."}:{}),
     sourceNames, historicalGames, metricDefinitions, sharedContext: pool, ...(packet.sharedGameContext ? { sharedGameContext: share(packet.sharedGameContext) } : {}), players, quoteMarkets: markets, quoteBooks: books, quoteTraces,
     ...(packet.quotes.some(q=>q.offerContract)?{quoteContracts:[...new Map(packet.quotes.filter(q=>q.offerContract).map(q=>{const row=[players.findIndex(p=>p.id===q.playerId),markets.indexOf(q.market),books.findIndex(b=>b[0]===q.provider&&b[1]===q.book),q.line,q.side,q.offerContract];return [JSON.stringify(row),row];})).values()],quoteContractSchema:"[playerIndex,marketIndex,bookIndex,line,side,offerContract]; milestone means at least the stated threshold, with no push. Quotes without a declaration keep their original semantics."}:{}),
     rawQuoteCount: packet.quotes.length, rawPacketDigest: digest(packet), limitations: [...packet.sourceLimitations, "AI price timestamps rounded to 6 seconds; do not infer ordering finer than this resolution; exact timestamps retained in raw archive",...(options.readerCoverage?["Statistical context values use six significant figures. Execution quotes, event lines, integer source clocks and original archives retain their specified precision; source navigation links refer to the same evidence, never a second independent signal."]:[])] };

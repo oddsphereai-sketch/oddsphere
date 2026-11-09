@@ -77,7 +77,7 @@ import {
 } from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_11_09_r84_complete_sentences" as const;
+  "nfl_player_props_writer_2026_11_09_r85_source_event_contracts" as const;
 export const NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES = 60 as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
@@ -418,14 +418,14 @@ export async function runNflPlayerPropsProductionWriter(args: {
   if(args.apply&&propsAiSiteConfig().integrated){
     const observer=await readNflPlayerPropsMarketObserverHistory({client:args.client,season:args.season,week:args.week}).catch(()=>null);
     const marketHistory={observer,references:effectiveReferenceOffers,availableAt:new Date().toISOString()};
-    const aiBaseline=reconcileNflPlayerPropsProductionSnapshot({season:args.season,week:args.week,evaluatedAt:args.now,nextBoard,previous});
+    const aiBaseline=reconcileNflPlayerPropsProductionSnapshot({requireVerifiedInterceptionSource:true,season:args.season,week:args.week,evaluatedAt:args.now,nextBoard,previous});
     const ai=await reviewPropsForSite({client:args.client,sport:"nfl",writerRunId:args.writerRunId,deadline:Date.parse(args.now)+390000,
       games:context.games.map(g=>({id:g.canonicalGameId,start:g.scheduledStart,away:g.awayTeam,home:g.homeTeam})),
       load:(game,window)=>liveNflPacket({game,window,snapshot:aiBaseline,observations:collection.snapshot,history:currentSeason.state,context,marketHistory})});
     for(const game of ai.games)nextBoard=applyNflSiteAi(nextBoard,game.packet,game.decisions,new Date().toISOString());
   }
   const publicationNow=args.apply&&propsAiSiteConfig().integrated?new Date().toISOString():args.now;
-  const snapshot = reconcileNflPlayerPropsProductionSnapshot({
+  const snapshot = reconcileNflPlayerPropsProductionSnapshot({requireVerifiedInterceptionSource:true,
     season: args.season,
     week: args.week,
     evaluatedAt: publicationNow,
@@ -433,7 +433,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
     previous,
   });
   const candidateImpact = compareNflPlayerPropsCandidateImpact(
-    reconcileNflPlayerPropsProductionSnapshot({
+    reconcileNflPlayerPropsProductionSnapshot({requireVerifiedInterceptionSource:true,
         season: args.season,
         week: args.week,
         evaluatedAt: args.now,

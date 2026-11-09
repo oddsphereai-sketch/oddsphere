@@ -1,3 +1,4 @@
+import {sourceEventUsable,sourceEventSemantic,assertSourceEventQualifications} from "./sourceEvents";
 import type {GamePacket,Quote} from "./evidenceContract";
 
 export const quoteBook=(value:string)=>value.toLowerCase().replace(/[^a-z0-9]/g,"");
@@ -12,11 +13,12 @@ export function latestExecutionQuotes(rows:readonly Quote[],now:string,maxAgeMs=
     const key=JSON.stringify([q.playerId,q.market,q.provider,quoteBook(q.book),q.line,quoteContract(q),q.side]),old=latest.get(key);
     const rank=old?received-Date.parse(old.receivedAt)||observed-Date.parse(old.observedAt):1;
     if(rank>0){latest.set(key,q);ambiguous.delete(key);}
-    else if(rank===0&&old&&old.american!==q.american)ambiguous.add(key);
+    else if(rank===0&&old&&(old.american!==q.american||sourceEventSemantic(old)!==sourceEventSemantic(q)))ambiguous.add(key);
   }
   return [...latest].flatMap(([key,q])=>!ambiguous.has(key)&&at-Date.parse(q.receivedAt)<=maxAgeMs&&Number.isInteger(q.american)&&Math.abs(q.american)>=100?[q]:[]);
 }
 /** An explicitly empty collector set must never resurrect archived prices. */
 export function executionQuotes(packet:GamePacket,now:string,maxAgeMs=15*60000){
-  return latestExecutionQuotes(packet.executionQuotes??packet.quotes,now,maxAgeMs);
+  assertSourceEventQualifications(packet);
+  return latestExecutionQuotes(packet.executionQuotes??packet.quotes,now,maxAgeMs).filter(sourceEventUsable);
 }

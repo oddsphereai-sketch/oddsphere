@@ -1,3 +1,4 @@
+import {sourceEventUsable} from "./sourceEvents";
 /** Deterministic research compression. Every player/market remains; raw offers stay in the local archive. */
 import type { Evidence, GamePacket, Json, Quote } from "./evidenceContract";
 import { digest, instant, invariant, validatePacket } from "./evidence";
@@ -42,7 +43,9 @@ export function compileMarketReport(packet: GamePacket): GamePacket {
   const players = packet.players.map(player => {
     const evidence = [...player.evidence];
     for (const market of player.markets) {
-      const rows = packet.quotes.filter(q => q.playerId === player.id && q.market === market);
+      const allRows = packet.quotes.filter(q => q.playerId === player.id && q.market === market);
+      for(const q of allRows.filter(q=>!sourceEventUsable(q)))retained.add(q.id);
+      const rows=allRows.filter(sourceEventUsable);
       const model = player.evidence.find(e => e.kind === "independent_model" && e.value && typeof e.value === "object" && !Array.isArray(e.value) && e.value.market === market);
       const value = model?.value as { line?: number } | undefined;
       const lines = [...new Set(rows.map(q => q.line))].sort((a, b) => a - b);

@@ -52,7 +52,7 @@ const snapshot = productionSnapshot([actionable, held]);
 const memberBefore = buildNflPlayerPropsMemberSnapshot(snapshot);
 
 assert.equal(memberBefore.lifecycleRelease,
-  "nfl_player_props_member_lifecycle_2026_11_08_r39_player_scope_publication");
+  "nfl_player_props_member_lifecycle_2026_11_09_r40_source_event_contracts");
 assert.equal(memberBefore.lifecycleRelease, NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE);
 const atKickoff = buildNflPlayerPropsMemberSnapshot(snapshot, actionable.scheduledStart);
 assert.equal(atKickoff.memberDecisions.length, 2,
@@ -127,6 +127,9 @@ assert.deepEqual(decoded.lifecycle, snapshot.lifecycle);
 assert.deepEqual(decoded.board.decisions.find((row) => row.state === "locked"), actionable,
   "locked projection, probability, pick, grade, price, and evidence remain exact");
 
+const oldReleaseSnapshot={...snapshot,release:"nfl_player_props_member_2026_11_08_r57_player_scope_publication"} as unknown as NflPlayerPropsProductionSnapshot;
+assert.strictEqual(decodeNflPlayerPropsSnapshotPayload(oldReleaseSnapshot),oldReleaseSnapshot,"actual legacy release wrapper and stored member list remain authoritative");
+assert.deepEqual(decodeNflPlayerPropsSnapshotPayload(encodeNflPlayerPropsSnapshotPayload(oldReleaseSnapshot)),oldReleaseSnapshot,"v57 wrapper and locked values survive current storage codec without relabeling");
 const legacyWithDifferentMemberList = { ...snapshot, memberDecisions: [] };
 assert.equal(decodeNflPlayerPropsSnapshotPayload(legacyWithDifferentMemberList), legacyWithDifferentMemberList,
   "legacy snapshots retain their stored member list and take precedence over new derivation semantics");

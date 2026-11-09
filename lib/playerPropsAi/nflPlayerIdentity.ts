@@ -4,7 +4,8 @@ import type {NflPlayerPropsInferenceContext} from '../services/football/nflPlaye
 import type {LivePropsGame} from './liveSources';
 import {propsTeam} from './teamIdentity';
 import {instant,invariant} from './evidence';
-export const PROPS_AI_NFL_SOURCE_RELEASE='player_props_ai_nfl_source_2026_11_08_r2_model_context_status' as const;
+import {PROPS_AI_NFL_EVENT_SOURCE_RELEASE} from "./sourceEvents";
+export const PROPS_AI_NFL_SOURCE_RELEASE=PROPS_AI_NFL_EVENT_SOURCE_RELEASE;
 const norm=(s:string)=>s.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/\b(jr|sr|ii|iii|iv)\b/g,'').replace(/[^a-z]/g,'');
 // Name equivalence is explicit and must bind the independently captured native ID.
 const aliases=[

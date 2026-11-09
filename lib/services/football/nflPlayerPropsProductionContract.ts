@@ -1,3 +1,4 @@
+import {PROPS_AI_SOURCE_EVENT_RELEASE} from "../../playerPropsAi/sourceEvents";
 import {PROPS_AI_NFL_EXACT_RECEIPT_RELEASES} from "../../playerPropsAi/releases";
 import {propsTeam} from "../../playerPropsAi/teamIdentity";
 import {
@@ -17,9 +18,9 @@ import { selectNflPlayerPropsCanonicalLines } from "./nflPlayerPropsCanonicalLin
 import { withoutUnresolvedNflPlayerAliasDuplicates } from "./nflPlayerPropsMemberAliasIdentity";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_11_08_r57_player_scope_publication" as const;
+  "nfl_player_props_member_2026_11_09_r58_source_event_contracts" as const;
 export const NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE =
-  "nfl_player_props_member_lifecycle_2026_11_08_r39_player_scope_publication" as const;
+  "nfl_player_props_member_lifecycle_2026_11_09_r40_source_event_contracts" as const;
 const NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE =
   "nfl_player_props_decision_2026_10_27_r38_passing_yards_direction" as const;
 export const NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET = 2 as const;
@@ -81,11 +82,13 @@ export type NflPlayerPropsTrackedDecision = {
 export function reconcileNflPlayerPropsProductionSnapshot(args: {
   season: number; week: number; evaluatedAt: string;
   nextBoard: NflPlayerPropsRuntimeBoard;
+  requireVerifiedInterceptionSource?:boolean;
   previous?: NflPlayerPropsProductionSnapshot | null;
 }): NflPlayerPropsProductionSnapshot {
   const evaluatedAt = Date.parse(args.evaluatedAt);
   if (!Number.isFinite(evaluatedAt)) throw new Error("NFL props production evaluatedAt is invalid.");
   const priorRows=args.previous?.board.decisions??[];
+  const canRetainUnlocked=(row:NflPlayerPropsRuntimeDecision)=>!args.requireVerifiedInterceptionSource||row.market!=="interceptions"||!row.aiReview||row.aiReview.sourceEventRelease===PROPS_AI_SOURCE_EVENT_RELEASE&&row.aiReview.sourceEventStatistic==="interceptions";
   const priorLocked=priorRows.filter(row=>row.state==="locked");
   const protectedScopes=new Set([
     ...priorLocked.map(outcomeScopeKey),
@@ -96,7 +99,7 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
   const priorLockedMembers=(args.previous?.memberDecisions??[])
     .filter(row=>row.state==="locked"||protectedScopes.has(outcomeScopeKey(row)));
   const priorAi=new Map<string,NflPlayerPropsRuntimeDecision[]>();
-  for(const row of priorRows)if(row.aiReview&&row.state!=="locked"){
+  for(const row of priorRows)if(row.aiReview&&row.state!=="locked"&&canRetainUnlocked(row)){
     const key=quoteScopeKey(row);const list=priorAi.get(key)??[];list.push(row);priorAi.set(key,list);
   }
   let frozenAtLock = 0;
@@ -106,7 +109,7 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
   // Preserve every legacy locked book and its original field values/order.
   const decisions:NflPlayerPropsRuntimeDecision[]=[...priorLocked];
   for(const next of args.nextBoard.decisions){
-    if(protectedScopes.has(outcomeScopeKey(next)))continue;
+    if(protectedScopes.has(outcomeScopeKey(next))||!canRetainUnlocked(next))continue;
     if(evaluatedAt>=Date.parse(next.lockAt)){
       const candidates=(priorAi.get(quoteScopeKey(next))??[]).filter(row=>
         (row.providerPlayerId!==null&&next.providerPlayerId!==null
@@ -122,7 +125,7 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
   const nextKeys = new Set(decisions.map(offerKey));
   const nextOutcomeScopes = new Set(args.nextBoard.decisions.map(outcomeScopeKey));
   for (const prior of priorRows) {
-    if(prior.state==="locked"||protectedScopes.has(outcomeScopeKey(prior)))continue;
+    if(prior.state==="locked"||protectedScopes.has(outcomeScopeKey(prior))||!canRetainUnlocked(prior))continue;
     if (!nextKeys.has(offerKey(prior)) && evaluatedAt >= Date.parse(prior.lockAt)
       && isFreshAtLock(prior)) {
       decisions.push({ ...prior, state: "locked" as const });
