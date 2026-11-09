@@ -1,6 +1,6 @@
 /** One authoritative identity path for the AI-assisted player-prop product. */
-export const PROPS_AI_RELEASE = "player_props_ai_2026_11_09_r19_current_execution" as const;
-export const PROPS_AI_ACCEPTED_RELEASES=[PROPS_AI_RELEASE,"player_props_ai_2026_11_09_r18_forecast_semantics","player_props_ai_2026_11_08_r17_nfl_input_status","player_props_ai_2026_11_08_r16_nfl_output_headroom","player_props_ai_2026_11_08_r15_review_window_handoff"] as const;
+export const PROPS_AI_RELEASE = "player_props_ai_2026_11_09_r20_rejection_evidence" as const;
+export const PROPS_AI_ACCEPTED_RELEASES=[PROPS_AI_RELEASE,"player_props_ai_2026_11_09_r19_current_execution","player_props_ai_2026_11_09_r18_forecast_semantics","player_props_ai_2026_11_08_r17_nfl_input_status","player_props_ai_2026_11_08_r16_nfl_output_headroom","player_props_ai_2026_11_08_r15_review_window_handoff"] as const;
 export const PROPS_AI_UNCHECKED_LEGACY_RELEASES:readonly string[]=["player_props_ai_2026_11_08_r17_nfl_input_status","player_props_ai_2026_11_08_r16_nfl_output_headroom","player_props_ai_2026_11_08_r15_review_window_handoff"];
 export function propsReviewHasSemanticChecks(release:string){return (PROPS_AI_ACCEPTED_RELEASES as readonly string[]).includes(release)&&!PROPS_AI_UNCHECKED_LEGACY_RELEASES.includes(release);}
 export const PROPS_AI_NFL_TARGET_ACTORS_PER_PART=4;

@@ -1,5 +1,5 @@
 /** Allowlisted operational codes only: never log raw API bodies, keys or inputs. */
-export const PROPS_AI_DIAGNOSTIC_RELEASE="player_props_ai_operations_2026_11_08_r1_safe_failure_codes" as const;
+export const PROPS_AI_DIAGNOSTIC_RELEASE="player_props_ai_operations_2026_11_09_r2_private_failure_evidence" as const;
 const known:Readonly<Record<string,string>>={
  "Conflicting NFL provider player identity":"nfl_provider_identity_conflict",
  "Conflicting NFL player-team identity":"nfl_player_team_conflict",

@@ -5,6 +5,7 @@ import { type GameReview, type PlayerReview, validateGameReview,primitives } fro
 import { verifiedReaderSource } from "./sourceCodec";
 import type { Json } from "./evidenceContract";
 import {decodeNamedScenarioLaw,PROPS_AI_WIRE_RELEASE} from "./scenarioCoordinates";
+import {physicalLawFindings,physicalCorrectionSummary} from "./physicalDiagnostics";
 import {validateSourceForecast,validateScenarioOpportunities} from "./forecastSanity";
 import {independentPriorEvents} from "./priorEvents";
 import { PROPS_AI_RELEASE, PROPS_AI_SCENARIOS, type PropsAiModel } from "./releases";
@@ -50,6 +51,7 @@ confidence is an array aligned EXACTLY with that player's markets: 0=weak/uncert
 }
 export function parseJointReview(packet: GamePacket, value: unknown) {
   invariant((value as {wireRelease?:string})?.wireRelease===PROPS_AI_WIRE_RELEASE,"Forecast wire release mismatch; legacy rows cannot be reinterpreted");
+  const physical=physicalLawFindings(packet,value);invariant(!physical.length,physicalCorrectionSummary(physical));
   const review = value as GameReview, aliases = evidenceAliases(packet);
   invariant(review && typeof review.players === "object" && !Array.isArray(review.players), "Missing structured player reviews");
   const expanded = {players:Object.fromEntries(Object.entries(review.players).map(([id,row])=>{
