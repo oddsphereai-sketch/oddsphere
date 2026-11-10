@@ -1,5 +1,5 @@
 import {qualifyNflSourceEvent,sourceEventSummary,qualifyConflictingSourceObservations} from "./sourceEvents";
-import {resolveNflPropSourcePlayer,sameNflPropActorName,PROPS_AI_NFL_SOURCE_RELEASE} from "./nflPlayerIdentity";
+import {resolveNflPropSourcePlayer,sameNflPropActorName,PROPS_AI_NFL_SOURCE_RELEASE,PROPS_AI_NFL_IDENTITY_RELEASE} from "./nflPlayerIdentity";
 /** Complete captured collector inputs. Pure: no provider, database or inference calls. */
 import type {NbaPlayerPropsCurrentState} from "../services/nba/nbaPlayerPropsCurrentState";
 import type {NbaPlayerPropsMemberSnapshot} from "../services/nba/nbaPlayerPropsProductContract";
@@ -47,15 +47,14 @@ export function liveNbaPacket(args:{game:LivePropsGame;window:CapturedReviewWind
   return finish(enrichCachedPacket(packet,source),at,current);
 }
 export function liveNflPacket(args:{game:LivePropsGame;window:CapturedReviewWindow;snapshot:NflPlayerPropsProductionSnapshot;observations:NflPlayerPropsObservationSnapshot;history:NflPlayerPropsCurrentSeasonState;context:NflPlayerPropsInferenceContext;retainedQuotes?:Quote[];marketHistory?:Parameters<typeof attachNflReaderMarkets>[1]}):GamePacket{
-  const at=args.window.cutoff,source:EnrichedSource={...emptyCapturedSource(at),nfl:[{week:args.snapshot.week,snapshot:{...args.snapshot,generatedAt:at}}],nflHistory:args.history};
+  const at=args.window.cutoff,source:EnrichedSource={...emptyCapturedSource(at),nfl:[{week:args.snapshot.week,snapshot:args.snapshot}],nflHistory:args.history};
   const cached=fromCachedExport(source,args.window).packets[0];
   const packet:GamePacket=cached??{release:PRODUCT_RELEASE,sport:"nfl",gameId:args.game.id,start:args.game.start,lock:args.window.lock,cutoff:at,stage:args.window.stage,players:[],quotes:[],sourceLimitations:[]};
   const players=new Map<string,Player>(),quotes:Quote[]=[];let unresolved=0;
-  const rosterPosition=(id:string)=>{const g=args.context.games.find(g=>g.canonicalGameId===args.game.id);const positions=[...new Set([...(g?.awayDepth.roster??[]),...(g?.homeDepth.roster??[])].filter(p=>p.playerId===id).flatMap(p=>p.position?[p.position]:[]))];return positions.length===1?positions[0]:positions.length?positions.join(" | "):null;};
   const native=args.observations.observations.filter(q=>q.canonicalGameId===args.game.id&&(CATALOG.nfl.required as readonly string[]).includes(q.market));
   const currentNative=native.filter(q=>!q.isOpening&&!q.isLive&&q.receivedAt&&instant(q.receivedAt)<=instant(at)&&instant(q.observedAt)<=instant(q.receivedAt));
   for(const q of currentNative){
-    const identity=resolveNflPropSourcePlayer({row:q,rows:args.snapshot.board.decisions,observations:currentNative,context:args.context,game:args.game});
+    const identity=resolveNflPropSourcePlayer({row:q,rows:args.snapshot.board.decisions,observations:currentNative,context:args.context,game:args.game,cutoff:at,observationsAvailableAt:args.observations.generatedAt,storedAvailableAt:args.snapshot.generatedAt});
     if(!identity){unresolved++;continue;}
     let player=players.get(identity.id);
     if(!player){
@@ -71,16 +70,16 @@ export function liveNflPacket(args:{game:LivePropsGame;window:CapturedReviewWind
     if(!player.markets.includes(q.market))player.markets.push(q.market);
     const received=q.receivedAt;
     if(!received||q.isLive||instant(received)>instant(at)||instant(q.observedAt)>instant(received))continue;
-    const sourceEvent=qualifyNflSourceEvent({market:q.market,provider:q.provider,providerMarket:q.providerMarket,observationId:q.providerObservationId,rosterPosition:rosterPosition(identity.providerId)});
+    const sourceEvent=qualifyNflSourceEvent({market:q.market,provider:q.provider,providerMarket:q.providerMarket,observationId:q.providerObservationId,rosterPosition:identity.rosterPosition});
     const value={...(sourceEvent?{sourceEvent}:{}),playerId:identity.id,market:q.market,provider:q.provider,book:q.sportsbook,line:q.line,side:q.side,american:q.americanPrice,observedAt:q.observedAt,receivedAt:received,receivedAtProvenance:"provider_response" as const,opening:q.isOpening,live:false};
     quotes.push({...value,id:digest(value)});
   }
   // Historical openings supplement a verified current actor; they cannot create
   // an additional offered actor or block a currently complete game.
   for(const q of native.filter(q=>q.isOpening&&!q.isLive&&q.receivedAt&&instant(q.receivedAt)<=instant(at)&&instant(q.observedAt)<=instant(q.receivedAt))){
-    let identity;try{identity=resolveNflPropSourcePlayer({row:q,rows:args.snapshot.board.decisions,observations:currentNative,context:args.context,game:args.game});}catch{continue;}
+    let identity;try{identity=resolveNflPropSourcePlayer({row:q,rows:args.snapshot.board.decisions,observations:currentNative,context:args.context,game:args.game,cutoff:at,observationsAvailableAt:args.observations.generatedAt,storedAvailableAt:args.snapshot.generatedAt});}catch{continue;}
     const player=identity?players.get(identity.id):undefined;if(!identity||!player||!player.markets.includes(q.market))continue;
-    const sourceEvent=qualifyNflSourceEvent({market:q.market,provider:q.provider,providerMarket:q.providerMarket,observationId:q.providerObservationId,rosterPosition:rosterPosition(identity.providerId)});
+    const sourceEvent=qualifyNflSourceEvent({market:q.market,provider:q.provider,providerMarket:q.providerMarket,observationId:q.providerObservationId,rosterPosition:identity.rosterPosition});
     const value={...(sourceEvent?{sourceEvent}:{}),playerId:identity.id,market:q.market,provider:q.provider,book:q.sportsbook,line:q.line,side:q.side,american:q.americanPrice,observedAt:q.observedAt,receivedAt:q.receivedAt!,receivedAtProvenance:"provider_response" as const,opening:true,live:false};quotes.push({...value,id:digest(value)});
   }
   // Never silently omit a book-offered player with an unresolved identity.
@@ -93,7 +92,7 @@ export function liveNflPacket(args:{game:LivePropsGame;window:CapturedReviewWind
     player.evidence.push({id:`source-event:${player.id}:interceptions`,kind:"market",availableAt:at,source:"exact captured NFL provider declaration and same-actor roster context",value:json({market:"interceptions",sourceEventQualification:qualification})});
   }
   const retained=(args.retainedQuotes??[]).map(q=>q.market!=="interceptions"||q.sourceEvent?q:{...q,sourceEvent:qualifyNflSourceEvent({market:q.market,provider:q.provider,providerMarket:null,rosterPosition:null})!});
-  const current={...packet,sourceInputRelease:PROPS_AI_NFL_SOURCE_RELEASE,sourceLimitations:["Verified same-game current actor IDs. Stored model priors sharing a release remain correlated, including display aliases.",`Current rows without admissible provider receipt chronology: ${native.filter(q=>!q.isOpening&&!q.isLive).length-currentNative.length}; they cannot establish a current price.`,"Opening history supplements verified current actors and markets; orphan historical actors are not current offers."],players:[...players.values()].map(p=>({...p,markets:p.markets.sort()})),quotes:[...quotes,...retained]};
+  const current={...packet,sourceInputRelease:PROPS_AI_NFL_SOURCE_RELEASE,sourceIdentityRelease:PROPS_AI_NFL_IDENTITY_RELEASE,sourceLimitations:["Verified same-game current actor IDs. Stored model priors sharing a release remain correlated, including display aliases.",`Current rows without admissible provider receipt chronology: ${native.filter(q=>!q.isOpening&&!q.isLive).length-currentNative.length}; they cannot establish a current price.`,"Opening history supplements verified current actors and markets; orphan historical actors are not current offers."],players:[...players.values()].map(p=>({...p,markets:p.markets.sort()})),quotes:[...quotes,...retained]};
   const enriched=enrichCachedPacket(current,source);
   const contexts:ReaderGameContext[]=args.context.games.map(g=>({id:`live:${g.canonicalGameId}`,gameId:g.canonicalGameId,start:g.scheduledStart,awayTeam:g.awayTeam,homeTeam:g.homeTeam,availableAt:args.context.capturedAt,source:"existing exact-game NFL collector",injuries:json(g.injuries),depth:json({away:g.awayDepth,home:g.homeDepth}),weather:json(g.weather??null)}));
   const contextual=attachGameReaderContext(enriched,contexts);
