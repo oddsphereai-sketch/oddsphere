@@ -21,6 +21,8 @@
  * Gate A probe round 1).
  */
 
+import { assertCompleteBdlPropsResponse } from "../playerPropsResponseCompleteness";
+
 const BDL_BASE_URL = "https://api.balldontlie.io/mlb/v1";
 
 export type QueryValue = string | number | boolean | Array<string | number>;
@@ -267,6 +269,12 @@ export class BdlClient {
       );
     }
 
+    // Both props endpoints return the complete matching set in one response.
+    // Inspect the original envelope before metadata normalization can hide a
+    // contradiction; ordinary stats/history endpoints still paginate normally.
+    if (opts.path === "/odds/player_props" || opts.path === "/odds/player_props/opening") {
+      assertCompleteBdlPropsResponse(parsed, opts.path);
+    }
     const obj = (parsed ?? {}) as { data?: unknown; meta?: unknown };
     return {
       data: (obj.data ?? []) as T,

@@ -53,6 +53,18 @@ single-response endpoint contract. Explicit continuation, malformed completion
 metadata or a contradictory returned-count cannot silently establish coverage.
 Healthy full responses retain every offered actor without extra requests or
 invented pagination. R15 archived observations and all legacy locks stay exact.
+NBA collectorR7
+`nba_player_props_live_collector_2026_11_10_r7_complete_response` and shared
+response contractR1 `player_props_response_completeness_2026_11_10_r1_whole_response`
+apply the same documented whole-response boundary across NBA/NFL/MLB. Current
+and opening BDL props refuse contradictory continuation/raw returned counts;
+Owls whole-set responses validate the documented returned-game count, without
+inventing prop-count aggregation or paging. Invalid optional feed data cannot
+leak into observations or attest withdrawal. Explicit MLB current contract
+failures propagate instead of masquerading as a smaller complete slate; normal
+opening fallback keeps only the existing historical rows. Valid source rows,
+quote/receipt clocks and native MLB R44 mathematics remain unchanged. No
+additional provider request, AI phase, review slot or spending ceiling is added.
 NFL memberR60/lifecycleR42 stamp current-execution first-lock authority.
 ParticipationR3 `player_props_ai_participation_2026_11_10_r3_separate_lineup_and_medical`
 keeps lineup opportunity separate from medical availability: one channel cannot

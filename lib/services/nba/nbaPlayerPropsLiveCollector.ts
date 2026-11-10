@@ -4,13 +4,14 @@ import {
   normalizeTheOddsApiNbaPlayerProps,
 } from "./nbaPlayerPropsProviders";
 import { OwlsInsightClient } from "../../providers/owls/owlsInsightClient";
+import { assertCompleteBdlPropsResponse, assertCompleteOwlsPropsResponse, assertNoDeclaredContinuation } from "../../providers/playerPropsResponseCompleteness";
 import type {
   NbaPlayerPropGameIdentity,
   NbaPlayerPropPriceObservation,
 } from "./nbaPlayerPropsContract";
 
 export const NBA_PLAYER_PROPS_LIVE_COLLECTOR_RELEASE =
-  "nba_player_props_live_collector_2026_11_06_r6_response_completion" as const;
+  "nba_player_props_live_collector_2026_11_10_r7_complete_response" as const;
 const BDL_BASE = "https://api.balldontlie.io";
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_SPORT = "basketball_nba";
@@ -59,6 +60,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
     url: `${BDL_BASE}/v1/games?dates[]=${encodeURIComponent(args.slateDate)}&season_type=${seasonType}&per_page=100`,
     headers: { Authorization: args.ballDontLieApiKey, Accept: "application/json" }, fetchImpl,
   })));
+  for (const envelope of gameEnvelopes) assertNoDeclaredContinuation(envelope.body, "NBA games");
   const rawGames = [...new Map(gameEnvelopes.flatMap((envelope) => data(envelope.body))
     .map((game) => [String(game.id), game])).values()];
   const games = rawGames.map(gameIdentity)
@@ -87,6 +89,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
       fetchImpl,
     });
     bdlRequests += 1;
+    assertCompleteBdlPropsResponse(current.body, "NBA current player props");
     const playerMap = canonicalPlayerMap(data(current.body));
     const currentReceivedAt = new Date().toISOString();
     observations.push(...normalizeBallDontLieNbaPlayerProps({
@@ -99,6 +102,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
         fetchImpl,
       });
       bdlRequests += 1;
+      assertCompleteBdlPropsResponse(opening.body, "NBA opening player props");
       const openingRows = data(opening.body);
       const openingReceivedAt = new Date().toISOString();
       observations.push(...normalizeBallDontLieNbaPlayerProps({
@@ -152,6 +156,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
     try {
       const response = await new OwlsInsightClient(args.owlsInsightApiKey, { fetchImpl, timeoutMs: 20_000 })
         .props<{ data?: unknown }>("nba");
+      assertCompleteOwlsPropsResponse(response.body, "NBA Owls player props");
       const owlsEvents = array(object(response.body)?.data);
       const owlsReceivedAt = new Date().toISOString();
       validateOwlsCapacity(owlsEvents);

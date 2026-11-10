@@ -3,6 +3,7 @@ import {
   american_to_implied_probability,
 } from "./oddsMath";
 import { BdlClient, BdlNotFoundError } from "../../providers/real_api/_bdlClient";
+import { PlayerPropsResponseCompletenessError } from "../../providers/playerPropsResponseCompleteness";
 import { getHitterGameLogs as fetchHitterGameLogs, getPitcherGameLogs } from "../../providers/real_api/_mlbStatsApiClient";
 import { mkdir, writeFile } from "fs/promises";
 import { tmpdir } from "os";
@@ -267,6 +268,10 @@ export class BallDontLieMlbPropsClient implements PropOddsProvider {
         trace.milestoneRows += rawProps.filter((row) => stringOrNull(rawObj(row.market).type)?.toLowerCase() === "milestone").length;
         trace.unmappedMarketTypes = [...new Set([...trace.unmappedMarketTypes, ...unmappedMarketTypes])].sort();
       } catch (e) {
+        // A contradicted whole-response contract cannot become a successful
+        // reduced slate. Refuse this refresh before publication/paid review;
+        // ordinary optional per-game failures keep their existing isolation.
+        if (e instanceof PlayerPropsResponseCompletenessError) throw e;
         if (e instanceof BdlNotFoundError) {
           gameTrace.error = null;
         } else {

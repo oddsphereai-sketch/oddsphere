@@ -334,3 +334,18 @@ Documented complete two-actor responses remain admissible with unchanged request
 bounds. The real collector, input constructor and request schema are exercised
 with all HTTP mocked; failures cannot create a complete input or withdrawal
 attestation. This correction resets the independent clean streak again.
+
+A later whole-product review found the same class outside NFL BDL: NBA
+current/opening BDL metadata, NBA/NFL Owls returned-game declarations, and MLB
+current/opening BDL envelopes could contradict the complete set being admitted.
+All reproductions used synthetic responses; no actual production truncation was
+established. Shared response contractR1 validates the documented complete
+response before normalization or metadata loss. It does not invent pagination,
+Owls prop-count aggregation or missing actors. NBA collectorR7 stamps the new
+collection behavior; future R31 and NFL observationR16 retain their own scope.
+An explicit MLB current contract failure cannot be swallowed into a reduced
+complete board; ordinary optional-opening fallback retains only existing exact
+history. Healthy full collections, neighboring paginated non-prop endpoints,
+actual native/source/parser/member paths and immutable legacy locks have paired
+controls. Native MLB R44 scoring, request limits, AI slots/phases and monetary
+ceilings are unchanged. This correction resets clean-round accounting.
