@@ -9,7 +9,7 @@
 export const NFL_PLAYER_PROPS_RESEARCH_SCHEMA_RELEASE =
   "nfl_player_props_research_schema_2026_08_20_r4" as const;
 export const NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE =
-  "nfl_player_props_provider_observation_2026_11_06_r15_response_completion" as const;
+  "nfl_player_props_provider_observation_2026_11_10_r16_complete_response" as const;
 export const NFL_PLAYER_PROPS_SHADOW_MODEL_RELEASE =
   "nfl_player_props_shadow_unfit_2026_08_20_r1" as const;
 export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =

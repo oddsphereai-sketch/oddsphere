@@ -46,6 +46,13 @@ provenance is explicit. Existing event-sourceR3, identityR1 and missing-head
 semantics are preserved. Medical-contextR1 also compares only known equivalent
 ESPN and BDL native/roster/clinical medical encodings across authority clocks;
 raw source, distinct identities, substantive facts and unknown extras remain bound.
+Future NFL provider observationR16
+`nfl_player_props_provider_observation_2026_11_10_r16_complete_response`
+refuses current and opening envelopes that contradict the documented complete
+single-response endpoint contract. Explicit continuation, malformed completion
+metadata or a contradictory returned-count cannot silently establish coverage.
+Healthy full responses retain every offered actor without extra requests or
+invented pagination. R15 archived observations and all legacy locks stay exact.
 NFL memberR60/lifecycleR42 stamp current-execution first-lock authority.
 ParticipationR3 `player_props_ai_participation_2026_11_10_r3_separate_lineup_and_medical`
 keeps lineup opportunity separate from medical availability: one channel cannot
@@ -62,8 +69,10 @@ comparisons and exact-event prior/paired-book direction cannot be substituted
 by unrestricted observation, assessment, gap or exception prose. Deliberate
 forecast abstention is a reviewer judgment, never a false missing-source claim.
 The compiler does not add independent evidence or prescribe a statistical
-adjustment. Full original sources remain supplied. Compact model navigation
-avoids repeating large raw windows, priors and feed arrays; private full claim
+adjustment. Original source packets remain archived. Model input retains the
+supplied logs, quotes and context, with explicitly labelled empirical summaries
+of MLB season sample arrays; those raw arrays remain in the archive. Compact
+model navigation avoids repeating large raw windows, priors and feed arrays; private full claim
 provenance remains bound to each accepted original actor and input.
 
 Actor admissionR2 preserves the original alias/fact/catalog universe and known

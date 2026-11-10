@@ -145,8 +145,10 @@ conditional law and evidence-strength estimates. Original R29 output is retained
 unchanged; this does not make that earlier reasoning correct retrospectively.
 
 Compiler cards preserve exact actor/clock/event scope, actual same-unit arithmetic
-and underlying-book independence. Compact model input retains all raw sources
-while avoiding duplicated source-window and feed arrays. Byte measurements are
+and underlying-book independence. Original source packets remain archived.
+Compact model input retains logs, quotes and context while avoiding duplicate
+source-window/feed arrays; MLB season sample arrays are explicitly represented
+by empirical summaries, with raw values retained in the archive. Byte measurements are
 diagnostic only; future exact token counts and costs require ordinary production
 receipts. Tests include the actual observed failure classes, foreign/omitted
 readings, paraphrase/prose bypasses, source missing/comparable cases, actor
@@ -320,3 +322,15 @@ the exact receipt and original previous snapshot. The foundation fixture's stale
 R14 expectation is updated to the already exported/registered R15 provider release;
 no production behavior is changed for that assertion. These source/process repairs
 reset the clean-round streak and require new full independent rounds and gates.
+
+The thirteenth independent round reproduced a provider-contract robustness gap:
+a synthetic nonempty NFL response with explicit continuation still established
+complete coverage. No actual production truncation was established. The
+[official NFL endpoint contract](https://nfl.balldontlie.io/#get-player-props)
+returns all current and opening props in one response without pagination.
+Prospective provider observationR16 rejects contradictory continuation or count
+metadata before actor lookup, rather than inventing unsupported paging calls.
+Documented complete two-actor responses remain admissible with unchanged request
+bounds. The real collector, input constructor and request schema are exercised
+with all HTTP mocked; failures cannot create a complete input or withdrawal
+attestation. This correction resets the independent clean streak again.

@@ -98,6 +98,7 @@ export async function collectNflPlayerPropsObservations(args: {
       optionalEmpty: true,
     });
     bdlRequests += 1;
+    assertCompleteBdlPropResponse(envelope, "/odds/player_props");
     currentReceipts.set(game.providerGameId,new Date().toISOString());
     if (envelope.responseStatus !== undefined && envelope.responseStatus >= 200 && envelope.responseStatus < 300
       && completeEmptyPagination(envelope) && data(envelope).length === 0) successfulEmptyCurrent.add(game.providerGameId);
@@ -121,6 +122,7 @@ export async function collectNflPlayerPropsObservations(args: {
         optionalEmpty: true,
       });
       bdlRequests += 1;
+      assertCompleteBdlPropResponse(envelope, "/odds/player_props/opening");
       openingReceipts.set(game.providerGameId,new Date().toISOString());
       return data(envelope);
     });
@@ -419,14 +421,26 @@ function nextCursor(envelope: Envelope): string | null {
   return typeof value === "string" || typeof value === "number" ? String(value) : null;
 }
 
-/** Narrow prospective proof: missing/null cursor is complete, unknown cursor
- * shapes and any other pagination envelope are not an empty-set attestation. */
+/** Known continuation markers cannot establish a complete single response.
+ * Unknown fields alone do not imply an undocumented pagination protocol. */
 function completeEmptyPagination(value: unknown): boolean {
   const body=object(value),meta=body.meta;
   if(meta!==undefined&&meta!==null&&(typeof meta!=='object'||Array.isArray(meta)))return false;
   const details=object(meta);
   return [body.next_cursor,body.nextCursor,body.pagination,details.next_cursor,details.nextCursor,details.pagination].every(v=>v===undefined||v===null)
     && [body.has_more,body.hasMore,details.has_more,details.hasMore].every(v=>v===undefined||v===null||v===false);
+}
+
+/** Current and opening props return all matching rows in one response; neither
+ * endpoint supports pagination. Reject contradictory metadata before any row
+ * normalization or player lookup rather than inventing another provider call.
+ * Documented meta.per_page counts raw props, not their normalized price legs. */
+function assertCompleteBdlPropResponse(envelope: Envelope, path: string): void {
+  const count = object(envelope.meta).per_page;
+  if (!completeEmptyPagination(envelope)
+    || count !== undefined && (!Number.isSafeInteger(count) || Number(count) < 0 || count !== data(envelope).length)) {
+    throw new Error(`BALLDONTLIE ${path} violated the complete single-response contract.`);
+  }
 }
 
 function collectBoundedPlayerIdentities(
