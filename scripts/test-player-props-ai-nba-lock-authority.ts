@@ -58,6 +58,23 @@ function main(){
  const locked={...native,lockedAt:'2026-11-10T22:00:00Z'},protectedSnapshot=f.snapshot([locked]);
  assert.strictEqual(applyNbaSiteAi(protectedSnapshot,f.packet,choices,sourceAt).decisions.find(r=>r.playerId==='a'&&r.market==='points'),locked);
  assert.deepEqual(restoreNbaNativeGame(applied,baseline,f.packet,sourceAt).decisions,baseline.decisions,'Restoration uses the actual native baseline');
+ // Actual source participation also qualifies the native fallback. The
+ // original forecast/quote are retained, and no actionable blocked proof seals.
+ const actualNative=f.snapshot([f.row(),f.row('a','rebounds')]),blockedSource=structuredClone(f.packet);
+ const medical=(status:string,reportedAt:string)=>({id:`medical:${status}`,kind:'availability' as const,source:'synthetic own-player exact-game report',availableAt:sourceAt,value:{canonicalGameId:'g',scheduledStart:start,context:{away:{team:'BOS',known:true,players:[{name:'Synthetic a',status,reportedAt}]},home:{team:'NYK',known:true,players:[]}}}});
+ blockedSource.players[0].evidence.push(medical('Out','2026-11-10T22:20:00Z'));
+ const blockedNative=restoreNbaNativeGame(actualNative,actualNative,blockedSource,sourceAt);
+ assert(blockedNative.decisions.every(r=>r.grade==='No Play'&&!r.aiReview));
+ for(const r of blockedNative.decisions){const original=actualNative.decisions.find(o=>o.market===r.market)!;assert.deepEqual({...r,grade:original.grade},original,'Participation does not replace the native numeric/price/source tuple');}
+ assert.equal(testNbaHandoffCapture(()=>sourceAt)(actualNative.decisions,blockedSource,null,'native').proofs.length,0);
+ const blockedLock=advanceNbaPlayerPropsCandidateLifecycle({now:after,previous:actualNative,candidate:actualNative,lockHandoff:mergeNbaHandoffs([testNbaSourceAuthority(()=>sourceAt)(blockedSource,null),testNbaHandoffCapture(()=>sourceAt)(actualNative.decisions,blockedSource,null,'native')])});
+ assert.equal(blockedLock.snapshot.decisions.length,0,'An actionable native baseline cannot become a new lock through an active own-player Out');
+ const returnedSource=structuredClone(blockedSource);returnedSource.players[0].evidence.push(medical('Available','2026-11-10T22:22:00Z'));
+ const restoredNative=restoreNbaNativeGame(blockedNative,actualNative,returnedSource,sourceAt);
+ assert.deepEqual(restoredNative.decisions,actualNative.decisions,'Actual own clearance restores the original native Lean path');
+ assert.equal(testNbaHandoffCapture(()=>sourceAt)(restoredNative.decisions,returnedSource,null,'native').proofs.length,2);
+ const protectedNative=f.snapshot(actualNative.decisions.map(r=>({...r,lockedAt:lock}))),protectedBytes=JSON.stringify(protectedNative.decisions);
+ assert.equal(JSON.stringify(restoreNbaNativeGame(protectedNative,actualNative,blockedSource,sourceAt).decisions),protectedBytes,'An existing native lock remains exact before prospective source qualification');
  const empty={observations:[],proofs:[]}satisfies NbaLockHandoff;
  // Exact last published pre-lock AI-only scopes survive a fresh native-only
  // invocation after lock. Original values, prices and evidence remain exact.

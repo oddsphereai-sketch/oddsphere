@@ -28,7 +28,7 @@ const statusName=(value:unknown)=>typeof value==='string'?({out:'Out',inactive:'
 /** Native lineup records are attached to the actor by the existing MLB adapter.
  * Honor any explicit identity and source clocks too; a later fetch of an old
  * record cannot supersede a newer lineup. This is not a medical clearance. */
-function currentBatterLineup(packet:GamePacket,player:Player,facts:ReaderFact[]){
+export function currentBatterLineup(packet:GamePacket,player:Player,facts:ReaderFact[]=[]){
  if(packet.sport!=='mlb'||!player.markets.some(m=>m.startsWith('batter_')))return null;
  const time=(value:unknown)=>typeof value==='string'&&/(?:Z|[+-]\d\d:\d\d)$/.test(value)?Date.parse(value):NaN;
  const normalize=(value:string)=>value.trim().toLowerCase().replace(/[_-]+/g,' ').replace(/\s+/g,' ');

@@ -135,14 +135,27 @@ export function mlbPackets(source: EnrichedSource,window?:CapturedReviewWindow,l
       const identity = (row: typeof rows[number]) => row.providerIds?.mlbStatsPlayerId ?? `bdl:${row.providerIds?.bdlPlayerId ?? row.player}`;
       const players = [...new Set(rows.map(identity))].map(id => {
         const playerRows = rows.filter(r => identity(r) === id), first = playerRows[0], evidence: Evidence[] = [], missing: string[] = [];
+        const unqualifiedQuotes: Json[] = [];
+        const bookKey = (book: string) => book.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const explicitContract = (value: unknown): NonNullable<Quote["offerContract"]> | null => value === "two_way" || value === "milestone" ? value : null;
+        const uniqueContract = (values: unknown[]): NonNullable<Quote["offerContract"]> | null => {
+          const contracts = values.map(explicitContract);
+          return contracts.length && contracts.every(Boolean) && new Set(contracts).size === 1 ? contracts[0] : null;
+        };
         const representatives = new Map<string, typeof first>();
         for (const row of [...playerRows].sort((a, b) => Number(a.offerContract === "milestone") - Number(b.offerContract === "milestone") || Number(b.finalProbability !== null) - Number(a.finalProbability !== null))) if (!representatives.has(row.market)) representatives.set(row.market, row);
         for (const row of representatives.values()) {
           const captured = snapshot.marketEvidence?.i.find(i => i[0] === (row as MlbPropsMarketEvidenceRow).marketEvidenceId);
+          // The old bounded identity joins by statistic/line, not contract. A
+          // mixed ordinary/milestone capture cannot declare either event's
+          // probabilities; preserve its raw numbers without relabeling them.
+          const probabilityContract = uniqueContract(playerRows.filter(r => r.market === row.market && r.line === row.line).map(r => r.offerContract));
           evidence.push({ id: `${id}:model:${row.market}`, kind: "independent_model", availableAt: snapshot.asOfTimestamp,
             source: snapshot.modelContext?.modelReleaseId ?? "unversioned MLB source", value: json({ market: row.market, line: row.line,
-              independentProjection: captured?.[5][0] ?? null, independentOver: captured?.[5][3] ?? null, independentUnder: captured?.[5][4] ?? null,
-              storedPublishedProjection: row.projection, storedPublishedProbability: row.finalProbability, selectedSide: row.side,
+              independentProjection: captured?.[5][0] ?? null, independentOver: probabilityContract ? captured?.[5][3] ?? null : null, independentUnder: probabilityContract ? captured?.[5][4] ?? null : null,
+              ...(probabilityContract ? { offerContract: probabilityContract } : { independentEventStatus: "unresolved_legacy_capture_contract", unqualifiedCapturedIndependentOver: captured?.[5][3] ?? null, unqualifiedCapturedIndependentUnder: captured?.[5][4] ?? null }),
+              sourceRowOfferContract: row.offerContract ?? null,
+              storedPublishedProjection: row.projection, storedPublishedProbability: row.finalProbability, selectedSide: probabilityContract === "milestone" ? "yes" : row.side,
               storedGrade: row.playGrade, lockedPayloadDigest: digest(row), inputWarnings: row.modelInputWarnings ?? [], missingFeatures: row.missingFeatures }) });
           if(row.oddsMovement)evidence.push({id:`${id}:stored-movement:${row.market}`,kind:"market",availableAt:latestTime(row.oddsMovement,snapshot.asOfTimestamp),source:"stored MLB same-book movement; derived quote context, not an independent source",
             value:json({market:row.market,side:row.side,sportsbook:row.book,movement:row.oddsMovement,limitation:"Opening may be nearest-line provider opening or first tracked snapshot, as labeled. This does not establish an unambiguous main-line path or independent money signal."})});
@@ -162,7 +175,27 @@ export function mlbPackets(source: EnrichedSource,window?:CapturedReviewWindow,l
             for (const b of captured[2]) for (const [side, current, opening] of [["over", b[8], b[10]], ["under", b[9], b[11]]] as const) {
               for (const state of [{ line: row.line, price: current, at: b[3], opening: false }, ...(b[6] && b[7] !== null ? [{ line: b[7], price: opening, at: b[6], opening: true }] : [])]) {
                 if (state.price === null || !Number.isFinite(state.price) || Math.abs(state.price) < 100 || instant(state.at) > instant(slot.at)) continue;
-                const q = { playerId: id, market: row.market, provider: b[1], book: b[0], line: state.line, side, american: state.price, observedAt: state.at, receivedAt: snapshot.asOfTimestamp, receivedAtProvenance: "snapshot_availability" as const, opening: state.opening, live: false };
+                // mlbpme1 has no per-leg event declaration. Bind current legs
+                // only to exact supplied native records. Opening contracts
+                // require the original opening record, never a nearest line or
+                // a declaration borrowed from a later current offer.
+                const declarations = state.opening
+                  ? (snapshot.modelContext?.openingPropOdds ?? []).filter(q => q.marketKey === row.market && q.line === state.line && q.side === side
+                    && bookKey(q.sportsbook) === bookKey(b[0]) && q.americanOdds === state.price && instant(q.asOfTimestamp) === instant(state.at)
+                    && q.gameId.replace(/^balldontlie-game-/, "") === String(row.providerIds?.bdlGameId)
+                    && q.playerId.replace(/^balldontlie-player-/, "") === String(row.providerIds?.bdlPlayerId)).map(q => {
+                      const raw = q.rawPayload && typeof q.rawPayload === "object" && !Array.isArray(q.rawPayload) ? q.rawPayload as Record<string, unknown> : {};
+                      return raw.market_kind === "over_under" ? "two_way" : raw.market_kind;
+                    })
+                  : playerRows.filter(r => r.market === row.market && r.line === state.line && r.side === side && bookKey(r.book) === bookKey(b[0])
+                    && r.odds === state.price && instant(r.lastUpdated) === instant(state.at)).map(r => r.offerContract);
+                const contract = uniqueContract(declarations);
+                const raw = { playerId: id, market: row.market, provider: b[1], book: b[0], line: state.line, side, american: state.price, observedAt: state.at, receivedAt: snapshot.asOfTimestamp, receivedAtProvenance: "snapshot_availability" as const, opening: state.opening, live: false };
+                if (!contract || contract === "milestone" && side !== "over") {
+                  unqualifiedQuotes.push(json({ ...raw, contractStatus: "unresolved_legacy_contract", meaning: "The bounded source did not store this leg's exact ordinary/milestone declaration. Retained as raw context only; do not pair it or infer an event from current/nearest-line offers." }));
+                  continue;
+                }
+                const q = { ...raw, offerContract: contract, side: contract === "milestone" ? "yes" as const : side };
                 if (instant(q.observedAt) > instant(q.receivedAt)) continue;
                 const key = digest(q); quotes.set(key, { ...q, id: key });
               }
@@ -171,9 +204,17 @@ export function mlbPackets(source: EnrichedSource,window?:CapturedReviewWindow,l
         }
         for (const row of playerRows) {
           if (!Number.isFinite(row.odds) || Math.abs(row.odds) < 100 || instant(row.lastUpdated) > instant(snapshot.asOfTimestamp)) continue;
-          const q = { playerId: id, market: row.market, provider: "stored_member_quote", book: row.book.toLowerCase().replace(/[^a-z0-9]/g, ""), line: row.line, side: row.side, american: row.odds, observedAt: row.lastUpdated, receivedAt: snapshot.asOfTimestamp, receivedAtProvenance: "snapshot_availability" as const, live: false };
+          const contract = explicitContract(row.offerContract);
+          const raw = { playerId: id, market: row.market, provider: "stored_member_quote", book: bookKey(row.book), line: row.line, side: row.side, american: row.odds, observedAt: row.lastUpdated, receivedAt: snapshot.asOfTimestamp, receivedAtProvenance: "snapshot_availability" as const, live: false };
+          if (!contract || contract === "milestone" && row.side !== "over") {
+            unqualifiedQuotes.push(json({ ...raw, contractStatus: "unresolved_legacy_contract", meaning: "The original member row did not declare a usable exact contract. Retained unchanged as raw context; do not assume an ordinary event or pair it." }));
+            continue;
+          }
+          const q = { ...raw, offerContract: contract, side: contract === "milestone" ? "yes" as const : row.side };
           const key = digest(q); quotes.set(key, { ...q, id: key });
         }
+        if (unqualifiedQuotes.length) evidence.push({ id: `${id}:unqualified-legacy-quotes`, kind: "market", availableAt: snapshot.asOfTimestamp,
+          source: "original MLB quote values with unresolved legacy event contracts; raw context only", value: { contractStatus: "unresolved_legacy_contract", quotes: unqualifiedQuotes, meaning: "These source values and clocks are retained, but no ordinary/milestone event or paired-price comparison is established. Existing stored source and lock payloads are unchanged." } });
         missing.push("qualified joint outcome law not attached");
         const seen = new Set<string>(), uniqueEvidence = evidence.filter(e => { const key = digest({ kind: e.kind, availableAt: e.availableAt, source: e.source, value: e.value }); if (seen.has(key)) return false; seen.add(key); return true; });
         return { id, name: first.player, team: first.team, opponent: first.opponent, markets: [...new Set(playerRows.map(r => r.market))].sort(), evidence: uniqueEvidence, missing: [...new Set(missing)] };

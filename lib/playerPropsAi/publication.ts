@@ -3,7 +3,7 @@ import type {GamePacket,Quote} from "./evidenceContract";
 import type {AcceptedGameReview} from "./reviewer";
 import type {PropsAiMemberEvidence} from "./publicationContract";
 import {PROPS_AI_EXECUTION_EVIDENCE_RELEASE} from "./publicationContract";
-import {criticalContextHashes} from "./criticalContext";
+import {reviewedReaderContextCurrent} from './readerClaimFreshness';
 import {PROPS_AI_ACCEPTED_RELEASES,PROPS_AI_GRADE_RELEASE,PROPS_AI_SELECTION_RELEASE,propsReviewHasSemanticChecks} from "./releases";
 import {PROPS_AI_SITE_RELEASE} from "./siteConfig";
 import {priceAiLaw,type PropsAiGrade} from "./pricing";
@@ -23,12 +23,12 @@ function sameReviewGame(packet:GamePacket,review:AcceptedGameReview,now:string){
 }
 /** Completeness is required at purchase. Publication checks each reviewed actor and scope independently. */
 export function siteReviewCoverage(packet:GamePacket,review:AcceptedGameReview|null,now:string){
-  const contexts=criticalContextHashes(packet),sameGame=Boolean(review&&sameReviewGame(packet,review,now));
+  const sameGame=Boolean(review&&sameReviewGame(packet,review,now));
   return packet.players.map(player=>{
     const matches=sameGame?review!.players.filter(p=>p.playerId===player.id):[];
     const reviewed=matches.length===1?matches[0]:null,storedScopes=sameGame?review!.marketScopes?.[player.id]:null;
     const scopes=Array.isArray(storedScopes)?storedScopes:[];
-    const contextCurrent=Boolean(reviewed&&review!.criticalContextHashes?.[player.id]===contexts[player.id]);
+    const contextCurrent=Boolean(reviewed&&reviewedReaderContextCurrent(packet,review!,player.id));
     const validIndexes=reviewed&&Array.isArray(storedScopes)&&Array.isArray(reviewed.confidence)&&Array.isArray(reviewed.exceptions)&&new Set(scopes).size===scopes.length
       &&reviewed.confidence.length===scopes.length&&reviewed.exceptions.length===scopes.length;
     const markets=contextCurrent&&validIndexes?player.markets.filter(m=>scopes.includes(m)):[];

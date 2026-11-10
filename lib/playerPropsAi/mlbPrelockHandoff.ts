@@ -11,6 +11,7 @@ import { executionQuotes, quoteBook, quoteContract } from "./executionQuotes";
 import { playerParticipationEligibility } from "./participationEligibility";
 import { siteAiDecisions } from "./publication";
 import { applyMlbSiteAi } from "./siteBindings";
+import { propsTeam } from "./teamIdentity";
 
 export const MLB_PROPS_AI_HANDOFF_RELEASE = "mlb_props_ai_handoff_2026_11_10_r1_ready_publication" as const;
 type Publisher = (rows: Row[], gameId: string) => Promise<void>;
@@ -49,8 +50,10 @@ function create(nativeRows: readonly Row[], publish: Publisher, clock: () => str
           const executable = current.some(q => q.playerId === actor(row) && q.market === row.market && q.line === row.line
             && quoteBook(q.book) === quoteBook(row.book) && q.american === row.odds
             && (q.side === "yes" ? "over" : q.side) === row.side && quoteContract(q) === (row.offerContract ?? "two_way"));
-          return executable ? row : { ...row, playGrade: "NO_PLAY" as const, units: 0,
-            reasonCodes: [...new Set([...(row.reasonCodes ?? []), "CURRENT_EXECUTION_UNAVAILABLE_NATIVE_FALLBACK"])] };
+          const player=source.players.find(p=>p.id===actor(row)&&p.markets.includes(row.market)&&propsTeam(p.team)===propsTeam(row.team)&&propsTeam(p.opponent)===propsTeam(row.opponent));
+          const blocked=player&&playerParticipationEligibility(source,player).blocked;
+          return executable&&!blocked ? row : { ...row, playGrade: "NO_PLAY" as const, units: 0,
+            reasonCodes: [...new Set([...(row.reasonCodes ?? []), ...(blocked?["SOURCE_PARTICIPATION_UNAVAILABLE_NATIVE_FALLBACK"]:[]), ...(!executable?["CURRENT_EXECUTION_UNAVAILABLE_NATIVE_FALLBACK"]:[])])] };
         });
         const choices = lookupAvailable && accepted ? siteAiDecisions(source, accepted, readyAt) : [];
         const gameRows = applyMlbSiteAi(native, source, choices, readyAt);

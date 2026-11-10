@@ -14,9 +14,12 @@ import {executionQuotes} from './executionQuotes';
 import {quoteContract} from './executionQuotes';
 import {sameNflPropActorName} from './nflPlayerIdentity';
 import {lawForecast} from './law';
+import {playerParticipationEligibility} from './participationEligibility';
+import {qualifyNflSourceParticipation} from './siteBindings';
+import {reviewedReaderContextCurrent} from './readerClaimFreshness';
 export type State='qualified'|'declined'|'context_changed'|'unreviewed_actor'|'unreviewed_scope'|'source_unresolved'|'review_lookup_unavailable'|'review_authority_missing';
 type Bound<T> = T&{binding:string};
-export type Authority=Bound<{gameId:string;actorId:string;scheduledStart:string;team:string;opponent:string;lockAt:string;observedAt:string;currentContextHash:string;review:null|{release:string;inputHash:string;stage:string;issuedAt:string;contextHash:string|null;lawHash:string|null;playerDigest:string|null};scopes:{market:string;status:State}[]}>;
+export type Authority=Bound<{gameId:string;actorId:string;scheduledStart:string;team:string;opponent:string;lockAt:string;observedAt:string;currentContextHash:string;participationBlocked:boolean;participationReason:string|null;review:null|{release:string;inputHash:string;stage:string;issuedAt:string;contextHash:string|null;lawHash:string|null;playerDigest:string|null};scopes:{market:string;status:State}[]}>;
 export type Proof=Bound<{gameId:string;actorId:string;event:string;kind:'ai'|'native';rowHash:string;contextHash:string;readyAt:string;quoteConfirmedAt:string;sourcePacketHash?:string}>;
 /** Only an explicit current collector set can establish withdrawal. Missing
  * execution metadata or a failed load must never be interpreted as an empty set. */
@@ -38,9 +41,9 @@ function buildAuthorities(packet:GamePacket,review:AcceptedGameReview|null,obser
  assert(instant(packet.cutoff)<=instant(observedAt),'Authority observation precedes source availability');
  const inputHash=review?.inputHash??review?.inputEvidence.digest;
  if(review){assert(review.issuedAt&&inputHash,'Exact review timestamp and input digest required');assert.equal(inputHash,review.inputEvidence.digest,'Immutable submitted input digest mismatch');assert.equal(review.sourceGameId??review.gameId,gameId);assert.equal(instant(review.lock),instant(packet.lock));assert.equal(instant(review.start),instant(packet.start));assert(instant(review.issuedAt!)<=instant(observedAt),'Review not available at authority observation');}
- return packet.players.map(p=>{const old=review?.players.find(r=>r.playerId===p.id),stored=review?.marketScopes?.[p.id]??[],unresolved=unresolvedForecastMarkets(p),same=old&&review!.criticalContextHashes?.[p.id]===contexts[p.id];
+ return packet.players.map(p=>{const old=review?.players.find(r=>r.playerId===p.id),stored=review?.marketScopes?.[p.id]??[],unresolved=unresolvedForecastMarkets(p),same=old&&reviewedReaderContextCurrent(packet,review!,p.id),participation=playerParticipationEligibility(packet,p);
   const scopes=[...new Set([...p.markets,...stored])].map(market=>({market,status:(unresolved.includes(market)?'source_unresolved':!lookupAvailable?'review_lookup_unavailable':!review?'review_authority_missing':!old?'unreviewed_actor':!same?'context_changed':!stored.includes(market)?'unreviewed_scope':!old.law||(old.sourceDeclinedMarkets??[]).includes(market)?'declined':'qualified')as State}));
-  return seal({gameId,actorId:p.id,scheduledStart:packet.start,team:propsTeam(p.team),opponent:propsTeam(p.opponent),lockAt:packet.lock,observedAt,currentContextHash:contexts[p.id],review:review?{release:review!.release,inputHash:inputHash!,stage:review!.stage,issuedAt:review!.issuedAt!,contextHash:review!.criticalContextHashes[p.id]??null,lawHash:old?.law?.hash??null,playerDigest:old?digest(old):null}:null,scopes});
+  return seal({gameId,actorId:p.id,scheduledStart:packet.start,team:propsTeam(p.team),opponent:propsTeam(p.opponent),lockAt:packet.lock,observedAt,currentContextHash:contexts[p.id],participationBlocked:participation.blocked,participationReason:participation.reason,review:review?{release:review!.release,inputHash:inputHash!,stage:review!.stage,issuedAt:review!.issuedAt!,contextHash:review!.criticalContextHashes[p.id]??null,lawHash:old?.law?.hash??null,playerDigest:old?digest(old):null}:null,scopes});
  });
 }
 /** readyAt is sampled after the actual native construction/AI overlay. Passing
@@ -70,7 +73,7 @@ function captureRowProofs(rows:Row[],packet:GamePacket,kind:'ai'|'native',readyA
   }
   if(kind==='ai'){
    const approved=review?.players.find(p=>p.playerId===id),e=row.aiReview;
-   if(!review||!e||!approved?.law||review.criticalContextHashes[id!]!==contexts[id!]||e.release!==review.release||e.inputHash!==(review.inputHash??review.inputEvidence.digest)||e.lawHash!==approved.law.hash||e.stage!==review.stage||instant(e.reviewedAt)!==instant(review.issuedAt!)||!review.marketScopes[id!]?.includes(row.market)||approved.sourceDeclinedMarkets?.includes(row.market))continue;
+   if(!review||!e||!approved?.law||!reviewedReaderContextCurrent(packet,review,id!)||e.release!==review.release||e.inputHash!==(review.inputHash??review.inputEvidence.digest)||e.lawHash!==approved.law.hash||e.stage!==review.stage||instant(e.reviewedAt)!==instant(review.issuedAt!)||!review.marketScopes[id!]?.includes(row.market)||approved.sourceDeclinedMarkets?.includes(row.market))continue;
    const index=review.marketScopes[id!].indexOf(row.market),f=lawForecast(approved.law,row.market,row.line,row.side==='yes'||row.market==='anytime_td'),prob=row.side==='under'?f.under:f.over,loss=row.side==='under'?f.over:f.under;
    if(e.confidence!==approved.confidence[index]||e.exception!==approved.exceptions[index]||e.assessment!==approved.assessment||Math.abs(row.projection-f.mean)>1e-10||Math.abs(row.finalProbability-prob)>1e-10||Math.abs(row.expectedValue-(prob*(row.americanPrice>0?row.americanPrice/100:100/-row.americanPrice)-loss))>1e-10)continue;
   }
@@ -119,10 +122,13 @@ export function resolveScope(args:{authority:Authority;market:string;previousLoc
  if(!observedBeforeLock)return{kind:'unavailable',row:null,status,reason:'No genuinely prelock authority observation'};
  if(status==='qualified'&&a.review&&args.candidate?.market===args.market&&args.candidate.aiReview&&eligible(args.candidate,args.candidateProof,a,'ai',args.now)){
   const e=args.candidate!.aiReview!;
-  if(e.release===a.review.release&&e.inputHash===a.review.inputHash&&e.lawHash===a.review.lawHash&&e.stage===a.review.stage&&instant(e.reviewedAt)===instant(a.review.issuedAt))return{kind:'qualified_ai',row:args.candidate,status};
+  if(e.release===a.review.release&&e.inputHash===a.review.inputHash&&e.lawHash===a.review.lawHash&&e.stage===a.review.stage&&instant(e.reviewedAt)===instant(a.review.issuedAt))return{kind:'qualified_ai',row:qualifyAuthorityParticipation(args.candidate,a),status};
  }
- if(status!=='source_unresolved'&&args.native?.market===args.market&&!args.native.aiReview&&args.native.grade!=='Held'&&Number.isFinite(args.native.projection)&&Number.isFinite(args.native.finalProbability)&&args.native.finalProbability>=0&&args.native.finalProbability<=1&&Number.isFinite(args.native.expectedValue)&&Number.isInteger(args.native.americanPrice)&&Math.abs(args.native.americanPrice)>=100&&eligible(args.native,args.nativeProof,a,'native',args.now))return{kind:'native_baseline',row:args.native,status};
+ if(status!=='source_unresolved'&&args.native?.market===args.market&&!args.native.aiReview&&args.native.grade!=='Held'&&Number.isFinite(args.native.projection)&&Number.isFinite(args.native.finalProbability)&&args.native.finalProbability>=0&&args.native.finalProbability<=1&&Number.isFinite(args.native.expectedValue)&&Number.isInteger(args.native.americanPrice)&&Math.abs(args.native.americanPrice)>=100&&eligible(args.native,args.nativeProof,a,'native',args.now))return{kind:'native_baseline',row:qualifyAuthorityParticipation(args.native,a),status};
  return{kind:'unavailable',row:null,status,reason:'No eligible exact prelock candidate/baseline; never resurrect an older AI scope'};
+}
+function qualifyAuthorityParticipation(row:Row,a:Authority):Row{
+ return a.participationBlocked&&row.gameId===a.gameId&&actor(row)===a.actorId&&instant(row.scheduledStart)===instant(a.scheduledStart)&&instant(row.lockAt)===instant(a.lockAt)&&propsTeam(row.team)===a.team&&propsTeam(row.opponent)===a.opponent?{...row,grade:row.grade==='Held'?'Held':'No Play',healthHolds:[...new Set([...row.healthHolds,`source_participation_unavailable:${a.participationReason}`])]}:row;
 }
 
 export type SourceFrame={gameId:string;kind:'ai'|'native'|'authority';sourcePacketHash:string;cutoff:string;readyAt:string;lockAt:string};
@@ -133,8 +139,8 @@ export type NflLockHandoff={authorities:Authority[];nativeRows:Row[];nativeProof
 function captureBundle(rows:Row[],packet:GamePacket,review:AcceptedGameReview|null,kind:'ai'|'native',clock:()=>string):NflLockHandoff{
  const source:GamePacket=freeze(JSON.parse(JSON.stringify(packet)));
  const gameId=source.sourceGameId??source.gameId;
- const frozen:Row[]=freeze(JSON.parse(JSON.stringify(rows.filter(r=>r.gameId===gameId))));
  const readyAt=clock();validatePacket(source);
+ const frozen:Row[]=freeze(JSON.parse(JSON.stringify(qualifyNflSourceParticipation(rows.filter(r=>r.gameId===gameId),source,readyAt))));
  const proofs=captureRowProofs(frozen,source,kind,readyAt,review);
  return{authorities:[],nativeRows:kind==='native'?frozen:[],nativeProofs:kind==='native'?proofs:[],candidateProofs:kind==='ai'?proofs:[],sourceFrames:[{gameId,kind,sourcePacketHash:digest(source),cutoff:source.cutoff,readyAt,lockAt:source.lock}]};
 }
@@ -175,8 +181,9 @@ export function prepareNflLockHandoff(args:NflLockHandoff&{nextRows:Row[];previo
  const active=[...latest.values()].filter(a=>supersedes(a,args.previousRows,args.now));
  const diagnostics:{actorId:string|null;market:string;kind:string;status:string|null}[]=[],nextRows:Row[]=[];
  const preferredEvents=new Set<string>();
- for(const row of args.nextRows){
-  if(row.state==='locked'){nextRows.push(row);continue;}
+ for(const originalRow of args.nextRows){
+  if(originalRow.state==='locked'){nextRows.push(originalRow);continue;}
+  const currentAuthority=latest.get(JSON.stringify([originalRow.gameId,actor(originalRow)])),row=currentAuthority?qualifyAuthorityParticipation(originalRow,currentAuthority):originalRow;
   if(executionAllows(row)===false){diagnostics.push({actorId:actor(row),market:row.market,kind:'unavailable',status:'current_execution_withdrawn'});continue;}
   if(instant(args.now)<instant(row.lockAt)){nextRows.push(row);continue;}
   const a=active.find(a=>a.actorId===actor(row)&&a.gameId===row.gameId);
@@ -194,6 +201,7 @@ export function prepareNflLockHandoff(args:NflLockHandoff&{nextRows:Row[];previo
   if(result.row&&!withdrawn)nextRows.push(result.row);
   diagnostics.push({actorId:a.actorId,market:row.market,kind:withdrawn?'unavailable':result.kind,status:withdrawn?'current_execution_withdrawn':result.status??null});
  }
- const suppressPrevious=(row:Row)=>row.state!=='locked'&&(executionAllows(row)===false||instant(args.now)>=instant(row.lockAt)&&(active.some(a=>a.actorId===actor(row)&&a.gameId===row.gameId)||Boolean(row.aiReview&&preferredEvents.has(event(row)))||Boolean(args.previousGeneratedAt&&instant(args.previousGeneratedAt)>=instant(row.lockAt))));
+ const sourceBlocks=(row:Row)=>{const a=latest.get(JSON.stringify([row.gameId,actor(row)]));return Boolean(a&&qualifyAuthorityParticipation(row,a)!==row);};
+ const suppressPrevious=(row:Row)=>row.state!=='locked'&&(executionAllows(row)===false||sourceBlocks(row)||instant(args.now)>=instant(row.lockAt)&&(active.some(a=>a.actorId===actor(row)&&a.gameId===row.gameId)||Boolean(row.aiReview&&preferredEvents.has(event(row)))||Boolean(args.previousGeneratedAt&&instant(args.previousGeneratedAt)>=instant(row.lockAt))));
  return{nextRows,suppressPrevious,diagnostics};
 }

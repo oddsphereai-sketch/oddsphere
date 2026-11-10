@@ -13,7 +13,8 @@ import {executionQuotes,latestExecutionQuotes} from "../lib/playerPropsAi/execut
 import {buildNbaPlayerPropsMemberSnapshot} from "../lib/services/nba/nbaPlayerPropsProductContract";
 import {applyNbaSiteAi,applyNflSiteAi,applyMlbSiteAi} from "../lib/playerPropsAi/siteBindings";
 import {needsLegacyLockedAiReader} from "../lib/playerPropsAi/publicationContract";
-import {PROPS_AI_RELEASE} from "../lib/playerPropsAi/releases";
+import {PROPS_AI_RELEASE,PROPS_AI_READER_CLAIMS_RELEASE} from "../lib/playerPropsAi/releases";
+import {readerAvailabilityContextHash} from "../lib/playerPropsAi/readerClaimFreshness";
 import type {AcceptedGameReview} from "../lib/playerPropsAi/reviewer";
 import {validateScenarioOpportunities} from "../lib/playerPropsAi/forecastSanity";
 import {MLB_PROPS_STANDARD_STAKE_UNITS} from "../lib/mlb/props/actionabilityPolicy";
@@ -30,7 +31,7 @@ const player={id:"p",name:"Synthetic",team:"BOS",opponent:"NYK",markets:["points
 const quote=(id:string,side:Quote["side"],american:number,at=now,line=12.5):Quote=>({id,playerId:"p",market:"points",provider:"synthetic",book:"one",line,side,american,observedAt:at,receivedAt:at,receivedAtProvenance:"provider_response",opening:false,live:false});
 const packet:GamePacket={release:PRODUCT_RELEASE,sport:"nba",gameId:"native",start,lock,cutoff:now,stage:"final",sourceLimitations:[],players:[player],quotes:[quote("old-over","over",150,old),quote("old-under","under",-170,old),quote("new-over","over",-200),quote("new-under","under",170)]};
 const law=validateLaw("nba",player,{weights:[6,4,...vector(0).slice(2)],outcomes:{points:[20,10,...vector(10).slice(2)],rebounds:vector(2),assists:vector(3),threes:vector(0)}});
-const review={release:PROPS_AI_RELEASE,gameId:"funded",sourceGameId:"native",start,lock,cutoff:now,stage:"final",issuedAt:now,inputHash:"synthetic",model:"synthetic",criticalContextHashes:criticalContextHashes(packet),marketScopes:{p:["points"]},partProvenance:[],inputEvidence:{digest:"synthetic"},players:[{playerId:"p",assessment:"Synthetic complete sentence.",law,confidence:[2],exceptions:[null],coverage:{}}]} as unknown as AcceptedGameReview;
+const review={release:PROPS_AI_RELEASE,gameId:"funded",sourceGameId:"native",start,lock,cutoff:now,stage:"final",issuedAt:now,inputHash:"synthetic",model:"synthetic",criticalContextHashes:criticalContextHashes(packet),marketScopes:{p:["points"]},partProvenance:[],inputEvidence:{digest:"synthetic"},players:[{playerId:"p",assessment:"Synthetic complete sentence.",law,confidence:[2],exceptions:[null],coverage:{},sourceReadProofs:{release:PROPS_AI_READER_CLAIMS_RELEASE,availabilityContextHash:readerAvailabilityContextHash(packet,'p')}}]} as unknown as AcceptedGameReview;
 const choice=siteAiDecisions(packet,review,now)[0];
 assert.equal(choice.american,-200);assert.equal(choice.quote.id,"new-over");assert.equal(choice.grade,"Watchlist");assert.ok(Math.abs(choice.expectedValue+.1)<1e-12);
 const improved={...packet,executionQuotes:[quote("new-best-over","over",150),quote("new-best-under","under",-170)]};

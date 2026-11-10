@@ -74,11 +74,13 @@ export function sourceForecastIssues(packet:GamePacket,player:Player,law:Accepte
   }
   for(const prior of priors){
     if(!prior.market||prior.line===null||!qualified.includes(prior.market))continue;
-    const uncertain=prior.market==="anytime_td"?prior.yesProbability!==null&&prior.yesProbability>0&&prior.yesProbability<1
+    const milestone=prior.offerContract==="milestone",inclusive=milestone||prior.market==="anytime_td";
+    const uncertain=milestone?prior.yesProbability!==null&&prior.yesProbability>0&&prior.noProbability!==null&&prior.noProbability!==undefined&&prior.noProbability>0
+      :prior.market==="anytime_td"?prior.yesProbability!==null&&prior.yesProbability>0&&prior.yesProbability<1
       :prior.overProbability!==null&&prior.overProbability>0&&prior.underProbability!==null&&prior.underProbability>0;
     if(!uncertain)continue;
-    const f=lawForecast(law,prior.market,prior.line);
-    if(f.over===0||f.under===0)issues.push({code:"unsupported_zero_probability_tail",markets:[prior.market],example:`${prior.market}@${prior.line}: missing opposing prior tail`,events:[{market:prior.market,line:prior.line,contract:prior.market==="anytime_td"?"milestone":"two_way"}],
+    const f=lawForecast(law,prior.market,prior.line,inclusive);
+    if(f.over===0||f.under===0)issues.push({code:"unsupported_zero_probability_tail",markets:[prior.market],example:`${prior.market}@${prior.line}: missing opposing prior tail`,events:[{market:prior.market,line:prior.line,contract:inclusive?"milestone":"two_way"}],
       detail:`${player.id} ${prior.market} at ${prior.line} has zero opposite-event mass although the independent source assigns both outcomes positive probability. Include realistic opposing tails or explicitly except this market; never clip the displayed probability.`});
   }
   const seen=new Set<string>();

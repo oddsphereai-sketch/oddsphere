@@ -2,7 +2,7 @@ import {sourceEventUsable} from "./sourceEvents";
 /** Deterministic research compression. Every player/market remains; raw offers stay in the local archive. */
 import type { Evidence, GamePacket, Json, Quote } from "./evidenceContract";
 import { digest, instant, invariant, validatePacket } from "./evidence";
-import {quoteBook} from "./executionQuotes";
+import {quoteBook,quoteContract} from "./executionQuotes";
 
 export const PROPS_AI_MARKET_REPORT_RELEASE="player_props_ai_market_report_2026_11_10_r4_underlying_book_anchor" as const;
 
@@ -12,6 +12,9 @@ function pair(rows: Quote[], earliest: boolean) {
   // Never combine opening/current/unknown states or incompatible receipt clocks.
   const groups = new Map<string, Quote[]>();
   for (const q of rows) {
+    // Inclusive at-least prices are one-way events, even when a native source
+    // still spells their side Over. They cannot supply an ordinary Over leg.
+    if (quoteContract(q) !== "two_way") continue;
     const key = JSON.stringify([q.opening ?? null, q.receivedAtProvenance ?? null]);
     const group = groups.get(key);
     if (group) group.push(q); else groups.set(key, [q]);
@@ -52,7 +55,7 @@ function underlyingBookReferences(rows:Quote[],line:number){
   for(const source of sources){
     const atLine=rows.filter(q=>JSON.stringify([q.provider,quoteBook(q.book)])===source&&q.line===line);
     const value=pair(atLine,false),book=quoteBook(atLine[0]?.book??"");if(!value||!book)continue;
-    const sourceAmbiguous=value.evidence.some(id=>{const chosen=atLine.find(q=>q.id===id)!;return atLine.some(q=>q.side===chosen.side&&(q.opening??null)===(chosen.opening??null)&&(q.receivedAtProvenance??null)===(chosen.receivedAtProvenance??null)&&instant(q.observedAt)===instant(chosen.observedAt)&&instant(q.receivedAt)===instant(chosen.receivedAt)&&q.american!==chosen.american);});
+    const sourceAmbiguous=value.evidence.some(id=>{const chosen=atLine.find(q=>q.id===id)!;return atLine.some(q=>quoteContract(q)==="two_way"&&q.side===chosen.side&&(q.opening??null)===(chosen.opening??null)&&(q.receivedAtProvenance??null)===(chosen.receivedAtProvenance??null)&&instant(q.observedAt)===instant(chosen.observedAt)&&instant(q.receivedAt)===instant(chosen.receivedAt)&&q.american!==chosen.american);});
     const rank=[value.opening===false?2:value.opening===null?1:0,Number(value.receivedAtProvenance==="provider_response"),
       Math.max(instant(value.overReceivedAt),instant(value.underReceivedAt)),Math.max(instant(value.overObservedAt),instant(value.underObservedAt))];
     const old=byBook.get(book),order=old?compare(rank,old.rank):1;
@@ -98,7 +101,7 @@ export function compileMarketReport(packet: GamePacket): GamePacket {
           openingPairs: lines.flatMap(line => { const p = pair(bookRows.filter(q => q.line === line && q.opening === true), true); return p ? [p] : []; }),
           representativeLadderPoints: [...selected.values()], pairedLadderLines: ladder.length,
           nonMonotonePairs: ladder.slice(1).filter((p, i) => p.fairOver > ladder[i].fairOver + 1e-9).length,
-          oneSidedYes: bookRows.filter(q => q.side === "yes").length ? [...bookRows].sort(order).filter(q => q.side === "yes").map(q => ({ id: q.id, line: q.line, american: q.american, observedAt: q.observedAt, receivedAt: q.receivedAt, opening: q.opening ?? null, receivedAtProvenance: q.receivedAtProvenance ?? null })).filter((_, i, a) => i === 0 || i === a.length - 1) : [],
+          oneSidedYes: bookRows.filter(q => quoteContract(q) === "milestone").length ? [...bookRows].sort(order).filter(q => quoteContract(q) === "milestone").map(q => ({ id: q.id, line: q.line, american: q.american, observedAt: q.observedAt, receivedAt: q.receivedAt, opening: q.opening ?? null, receivedAtProvenance: q.receivedAtProvenance ?? null })).filter((_, i, a) => i === 0 || i === a.length - 1) : [],
         };
       });
       const report: Evidence = { id: `market-report:${player.id}:${market}`, kind: "market", availableAt: packet.cutoff,

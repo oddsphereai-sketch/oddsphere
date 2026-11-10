@@ -47,6 +47,15 @@ actor/scope/book events, with valid prelock returns recoverable and all existing
 locks first. Repeated capture handoffs bind the exact immutable row and proof,
 not the first matching event. Typed readings retain native dated-history cautions
 and valid effective lineup chronology, including explicit absence and conflicts.
+A private semantic availability proof invalidates new R31 readings when effective
+lineup/medical authority changes, while receipt-only refreshes and legacy accepted
+payloads retain their own semantics. Native fallback action qualification also
+uses current exact-player participation before a new lock. Explicit MLB source
+milestones retain inclusive events; unqualified archived legs remain raw evidence,
+never a synthesized ordinary pair. NBA current-collector identity is independent
+of orphan retained history: historical unresolved names cannot block complete
+identified current retail actors, while unresolved current retail offers and failed
+collection remain refused. Native Out filtering uses exact fixture/team/name scope.
 R59 snapshot/reader compatibility remains tested. NFL settlementR8
 and per-row eventR1 now pin new decisionR13; old results require separate owner
 approval and are never repaired by a recurring release. TrackingR43 identities

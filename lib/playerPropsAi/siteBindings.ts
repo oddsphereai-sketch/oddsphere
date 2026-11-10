@@ -14,6 +14,22 @@ import {PROPS_AI_ESTIMATE_RELEASE,PROPS_AI_NFL_DECISION_RELEASE} from "./release
 import type {GamePacket} from "./evidenceContract";
 import {digest,instant} from "./evidence";
 import {PROPS_AI_EXECUTION_EVIDENCE_RELEASE,type PropsAiMemberEvidence} from "./publicationContract";
+import {playerParticipationEligibility} from "./participationEligibility";
+import {propsTeam} from "./teamIdentity";
+
+/** Qualify this invocation's conditional native forecast without changing its
+ * numbers or source context. The original baseline owns recovery after an
+ * explicit clearance; existing public locks never enter this transformation. */
+export function qualifyNflSourceParticipation(rows:readonly NflPlayerPropsRuntimeDecision[],packet:GamePacket,now:string):NflPlayerPropsRuntimeDecision[]{
+ const source=nflAiSourceBinding(packet,[],now);
+ return rows.map(row=>{
+  if(row.state==="locked"||instant(packet.cutoff)>instant(now))return row;
+  const id=source.playerId(row),player=packet.players.find(p=>p.id===id&&p.markets.includes(row.market));
+  if(!player)return row;
+  const status=playerParticipationEligibility(packet,player);if(!status.blocked)return row;
+  return {...row,grade:row.grade==="Held"?"Held":"No Play",healthHolds:[...new Set([...row.healthHolds,`source_participation_unavailable:${status.reason}`])]};
+ });
+}
 
 const book=(value:string)=>value.toLowerCase().replace(/[^a-z0-9]/g,"");
 const choice=(all:SiteAiDecision[],id:string,market:string,line:number,sportsbook:string,provider?:string)=>all.find(c=>c.side!=="yes"&&quoteContract(c.quote)==="two_way"&&c.playerId===id&&c.market===market&&c.line===line&&book(c.book)===book(sportsbook)&&(!provider||c.provider===provider));
@@ -99,7 +115,10 @@ export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:Game
 export function restoreNbaNativeGame(snapshot:NbaPlayerPropsMemberSnapshot,baseline:NbaPlayerPropsMemberSnapshot,packet:GamePacket,now:string):NbaPlayerPropsMemberSnapshot{
   const gameId=packet.sourceGameId??packet.gameId,scope=(r:NbaPlayerPropsMemberDecision)=>JSON.stringify([r.gameId,r.playerId,r.market]);
   const protectedScopes=new Set(snapshot.decisions.filter(r=>r.lockedAt!==null).map(scope));
-  const decisions=[...snapshot.decisions.filter(r=>r.gameId!==gameId||r.lockedAt!==null),...baseline.decisions.filter(r=>r.gameId===gameId&&r.lockedAt===null&&!protectedScopes.has(scope(r)))];
+  const decisions=[...snapshot.decisions.filter(r=>r.gameId!==gameId||r.lockedAt!==null),...baseline.decisions.filter(r=>r.gameId===gameId&&r.lockedAt===null&&!protectedScopes.has(scope(r))).map(row=>{
+    const player=packet.players.find(p=>p.id===row.playerId&&p.markets.includes(row.market)&&propsTeam(p.team)===propsTeam(row.team)&&propsTeam(p.opponent)===propsTeam(row.opponent));
+    return player&&instant(row.scheduledStart)===instant(packet.start)&&instant(packet.cutoff)<=instant(now)&&playerParticipationEligibility(packet,player).blocked?{...row,grade:"No Play" as const}:row;
+  })];
   return buildNbaPlayerPropsMemberSnapshot({...snapshot,generatedAt:now,decisions,inputRows:snapshot.diagnostics.inputRows});
 }
 /** Reapply a game only from its actual fresh native construction. A local
@@ -107,7 +126,7 @@ export function restoreNbaNativeGame(snapshot:NbaPlayerPropsMemberSnapshot,basel
  * a changed/declined final observation can restore the same native baseline. */
 export function restoreNflNativeGame(board:NflPlayerPropsRuntimeBoard,baseline:NflPlayerPropsRuntimeBoard,packet:GamePacket,now:string):NflPlayerPropsRuntimeBoard{
  const gameId=packet.sourceGameId??packet.gameId;
- const rows=[...board.decisions.filter(r=>r.gameId!==gameId||r.state==="locked"),...baseline.decisions.filter(r=>r.gameId===gameId&&r.state!=="locked")];
+ const rows=qualifyNflSourceParticipation([...board.decisions.filter(r=>r.gameId!==gameId||r.state==="locked"),...baseline.decisions.filter(r=>r.gameId===gameId&&r.state!=="locked")],packet,now);
  const coherent=nflAiSourceBinding(packet,[],now).coherent(rows),counts={"Best Angle":0,Lean:0,Watchlist:0,"No Play":0,Held:0,actionable:0};
  for(const r of coherent.decisions){counts[r.grade]++;if(r.grade==="Best Angle"||r.grade==="Lean")counts.actionable++;}
  return{...board,decisions:coherent.decisions,counts,aiSourceCoherence:coherent.report};

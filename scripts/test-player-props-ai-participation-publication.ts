@@ -13,6 +13,8 @@ import {encodeCanonicalScenarioLaw} from '../lib/playerPropsAi/generativeCoordin
 import {parseJointReview} from '../lib/playerPropsAi/request';
 import {PROPS_AI_RELEASE} from '../lib/playerPropsAi/releases';
 import {criticalContextHashes} from '../lib/playerPropsAi/criticalContext';
+import {readerAvailabilityContextHash,reviewedReaderContextCurrent} from '../lib/playerPropsAi/readerClaimFreshness';
+import {testNbaSourceAuthority,testNbaHandoffCapture,mergeNbaHandoffs} from '../lib/playerPropsAi/nbaLockAuthority';
 import {siteAiDecisions,siteReviewCoverage,siteReviewQualification} from '../lib/playerPropsAi/publication';
 import {applyNbaSiteAi,applyNflSiteAi,applyMlbSiteAi} from '../lib/playerPropsAi/siteBindings';
 import {playerParticipationEligibility,attachCapturedNbaParticipationReports,type CapturedNbaParticipationReport} from '../lib/playerPropsAi/participationEligibility';
@@ -99,4 +101,51 @@ assert.equal(captureMember.decisions[0].grade,'No Play');assert.equal(captureMem
 const certainty=verify('nba','cleared','over'),id=certainty.packet.players[0].id,bad=structuredClone(certainty.raw);Object.assign(bad.players[id],{assessment:'Insider money guarantees the player will exceed this line.'});
 assert.throws(()=>parseJointReview(certainty.packet,bad),/Future assessment must select verified claims/);
 const caution=structuredClone(certainty.raw);Object.assign(caution.players[id],{assessment:'There is no verified smart money in the supplied source.'});assert.throws(()=>parseJointReview(certainty.packet,caution),/Future assessment must select verified claims/,'Even cautious unrestricted factual prose cannot bypass future source claims');
+// Effective source chronology is substantive even when the unordered source
+// values remain identical. Routine receipts and unchanged authority are neutral.
+for(const sport of ['nba','nfl','mlb'] as const)for(const side of ['over','under'] as const){
+ const input=sourcePacket(sport,'no_source'),p=input.players[0],actorId=p.id;
+ const medical=(id:string,status:string,reportedAt:string):Evidence=>({id,kind:'availability',source:'synthetic exact-game medical report',availableAt:at,value:{canonicalGameId:input.gameId,scheduledStart:input.start,context:{away:{team:p.team,known:true,players:[{name:p.name,status,reportedAt}]},home:{team:p.opponent,known:true,players:[]}}}});
+ const lineup=(id:string,status:string,asOfTimestamp:string,battingOrder:number|null):Evidence=>({id,kind:'availability',source:'stored MLB lineup',availableAt:at,value:{canonicalGameId:input.gameId,scheduledStart:input.start,status,battingOrder,asOfTimestamp}});
+ p.evidence.push(...(sport==='mlb'?[lineup('blocked','not_in_lineup','2026-11-10T20:40:00Z',null),lineup('returned','posted','2026-11-10T20:30:00Z',4)]:[medical('blocked','Out','2026-11-10T20:40:00Z'),medical('returned','Available','2026-11-10T20:30:00Z')]));
+ const old=accepted(input,side),before=digest(old.review),currentInput=structuredClone(input),returned=currentInput.players[0].evidence.find(e=>e.id==='returned')!;
+ if(sport==='mlb')(returned.value as Record<string,unknown>).asOfTimestamp='2026-11-10T20:45:00Z';
+ else (((returned.value as Record<string,unknown>).context as {away:{players:{reportedAt:string}[]}}).away.players[0]).reportedAt='2026-11-10T20:45:00Z';
+ const current=compileMarketReport(currentInput);
+ assert.deepEqual(criticalContextHashes(current),criticalContextHashes(old.packet),'The established source-content hash remains exact');
+ assert.notEqual(readerAvailabilityContextHash(current,actorId),readerAvailabilityContextHash(old.packet,actorId));
+ assert.equal(siteAiDecisions(old.packet,old.review,now)[0].grade,'No Play');
+ assert.equal(reviewedReaderContextCurrent(current,old.review,actorId),false);
+ assert.equal(siteReviewCoverage(current,old.review,now)[0].contextCurrent,false);
+ assert.deepEqual(siteAiDecisions(current,old.review,now),[],'A changed current authority cannot reuse the old factual reading or confidence');
+ const fresh=accepted(currentInput,side),freshChoice=siteAiDecisions(fresh.packet,fresh.review,now)[0];
+ assert.equal(freshChoice.side,side);assert.equal(freshChoice.grade,'Best Angle','A normal new final restores both qualified directional paths');
+ const conflicted=structuredClone(current),conflictingReturn=conflicted.players[0].evidence.find(e=>e.id==='returned')!;
+ if(sport==='mlb')(conflictingReturn.value as Record<string,unknown>).asOfTimestamp='2026-11-10T20:40:00Z';
+ else (((conflictingReturn.value as Record<string,unknown>).context as {away:{players:{reportedAt:string}[]}}).away.players[0]).reportedAt='2026-11-10T20:40:00Z';
+ assert.equal(playerParticipationEligibility(conflicted,conflicted.players[0]).conflict,true);
+ assert.equal(reviewedReaderContextCurrent(conflicted,fresh.review,actorId),false,'New equal-clock conflicts cannot reuse the previous resolved reading');
+ assert.deepEqual(siteAiDecisions(conflicted,fresh.review,now),[]);
+ const refetched=structuredClone(current);for(const e of refetched.players[0].evidence)e.availableAt=now;
+ refetched.cutoff=now;
+ assert.equal(readerAvailabilityContextHash(refetched,actorId),readerAvailabilityContextHash(current,actorId));
+ assert.equal(reviewedReaderContextCurrent(refetched,fresh.review,actorId),true,'A later receipt with unchanged authority is not new context');
+ const funded={...current,sourceGameId:current.gameId,gameId:'funded-fixture'};
+ assert.equal(readerAvailabilityContextHash(funded,actorId),readerAvailabilityContextHash(current,actorId),'Funding/native aliases denote the same exact fixture');
+ const missing=structuredClone(fresh.review);delete missing.players[0].sourceReadProofs;
+ assert.equal(reviewedReaderContextCurrent(current,missing,actorId),false,'A future claim review with missing proof fails closed');
+ const legacy={...missing,release:'player_props_ai_2026_11_10_r29_identity_and_execution_evidence' as const};
+ assert.equal(reviewedReaderContextCurrent(current,legacy,actorId),true,'Legacy reviews keep their established unchanged-content contract');
+ assert.equal(digest(old.review),before,'No accepted text, law, input or proof is rewritten');
+ if(sport==='nba'){
+  const previousEnv=process.env.NODE_ENV;Object.assign(process.env,{NODE_ENV:'test'});
+  try{
+   const applied=applyNbaSiteAi(nbaBaseline(old.packet),old.packet,siteAiDecisions(old.packet,old.review,now),now);
+   const observed=testNbaSourceAuthority(()=>now)(current,old.review);
+   assert(observed.observations[0].actors[0].scopes.every(s=>s.status==='context_changed'));
+   const firstLock=advanceNbaPlayerPropsCandidateLifecycle({now:lock,previous:applied,candidate:applied,lockHandoff:mergeNbaHandoffs([testNbaHandoffCapture(()=>now)(applied.decisions,old.packet,old.review,'ai'),observed])});
+   assert.equal(firstLock.snapshot.decisions.length,0,'The new first lock cannot admit an AI proof whose effective medical authority changed');
+  }finally{if(previousEnv===undefined)Reflect.deleteProperty(process.env,'NODE_ENV');else Object.assign(process.env,{NODE_ENV:previousEnv});}
+ }
+}
 console.log('Participation publication passed: actual parser→publication→NBA/NFL/MLB; own Out/lineup blocks, paired Over/Under clearance promotions, teammate/opponent/unlisted controls, complete coverage versus blocked qualification, exact law/input/provenance, fresh fetched report, legacy locks and assessment certainty. Synthetic/offline; no paid calls.');

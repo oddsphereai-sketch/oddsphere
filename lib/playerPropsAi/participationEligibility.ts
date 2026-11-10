@@ -26,8 +26,9 @@ function state(raw:string,basis:ParticipationFact['ownIdentityBasis']):Pick<Part
  return{status:'unknown',reason:'participation_not_confirmed'};
 }
 function exactFixture(value:Record<string,unknown>,packet:GamePacket){
- if(typeof value.canonicalGameId==='string'&&value.canonicalGameId!==packet.gameId)return false;
- if(typeof value.gameId==='string'&&value.gameId!==packet.gameId)return false;
+ const ids=[packet.gameId,...(packet.sourceGameId?[packet.sourceGameId]:[])];
+ if(typeof value.canonicalGameId==='string'&&!ids.includes(value.canonicalGameId))return false;
+ if(typeof value.gameId==='string'&&!ids.includes(value.gameId))return false;
  if(typeof value.scheduledStart==='string'&&time(value.scheduledStart)!==instant(packet.start))return false;
  if(typeof value.start==='string'&&time(value.start)!==instant(packet.start))return false;
  return true;

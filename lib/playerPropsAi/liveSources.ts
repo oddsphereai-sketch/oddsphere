@@ -40,6 +40,18 @@ function finish(packet:GamePacket,at:string,currentOffers:Quote[]){
 }
 export function liveNbaPacket(args:{game:LivePropsGame;window:CapturedReviewWindow;snapshot:NbaPlayerPropsMemberSnapshot;market:NbaPlayerPropsMarketHistory;prior:NbaPlayerPropsCurrentState;current:NbaPlayerPropsCurrentState;context?:EnrichedSource["nbaContext"];participationReports?:readonly CapturedNbaParticipationReport[];currentObservations:NbaPlayerPropsMarketHistory["observations"]}):GamePacket{
   const at=args.window.cutoff;
+  // The existing collector's explicit set owns current offer coverage. Retained
+  // historical/opening orphans cannot turn into an offered actor on a later
+  // refresh, and a failed/missing collector set cannot mean an empty market.
+  invariant(Array.isArray(args.currentObservations),'NBA current collector observations unavailable');
+  const retailIdentityMissing=(q:NbaPlayerPropsMarketHistory['observations'][number])=>q.canonicalGameId===args.game.id&&(CATALOG.nba.required as readonly string[]).includes(q.market)&&q.provider!=='owls'&&!q.canonicalPlayerId;
+  const currentAtCutoff=args.currentObservations.filter(q=>{
+    if(q.canonicalGameId!==args.game.id||!(CATALOG.nba.required as readonly string[]).includes(q.market))return false;
+    const available=q.receivedAt??args.market.updatedAt;
+    return q.isOpening===false&&!q.isLive&&['over','under','yes'].includes(q.side)&&Math.abs(q.americanPrice)>=100
+      &&instant(q.observedAt)<=instant(available)&&instant(q.fetchedAt)<=instant(available)&&instant(available)<=instant(at);
+  });
+  invariant(!currentAtCutoff.some(retailIdentityMissing),'NBA retail offered-player identity incomplete');
   const nativeAvailable=instant(args.snapshot.generatedAt)<=instant(at);
   // A later native snapshot cannot donate priors, names or market scopes to an
   // earlier cutoff. The current fixture and independently available offers may
@@ -47,10 +59,11 @@ export function liveNbaPacket(args:{game:LivePropsGame;window:CapturedReviewWind
   const snapshot=nativeAvailable?args.snapshot:{...args.snapshot,games:[{gameId:args.game.id,scheduledStart:args.game.start,awayTeam:args.game.away,homeTeam:args.game.home}],decisions:[]};
   const source:EnrichedSource={readOnly:true,generatedAt:at,priorNba:args.prior,currentNba:args.current,nba:[{date:args.snapshot.slateDate,snapshot,market:args.market}],nfl:[],nbaContext:args.context};
   const packet=fromCachedExport(source,args.window).packets[0];invariant(packet,"NBA live game missing from captured source");
-  invariant(!args.market.observations.some(q=>q.canonicalGameId===args.game.id&&(CATALOG.nba.required as readonly string[]).includes(q.market)&&q.provider!=="owls"&&!q.canonicalPlayerId),"NBA retail offered-player identity incomplete");
   for(const p of packet.players){p.team=propsTeam(p.team);p.opponent=propsTeam(p.opponent);invariant([propsTeam(args.game.home),propsTeam(args.game.away)].includes(p.team)&&[propsTeam(args.game.home),propsTeam(args.game.away)].includes(p.opponent)&&p.team!==p.opponent,"NBA player/team matchup identity incomplete");}
   const current=fromCachedExport({...source,nba:[{...source.nba[0],market:{...args.market,observations:args.currentObservations}}]},args.window).packets[0]?.quotes??[];
-  const result=finish(attachCapturedNbaParticipationReports(enrichCachedPacket(packet,source),args.participationReports??[]),at,current);
+  const priced=finish(attachCapturedNbaParticipationReports(enrichCachedPacket(packet,source),args.participationReports??[]),at,current);
+  const orphanHistory=args.market.observations.filter(retailIdentityMissing).length;
+  const result=orphanHistory?{...priced,sourceLimitations:[...priced.sourceLimitations,`Retained NBA market history contains ${orphanHistory} retail records without verified actor IDs; they cannot establish identity or current offer coverage. Current collector observations independently qualify current retail actors.`]}:priced;
   return nativeAvailable?result:{...result,sourceLimitations:[...result.sourceLimitations,`Original NBA native snapshot availability ${args.snapshot.generatedAt} is after cutoff; its priors, labels and scopes were not supplied. Current quote-only actor coverage remains independent.`]};
 }
 export function liveNflPacket(args:{game:LivePropsGame;window:CapturedReviewWindow;snapshot:NflPlayerPropsProductionSnapshot;observations:NflPlayerPropsObservationSnapshot;history:NflPlayerPropsCurrentSeasonState;context:NflPlayerPropsInferenceContext;retainedQuotes?:Quote[];marketHistory?:Parameters<typeof attachNflReaderMarkets>[1]}):GamePacket{

@@ -42,6 +42,23 @@ async function main(){
  await assert.rejects(handoff.observe({...packet,start:new Date(Date.parse(start)+60000).toISOString(),cutoff:tick},review,true),/fixture clock changed/);
  assert.equal(writes.length,count);
  assert.equal(digest(oldLock),oldBytes);
+ // A missing review cannot reopen a current own-player lineup block through
+ // native fallback. An explicit later posted return restores the same native
+ // decision, with every conditional forecast and price field unchanged.
+ const nativeLean={...native,playGrade:'LEAN' as const,units:1};
+ const nativeFallback=testMlbPrelockHandoff([nativeLean,oldLock],async()=>{},()=>tick);
+ const absent=structuredClone(packet);absent.cutoff=tick;
+ absent.players[0].evidence.push({id:'actual-own-lineup',kind:'availability',source:'synthetic exact actor lineup',availableAt:tick,value:{canonicalGameId:packet.gameId,scheduledStart:packet.start,status:'not_in_lineup',battingOrder:null,asOfTimestamp:tick}});
+ await nativeFallback.observe(absent,null,false);
+ const blocked=nativeFallback.rows()[0];assert.equal(blocked.playGrade,'NO_PLAY');assert.equal(blocked.units,0);assert(blocked.reasonCodes.includes('SOURCE_PARTICIPATION_UNAVAILABLE_NATIVE_FALLBACK'));
+ const numeric=(row:PlayerPropPreviewRow)=>[row.projection,row.finalProbability,row.modelProbability,row.overProbability,row.underProbability,row.line,row.side,row.odds,row.book,row.aiReview];
+ assert.deepEqual(numeric(blocked),numeric(nativeLean),'Lineup qualification cannot rewrite the native conditional law or execution');
+ assert.equal(digest(nativeFallback.rows()[1]),oldBytes);
+ tick=new Date(Date.parse(tick)+1000).toISOString();const returned=structuredClone(absent);returned.cutoff=tick;
+ returned.players[0].evidence.push({id:'actual-own-posted-return',kind:'availability',source:'synthetic exact actor lineup',availableAt:tick,value:{canonicalGameId:packet.gameId,scheduledStart:packet.start,status:'posted',battingOrder:3,asOfTimestamp:tick}});
+ await nativeFallback.observe(returned,null,true);assert.equal(nativeFallback.rows()[0].playGrade,'LEAN');assert.equal(nativeFallback.rows()[0].units,1);assert.deepEqual(numeric(nativeFallback.rows()[0]),numeric(nativeLean));
+ assert.equal(digest(nativeFallback.rows()[1]),oldBytes);
+ console.log('MLB native participation impact: two retained rows; actionable1→0 for explicit absence,0→1 after posted return; exact conditional numbers/prices and stored lock.');
  console.log('MLB handoff boundary passed: awaited serialized actual-ready publication, duplicate observation collapse, exact milestone execution, withdrawal/return recovery, write-failure honesty, lookup fallback, clock refusal and immutable locks. No HTTP/DB/paid calls.');
  }finally{if(original===undefined)Reflect.deleteProperty(process.env,'NODE_ENV');else Object.assign(process.env,{NODE_ENV:original});}
 }

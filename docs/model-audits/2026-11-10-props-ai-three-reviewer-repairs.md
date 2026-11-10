@@ -162,3 +162,24 @@ and omit a newer explicit absence. These are process and factual-presentation
 defects, not outcome-based tuning. Their repairs require exact capture binding,
 complete source-limit disclosure and effective lineup chronology, with positive
 recovery and legacy-lock controls before another full independent round.
+
+The sixth round reproduced stale factual lineup text after a source-clock
+authority change, an archival MLB milestone leg misread as an ordinary price,
+and current own-player Out bypass through a native fallback. Its native-source
+follow-up also reproduced cross-team suppression of a same-name NBA actor.
+Future source-bound availability freshness must track effective meaning without
+treating a receipt refresh as new context. Exact native participation applies to
+new unlocked fallback decisions and capture proofs, while valid clearance restores
+the original qualification. MLB event declarations must survive source compression;
+ambiguous historical legs remain labeled raw evidence instead of inferred pairs.
+All existing locked records and accepted text retain their original payloads.
+These corrections reset the full independent round count again.
+
+A normal pending NBA slot exposed a retained-history identity obstruction. The
+constructor required every old retail observation to carry a canonical player ID,
+even when the actual current collection identified its entire offered set. Future
+admission requires an explicit current collection, validates its supported current
+retail actors and retains the old history unchanged with an unresolved-source
+limitation. A failed collection is never interpreted as an empty one, and an
+unresolved current actor still prevents a falsely complete review. This repair
+does not remap an old name or replay an already closed slot.

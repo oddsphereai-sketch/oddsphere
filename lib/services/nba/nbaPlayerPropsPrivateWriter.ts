@@ -216,10 +216,15 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     emitGameIds,
   });
   const availability = await explicitOutPlayers(slateSchedule, args.fetchImpl);
-  const participationReports:CapturedNbaParticipationReport[]=availability.reports.flatMap(capture=>live.games.filter(game=>nbaPlayerPropsScheduleGameMatches(game,capture.game)).map(game=>({
+  const participationReports:CapturedNbaParticipationReport[]=availability.reports.flatMap(capture=>live.games.filter(game=>nbaPlayerPropsScheduleGameMatches(game,capture.game)&&Date.parse(game.scheduledStart)===Date.parse(capture.game.gameStartAt)).map(game=>({
     gameId:game.canonicalGameId,start:game.scheduledStart,awayTeam:game.awayTeam,homeTeam:game.homeTeam,expectedEventId:String(capture.game.externalId),availableAt:capture.availableAt,report:capture.report,
   })));
-  const eligibleFeatures = features.filter((feature) => !availability.out.has(normalize(feature.player_name ?? "")));
+  const isOut=(gameId:number,teamId:number,name:string|null)=>{
+    const game=gameById.get(gameId);if(!game)return false;
+    const team=teamId===game.homeTeamId?game.homeTeam:teamId===game.awayTeamId?game.awayTeam:null;
+    return team!==null&&availability.out.has(outPlayerScope(game.startTime,game.awayTeam,game.homeTeam,team,name??""));
+  };
+  const eligibleFeatures = features.filter((feature) => !isOut(feature.game_id,feature.team_id,feature.player_name));
   const forward = buildNbaPlayerPropsForwardDecisions({
     features: eligibleFeatures,
     observations: mergedMarket.history.observations,
@@ -231,7 +236,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   // Known unavailable actors are intentionally excluded from native features.
   // They are still part of the AI source/review; counting them as missing
   // features could block every healthy actor and retain yesterday's Leans.
-  const availableCandidates = candidates.filter(candidate => !availability.out.has(normalize(candidate.playerName ?? "")));
+  const availableCandidates = candidates.filter(candidate => !isOut(candidate.gameId,candidate.teamId,candidate.playerName));
   const minimumCoverage = availableCandidates.length ? Math.max(1, Math.floor(availableCandidates.length * 0.80)) : 0;
   const allCandidatesUnavailable = candidates.length > 0 && availableCandidates.length === 0;
   const noNativeForwardRequired = allCandidatesUnavailable && propsAiSiteConfig().integrated;
@@ -412,12 +417,17 @@ async function explicitOutPlayers(
   for (const game of games) {
     const report = await fetchEspnNbaGameInjuries(game.externalId, game.awayTeam, game.homeTeam, { fetchImpl });
     if (!report) continue;
+    const teams=[...report.teams.keys()].map(canonicalNbaAbbreviation);
+    if(String(report.eventId)!==String(game.externalId)||teams.length!==2||new Set(teams).size!==2||![game.awayTeam,game.homeTeam].every(team=>teams.includes(canonicalNbaAbbreviation(team))))continue;
     reports.push({game,availableAt:new Date().toISOString(),report});
-    for (const injuries of report.teams.values()) {
-      for (const injury of injuries) if (injury.status === "out") out.add(normalize(injury.name));
+    for (const [team,injuries] of report.teams) {
+      for (const injury of injuries) if (injury.status === "out") out.add(outPlayerScope(game.gameStartAt,game.awayTeam,game.homeTeam,team,injury.name));
     }
   }
   return {out,reports};
+}
+function outPlayerScope(start:string,away:string,home:string,team:string,name:string){
+  return JSON.stringify([Date.parse(start),canonicalNbaAbbreviation(away),canonicalNbaAbbreviation(home),canonicalNbaAbbreviation(team),normalize(name)]);
 }
 
 function recentDates(now: string, count: number): string[] {

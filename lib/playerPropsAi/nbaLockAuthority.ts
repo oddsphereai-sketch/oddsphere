@@ -7,6 +7,8 @@ import type {GamePacket,Quote} from './evidenceContract';
 import type {AcceptedGameReview} from './reviewer';
 import {digest,instant,validatePacket} from './evidence';
 import {criticalContextHashes} from './criticalContext';
+import {reviewedReaderContextCurrent} from './readerClaimFreshness';
+import {playerParticipationEligibility} from './participationEligibility';
 import {executionQuotes,quoteBook,quoteContract} from './executionQuotes';
 import {siteAiDecisions} from './publication';
 import {PROPS_AI_EXECUTION_EVIDENCE_RELEASE} from './publicationContract';
@@ -38,7 +40,7 @@ function observe(packet:GamePacket,review:AcceptedGameReview|null,lookupAvailabl
  const contexts=criticalContextHashes(source),actors:Actor[]=source.players.map(player=>{
   const row=review?.players.find(r=>r.playerId===player.id),scopes=review?.marketScopes[player.id]??[];
   return{actorId:player.id,contextHash:contexts[player.id],review:review?{release:review.release,inputHash:review.inputHash??review.inputEvidence.digest,stage:review.stage,issuedAt:review.issuedAt!,lawHash:row?.law?.hash??null}:null,
-   scopes:[...new Set([...player.markets,...scopes])].map(market=>({market,status:(!lookupAvailable?'review_lookup_unavailable':!review?'review_authority_missing':!row?'unreviewed_actor':review.criticalContextHashes[player.id]!==contexts[player.id]?'context_changed':!scopes.includes(market)?'unreviewed_scope':!row.law||row.sourceDeclinedMarkets?.includes(market)?'declined':'qualified')as Status}))};
+   scopes:[...new Set([...player.markets,...scopes])].map(market=>({market,status:(!lookupAvailable?'review_lookup_unavailable':!review?'review_authority_missing':!row?'unreviewed_actor':!reviewedReaderContextCurrent(source,review,player.id)?'context_changed':!scopes.includes(market)?'unreviewed_scope':!row.law||row.sourceDeclinedMarkets?.includes(market)?'declined':'qualified')as Status}))};
  });
  return{observations:[seal({gameId:gameId(source),start:source.start,lock:source.lock,cutoff:source.cutoff,observedAt,order:++observationOrder,sourcePacketHash:digest(source),completeExecution:Array.isArray(source.executionQuotes),quotes:clone(executionQuotes(source,observedAt)),actors})],proofs:[]};
 }
@@ -60,6 +62,8 @@ function capture(rows:readonly Row[],packet:GamePacket,review:AcceptedGameReview
    quote=choice.quote;
   }else{
    if(String(row.modelRelease).startsWith('player_props_ai_'))continue;
+   const player=source.players.find(p=>p.id===row.playerId)!;
+   if(playerParticipationEligibility(source,player).blocked)continue;
    // Native NBA rows do not store the provider. This is an actual current
    // confirmation of their public book/line/side/price, not an invented claim
    // about which feed originally generated the native forecast.
