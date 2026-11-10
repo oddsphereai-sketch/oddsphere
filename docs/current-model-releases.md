@@ -1,3 +1,43 @@
+## November 10 NBA evidence and actor retention R28
+
+Future generation `player_props_ai_2026_11_10_r28_evidence_and_actor_retention`,
+NBA reader `player_props_readable_tables_r14_named_source_checks`, NBA writerR15
+and NFL writerR89 add named NBA source navigation and bounded actor retention.
+The original source stays authoritative. Cards directly name conditional stats,
+same-game non-three components, observed joint patterns, native event semantics,
+source coverage and exact retained/opening market prices. Every book/provider row
+is bound to its original alias and transmitted bookRows index; no freshness,
+main-line movement, money or independent feed vote is inferred. The normal exact
+pre-claim count includes every added byte. Non-NBA requests keep their prior path.
+
+NBA comparison-only matchup/environment coverage remains partial until actual
+usable context is supplied; available coverage must cite a trusted context fact.
+Old accepted coverage and locked rows retain their original interpretation.
+Complete named feedback fits the existing1984byte addition/2048token cushion;
+failed diagnostics cannot silently authorize a retry. Known usage is recorded.
+
+After a failed NBA part, independently admitted actors retain their exact raw and
+canonical snapshots only after known usage and exact source/request/wire archives
+are durably recorded. The same original full input/schema is requested in the
+existing correction phase; only still-unadmitted actors are consumed. Ignored
+resampled actors are not represented as accepted output. A final original-parser
+union and complete game/scope barrier remain. Actor-admissionR1 receipts and
+disjoint per-phase actor provenance bind actual model/request/wire/law hashes.
+The combined receipt is bounded; unknown billing/evidence or incomplete actors
+cannot publish. The pure persisted-receipt auditor independently reconstructs
+admission. Original-generation live observers must understand this provenance.
+
+SourceR1/R3, selectionR4/decisionR11, memberR59/lifecycleR41, lawR1/gradeR2/wireR4,
+Standard budgetR5/$50target/$60cap, two slots/two phases, sole sport leases,
+settlementR7/trackingR43 and native MLB championR44 remain. NFL writer changes
+reader-generation metadata only; a separate NFL identity-source repair remains
+unreleased. No automatic exception, numerical repair, grade filter, extra review,
+paid proof or historical change is introduced. Both supported Over and Under
+paths remain. Focused/native-PostgreSQL/full CI, exact fresh-main protected PR,
+production and ordinary live proof remain necessary; offline checks alone do not
+prove substantive decisions, complete coverage or a monthly cost ceiling.
+See `model-audits/2026-11-09-props-ai-named-source-checks.md`.
+
 ## November 9 NBA exact source evidence R27
 
 Generation `player_props_ai_2026_11_09_r27_nba_source_evidence`, NBA input
