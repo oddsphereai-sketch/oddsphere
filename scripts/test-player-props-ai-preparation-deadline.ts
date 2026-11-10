@@ -46,7 +46,7 @@ async function exercise(mode:'unpackable'|'orphan'|'full_parts'){
   maybeSingle:async()=>{assert.equal(table,'player_props_ai_calendars');return{data:{release:PROPS_AI_CALENDAR_RELEASE,captured_at:iso(0),payload:calendar},error:null};},
   then(resolve:(value:DbResult)=>unknown,reject:(error:unknown)=>unknown){assert.equal(table,'player_props_ai_reviews');return Promise.resolve({data:selection==='*'?jobs.filter(j=>j.state==='pending'):jobs.filter(j=>j.state==='completed').map(j=>({result:j.result})),error:null} as DbResult).then(resolve,reject);},
  };return query;},rpc:async(name:string,args:Record<string,unknown>={})=>{
-  if(name==='player_props_ai_plan_v3')return{data:{funded:true,budget:{}},error:null};if(name==='player_props_ai_reap')return{data:0,error:null};
+  if(name==='player_props_ai_plan_v4')return{data:{funded:true,budget:{}},error:null};if(name==='player_props_ai_reap')return{data:0,error:null};
   const job=jobs.find(j=>j.job_key===args.p_key);
   if(name==='player_props_ai_claim'){assert(job);assert.equal(activeCounts,0,'No claim can race orphan/default count HTTP');assert.equal(job.state,'pending');assert(Array.isArray(args.p_requests));assert.equal(args.p_requests.length,mode==='full_parts'?16:1);claimEvents.push({game:job.game_id,at:now});job.state='running';job.parts=args.p_requests.length;job.input_hash=String(args.p_hash);return{data:{claimed:true,token:'synthetic',job:{...job,model:'gpt-6-luna',requested_tier:'default'}},error:null};}
   if(name==='player_props_ai_send'){assert(job);return{data:{id:`synthetic-attempt-${++sent}`,model:'gpt-6-luna',requested_tier:'default',reserved_micro:100000},error:null};}

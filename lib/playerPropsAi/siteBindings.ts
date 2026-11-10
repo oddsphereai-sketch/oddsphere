@@ -50,17 +50,24 @@ function nbaAiPrices(packet:GamePacket,c:SiteAiDecision,now:string):NbaPlayerPro
 }
 export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:GamePacket,choices:SiteAiDecision[],now:string):NbaPlayerPropsMemberSnapshot{
   let changed=false;
+  // A qualified current event can replace the native model's preselection when
+  // that exact old book/line is unavailable to the accepted AI law. Never let
+  // an unqualified native event suppress another genuinely priceable AI scope.
+  const current=executionQuotes(packet,now);
+  const available=choices.filter(c=>c.side!=="yes"&&quoteContract(c.quote)==="two_way"&&current.some(q=>q.id===c.quote.id&&digest(q)===digest(c.quote)));
+  const preferred=(id:string,market:string)=>available.filter(c=>c.playerId===id&&c.market===market).sort((a,b)=>b.expectedValue-a.expectedValue||book(a.book).localeCompare(book(b.book))||a.provider.localeCompare(b.provider)||a.line-b.line||a.side.localeCompare(b.side)||a.quote.id.localeCompare(b.quote.id))[0];
   const decisions=snapshot.decisions.map((row):NbaPlayerPropsMemberDecision=>{
     if(row.lockedAt!==null||row.gameId!==packet.gameId||instant(now)>=instant(packet.lock))return row;
-    const c=choice(choices,row.playerId,row.market,row.line,row.sportsbook);if(!c||c.side==="yes")return row;
+    const c=choice(available,row.playerId,row.market,row.line,row.sportsbook)??preferred(row.playerId,row.market);if(!c||c.side==="yes")return row;
     changed=true;
-    return {...row,decisionKey:[c.evidence.release,row.gameId,row.playerId,row.market,c.line].join("|"),projection:c.projection,probability:c.probability,side:c.side,grade:c.grade,sportsbook:c.book,americanPrice:c.american,expectedValue:c.expectedValue,
+    return {...row,decisionKey:[c.evidence.release,row.gameId,row.playerId,row.market,c.line].join("|"),line:c.line,projection:c.projection,probability:c.probability,side:c.side,grade:c.grade,sportsbook:c.book,americanPrice:c.american,expectedValue:c.expectedValue,
+      ...(c.line!==row.line?{independentProbability:null,independentSide:undefined}:{}),
       modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:c.evidence.selectionRelease??c.evidence.publicationRelease,targetExcludedProbability:null,targetExcludedBooks:0,targetExcludedReferenceBooks:0,marketEvidenceMode:"ai_joint_law" as const,gradePolicySource:"ai_source_review" as const,evaluatedAt:now,aiReview:structuredClone(c.evidence),
       priceLadder:nbaAiPrices(packet,c,now),movement:nbaMovement(packet,c)};
   });
   for(const player of packet.players)for(const market of player.markets){
     if(decisions.some(r=>r.gameId===packet.gameId&&r.playerId===player.id&&r.market===market))continue;
-    const c=choices.filter(c=>c.playerId===player.id&&c.market===market&&c.side!=="yes"&&quoteContract(c.quote)==="two_way").sort((a,b)=>b.expectedValue-a.expectedValue)[0];
+    const c=preferred(player.id,market);
     const game=snapshot.games.find(g=>g.gameId===packet.gameId);if(!c||!game||instant(now)>=instant(packet.lock))continue;
     decisions.push({decisionKey:[c.evidence.release,game.gameId,player.id,market,c.line].join("|"),gameId:game.gameId,scheduledStart:game.scheduledStart,homeTeam:game.homeTeam,awayTeam:game.awayTeam,
       playerId:player.id,playerName:player.name,team:player.team,opponent:player.opponent,market:market as NbaPlayerPropsMemberDecision["market"],line:c.line,projection:c.projection,independentProjection:null,independentProbability:null,
@@ -68,6 +75,14 @@ export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:Game
       targetExcludedProbability:null,targetExcludedBooks:0,targetExcludedReferenceBooks:0,marketEvidenceMode:"ai_joint_law",gradePolicySource:"ai_source_review",role:[],production:[],matchup:[],priceLadder:nbaAiPrices(packet,c,now),movement:nbaMovement(packet,c),evaluatedAt:now,lockedAt:null});changed=true;
   }
   return changed?buildNbaPlayerPropsMemberSnapshot({...snapshot,generatedAt:now,decisions,inputRows:snapshot.diagnostics.inputRows}):snapshot;
+}
+/** Reconstruct only this invocation's actual native baseline before applying a
+ * newly observed review/context. Stored locks retain their exact payloads. */
+export function restoreNbaNativeGame(snapshot:NbaPlayerPropsMemberSnapshot,baseline:NbaPlayerPropsMemberSnapshot,packet:GamePacket,now:string):NbaPlayerPropsMemberSnapshot{
+  const gameId=packet.sourceGameId??packet.gameId,scope=(r:NbaPlayerPropsMemberDecision)=>JSON.stringify([r.gameId,r.playerId,r.market]);
+  const protectedScopes=new Set(snapshot.decisions.filter(r=>r.lockedAt!==null).map(scope));
+  const decisions=[...snapshot.decisions.filter(r=>r.gameId!==gameId||r.lockedAt!==null),...baseline.decisions.filter(r=>r.gameId===gameId&&r.lockedAt===null&&!protectedScopes.has(scope(r)))];
+  return buildNbaPlayerPropsMemberSnapshot({...snapshot,generatedAt:now,decisions,inputRows:snapshot.diagnostics.inputRows});
 }
 /** Reapply a game only from its actual fresh native construction. A local
  * accepted review can prepare its overlay before a later database read, while

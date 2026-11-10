@@ -12,7 +12,7 @@ import type {LivePropsGame} from "./liveSources";
 import type {CapturedReviewWindow} from "./liveWindow";
 import {propsAiSiteConfig,PROPS_AI_CONTROL_RELEASE} from "./siteConfig";
 import {PropsAiStore,type PropsAiJob} from "./budget";
-import {loadPropsCalendar,calendarWalletPlan,matchPropsCalendarGame} from "./calendar";
+import {loadPropsCalendar,calendarWalletPlan,matchPropsCalendarGame,reconcilePropsCalendarDay} from "./calendar";
 import {runPropsReview,type AcceptedGameReview} from "./reviewer";
 import {selectSiteReview,siteAiDecisions,siteReviewCoverage,siteReviewQualification,type SiteAiDecision} from "./publication";
 import {instant,etDate} from "./evidence";
@@ -20,7 +20,7 @@ import {PROPS_AI_RELEASE,PROPS_AI_ACCEPTED_RELEASES,PROPS_AI_SELECTION_RELEASE,P
 /** Purpose is diagnostic context only; it never creates a review or source read. */
 export type PropsAiSourceLoadContext={purpose:"scheduled_review";job:PropsAiJob}|{purpose:"lock_authority"|"member_publication"};
 export type SiteReviewResult={game:LivePropsGame;packet:GamePacket;decisions:SiteAiDecision[];authorityReview:AcceptedGameReview|null;observedAt:string};
-type SiteCoverage={unresolvedSourceScopes:number;unresolvedExecutionContracts:number;gameId:string;players:number;reviewedPlayers:number;contextChangedPlayers:number;unreviewedScopes:number;eligiblePlayers:number;pricedPlayers:number;qualifiedLawPlayers:number;sourceDeclinedScopes:number;unqualifiedTailScopes:number;currentExecutionContracts:number;pricedExecutionContracts:number;unpricedExecutionContracts:number};
+type SiteCoverage={participationBlockedScopes:number;unresolvedSourceScopes:number;unresolvedExecutionContracts:number;gameId:string;players:number;reviewedPlayers:number;contextChangedPlayers:number;unreviewedScopes:number;eligiblePlayers:number;pricedPlayers:number;qualifiedLawPlayers:number;sourceDeclinedScopes:number;unqualifiedTailScopes:number;currentExecutionContracts:number;pricedExecutionContracts:number;unpricedExecutionContracts:number};
 export type SiteReviewOutcome={status:string;games:SiteReviewResult[];findings:string[];coverage?:SiteCoverage[]};
 export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport;games:LivePropsGame[];writerRunId?:string;load:(game:LivePropsGame,window:CapturedReviewWindow,context?:PropsAiSourceLoadContext)=>Promise<GamePacket>|GamePacket;fetchImpl?:typeof fetch;clock?:()=>string;deadline?:number;onSourceReady?:(packet:GamePacket,review:AcceptedGameReview|null,observedAt:string,lookupAvailable:boolean)=>void;onReviewObserved?:(packet:GamePacket,review:AcceptedGameReview|null,lookupAvailable:boolean)=>void;onReviewReady?:(packet:GamePacket,review:AcceptedGameReview)=>void}):Promise<SiteReviewOutcome>{
   const config=propsAiSiteConfig();
@@ -37,8 +37,11 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
     // Retained results can render with paid runs off. No calendar HTTP/funding is needed to do so.
     let calendar:Awaited<ReturnType<typeof loadPropsCalendar>>|null=null;
     if(paid&&deadline-Date.now()>40000){
-      calendar=await loadPropsCalendar(args.client,now.slice(0,7),now,args.fetchImpl,deadline);
-      const plan=await store.plan(calendarWalletPlan(calendar,now));
+      calendar=await loadPropsCalendar(args.client,now.slice(0,7),now,args.fetchImpl,deadline,clock);
+      const currentGames=args.games.filter(g=>etDate(g.start)===etDate(clock())&&instant(g.start)-3600000>instant(clock()));
+      const refreshed=await reconcilePropsCalendarDay({client:args.client,calendar,sport:args.sport,games:currentGames,writerRunId:args.writerRunId!,now:clock(),clock,fetchImpl:args.fetchImpl,deadline});
+      calendar=refreshed.calendar;findings.push(...refreshed.findings);
+      const plan=await store.plan(calendarWalletPlan(calendar,clock()),calendar);
       if(!plan.funded){findings.push(`ai_unavailable:${plan.reason??"month_not_funded"}`);calendar=null;}
       await store.reap();
     }

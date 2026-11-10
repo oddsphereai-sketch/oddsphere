@@ -5,9 +5,10 @@ import {
 } from "./nbaPlayerPropsProductContract";
 import { currentSlateDate } from "../../dates/slateDate";
 import { nbaPlayerPropsCadenceStage, type NbaPlayerPropsCadenceStage } from "./nbaPlayerPropsSourcePolicy";
+import {prepareNbaLockHandoff,nbaLockScope,type NbaLockHandoff,type NbaLockDiagnostic} from "../../playerPropsAi/nbaLockAuthority";
 
 export const NBA_PLAYER_PROPS_LIFECYCLE_CANDIDATE_RELEASE =
-  "nba_player_props_lifecycle_candidate_2026_10_22_r4_et_day_boundary" as const;
+  "nba_player_props_lifecycle_candidate_2026_11_10_r5_prelock_ai_authority" as const;
 export const NBA_PLAYER_PROPS_WRITER_LEASE_GROUP = "prediction_pipeline:nba" as const;
 export const NBA_PLAYER_PROPS_LOCK_LEAD_MINUTES = 60;
 
@@ -80,12 +81,14 @@ export function advanceNbaPlayerPropsCandidateLifecycle(args: {
   now: string;
   previous: NbaPlayerPropsMemberSnapshot | null;
   candidate: NbaPlayerPropsMemberSnapshot;
+  lockHandoff?:NbaLockHandoff;
 }): Readonly<{
   release: typeof NBA_PLAYER_PROPS_LIFECYCLE_CANDIDATE_RELEASE;
   snapshot: NbaPlayerPropsMemberSnapshot;
   recomputedUnlocked: number;
   frozenAtLock: number;
   retainedLocked: number;
+  lockHandoffDiagnostics:NbaLockDiagnostic[];
 }> {
   const now = timestamp(args.now, "now");
   if (
@@ -96,6 +99,7 @@ export function advanceNbaPlayerPropsCandidateLifecycle(args: {
   }
   const previousByScope = new Map((args.previous?.decisions ?? []).map((row) => [decisionScope(row), row]));
   const candidateScopes = new Set(args.candidate.decisions.map(decisionScope));
+  const handoff=args.lockHandoff?prepareNbaLockHandoff({...args.lockHandoff,nextRows:args.candidate.decisions,previousRows:args.previous?.decisions??[],previousGeneratedAt:args.previous?.generatedAt,now:args.now}):null;
   const output: NbaPlayerPropsMemberDecision[] = [];
   let recomputedUnlocked = 0;
   let frozenAtLock = 0;
@@ -110,8 +114,9 @@ export function advanceNbaPlayerPropsCandidateLifecycle(args: {
     }
     const lockAt = Date.parse(row.scheduledStart) - NBA_PLAYER_PROPS_LOCK_LEAD_MINUTES * 60_000;
     if (now >= lockAt) {
-      if (prior) {
-        output.push({ ...prior, lockedAt: new Date(Math.max(lockAt, 0)).toISOString() });
+      const scope=nbaLockScope(row),selected=handoff?.overrides.has(scope)?handoff.overrides.get(scope):prior;
+      if (selected) {
+        output.push({ ...selected, lockedAt: new Date(Math.max(lockAt, 0)).toISOString() });
         frozenAtLock += 1;
       }
     } else {
@@ -123,6 +128,9 @@ export function advanceNbaPlayerPropsCandidateLifecycle(args: {
     if (prior.lockedAt && !candidateScopes.has(decisionScope(prior))) {
       output.push(prior);
       retainedLocked += 1;
+    }else if(!prior.lockedAt&&!candidateScopes.has(decisionScope(prior))&&now>=Date.parse(prior.scheduledStart)-NBA_PLAYER_PROPS_LOCK_LEAD_MINUTES*60000){
+      const selected=handoff?.overrides.get(nbaLockScope(prior));
+      if(selected){output.push({...selected,lockedAt:new Date(Date.parse(selected.scheduledStart)-NBA_PLAYER_PROPS_LOCK_LEAD_MINUTES*60000).toISOString()});frozenAtLock++;}
     }
   }
   const gameMap = new Map([
@@ -142,6 +150,7 @@ export function advanceNbaPlayerPropsCandidateLifecycle(args: {
     recomputedUnlocked,
     frozenAtLock,
     retainedLocked,
+    lockHandoffDiagnostics:handoff?.diagnostics??[],
   };
 }
 

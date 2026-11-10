@@ -2,6 +2,9 @@ import {sourceEventUsable} from "./sourceEvents";
 /** Deterministic research compression. Every player/market remains; raw offers stay in the local archive. */
 import type { Evidence, GamePacket, Json, Quote } from "./evidenceContract";
 import { digest, instant, invariant, validatePacket } from "./evidence";
+import {quoteBook} from "./executionQuotes";
+
+export const PROPS_AI_MARKET_REPORT_RELEASE="player_props_ai_market_report_2026_11_10_r4_underlying_book_anchor" as const;
 
 const probability = (odds: number) => odds > 0 ? 100 / (odds + 100) : -odds / (-odds + 100);
 const order = (a: Quote, b: Quote) => instant(a.observedAt) - instant(b.observedAt) || instant(a.receivedAt) - instant(b.receivedAt) || a.id.localeCompare(b.id);
@@ -37,6 +40,27 @@ function pair(rows: Quote[], earliest: boolean) {
   });
   return (earliest ? candidates[0] : candidates.at(-1)) ?? null;
 }
+/** A feed is provenance, not another independent vote from the same book.
+ * Keep each original source in the report; only inferred-anchor voting is
+ * deduplicated. Equally current conflicting feeds cannot establish a vote.
+ */
+function underlyingBookReferences(rows:Quote[],line:number){
+  type Paired=NonNullable<ReturnType<typeof pair>>;
+  const byBook=new Map<string,{value:Paired;rank:number[];ambiguous:boolean}>();
+  const compare=(a:number[],b:number[])=>a.reduce((order,n,i)=>order||n-b[i],0);
+  const sources=[...new Set(rows.map(q=>JSON.stringify([q.provider,quoteBook(q.book)])))];
+  for(const source of sources){
+    const atLine=rows.filter(q=>JSON.stringify([q.provider,quoteBook(q.book)])===source&&q.line===line);
+    const value=pair(atLine,false),book=quoteBook(atLine[0]?.book??"");if(!value||!book)continue;
+    const sourceAmbiguous=value.evidence.some(id=>{const chosen=atLine.find(q=>q.id===id)!;return atLine.some(q=>q.side===chosen.side&&(q.opening??null)===(chosen.opening??null)&&(q.receivedAtProvenance??null)===(chosen.receivedAtProvenance??null)&&instant(q.observedAt)===instant(chosen.observedAt)&&instant(q.receivedAt)===instant(chosen.receivedAt)&&q.american!==chosen.american);});
+    const rank=[value.opening===false?2:value.opening===null?1:0,Number(value.receivedAtProvenance==="provider_response"),
+      Math.max(instant(value.overReceivedAt),instant(value.underReceivedAt)),Math.max(instant(value.overObservedAt),instant(value.underObservedAt))];
+    const old=byBook.get(book),order=old?compare(rank,old.rank):1;
+    if(order>0)byBook.set(book,{value,rank,ambiguous:sourceAmbiguous});
+    else if(order===0&&old&&(sourceAmbiguous||old.value.over!==value.over||old.value.under!==value.under))old.ambiguous=true;
+  }
+  return [...byBook.values()].filter(row=>!row.ambiguous).map(row=>row.value);
+}
 export function compileMarketReport(packet: GamePacket): GamePacket {
   validatePacket(packet);
   const retained = new Set<string>(), aggregate: Evidence[] = [];
@@ -49,10 +73,7 @@ export function compileMarketReport(packet: GamePacket): GamePacket {
       const model = player.evidence.find(e => e.kind === "independent_model" && e.value && typeof e.value === "object" && !Array.isArray(e.value) && e.value.market === market);
       const value = model?.value as { line?: number } | undefined;
       const lines = [...new Set(rows.map(q => q.line))].sort((a, b) => a - b);
-      const paired = lines.map(line => ({ line, refs: [...new Set(rows.map(q => `${q.provider}|${q.book}`))].flatMap(source => {
-        const atLine = rows.filter(q => `${q.provider}|${q.book}` === source && q.line === line), p = pair(atLine, false);
-        return p ? [p] : [];
-      }) }));
+      const paired = lines.map(line => ({ line, refs: underlyingBookReferences(rows,line) }));
       // Prefer the declared exact model line. A fallback is labelled inferred, never an invented model head.
       const fallback = [...paired].filter(p => p.refs.length).sort((a, b) => b.refs.length - a.refs.length ||
         Math.abs(a.refs.reduce((n, p) => n + p.fairOver, 0) / a.refs.length - 0.5) - Math.abs(b.refs.reduce((n, p) => n + p.fairOver, 0) / b.refs.length - 0.5) || a.line - b.line)[0]?.line ?? lines[Math.floor(lines.length / 2)] ?? null;
@@ -81,10 +102,10 @@ export function compileMarketReport(packet: GamePacket): GamePacket {
         };
       });
       const report: Evidence = { id: `market-report:${player.id}:${market}`, kind: "market", availableAt: packet.cutoff,
-        source: "deterministic exact-line/book dual-clock price report r3; cross-line openings retained; not a forecast",
+        source: `${PROPS_AI_MARKET_REPORT_RELEASE}; exact-line/book dual-clock report; cross-line openings retained; not a forecast`,
         value: { market, anchorLine: anchor, anchorSource: typeof value?.line === "number" ? "timestamped_independent_model" : "inferred_from_retained_offers",
           rawTraceDigest: digest(rows), rawTraceStates: rows.length, fullAnchorTraceStates: rows.filter(q => q.line === anchor).length,
-          books, limitations: ["All supplied opening quotes and raw anchor-line history retained; other alternate-line histories summarized with full source in archive", "Multiple opening/alternate lines do not establish a chronological main-line move without source designation", "nearest ladder samples are observed pairs, not interpolated quantiles", "no money/bet splits inferred from odds", "no attribution of who moved first beyond retained timestamps", "stale leg/age checks still required at execution"] } as unknown as Json };
+          books, limitations: ["Inferred anchors count each normalized underlying book once per line; duplicate feeds are correlated and equal-clock conflicting feeds cannot establish an independent vote", "All supplied opening quotes and raw anchor-line history retained; other alternate-line histories summarized with full source in archive", "Multiple opening/alternate lines do not establish a chronological main-line move without source designation", "nearest ladder samples are observed pairs, not interpolated quantiles", "no money/bet splits inferred from odds", "no attribution of who moved first beyond retained timestamps", "stale leg/age checks still required at execution"] } as unknown as Json };
       evidence.push(report); aggregate.push(report);
     }
     return { ...player, evidence };

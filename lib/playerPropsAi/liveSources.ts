@@ -20,6 +20,7 @@ import {CATALOG,PRODUCT_RELEASE,type GamePacket,type Json,type Quote,type Player
 import type {CapturedReviewWindow} from "./liveWindow";
 import {propsTeam} from "./teamIdentity";
 import {digest,instant,invariant} from "./evidence";
+import {attachCapturedNbaParticipationReports,type CapturedNbaParticipationReport} from './participationEligibility';
 
 export type LivePropsGame={id:string;start:string;away:string;home:string};
 const json=(v:unknown):Json=>JSON.parse(JSON.stringify(v));
@@ -37,14 +38,20 @@ function finish(packet:GamePacket,at:string,currentOffers:Quote[]){
   ]};
   return {...compileMarketReport(clean),executionQuotes:latestExecutionQuotes(currentOffers,at).map(q=>({...q,id:`execution:${digest(q)}`}))};
 }
-export function liveNbaPacket(args:{game:LivePropsGame;window:CapturedReviewWindow;snapshot:NbaPlayerPropsMemberSnapshot;market:NbaPlayerPropsMarketHistory;prior:NbaPlayerPropsCurrentState;current:NbaPlayerPropsCurrentState;context?:EnrichedSource["nbaContext"];currentObservations:NbaPlayerPropsMarketHistory["observations"]}):GamePacket{
+export function liveNbaPacket(args:{game:LivePropsGame;window:CapturedReviewWindow;snapshot:NbaPlayerPropsMemberSnapshot;market:NbaPlayerPropsMarketHistory;prior:NbaPlayerPropsCurrentState;current:NbaPlayerPropsCurrentState;context?:EnrichedSource["nbaContext"];participationReports?:readonly CapturedNbaParticipationReport[];currentObservations:NbaPlayerPropsMarketHistory["observations"]}):GamePacket{
   const at=args.window.cutoff;
-  const source:EnrichedSource={readOnly:true,generatedAt:at,priorNba:args.prior,currentNba:args.current,nba:[{date:args.snapshot.slateDate,snapshot:{...args.snapshot,generatedAt:at},market:args.market}],nfl:[],nbaContext:args.context};
+  const nativeAvailable=instant(args.snapshot.generatedAt)<=instant(at);
+  // A later native snapshot cannot donate priors, names or market scopes to an
+  // earlier cutoff. The current fixture and independently available offers may
+  // still establish complete quote-only actors without a manufactured head.
+  const snapshot=nativeAvailable?args.snapshot:{...args.snapshot,games:[{gameId:args.game.id,scheduledStart:args.game.start,awayTeam:args.game.away,homeTeam:args.game.home}],decisions:[]};
+  const source:EnrichedSource={readOnly:true,generatedAt:at,priorNba:args.prior,currentNba:args.current,nba:[{date:args.snapshot.slateDate,snapshot,market:args.market}],nfl:[],nbaContext:args.context};
   const packet=fromCachedExport(source,args.window).packets[0];invariant(packet,"NBA live game missing from captured source");
   invariant(!args.market.observations.some(q=>q.canonicalGameId===args.game.id&&(CATALOG.nba.required as readonly string[]).includes(q.market)&&q.provider!=="owls"&&!q.canonicalPlayerId),"NBA retail offered-player identity incomplete");
   for(const p of packet.players){p.team=propsTeam(p.team);p.opponent=propsTeam(p.opponent);invariant([propsTeam(args.game.home),propsTeam(args.game.away)].includes(p.team)&&[propsTeam(args.game.home),propsTeam(args.game.away)].includes(p.opponent)&&p.team!==p.opponent,"NBA player/team matchup identity incomplete");}
   const current=fromCachedExport({...source,nba:[{...source.nba[0],market:{...args.market,observations:args.currentObservations}}]},args.window).packets[0]?.quotes??[];
-  return finish(enrichCachedPacket(packet,source),at,current);
+  const result=finish(attachCapturedNbaParticipationReports(enrichCachedPacket(packet,source),args.participationReports??[]),at,current);
+  return nativeAvailable?result:{...result,sourceLimitations:[...result.sourceLimitations,`Original NBA native snapshot availability ${args.snapshot.generatedAt} is after cutoff; its priors, labels and scopes were not supplied. Current quote-only actor coverage remains independent.`]};
 }
 export function liveNflPacket(args:{game:LivePropsGame;window:CapturedReviewWindow;snapshot:NflPlayerPropsProductionSnapshot;observations:NflPlayerPropsObservationSnapshot;history:NflPlayerPropsCurrentSeasonState;context:NflPlayerPropsInferenceContext;retainedQuotes?:Quote[];marketHistory?:Parameters<typeof attachNflReaderMarkets>[1]}):GamePacket{
   const at=args.window.cutoff,source:EnrichedSource={...emptyCapturedSource(at),nfl:[{week:args.snapshot.week,snapshot:args.snapshot}],nflHistory:args.history};
@@ -100,7 +107,7 @@ export function liveNflPacket(args:{game:LivePropsGame;window:CapturedReviewWind
 }
 export function liveMlbPacket(args:{game:LivePropsGame;window:CapturedReviewWindow;snapshot:MlbPropsBoardSnapshot;currentOdds:readonly PropOddsSnapshot[];openingOdds:readonly PropOddsSnapshot[]}):GamePacket{
   const at=args.window.cutoff,source=emptyCapturedSource(at);
-  const packet=mlbPackets(source,args.window,[{...args.snapshot,asOfTimestamp:at}])[0];invariant(packet,"MLB live game missing from captured source");
+  const packet=mlbPackets(source,args.window,[args.snapshot])[0];invariant(packet,"MLB live source snapshot unavailable at cutoff; no earlier verified player mapping or native head may be manufactured");
   const quotes:Quote[]=[];
   const nativeRows=args.snapshot.data.props.filter(r=>r.providerIds?.gameId===args.game.id);
   const nativeGames=new Set(nativeRows.flatMap(r=>r.providerIds?.bdlGameId?[String(r.providerIds.bdlGameId)]:[]));

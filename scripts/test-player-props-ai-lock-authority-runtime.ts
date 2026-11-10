@@ -185,7 +185,7 @@ const calendar={release:PROPS_AI_CALENDAR_RELEASE,month:'2026-11',capturedAt:pai
 const client:any={from:(table:string)=>{
  let selection='';const query:any={select:(s:string)=>{selection=s;return query;},eq:()=>query,gte:()=>query,in:()=>query,lte:()=>query,gt:()=>query,order:()=>query,single:async()=>({data:{release:'player_props_ai_control_2026_11_07_r1_explicit_off',paid_enabled:true},error:null}),maybeSingle:async()=>({data:{release:PROPS_AI_CALENDAR_RELEASE,captured_at:paidSourceAt,payload:calendar},error:null}),limit:async()=>{assert.equal(table,'player_props_ai_reviews');reviewGets++;if(reviewGets===1)return{data:[{result:early}],error:null};assert(finished,'Reviewer returned locally before final GET');completedObservedLocallyAt=tick;tick='2026-11-09T22:00:00.100Z';return{data:[{result:finished},{result:early}],error:null};},then:(resolve:any)=>{assert.equal(selection,'*');return Promise.resolve({data:[job],error:null}).then(resolve);}};return query;
 },rpc:async(name:string,args:any)=>{
- if(name==='player_props_ai_plan_v3')return{data:{funded:true,budget:{}},error:null};
+ if(name==='player_props_ai_plan_v4')return{data:{funded:true,budget:{}},error:null};
  if(name==='player_props_ai_reap')return{data:0,error:null};
  if(name==='player_props_ai_claim'){claimHash=args.p_hash;return{data:{claimed:true,token:'00000000-0000-0000-0000-000000000001',job:{...job,state:'running',parts:1,phase:1,model:'gpt-6-luna',requested_tier:'default',claim_token:'00000000-0000-0000-0000-000000000001'}},error:null};}
  if(name==='player_props_ai_send')return{data:{id:'00000000-0000-0000-0000-000000000002',model:'gpt-6-luna',requested_tier:'default',reserved_micro:100000},error:null};

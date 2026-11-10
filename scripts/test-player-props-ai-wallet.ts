@@ -140,6 +140,7 @@ try{
   await db.query(readFileSync("lib/db/schema-migration-v63-player-props-ai-site-control.sql","utf8"));
   await db.query(readFileSync("lib/db/schema-migration-v66-player-props-ai-slate-capacity.sql","utf8"));
   await db.query(readFileSync("lib/db/schema-migration-v68-player-props-ai-standard-primary-escrow.sql","utf8"));
+  await db.query(readFileSync("lib/db/schema-migration-v70-player-props-ai-calendar-lifecycle.sql","utf8"));
   await db.query("UPDATE player_props_ai_control SET paid_enabled=true");
   await db.query("CREATE TABLE test_clock(at timestamptz); INSERT INTO test_clock VALUES('2026-11-07T21:40:00Z'); CREATE FUNCTION props_ai_test_clock() RETURNS timestamptz LANGUAGE sql VOLATILE AS 'SELECT at FROM test_clock'");
   const functions=await db.query("SELECT pg_get_functiondef(oid) body FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname LIKE 'player_props_ai_%'");
