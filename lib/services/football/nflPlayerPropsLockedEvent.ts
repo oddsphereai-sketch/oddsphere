@@ -8,7 +8,7 @@ import { digest } from "../../playerPropsAi/evidence";
 
 export const NFL_PROPS_LOCKED_EVENT_RELEASE = "nfl_props_locked_event_2026_11_10_r1_exact_contract" as const;
 // Deliberately pinned: importing a later moving release must not opt old locks in.
-const EXACT_EVENT_DECISION_RELEASE = "player_props_ai_nfl_decision_2026_11_10_r12_source_participation";
+const EXACT_EVENT_DECISION_RELEASE = "player_props_ai_nfl_decision_2026_11_10_r13_verified_reader_claims";
 export type NflPropsLockedEvent = {
   release: typeof NFL_PROPS_LOCKED_EVENT_RELEASE;
   gameId: string; providerPlayerId: string; provider: string; decisionRelease: string; modelRelease: string;
@@ -21,7 +21,7 @@ const time = (s: string) => typeof s === "string" && /(?:Z|[+-]\d\d:\d\d)$/.test
 
 /** undefined means an unchanged legacy decision; null is a new-contract failure
  * that must be persisted explicitly and held, never silently settled as legacy.
- * A newly published R12 decision may retain an older accepted law/review release. */
+ * A newly published R13 decision may retain an older accepted law/review release. */
 export function buildNflPropsLockedEvent(row: NflPlayerPropsRuntimeDecision): NflPropsLockedEvent | null | undefined {
   if (row.decisionRelease !== EXACT_EVENT_DECISION_RELEASE) return undefined;
   try {

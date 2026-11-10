@@ -1,3 +1,5 @@
+import {PROPS_AI_WIRE_RELEASE} from "../lib/playerPropsAi/scenarioCoordinates";
+import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 /** Full current NFL event path, with in-memory tracking and fake final sources. */
 import assert from 'node:assert/strict';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -5,7 +7,7 @@ import type { NflPlayerPropsRuntimeDecision as Decision } from '../lib/services/
 import type { AcceptedGameReview } from '../lib/playerPropsAi/reviewer';
 import { normalizeBalldontlieNflPlayerProps } from '../lib/services/football/nflPlayerPropsProviders';
 import { liveNflPacket } from '../lib/playerPropsAi/liveSources';
-import { encodeCanonicalScenarioLaw, GENERATIVE_WIRE_RELEASE } from '../lib/playerPropsAi/generativeCoordinates';
+import { encodeCanonicalScenarioLaw } from '../lib/playerPropsAi/generativeCoordinates';
 import { readerEvidence, READER_AREAS } from '../lib/playerPropsAi/readerCoverage';
 import { evidenceAliases } from '../lib/playerPropsAi/input';
 import { parseJointReview } from '../lib/playerPropsAi/request';
@@ -32,10 +34,10 @@ function issued(market: 'rushing_yards' | 'passing_tds' | 'anytime_td', line: nu
   const p = packet.players[0], facts = readerEvidence(packet)[p.id], aliases = evidenceAliases(packet);
   const samples = market === 'anytime_td' ? [0, 1, 2, ...v(0).slice(3)] : [0, line, line + 10, ...v(0).slice(3)];
   const outcomes = market === 'passing_tds' ? { passing_attempts: v(30), passing_completions: v(20), passing_tds: samples, interceptions: v(0) } : { [market === 'anytime_td' ? 'touchdowns' : market]: samples };
-  const parsed = parseJointReview(packet, { wireRelease: GENERATIVE_WIRE_RELEASE, players: { [p.id]: {
+  const parsed = parseJointReview(packet, { wireRelease: PROPS_AI_WIRE_RELEASE, players: { [p.id]: verifiedReaderFixture(packet,p.id,{
     assessment: 'The supplied source supports a conditional production estimate.', priorRead: {},
     coverage: Object.fromEntries(READER_AREAS.map(a => [a, { status: facts[a].status, factIds: facts[a].facts.slice(0, 1).map(f => f.id), effect: 'uncertain', observation: 'The supplied source supports a conditional production estimate.' }])),
-    evidenceIds: [[...aliases][0][0]], gaps: [], confidence: [2], exceptions: [null], law: encodeCanonicalScenarioLaw('nfl', p, { weights: [1, 2, 1, ...v(0).slice(3)], outcomes }) } } });
+    evidenceIds: [[...aliases][0][0]], gaps: [], confidence: [2], exceptions: [null], law: encodeCanonicalScenarioLaw('nfl', p, { weights: [1, 2, 1, ...v(0).slice(3)], outcomes }) }) } });
   const review = { ...parsed, release, gameId: game.id, sourceGameId: game.id, start, lock, cutoff: at, stage: 'early', issuedAt: at, inputHash: digest(packet), criticalContextHashes: criticalContextHashes(packet), marketScopes: { [p.id]: p.markets }, partProvenance: [], model: 'synthetic', inputEvidence: { digest: digest(packet) } } as unknown as AcceptedGameReview;
   const choices = siteAiDecisions(packet, review, at); assert.equal(choices.length, 1);
   const seed = applyNflSiteAi({ decisions: [], counts: {} } as never, packet, choices, at);
@@ -81,7 +83,7 @@ async function main() {
     const bytes = JSON.stringify(db.records); await write(row, db); assert.equal(JSON.stringify(db.records), bytes, 'same-key retries preserve every stored field and insert no duplicate');
   }
   const priorLaw = issued('rushing_yards', 50, true, 'player_props_ai_2026_11_10_r29_identity_and_execution_evidence');
-  assert.equal(nflPropsSettlementEvent(eventRead((await write(priorLaw)).records[0]) as never).status, 'exact', 'new R12 decision with unchanged accepted R29 law opts in');
+  assert.equal(nflPropsSettlementEvent(eventRead((await write(priorLaw)).records[0]) as never).status, 'exact', 'new R13 decision with unchanged accepted R29 law opts in');
   const binary = (await write(issued('anytime_td', .5))).records[0];
   for (const [actual, result] of [[0, 'loss'], [1, 'win'], [2, 'win']] as const) assert.equal((await settle(binary, actual, 'rushing_touchdowns')).row.result, result);
   const ordinary = (await write(issued('rushing_yards', 50, false))).records[0];
@@ -103,9 +105,9 @@ async function main() {
   const old = { ...row, decisionRelease: 'player_props_ai_nfl_decision_2026_11_09_r11_prelock_authority' };
   const legacy = (await write(old)).records[0]; assert(!Object.hasOwn(legacy.snapshot_json, 'lockedEvent'));
   assert.equal((await settle(legacy, 49, 'rushing_yards')).row.result, 'win', 'legacy issued semantics remain exact, even when mathematically different');
-  const absent = structuredClone(current); delete absent.snapshot_json.lockedEvent; assert.equal((await settle(absent, 49, 'rushing_yards')).row.result, 'pending', 'new R12 requires its stored event; absence cannot become legacy or a reconstructed event');
+  const absent = structuredClone(current); delete absent.snapshot_json.lockedEvent; assert.equal((await settle(absent, 49, 'rushing_yards')).row.result, 'pending', 'new R13 requires its stored event; absence cannot become legacy or a reconstructed event');
   const settledLegacy = structuredClone(legacy); settledLegacy.result = 'loss'; settledLegacy.actual_value = 49; const storedBytes = JSON.stringify(settledLegacy);
   const preserved = await settle(settledLegacy, 100, 'rushing_yards'); assert.equal(JSON.stringify(preserved.row), storedBytes); assert.equal(preserved.result.pending, 0);
-  console.log('NFL exact event passed: normalizer→live source→generative parser→pricing→binding→actual tracking write→settlement; 50+ yards/2+ passing TDs below/equal/above, binary TD, integer push, R29 law/new R12 event, malformed metadata holds, exact legacy absence/results, immutable same-key retries. Fake I/O only.');
+  console.log('NFL exact event passed: normalizer→live source→generative parser→pricing→binding→actual tracking write→settlement; 50+ yards/2+ passing TDs below/equal/above, binary TD, integer push, R29 law/new R13 event, malformed metadata holds, exact legacy absence/results, immutable same-key retries. Fake I/O only.');
 }
 void main();

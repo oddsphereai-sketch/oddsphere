@@ -30,9 +30,27 @@ function currentGrade(packet:GamePacket,c:SiteAiDecision,q:GamePacket["quotes"][
   return gradeAiEvent({win:q.side==="under"?c.under:c.over,loss:q.side==="under"?c.over:c.under,american:q.american,opposingAmerican:opposite?.american??null,confidence:c.evidence.confidence,exception:c.evidence.exception}).grade;
 }
 function nbaMovement(packet:GamePacket,c:SiteAiDecision):NbaPlayerPropsMemberDecision["movement"]{
-  const quotes=packet.quotes.filter(q=>q.playerId===c.playerId&&q.market===c.market&&book(q.book)===book(c.book)&&q.provider===c.provider&&q.side===c.side).sort((a,b)=>instant(a.observedAt)-instant(b.observedAt));
-  const opening=quotes.find(q=>q.opening);if(!opening)return null;
-  const prior=quotes.filter(q=>!q.opening&&instant(q.observedAt)<instant(c.quote.observedAt)).at(-1);
+  // The captured Quote contract has no verified main-line designation. A
+  // different line can therefore be an alternate ladder, never a proven step
+  // in this event's path. Preserve those raw quotes without inventing movement.
+  const quotes=packet.quotes.filter(q=>q.playerId===c.playerId&&q.market===c.market&&book(q.book)===book(c.book)&&q.provider===c.provider&&q.side===c.side
+    &&q.line===c.line&&quoteContract(q)==="two_way"&&!q.live&&typeof q.opening==="boolean"
+    &&instant(q.observedAt)<=instant(c.quote.observedAt)&&instant(q.receivedAt)<=instant(packet.cutoff));
+  const openingClock=quotes.reduce((earliest,q)=>q.opening===true?Math.min(earliest,instant(q.observedAt)):earliest,Infinity);
+  if(!Number.isFinite(openingClock))return null;
+  const trail=quotes.filter(q=>instant(q.observedAt)>=openingClock);
+  // Repeated receipts/feed rows are not additional price changes. Contradictory
+  // prices at one native clock cannot establish an ordered opening/prior path,
+  // even if arrival order or an arbitrary quote ID could choose a winner.
+  const pricesByClock=new Map<number,Set<number>>();
+  for(const q of [...trail,c.quote]){
+    const clock=instant(q.observedAt),prices=pricesByClock.get(clock)??new Set<number>();
+    prices.add(q.american);pricesByClock.set(clock,prices);
+  }
+  if([...pricesByClock.values()].some(prices=>prices.size!==1))return null;
+  const opening=trail.find(q=>q.opening===true&&instant(q.observedAt)===openingClock)!;
+  const prior=trail.filter(q=>q.opening===false&&instant(q.observedAt)<instant(c.quote.observedAt)&&q.american!==c.american)
+    .sort((a,b)=>instant(b.observedAt)-instant(a.observedAt))[0];
   return {sportsbook:c.book,openingLine:opening.line,openingPrice:opening.american,priorLine:prior?.line??null,priorPrice:prior?.american??null,currentLine:c.line,currentPrice:c.american};
 }
 function nbaAiPrices(packet:GamePacket,c:SiteAiDecision,now:string):NbaPlayerPropsMemberDecision["priceLadder"]{

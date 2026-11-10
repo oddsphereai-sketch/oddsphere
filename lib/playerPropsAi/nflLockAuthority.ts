@@ -7,7 +7,7 @@ import {digest,instant,validatePacket} from './evidence';
 import {criticalContextHashes} from './criticalContext';
 import {unresolvedForecastMarkets} from './sourceEvents';
 import {nflPlayerPropsRuntimePolicy,type NflPlayerPropsRuntimeDecision as Row} from '../services/football/nflPlayerPropsRuntime';
-import type {GamePacket} from './evidenceContract';
+import type {GamePacket,Quote} from './evidenceContract';
 import type {AcceptedGameReview} from './reviewer';
 import {propsTeam} from './teamIdentity';
 import {executionQuotes} from './executionQuotes';
@@ -18,6 +18,11 @@ export type State='qualified'|'declined'|'context_changed'|'unreviewed_actor'|'u
 type Bound<T> = T&{binding:string};
 export type Authority=Bound<{gameId:string;actorId:string;scheduledStart:string;team:string;opponent:string;lockAt:string;observedAt:string;currentContextHash:string;review:null|{release:string;inputHash:string;stage:string;issuedAt:string;contextHash:string|null;lawHash:string|null;playerDigest:string|null};scopes:{market:string;status:State}[]}>;
 export type Proof=Bound<{gameId:string;actorId:string;event:string;kind:'ai'|'native';rowHash:string;contextHash:string;readyAt:string;quoteConfirmedAt:string;sourcePacketHash?:string}>;
+/** Only an explicit current collector set can establish withdrawal. Missing
+ * execution metadata or a failed load must never be interpreted as an empty set. */
+type CurrentExecution=Pick<Quote,'playerId'|'market'|'line'|'side'|'provider'|'book'|'american'|'offerContract'>;
+type ExecutionAuthority=Bound<{gameId:string;scheduledStart:string;lockAt:string;observedAt:string;order:number;sourcePacketHash:string;actors:{id:string;markets:string[]}[];quotes:CurrentExecution[]}>;
+let executionOrder=0;
 const owned=new WeakSet<object>();
 function freeze<T>(value:T):T{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;}
 const seal=<T extends object>(v:T):Bound<T>=>{const result=freeze({...v,binding:digest(v)});owned.add(result);return result;};
@@ -112,7 +117,7 @@ export function resolveScope(args:{authority:Authority;market:string;previousLoc
 }
 
 export type SourceFrame={gameId:string;kind:'ai'|'native'|'authority';sourcePacketHash:string;cutoff:string;readyAt:string;lockAt:string};
-export type NflLockHandoff={authorities:Authority[];nativeRows:Row[];nativeProofs:Proof[];candidateProofs:Proof[];sourceFrames?:SourceFrame[]};
+export type NflLockHandoff={authorities:Authority[];nativeRows:Row[];nativeProofs:Proof[];candidateProofs:Proof[];sourceFrames?:SourceFrame[];executionAuthorities?:ExecutionAuthority[]};
 /** Freeze source + constructed rows together, then sample the real observation
  * clock. Production callers never supply a hash or reuse board.evaluatedAt.
  * Clock injection exists solely for deterministic offline boundary controls. */
@@ -128,7 +133,10 @@ function observeAuthority(packet:GamePacket,review:AcceptedGameReview|null,looku
  // The information is fully materialized at entry. Observe it BEFORE any
  // overlay/hash work; readiness of a later numeric candidate is separate.
  const observedAt=clock(),source:GamePacket=freeze(JSON.parse(JSON.stringify(packet)));
- return{authorities:buildAuthorities(source,review,observedAt,lookupAvailable),nativeRows:[],nativeProofs:[],candidateProofs:[],sourceFrames:[{gameId:source.sourceGameId??source.gameId,kind:'authority',sourcePacketHash:digest(source),cutoff:source.cutoff,readyAt:observedAt,lockAt:source.lock}]};
+ const gameId=source.sourceGameId??source.gameId,sourcePacketHash=digest(source);
+ const authorities=buildAuthorities(source,review,observedAt,lookupAvailable);
+ const executionAuthorities=Array.isArray(source.executionQuotes)?[seal({gameId,scheduledStart:source.start,lockAt:source.lock,observedAt,order:++executionOrder,sourcePacketHash,actors:source.players.map(p=>({id:p.id,markets:[...p.markets]})),quotes:executionQuotes(source,observedAt).map(q=>({playerId:q.playerId,market:q.market,line:q.line,side:q.side,provider:q.provider,book:q.book,american:q.american,...(q.offerContract?{offerContract:q.offerContract}:{})}))})]:[];
+ return{authorities,nativeRows:[],nativeProofs:[],candidateProofs:[],executionAuthorities,sourceFrames:[{gameId,kind:'authority',sourcePacketHash,cutoff:source.cutoff,readyAt:observedAt,lockAt:source.lock}]};
 }
 export function observeNflSourceAuthority(packet:GamePacket,review:AcceptedGameReview|null,lookupAvailable:boolean):NflLockHandoff{assert.equal(arguments.length,3,'Production authority rejects supplied clocks/hashes');return observeAuthority(packet,review,lookupAvailable,()=>new Date().toISOString());}
 export function testNflSourceAuthority(clock:()=>string){assert.equal(process.env.NODE_ENV,'test');return(packet:GamePacket,review:AcceptedGameReview|null,lookupAvailable=true)=>observeAuthority(packet,review,lookupAvailable,clock);}
@@ -138,10 +146,19 @@ export function testNflHandoffProof(...args:Parameters<typeof proveRow>){assert.
 export function captureNflHandoffBundle(rows:Row[],packet:GamePacket,review:AcceptedGameReview|null,kind:'ai'|'native'):NflLockHandoff{assert.equal(arguments.length,4,'Production capture rejects supplied clocks/hashes');return captureBundle(rows,packet,review,kind,()=>new Date().toISOString());}
 /** Exact same constructor under an explicit offline test clock. */
 export function testNflHandoffCapture(clock:()=>string){assert.equal(process.env.NODE_ENV,'test','Injected capture clocks are offline-test only');return(rows:Row[],packet:GamePacket,review:AcceptedGameReview|null,kind:'ai'|'native')=>captureBundle(rows,packet,review,kind,clock);}
-export function mergeNflHandoffs(frames:NflLockHandoff[]):NflLockHandoff{return{authorities:frames.flatMap(f=>f.authorities),nativeRows:frames.flatMap(f=>f.nativeRows),nativeProofs:frames.flatMap(f=>f.nativeProofs),candidateProofs:frames.flatMap(f=>f.candidateProofs),sourceFrames:frames.flatMap(f=>f.sourceFrames??[])}};
+export function mergeNflHandoffs(frames:NflLockHandoff[]):NflLockHandoff{return{authorities:frames.flatMap(f=>f.authorities),nativeRows:frames.flatMap(f=>f.nativeRows),nativeProofs:frames.flatMap(f=>f.nativeProofs),candidateProofs:frames.flatMap(f=>f.candidateProofs),sourceFrames:frames.flatMap(f=>f.sourceFrames??[]),executionAuthorities:frames.flatMap(f=>f.executionAuthorities??[])}};
 /** Prepare only future locks; the authoritative existing reconciler still owns
  * lock construction, evidence merging, member selection and every stored lock. */
 export function prepareNflLockHandoff(args:NflLockHandoff&{nextRows:Row[];previousRows:Row[];previousGeneratedAt?:string;now:string}){
+ const currentExecutions=new Map<string,ExecutionAuthority>();
+ for(const capture of [...(args.executionAuthorities??[])].filter(c=>instant(c.observedAt)<=instant(args.now)&&instant(c.observedAt)<instant(c.lockAt)).map(c=>{verify(c);return c;}).sort((a,b)=>instant(b.observedAt)-instant(a.observedAt)||b.order-a.order))if(!currentExecutions.has(capture.gameId))currentExecutions.set(capture.gameId,capture);
+ const executionAllows=(row:Row):boolean|undefined=>{
+  const capture=currentExecutions.get(row.gameId);if(!capture)return undefined;
+  const id=actor(row),book=(s:string)=>s.toLowerCase().replace(/[^a-z0-9]/g,'');
+  return instant(row.scheduledStart)===instant(capture.scheduledStart)&&instant(row.lockAt)===instant(capture.lockAt)
+   &&capture.actors.some(p=>p.id===id&&p.markets.includes(row.market))
+   &&capture.quotes.some(q=>q.playerId===id&&q.market===row.market&&q.line===row.line&&q.side===row.side&&q.provider===row.provider&&book(q.book)===book(row.sportsbook)&&q.american===row.americanPrice&&quoteContract(q)===(row.side==='yes'?'milestone':'two_way'));
+ };
  const rank=(a:Authority)=>a.review?.stage==='final'?2:a.review?.stage==='early'?1:0;
  const ordered=[...args.authorities].filter(a=>{verify(a);return instant(a.observedAt)<=instant(args.now)&&instant(a.observedAt)<instant(a.lockAt);}).sort((a,b)=>instant(b.observedAt)-instant(a.observedAt)||rank(b)-rank(a)||instant(b.review?.issuedAt??b.observedAt)-instant(a.review?.issuedAt??a.observedAt)||a.binding.localeCompare(b.binding));
  const latest=new Map<string,Authority>();
@@ -150,6 +167,8 @@ export function prepareNflLockHandoff(args:NflLockHandoff&{nextRows:Row[];previo
  const diagnostics:{actorId:string|null;market:string;kind:string;status:string|null}[]=[],nextRows:Row[]=[];
  const preferredEvents=new Set<string>();
  for(const row of args.nextRows){
+  if(row.state==='locked'){nextRows.push(row);continue;}
+  if(executionAllows(row)===false){diagnostics.push({actorId:actor(row),market:row.market,kind:'unavailable',status:'current_execution_withdrawn'});continue;}
   if(instant(args.now)<instant(row.lockAt)){nextRows.push(row);continue;}
   const a=active.find(a=>a.actorId===actor(row)&&a.gameId===row.gameId);
   if(!a){
@@ -160,9 +179,10 @@ export function prepareNflLockHandoff(args:NflLockHandoff&{nextRows:Row[];previo
   }
   const native=args.nativeRows.find(r=>event(r)===event(row));
   const result=resolveScope({authority:a,market:row.market,candidate:row,candidateProof:args.candidateProofs.find(p=>p.event===event(row)),native,nativeProof:args.nativeProofs.find(p=>p.event===event(row)),now:args.now});
-  if(result.row)nextRows.push(result.row);
-  diagnostics.push({actorId:a.actorId,market:row.market,kind:result.kind,status:result.status??null});
+  const withdrawn=result.row&&executionAllows(result.row)===false;
+  if(result.row&&!withdrawn)nextRows.push(result.row);
+  diagnostics.push({actorId:a.actorId,market:row.market,kind:withdrawn?'unavailable':result.kind,status:withdrawn?'current_execution_withdrawn':result.status??null});
  }
- const suppressPrevious=(row:Row)=>row.state!=='locked'&&instant(args.now)>=instant(row.lockAt)&&(active.some(a=>a.actorId===actor(row)&&a.gameId===row.gameId)||Boolean(row.aiReview&&preferredEvents.has(event(row)))||Boolean(args.previousGeneratedAt&&instant(args.previousGeneratedAt)>=instant(row.lockAt)));
+ const suppressPrevious=(row:Row)=>row.state!=='locked'&&(executionAllows(row)===false||instant(args.now)>=instant(row.lockAt)&&(active.some(a=>a.actorId===actor(row)&&a.gameId===row.gameId)||Boolean(row.aiReview&&preferredEvents.has(event(row)))||Boolean(args.previousGeneratedAt&&instant(args.previousGeneratedAt)>=instant(row.lockAt))));
  return{nextRows,suppressPrevious,diagnostics};
 }

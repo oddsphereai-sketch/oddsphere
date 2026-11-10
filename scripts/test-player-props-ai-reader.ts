@@ -1,3 +1,4 @@
+import {buildVerifiedReaderSelections,verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 import {encodeCanonicalScenarioLaw} from "../lib/playerPropsAi/generativeCoordinates";
 import assert from "node:assert/strict";
 import {PRODUCT_RELEASE,type GamePacket,type Evidence,type Json} from "../lib/playerPropsAi/evidenceContract";
@@ -60,7 +61,7 @@ assert.equal(jointReviewRequest(compiled,"gpt-6-luna",10000).store,false);
 assert.deepEqual(JSON.parse(readerReviewRequest(compiled,"gpt-6-luna",10000).input),JSON.parse(jointReviewRequest(compiled,"gpt-6-luna",10000).input));
 const coverage=Object.fromEntries(READER_AREAS.map(area=>[area,{status:r[area].status,factIds:r[area].facts.slice(0,1).map(f=>f.id),effect:r[area].status==="missing"?"unavailable":"uncertain",observation:"Supplied facts require contextual caution."}])) as ReaderCoverage;
 const accepted=validateCoverage(r,coverage);
-const wire={priorRead:Object.fromEntries(compiled.players[0].evidence.filter(e=>e.kind==="independent_model").map(e=>[[...evidenceAliases(compiled)].find(([,id])=>id===e.id)![0],"tie"])),assessment:"Synthetic conditional forecast.",coverage,evidenceIds:["e0"],gaps:[],law:encodeCanonicalScenarioLaw(compiled.sport,compiled.players[0],{weights:Array(16).fill(1),outcomes:{points:Array.from({length:16},(_,i)=>i===1?24:10),rebounds:Array(16).fill(4),assists:Array(16).fill(3),threes:Array(16).fill(2)}}),confidence:[1],exceptions:[null]};
+const wire=verifiedReaderFixture(compiled,compiled.players[0].id,{priorRead:Object.fromEntries(compiled.players[0].evidence.filter(e=>e.kind==="independent_model").map(e=>[[...evidenceAliases(compiled)].find(([,id])=>id===e.id)![0],"tie"])),assessment:"Synthetic conditional forecast.",coverage,evidenceIds:["e0"],gaps:[],law:encodeCanonicalScenarioLaw(compiled.sport,compiled.players[0],{weights:Array(16).fill(1),outcomes:{points:Array.from({length:16},(_,i)=>i===1?24:10),rebounds:Array(16).fill(4),assists:Array(16).fill(3),threes:Array(16).fill(2)}}),confidence:[1],exceptions:[null]});
 const matrixForecast=parseJointReview(compiled,{wireRelease:PROPS_AI_WIRE_RELEASE,players:{p:wire}});
 assert.throws(()=>parseJointReview(compiled,{players:{p:wire}}),/wire release mismatch/);
 assert.throws(()=>parseJointReview(compiled,{wireRelease:"props_scenario_rows_legacy",players:{p:wire}}),/wire release mismatch/);
@@ -68,7 +69,7 @@ assert.equal(matrixForecast.players[0].law!.outcomes.points[0],10);assert.equal(
 assert.throws(()=>parseJointReview(compiled,{wireRelease:PROPS_AI_WIRE_RELEASE,players:{p:{...wire,law:[[1,10,4,3,2]]}}}),/C:fields_or_identity/);
 assert.throws(()=>parseJointReview(compiled,{wireRelease:PROPS_AI_WIRE_RELEASE,players:{p:{...wire,law:Array.from({length:16},()=>[1,-1,4,3,2])}}}),/C:fields_or_identity/);
 assert.equal(accepted.recent_form.facts[0].hash,r.recent_form.facts[0].hash);
-assert.equal(parseReaderReview(compiled,{players:{p:{coverage}}}).players.length,1);
+assert.equal(parseReaderReview(compiled,{players:{p:{coverage:buildVerifiedReaderSelections(compiled,"p").coverage}}}).players.length,1);
 assert.throws(()=>parseReaderReview(compiled,{players:{}}),/omitted/);
 const missing=structuredClone(coverage);delete (missing as Partial<ReaderCoverage>).matchup;
 assert.throws(()=>validateCoverage(r,missing),/omitted/);

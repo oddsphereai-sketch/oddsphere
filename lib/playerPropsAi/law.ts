@@ -19,7 +19,7 @@ export function primitives(sport: Sport, player: Pick<Player, "markets"|"sourceE
   return [...(player.markets.some(m => m.startsWith("pitcher_")) ? MLB_PITCHER : []), ...(player.markets.some(m => m.startsWith("batter_")) ? MLB_BATTER : [])];
 }
 export type PlayerLaw = { weights: number[]; outcomes: Record<string, number[]> };
-export type PlayerReview = { assessment: string; coverage: ReaderCoverage; evidenceIds: string[]; gaps: string[]; law: PlayerLaw | null; confidence: number[]; exceptions: (string | null)[]; priorRead?:Record<string,string> };
+export type PlayerReview = { assessment: string; coverage: ReaderCoverage; evidenceIds: string[]; gaps: string[]; law: PlayerLaw | null; confidence: number[]; exceptions: (string | null)[]; priorRead?:Record<string,string>;sourceReadProofs?:Record<string,unknown> };
 export type GameReview = { players: Record<string, PlayerReview> };
 export type AcceptedPlayerLaw = { release: typeof PROPS_AI_LAW_RELEASE; hash: string; weights: number[]; outcomes: Record<string, number[]> };
 /** Dependencies of the canonical mathematical contract, including nested combos. */
@@ -71,15 +71,15 @@ export function lawForecast(law: AcceptedPlayerLaw, market: string, line: number
   return { mean, over, under, push, preferredSide: over >= under ? "over" as const : "under" as const };
 }
 /** Validate one actor under the ORIGINAL packet/fact universe, never a reindexed subset. */
-export function validatePlayerReview(packet: GamePacket, playerId:string, row:PlayerReview) {
+export function validatePlayerReview(packet: GamePacket, playerId:string, row:PlayerReview,verifiedClaimRendering=false) {
   const player=packet.players.find(p=>p.id===playerId);invariant(player,"Unexpected player in forecast");
-    invariant(typeof row.assessment === "string" && row.assessment.trim().length > 0 && row.assessment.length <= 180, "Missing/oversize individual assessment");
+    invariant(typeof row.assessment === "string" && row.assessment.trim().length > 0 && row.assessment.length <= (verifiedClaimRendering?600:180), "Missing/oversize individual assessment");
     invariant(row.evidenceIds.length > 0 && row.evidenceIds.length <= 6 && row.evidenceIds.every(id => player.evidence.some(e => e.id === id)), "Fabricated/cross-player evidence citation");
     invariant(row.confidence.length === player.markets.length && row.confidence.every(c => [0, 1, 2].includes(c)), "Missing/invalid market confidence");
-    invariant(row.exceptions.length === player.markets.length && row.exceptions.every(s => s === null || typeof s === "string" && s.trim().length > 0 && s.length <= 140), "Missing/invalid market exceptions");
-    invariant(row.gaps.length <= 6 && row.gaps.every(s => typeof s === "string" && s.length > 0 && s.length <= 140), "Invalid evidence gaps");
+    invariant(row.exceptions.length === player.markets.length && row.exceptions.every(s => s === null || typeof s === "string" && s.trim().length > 0 && s.length <= (verifiedClaimRendering?400:140)), "Missing/invalid market exceptions");
+    invariant(row.gaps.length <= 6 && row.gaps.every(s => typeof s === "string" && s.length > 0 && s.length <= (verifiedClaimRendering?400:140)), "Invalid evidence gaps");
     invariant(row.law !== null || row.gaps.length > 0 && row.exceptions.every(s => s !== null), "Unsupported player requires explicit exceptions");
-    return { playerId: player.id, ...row, coverage: validatePlayerCoverage(player,readerEvidence(packet)[player.id],row.coverage), law: row.law ? validateLaw(packet.sport, player, row.law) : null };
+    return { playerId: player.id, ...row, coverage: validatePlayerCoverage(player,readerEvidence(packet)[player.id],row.coverage,verifiedClaimRendering), law: row.law ? validateLaw(packet.sport, player, row.law) : null };
 }
 export function validateGameReview(packet: GamePacket, review: GameReview) {
   invariant(Object.keys(review.players).sort().join("|") === packet.players.map(p => p.id).sort().join("|"), "Review omitted/added players");

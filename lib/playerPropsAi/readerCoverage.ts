@@ -150,16 +150,16 @@ export function coverageSchema(evidence:Record<ReaderArea,ReaderAreaEvidence>){
     observation:{type:"string",minLength:1,maxLength:300,pattern:"^[^0-9]*[.!?]$",description:"One short complete qualitative sentence, target under 100 characters; finish with punctuation and no digits."}}}];}));
   return {type:"object",additionalProperties:false,required:[...READER_AREAS],properties:fields};
 }
-export function validateCoverage(evidence:Record<ReaderArea,ReaderAreaEvidence>,coverage:ReaderCoverage){
+export function validateCoverage(evidence:Record<ReaderArea,ReaderAreaEvidence>,coverage:ReaderCoverage,verifiedClaimRendering=false){
   invariant(coverage&&Object.keys(coverage).sort().join("|")===READER_AREAS.slice().sort().join("|"),"Reader omitted a required area");
   return Object.fromEntries(READER_AREAS.map(area=>{
     const row=coverage[area],source=evidence[area];
     invariant(row.status===source.status,`Reader misrepresented ${area} source coverage`);
-    invariant(row.factIds.length>=(source.facts.length?1:0)&&row.factIds.length<=Math.min(4,source.facts.length)&&new Set(row.factIds).size===row.factIds.length&&row.factIds.every(id=>source.facts.some(f=>f.id===id)),`Reader omitted/fabricated ${area} facts`);
-    invariant(typeof row.observation==="string"&&row.observation.trim().length>0&&row.observation.length<=300,"Invalid reader interpretation");
+    invariant(row.factIds.length>=(source.facts.length?1:0)&&row.factIds.length<=(verifiedClaimRendering?source.facts.length:Math.min(4,source.facts.length))&&new Set(row.factIds).size===row.factIds.length&&row.factIds.every(id=>source.facts.some(f=>f.id===id)),`Reader omitted/fabricated ${area} facts`);
+    invariant(typeof row.observation==="string"&&row.observation.trim().length>0&&row.observation.length<=(verifiedClaimRendering?1400:300),"Invalid reader interpretation");
     invariant(/[.!?]$/.test(row.observation.trim()),"Reader interpretation must end as a complete sentence");
     invariant(["upward","downward","mixed","neutral","uncertain","unavailable"].includes(row.effect),"Invalid reader effect");
-    invariant(!/\d/.test(row.observation),"Reader must cite exact backend facts, not restate figures in prose");
+    invariant(verifiedClaimRendering||!/\d/.test(row.observation),"Reader must cite exact backend facts, not restate figures in prose");
     invariant(!hasUnsupportedCertainty(row.observation),"Unsupported reader factual certainty");
     invariant(source.status!=="missing"||["uncertain","unavailable"].includes(row.effect),"Missing history/context cannot create a directional signal");
     // New NBA catalogs bind this requirement at trusted source-construction
@@ -170,8 +170,8 @@ export function validateCoverage(evidence:Record<ReaderArea,ReaderAreaEvidence>,
     return [area,{...row,facts:row.factIds.map(id=>source.facts.find(f=>f.id===id)!)}];
   }));
 }
-export function validatePlayerCoverage(player:Pick<Player,"markets">,evidence:Record<ReaderArea,ReaderAreaEvidence>,coverage:ReaderCoverage){
-  const result=validateCoverage(evidence,coverage);
+export function validatePlayerCoverage(player:Pick<Player,"markets">,evidence:Record<ReaderArea,ReaderAreaEvidence>,coverage:ReaderCoverage,verifiedClaimRendering=false){
+  const result=validateCoverage(evidence,coverage,verifiedClaimRendering);
   if(player.markets.some(m=>m.startsWith("pitcher_"))){
     const text=coverage.matchup.observation;
     invariant(![...text.matchAll(/against\s+(?:left|right)[ -]handed\s+(?:hitters|batters)/gi)].some(m=>!negatedBefore(text,m.index!)),"Aggregate pitcher arsenal cannot establish an opponent-handedness split");

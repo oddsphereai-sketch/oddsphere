@@ -134,3 +134,21 @@ rule. Future exact contracts must retain their own threshold through the
 existing immutable tracking identity and settle inclusively, while the genuine
 binary touchdown event retains its one-touchdown definition. Historical locks
 and recorded outcomes are not reinterpreted by this prospective cutover.
+
+Actual normal-output inspection subsequently found own/teammate availability
+misattribution, a supplied benchmark described as absent and a cross-threshold
+market disagreement. The prospective R31/wireR5 contract replaces unrestricted
+factual sentences with source-built claim selections and bounded estimated
+judgments. It freezes canonical text at admission, closes assessment/gap/exception
+bypasses and binds private actor/catalog proofs. The AI still produces its
+conditional law and evidence-strength estimates. Original R29 output is retained
+unchanged; this does not make that earlier reasoning correct retrospectively.
+
+Compiler cards preserve exact actor/clock/event scope, actual same-unit arithmetic
+and underlying-book independence. Compact model input retains all raw sources
+while avoiding duplicated source-window and feed arrays. Byte measurements are
+diagnostic only; future exact token counts and costs require ordinary production
+receipts. Tests include the actual observed failure classes, foreign/omitted
+readings, paraphrase/prose bypasses, source missing/comparable cases, actor
+retention and old reader/lock precedence. Independent full-round verification
+must restart after this structural correction.

@@ -1,4 +1,4 @@
-/** Pure R28 receipt audit. No network, database, provider or model calls.
+/** Pure current-release receipt audit. No network, database, provider or model calls.
  * Import from the exact original generation; never use this to reinterpret an
  * older accepted law. Returned canonical players are private audit data.
  */
@@ -46,7 +46,7 @@ function evidenceFor(proposal:ActorAdmissionProposal){
  * convenient subset. An incomplete part may never supply accepted provenance.
  */
 export function auditPropsActorAdmissionPart(args:{packet:GamePacket;attempts:readonly PersistedActorAttempt[];provenance?:readonly unknown[]}){
-  invariant(args.packet.sport==="nba","Actor retention audit is NBA-only for R28");validatePacket(args.packet);
+  invariant(args.packet.sport==="nba","Actor retention audit is NBA-only for this release");validatePacket(args.packet);
   invariant(args.attempts.length>=1&&args.attempts.length<=2,"Actor audit requires one or two bounded attempts");
   const attempts=[...args.attempts].sort((a,b)=>a.phase-b.phase),part=attempts[0].part;
   invariant(Number.isSafeInteger(part)&&part>0&&attempts.every(a=>a.part===part),"Actor audit mixed original parts");

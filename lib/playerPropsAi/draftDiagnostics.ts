@@ -3,16 +3,16 @@ import type {GamePacket} from "./evidenceContract";
 import {READER_AREAS} from "./readerCoverage";
 import {physicalLawFindings} from "./physicalDiagnostics";
 const object=(v:unknown):Record<string,unknown>|null=>v!==null&&typeof v==="object"&&!Array.isArray(v)?v as Record<string,unknown>:null;
-export function draftFormattingFindings(packet:GamePacket,draft:unknown){
+export function draftFormattingFindings(packet:GamePacket,draft:unknown,verifiedClaimRendering=false){
  const players=object(object(draft)?.players),findings:{playerIndex:number;field:string}[]=[];
  if(!players)return findings;
  packet.players.forEach((p,playerIndex)=>{
   const row=object(players[p.id]);if(!row)return;
   const assessment=row.assessment;
-  if(typeof assessment!=="string"||!assessment.trim()||assessment.length>180||!/[.!?]$/.test(assessment.trim()))findings.push({playerIndex,field:"assessment"});
+  if(typeof assessment!=="string"||!assessment.trim()||assessment.length>(verifiedClaimRendering?600:180)||!/[.!?]$/.test(assessment.trim()))findings.push({playerIndex,field:"assessment"});
   const coverage=object(row.coverage);if(!coverage)return;
   READER_AREAS.forEach((area,i)=>{const observation=object(coverage[area])?.observation;
-   if(typeof observation!=="string"||!observation.trim()||observation.length>300||!/[.!?]$/.test(observation.trim())||/\d/.test(observation))findings.push({playerIndex,field:`reader${i}`});
+   if(typeof observation!=="string"||!observation.trim()||observation.length>(verifiedClaimRendering?1400:300)||!/[.!?]$/.test(observation.trim())||!verifiedClaimRendering&&/\d/.test(observation))findings.push({playerIndex,field:`reader${i}`});
   });
  });return findings;
 }

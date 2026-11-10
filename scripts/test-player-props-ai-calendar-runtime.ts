@@ -1,3 +1,5 @@
+import {PROPS_AI_WIRE_RELEASE} from "../lib/playerPropsAi/scenarioCoordinates";
+import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 import assert from 'node:assert/strict';
 import type {SupabaseClient} from '@supabase/supabase-js';
 import {reviewPropsForSite} from '../lib/playerPropsAi/siteRuntime';
@@ -6,7 +8,7 @@ import {PROPS_AI_CALENDAR_RELEASE,type PropsCalendar} from '../lib/playerPropsAi
 import {PRODUCT_RELEASE,type GamePacket} from '../lib/playerPropsAi/evidenceContract';
 import {readerEvidence,READER_AREAS} from '../lib/playerPropsAi/readerCoverage';
 import {evidenceAliases} from '../lib/playerPropsAi/input';
-import {encodeCanonicalScenarioLaw,GENERATIVE_WIRE_RELEASE} from '../lib/playerPropsAi/generativeCoordinates';
+import {encodeCanonicalScenarioLaw} from '../lib/playerPropsAi/generativeCoordinates';
 import type {AcceptedGameReview} from '../lib/playerPropsAi/reviewer';
 /** Actual site runtime through official calendar repair, count, review and finish; all I/O mocked. */
 globalThis.fetch=async()=>{throw Error('All real network is forbidden');};
@@ -30,7 +32,7 @@ async function run(stale:boolean){
   if(String(url).endsWith('/input_tokens')){counts++;return Response.json({input_tokens:1000});}
   assert.equal(String(url),'https://api.openai.com/v1/responses');generations++;
   const facts=readerEvidence(packet),alias=[...evidenceAliases(packet)].find(([,id])=>id==='log-0')![0],p=packet.players[0];
-  const wire={wireRelease:GENERATIVE_WIRE_RELEASE,players:{p1:{assessment:'The supplied evidence supports a conditional forecast.',priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts.p1[area].status,factIds:facts.p1[area].facts.slice(0,1).map(f=>f.id),effect:'uncertain',observation:'The supplied context requires appropriate caution.'}])),evidenceIds:[alias],gaps:[],confidence:[2],exceptions:[null],law:encodeCanonicalScenarioLaw('nfl',p,{weights:Array(16).fill(1),outcomes:{receptions:[4,8,...Array(14).fill(6)]}})}}};
+  const wire={wireRelease:PROPS_AI_WIRE_RELEASE,players:{p1:verifiedReaderFixture(packet,p.id,{assessment:'The supplied evidence supports a conditional forecast.',priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts.p1[area].status,factIds:facts.p1[area].facts.slice(0,1).map(f=>f.id),effect:'uncertain',observation:'The supplied context requires appropriate caution.'}])),evidenceIds:[alias],gaps:[],confidence:[2],exceptions:[null],law:encodeCanonicalScenarioLaw('nfl',p,{weights:Array(16).fill(1),outcomes:{receptions:[4,8,...Array(14).fill(6)]}})})}};
   return Response.json({id:'synthetic-response',model:'gpt-6-luna',status:'completed',service_tier:'default',usage:{input_tokens:1000,output_tokens:100},output:[{content:[{type:'output_text',text:JSON.stringify(wire)}]}]});
  };
  const result=await reviewPropsForSite({client,sport:'nfl',writerRunId:'synthetic-owner',games:[{id:'native',start:currentStart,away:'BUF',home:'MIN'}],deadline:Date.now()+300000,clock:()=>now,fetchImpl,load:(_g,w)=>({...packet,cutoff:w.cutoff,stage:w.stage})});

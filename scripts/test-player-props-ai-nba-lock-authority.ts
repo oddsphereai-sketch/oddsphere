@@ -1,9 +1,11 @@
+import {PROPS_AI_WIRE_RELEASE} from "../lib/playerPropsAi/scenarioCoordinates";
+import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 /** Actual source/parser/binding/lifecycle; synthetic sources and zero HTTP. */
 import assert from 'node:assert/strict';
 import {PRODUCT_RELEASE,type GamePacket,type Quote} from '../lib/playerPropsAi/evidenceContract';
 import {digest} from '../lib/playerPropsAi/evidence';
 import {criticalContextHashes} from '../lib/playerPropsAi/criticalContext';
-import {encodeCanonicalScenarioLaw,GENERATIVE_WIRE_RELEASE} from '../lib/playerPropsAi/generativeCoordinates';
+import {encodeCanonicalScenarioLaw} from '../lib/playerPropsAi/generativeCoordinates';
 import {parseJointReview} from '../lib/playerPropsAi/request';
 import {readerEvidence,READER_AREAS} from '../lib/playerPropsAi/readerCoverage';
 import {evidenceAliases} from '../lib/playerPropsAi/input';
@@ -30,7 +32,7 @@ export function nbaAuthorityFixture(cutoff=sourceAt){
 }
 export function nbaAuthorityDraft(packet:GamePacket,weights=[2,6,2,...v(0).slice(3)]){
  const aliases=evidenceAliases(packet),facts=readerEvidence(packet);
- const raw={wireRelease:GENERATIVE_WIRE_RELEASE,players:Object.fromEntries(packet.players.map(p=>[p.id,{assessment:'The supplied production supports the conditional estimate.',priorRead:Object.fromEntries(independentPriorEvents(p).map(e=>[[...aliases].find(([,id])=>id===e.sourceId)![0],e.preferredOutcome])),coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[p.id][area].status,factIds:facts[p.id][area].facts.slice(0,1).map(f=>f.id),effect:'uncertain',observation:'The supplied context requires appropriate caution.'}])),evidenceIds:[[...aliases].find(([,id])=>id===p.evidence[0].id)![0]],gaps:[],confidence:p.markets.map(()=>2),exceptions:p.markets.map(()=>null),law:encodeCanonicalScenarioLaw('nba',p,{weights,outcomes:{points:[14,18,20,...v(18).slice(3)],rebounds:[4,6,8,...v(6).slice(3)],assists:[2,4,3,...v(3).slice(3)],threes:[1,2,1,...v(1).slice(3)]}})}]))};
+ const raw={wireRelease:PROPS_AI_WIRE_RELEASE,players:Object.fromEntries(packet.players.map(p=>[p.id,verifiedReaderFixture(packet,p.id,{assessment:'The supplied production supports the conditional estimate.',priorRead:Object.fromEntries(independentPriorEvents(p).map(e=>[[...aliases].find(([,id])=>id===e.sourceId)![0],e.preferredOutcome])),coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[p.id][area].status,factIds:facts[p.id][area].facts.slice(0,1).map(f=>f.id),effect:'uncertain',observation:'The supplied context requires appropriate caution.'}])),evidenceIds:[[...aliases].find(([,id])=>id===p.evidence[0].id)![0]],gaps:[],confidence:p.markets.map(()=>2),exceptions:p.markets.map(()=>null),law:encodeCanonicalScenarioLaw('nba',p,{weights,outcomes:{points:[14,18,20,...v(18).slice(3)],rebounds:[4,6,8,...v(6).slice(3)],assists:[2,4,3,...v(3).slice(3)],threes:[1,2,1,...v(1).slice(3)]}})})]))};
  return raw;
 }
 export function nbaAuthorityReview(packet:GamePacket,weights=[2,6,2,...v(0).slice(3)],issuedAt=packet.cutoff){

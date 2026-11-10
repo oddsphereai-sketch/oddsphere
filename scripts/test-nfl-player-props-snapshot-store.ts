@@ -52,7 +52,7 @@ const snapshot = productionSnapshot([actionable, held]);
 const memberBefore = buildNflPlayerPropsMemberSnapshot(snapshot);
 
 assert.equal(memberBefore.lifecycleRelease,
-  "nfl_player_props_member_lifecycle_2026_11_09_r41_prelock_authority");
+  "nfl_player_props_member_lifecycle_2026_11_10_r42_current_execution_authority");
 assert.equal(memberBefore.lifecycleRelease, NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE);
 const atKickoff = buildNflPlayerPropsMemberSnapshot(snapshot, actionable.scheduledStart);
 assert.equal(atKickoff.memberDecisions.length, 2,
@@ -132,6 +132,13 @@ assert.strictEqual(decodeNflPlayerPropsSnapshotPayload(oldReleaseSnapshot),oldRe
 assert.deepEqual(decodeNflPlayerPropsSnapshotPayload(encodeNflPlayerPropsSnapshotPayload(oldReleaseSnapshot)),oldReleaseSnapshot,"v57 wrapper and locked values survive current storage codec without relabeling");
 const previousR58={...snapshot,release:"nfl_player_props_member_2026_11_09_r58_source_event_contracts",memberDecisions:[]};
 assert.strictEqual(decodeNflPlayerPropsSnapshotPayload(previousR58),previousR58,"R58 stored legacy wrapper/member payload remains authoritative under R59");
+const previousR59={...snapshot,release:"nfl_player_props_member_2026_11_09_r59_prelock_authority"} as unknown as NflPlayerPropsProductionSnapshot;
+const previousR59Before=JSON.stringify(previousR59);
+assert.strictEqual(decodeNflPlayerPropsSnapshotPayload(previousR59),previousR59,"R60 accepts the actual R59 wrapper without relabeling its locked payload");
+const decodedR59=decodeNflPlayerPropsSnapshotPayload(encodeNflPlayerPropsSnapshotPayload(previousR59));
+assert.deepEqual(decodedR59,previousR59,"R59 canonical and stored member lock fields survive the current storage codec exactly");
+assert.deepEqual(buildNflPlayerPropsMemberSnapshot(decodedR59!).memberDecisions,memberBefore.memberDecisions,"The R42 reader keeps every legacy R59 locked field");
+assert.equal(JSON.stringify(previousR59),previousR59Before,"Legacy reader and codec never mutate an R59 lock");
 const privateProofSnapshot={...snapshot,lockHandoffEvidence:{synthetic:{release:"synthetic",at:snapshot.generatedAt,capture:{authorities:[],nativeProofs:[],candidateProofs:[],sourceFrames:[]}}}};
 assert.ok(!Object.hasOwn(buildNflPlayerPropsMemberSnapshot(privateProofSnapshot),"lockHandoffEvidence"),"private handoff frames never enter the public member DTO");
 const legacyWithDifferentMemberList = { ...snapshot, memberDecisions: [] };

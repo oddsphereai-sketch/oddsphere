@@ -16,6 +16,9 @@ for(const row of Object.values(draft.players)){row.assessment="The supplied evid
 assert.equal(draftFormattingFindings(packet,draft).length,0);assert(draftAdmissionSummary(packet,draft)!.includes("INT<=ATT-CMP"),"text repair cannot waive physical identity");
 for(const row of Object.values(draft.players))row.law.outcomes={...row.law.outcomes,passing_attempts:v(3),passing_completions:v(1),passing_tds:v(1),interceptions:v(1)};
 assert.equal(draftAdmissionSummary(packet,draft),null);
-const schema=jointReviewSchema(packet) as unknown as {properties:{players:{properties:Record<string,{properties:{assessment:{pattern:string};coverage:{properties:Record<string,{properties:{observation:{pattern:string}}}>}}}>}}};
-for(const p of packet.players){const s=schema.properties.players.properties[p.id].properties;assert(new RegExp(s.assessment.pattern).test("The evidence supports a conditional forecast."));assert(!new RegExp(s.assessment.pattern).test("The evidence ends mid-thought"));for(const area of READER_AREAS){const re=new RegExp(s.coverage.properties[area].properties.observation.pattern);assert(re.test("The source is incomplete."));assert(!re.test("The source is incomplete"));assert(!re.test("The source states 12."));}}
+// Legacy diagnostic helpers retain their old explicit text contract. Future
+// production schema has no free factual prose field to repair or bypass.
+type SchemaNode={type?:string;additionalProperties?:boolean;properties:Record<string,SchemaNode>};
+const schema=jointReviewSchema(packet) as unknown as SchemaNode;
+for(const p of packet.players){const s=schema.properties.players.properties[p.id].properties;assert.equal(s.assessment.type,'object');assert.equal(s.assessment.additionalProperties,false);assert.deepEqual(Object.keys(s.assessment.properties).sort(),['claimIds','judgment']);for(const area of READER_AREAS){const selection=s.coverage.properties[area];assert.equal(selection.additionalProperties,false);assert.deepEqual(Object.keys(selection.properties).sort(),['claimIds','effect','judgment']);assert(!Object.hasOwn(selection.properties,'observation'));}}
 console.log("Complete-sentence admission passed: all actors/areas and physical failures reported together within unchanged feedback, schema matches existing checks, no text/number mutation or paid calls.");

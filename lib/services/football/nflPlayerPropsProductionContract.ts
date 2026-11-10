@@ -20,9 +20,9 @@ import { selectNflPlayerPropsCanonicalLines } from "./nflPlayerPropsCanonicalLin
 import { withoutUnresolvedNflPlayerAliasDuplicates } from "./nflPlayerPropsMemberAliasIdentity";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_11_09_r59_prelock_authority" as const;
+  "nfl_player_props_member_2026_11_10_r60_current_execution_authority" as const;
 export const NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE =
-  "nfl_player_props_member_lifecycle_2026_11_09_r41_prelock_authority" as const;
+  "nfl_player_props_member_lifecycle_2026_11_10_r42_current_execution_authority" as const;
 const NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE =
   "nfl_player_props_decision_2026_10_27_r38_passing_yards_direction" as const;
 export const NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET = 2 as const;
@@ -102,7 +102,7 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
   const actorKey=(row:NflPlayerPropsRuntimeDecision)=>JSON.stringify([row.gameId,row.providerPlayerId]);
   const fullyProtectedActors=new Set(storedLocks.filter(row=>row.providerPlayerId!==null).map(actorKey).filter(key=>!currentUnlocked.some(row=>actorKey(row)===key)));
   const irrelevant=(game:string,actorId?:string)=>fullyProtectedGames.has(game)||Boolean(actorId&&fullyProtectedActors.has(JSON.stringify([game,actorId.replace(/^nfl-bdl-player:/,"")])));
-  const effective=args.lockHandoff?{...args.lockHandoff,authorities:args.lockHandoff.authorities.filter(a=>!irrelevant(a.gameId,a.actorId)),nativeRows:args.lockHandoff.nativeRows.filter(row=>!storedScopes.has(outcomeScopeKey(row))),nativeProofs:args.lockHandoff.nativeProofs.filter(p=>!irrelevant(p.gameId,p.actorId)),candidateProofs:args.lockHandoff.candidateProofs.filter(p=>!irrelevant(p.gameId,p.actorId)),sourceFrames:(args.lockHandoff.sourceFrames??[]).filter(f=>!fullyProtectedGames.has(f.gameId))}:undefined;
+  const effective=args.lockHandoff?{...args.lockHandoff,authorities:args.lockHandoff.authorities.filter(a=>!irrelevant(a.gameId,a.actorId)),nativeRows:args.lockHandoff.nativeRows.filter(row=>!storedScopes.has(outcomeScopeKey(row))),nativeProofs:args.lockHandoff.nativeProofs.filter(p=>!irrelevant(p.gameId,p.actorId)),candidateProofs:args.lockHandoff.candidateProofs.filter(p=>!irrelevant(p.gameId,p.actorId)),sourceFrames:(args.lockHandoff.sourceFrames??[]).filter(f=>!fullyProtectedGames.has(f.gameId)),executionAuthorities:(args.lockHandoff.executionAuthorities??[]).filter(f=>!fullyProtectedGames.has(f.gameId))}:undefined;
   const handoff=effective?prepareNflLockHandoff({...effective,nextRows:currentUnlocked,previousRows:originalPrevious?.board.decisions??[],previousGeneratedAt:originalPrevious?.generatedAt,now:args.evaluatedAt}):null;
   const maySuppress=(row:NflPlayerPropsRuntimeDecision)=>!storedScopes.has(outcomeScopeKey(row))&&Boolean(handoff?.suppressPrevious(row));
   const previous=handoff&&originalPrevious?{...originalPrevious,board:{...originalPrevious.board,decisions:originalPrevious.board.decisions.filter(row=>!maySuppress(row))},memberDecisions:originalPrevious.memberDecisions.filter(row=>!maySuppress(row))}:originalPrevious;
@@ -192,8 +192,8 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
   const lockHandoffEvidence={...(originalPrevious?.lockHandoffEvidence??{})};
   if(effective){
     const games=new Set([...capturedDecisions.filter(row=>row.state==="locked"&&!protectedScopes.has(outcomeScopeKey(row))).map(row=>row.gameId),...(effective.sourceFrames??[]).filter(f=>Date.parse(f.lockAt)<=evaluatedAt).map(f=>f.gameId)]);
-    const capture:Omit<NflLockHandoff,"nativeRows">={authorities:effective.authorities.filter(a=>games.has(a.gameId)),nativeProofs:effective.nativeProofs.filter(p=>games.has(p.gameId)),candidateProofs:effective.candidateProofs.filter(p=>games.has(p.gameId)),sourceFrames:(effective.sourceFrames??[]).filter(f=>games.has(f.gameId))};
-    if(capture.sourceFrames?.length){const record={release:"nfl_props_lock_authority_2026_11_09_r1_prelock_capture",at:args.evaluatedAt,capture};lockHandoffEvidence[digest(record)]??=record;}
+    const capture:Omit<NflLockHandoff,"nativeRows">={authorities:effective.authorities.filter(a=>games.has(a.gameId)),nativeProofs:effective.nativeProofs.filter(p=>games.has(p.gameId)),candidateProofs:effective.candidateProofs.filter(p=>games.has(p.gameId)),sourceFrames:(effective.sourceFrames??[]).filter(f=>games.has(f.gameId)),executionAuthorities:(effective.executionAuthorities??[]).filter(f=>games.has(f.gameId))};
+    if(capture.sourceFrames?.length){const record={release:"nfl_props_lock_authority_2026_11_10_r2_current_execution",at:args.evaluatedAt,capture};lockHandoffEvidence[digest(record)]??=record;}
   }
   return {
     release: NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, season: args.season, week: args.week,

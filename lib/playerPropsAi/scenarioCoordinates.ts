@@ -3,7 +3,8 @@ import type {GamePacket,Player} from "./evidenceContract";
 import {primitives,type PlayerLaw} from "./law";
 import {invariant} from "./evidence";
 import {PROPS_AI_SCENARIOS} from "./releases";
-export {GENERATIVE_WIRE_RELEASE as PROPS_AI_WIRE_RELEASE} from "./generativeCoordinates";
+export const PROPS_AI_WIRE_RELEASE = "props_scenario_claims_2026_11_10_r5_verified_reader" as const;
+export {GENERATIVE_WIRE_RELEASE as PROPS_AI_LEGACY_GENERATIVE_WIRE_RELEASE} from "./generativeCoordinates";
 export const PROPS_AI_LEGACY_NAMED_WIRE_RELEASE="props_scenario_named_2026_11_09_r3_canonical_statistics";
 /** R2 remains an explicit historical decoder, never an interpretation of R3. */
 export const PROPS_AI_LEGACY_WIRE_RELEASE="props_scenario_rows_2026_11_07_r2_physical_coordinates";

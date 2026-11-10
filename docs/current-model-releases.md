@@ -1,3 +1,63 @@
+## November 10 future player-prop verified factual readings R31
+
+The owner requested full product correctness and two consecutive clean full
+rounds with three independent reviewers. Future generation is
+`player_props_ai_2026_11_10_r31_verified_reader_claims`; selectionR6 is
+`player_props_ai_selection_2026_11_10_r6_verified_reader_claims`, NFL decisionR13
+is `player_props_ai_nfl_decision_2026_11_10_r13_verified_reader_claims`, and
+claim contractR1 is `player_props_ai_reader_claims_2026_11_10_r1_source_bound`.
+WireR5 `props_scenario_claims_2026_11_10_r5_verified_reader` changes factual
+selections only; named generative coordinatesR4 and canonical lawR1 stay exact.
+Sole NBA writerR18 is
+`nba_player_props_private_writer_2026_11_10_r18_verified_reader_claims`; NFL
+writerR92 is `nfl_player_props_writer_2026_11_10_r92_verified_reader_claims`.
+NFL memberR60/lifecycleR42 stamp current-execution first-lock authority.
+ParticipationR3 `player_props_ai_participation_2026_11_10_r3_separate_lineup_and_medical`
+keeps lineup opportunity separate from medical availability: one channel cannot
+silently clear the other channel's active hold. Native
+MLB championR44, monetary budgetR5, gradeR3, scheduleR3, output7,000/input145,000,
+local8/global16 capacity, two slots and existing two phases stay unchanged.
+
+An actual accepted R29 output contained source-reading contradictions even when
+its citations and numerical laws passed. R31 compiles truthful actor-bound
+claims from the exact supplied facts and freezes factual text at admission.
+The AI selects claims and estimated effects/judgments, confidence and its joint
+law. Own-player availability, other-player absences, explicit same-unit pace
+comparisons and exact-event prior/paired-book direction cannot be substituted
+by unrestricted observation, assessment, gap or exception prose. Deliberate
+forecast abstention is a reviewer judgment, never a false missing-source claim.
+The compiler does not add independent evidence or prescribe a statistical
+adjustment. Full original sources remain supplied. Compact model navigation
+avoids repeating large raw windows, priors and feed arrays; private full claim
+provenance remains bound to each accepted original actor and input.
+
+Actor admissionR2 preserves the original alias/fact/catalog universe and known
+receipt binding across the same two phases; old R1 receipts are not reparsed.
+New success/failure evidenceR3 labels wireR5 separately from coordinateR4.
+Existing accepted R15–R29 text, laws and public locks remain exact; no legacy
+observation is sanitized, rerendered or relabeled as verified R31 reasoning.
+The familiar reader consumes stored canonical text in its existing format.
+Only the exact trusted new NBA unit annotation is context-hash neutral; real
+benchmark/status changes or another convention still invalidate the old read.
+
+The R30 draft repairs below remain included. NBA movement uses exact two-way
+same-line/provider/side history and refuses alternate-line or conflicting-clock
+inference. NFL current-execution authority prevents newly locking withdrawn
+actor/scope/book events, with valid prelock returns recoverable and all existing
+locks first. R59 snapshot/reader compatibility remains tested. NFL settlementR8
+and per-row eventR1 now pin new decisionR13; old results require separate owner
+approval and are never repaired by a recurring release. TrackingR43 identities
+and ignore-duplicates behavior remain unchanged; compact event projection
+avoids fetching full AI payloads to settle a result.
+
+This establishes bounded supplied-fact presentation and process checks, not
+complete evidence selection, calibrated confidence, causal inference, future
+response reliability or accuracy improvement. Required clean independent
+rounds, full gates, protected latest-main PR, V70 installation and normal live
+review/member/lock proof must be separately completed. No extra paid proof,
+manual cron, replay, third review or larger-model routing is introduced.
+See `model-audits/2026-11-10-props-ai-three-reviewer-repairs.md`.
+
 ## November 10 player-prop source and slate authority R30
 
 Future generation `player_props_ai_2026_11_10_r30_source_and_slate_authority`

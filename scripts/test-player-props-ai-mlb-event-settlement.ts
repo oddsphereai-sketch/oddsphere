@@ -1,3 +1,5 @@
+import {PROPS_AI_WIRE_RELEASE} from "../lib/playerPropsAi/scenarioCoordinates";
+import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 import type {PlayerPropPreviewRow} from '../app/mlb/props/components/PlayerPropsDashboard';
 import type {MlbPropsBoardSnapshot} from '../lib/mlb/props/boardSnapshotStore';
 import type {AcceptedGameReview} from '../lib/playerPropsAi/reviewer';
@@ -17,7 +19,6 @@ import {applyMlbSiteAi} from '../lib/playerPropsAi/siteBindings';
 import {trackingInsert} from '../lib/mlb/props/internalTracking';
 import {settlePropPick,settleTrackedPropPick,MLB_PROPS_LOCKED_EVENT_RELEASE} from '../lib/mlb/props/settlement';
 import {PROPS_AI_RELEASE} from '../lib/playerPropsAi/releases';
-import {GENERATIVE_WIRE_RELEASE} from '../lib/playerPropsAi/generativeCoordinates';
 import {independentPriorEvents} from '../lib/playerPropsAi/priorEvents';
 import {digest} from '../lib/playerPropsAi/evidence';
 globalThis.fetch=async()=>{throw Error('No HTTP permitted');};
@@ -29,7 +30,7 @@ const snapshot={slateDate:'2030-06-01',snapshotId:'synthetic-snapshot',asOfTimes
 const packet=liveMlbPacket({game:{id:'balldontlie-game-1',start,away:'NYY',home:'BOS'},window:{gameId:'balldontlie-game-1',stage:'final',cutoff:at,lock},snapshot,currentOdds:odds,openingOdds:[]});
 const player=packet.players[0],v=(n:number)=>Array(16).fill(n),facts=readerEvidence(packet)[player.id],aliases=evidenceAliases(packet);
 const canonical={weights:[1,2,1,...Array(13).fill(0)],outcomes:{batter_singles:[0,1,2,...Array(13).fill(0)],batter_doubles:v(0),batter_triples:v(0),batter_home_runs:v(0),batter_walks:v(0),batter_strikeouts:v(0),batter_rbis:v(0),batter_runs_scored:v(0),batter_stolen_bases:v(0)}};
-const parsed=parseJointReview(packet,{wireRelease:GENERATIVE_WIRE_RELEASE,players:{[player.id]:{assessment:'The supplied sources support a conditional estimate.',priorRead:Object.fromEntries(independentPriorEvents(player).map(e=>[[...aliases].find(([,id])=>id===e.sourceId)![0],e.preferredOutcome])),coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[area].status,factIds:facts[area].facts.slice(0,1).map(f=>f.id),effect:'uncertain',observation:'The supplied source requires contextual caution.'}])),evidenceIds:[[...aliases].find(([,id])=>id===player.evidence[0].id)![0]],gaps:[],confidence:[2],exceptions:[null],law:encodeCanonicalScenarioLaw('mlb',player,canonical)}}});
+const parsed=parseJointReview(packet,{wireRelease:PROPS_AI_WIRE_RELEASE,players:{[player.id]:verifiedReaderFixture(packet,player.id,{assessment:'The supplied sources support a conditional estimate.',priorRead:Object.fromEntries(independentPriorEvents(player).map(e=>[[...aliases].find(([,id])=>id===e.sourceId)![0],e.preferredOutcome])),coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[area].status,factIds:facts[area].facts.slice(0,1).map(f=>f.id),effect:'uncertain',observation:'The supplied source requires contextual caution.'}])),evidenceIds:[[...aliases].find(([,id])=>id===player.evidence[0].id)![0]],gaps:[],confidence:[2],exceptions:[null],law:encodeCanonicalScenarioLaw('mlb',player,canonical)})}});
 const review:AcceptedGameReview={release:PROPS_AI_RELEASE,gameId:packet.gameId,sourceGameId:packet.gameId,start,lock,cutoff:at,stage:'final',issuedAt:now,model:'synthetic',partProvenance:[],marketScopes:{[player.id]:player.markets},criticalContextHashes:criticalContextHashes(packet),players:parsed.players,inputHash:digest(packet),inputEvidence:{digest:digest(packet),encoding:'gzip-base64',bytes:Buffer.byteLength(JSON.stringify(packet)),data:gzipSync(Buffer.from(JSON.stringify(packet))).toString('base64')}};
 const decisions=siteAiDecisions(packet,review,now);assert.equal(decisions.length,1);assert.equal(decisions[0].quote.side,'yes');assert.equal(decisions[0].probability,.75);assert.equal(decisions[0].push,0);
 const row=applyMlbSiteAi([native],packet,decisions,now)[0];assert.equal(row.playGrade,'BEST_ANGLE');assert.equal(row.units,1);

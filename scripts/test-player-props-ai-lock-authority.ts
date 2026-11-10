@@ -1,3 +1,5 @@
+import {PROPS_AI_WIRE_RELEASE} from "../lib/playerPropsAi/scenarioCoordinates";
+import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 /* eslint-disable @typescript-eslint/no-explicit-any -- Synthetic malformed JSON fixtures intentionally exercise runtime parser and DTO admission. */
 /** All data synthetic. Full actual parser/binding/reconciler; no HTTP or paid calls. */
 import assert from 'node:assert/strict';
@@ -13,7 +15,7 @@ const {criticalContextHashes}=await import(root+'/lib/playerPropsAi/criticalCont
 const {readerEvidence,READER_AREAS}=await import(root+'/lib/playerPropsAi/readerCoverage.ts');
 const {evidenceAliases}=await import(root+'/lib/playerPropsAi/input.ts');
 const {parseJointReview}=await import(root+'/lib/playerPropsAi/request.ts');
-const {encodeCanonicalScenarioLaw,GENERATIVE_WIRE_RELEASE}=await import(root+'/lib/playerPropsAi/generativeCoordinates.ts');
+const {encodeCanonicalScenarioLaw}=await import(root+'/lib/playerPropsAi/generativeCoordinates.ts');
 const {PRODUCT_RELEASE}=await import(root+'/lib/playerPropsAi/evidenceContract.ts');
 const {digest}=await import(root+'/lib/playerPropsAi/evidence.ts');
 const {independentPriorEvents}=await import(root+'/lib/playerPropsAi/priorEvents.ts');
@@ -85,7 +87,7 @@ function packet(at:string,final=false){const p={id,name:'Synthetic Player',team:
  return{release:PRODUCT_RELEASE,sport:'nfl',gameId:'game',sourceGameId:'game',start,lock,cutoff:at,stage:final?'final':'early',players:[p],quotes:q,executionQuotes:q,sourceLimitations:[]}as any;
 }
 function review(input:any,final=false){const p=input.players[0],facts=readerEvidence(input)[id],alias=[...evidenceAliases(input)][0][0],law={weights:[1,1,...Array(14).fill(0)],outcomes:{receiving_yards:final?[60,80,...v(60).slice(2)]:[40,60,...v(40).slice(2)],receptions:final?[20,30,...v(20).slice(2)]:[2,6,...v(2).slice(2)]}};
- const wire={wireRelease:GENERATIVE_WIRE_RELEASE,players:{[id]:{assessment:'The supplied sources support a conditional forecast.',priorRead:priorReads(input),coverage:Object.fromEntries(READER_AREAS.map((area:string)=>[area,{status:facts[area].status,factIds:facts[area].facts.slice(0,1).map((f:any)=>f.id),effect:'uncertain',observation:'The supplied context requires caution.'}])),evidenceIds:[alias],gaps:[],law:encodeCanonicalScenarioLaw('nfl',p,law),confidence:[2,2],exceptions:final?[null,'Reception range is not supported by the supplied production.']:[null,null]}}};
+ const wire={wireRelease:PROPS_AI_WIRE_RELEASE,players:{[id]:verifiedReaderFixture(input,id,{assessment:'The supplied sources support a conditional forecast.',priorRead:priorReads(input),coverage:Object.fromEntries(READER_AREAS.map((area:string)=>[area,{status:facts[area].status,factIds:facts[area].facts.slice(0,1).map((f:any)=>f.id),effect:'uncertain',observation:'The supplied context requires caution.'}])),evidenceIds:[alias],gaps:[],law:encodeCanonicalScenarioLaw('nfl',p,law),confidence:[2,2],exceptions:final?[null,'Reception range is not supported by the supplied production.']:[null,null]})}};
  const parsed=parseJointReview(input,wire);return{...parsed,gameId:'game',sourceGameId:'game',start,lock,cutoff:input.cutoff,stage:input.stage,issuedAt:input.cutoff,inputHash:digest(input),criticalContextHashes:criticalContextHashes(input),marketScopes:{[id]:p.markets},model:'gpt-6-luna',partProvenance:[],inputEvidence:{digest:digest(input)}}as any;
 }
 function native(input:any){return boardRows(input.quotes.map((q:any)=>({...decision,gameId:'game',providerPlayerId:'1',playerName:'Synthetic Player',team:'BUF',opponent:'MIN',scheduledStart:start,lockAt:lock,state:'unlocked',market:q.market,line:q.line,side:q.side,sportsbook:q.book,provider:q.provider,americanPrice:q.american,observedAt:q.observedAt,projection:q.market==='receiving_yards'?55:4,projectionRange:null,grade:'No Play',roleFingerprint:'current-role',bookEvidence:[],aiReview:undefined})));}
@@ -131,7 +133,7 @@ const fixed=handoff([authority]);
 assert.ok(fixed.snapshot.memberDecisions.some((r:any)=>r.market==='receiving_yards'&&r.aiReview?.lawHash===b.players[0].law.hash));
 assert.ok(fixed.snapshot.memberDecisions.filter((r:any)=>r.market==='receptions').every((r:any)=>!r.aiReview));
 assert.ok(fixed.snapshot.board.decisions.every((r:any)=>!r.aiReview||r.aiReview.lawHash===b.players[0].law.hash));
-const sourcePlayer=b.players[0],declinedWire={wireRelease:GENERATIVE_WIRE_RELEASE,players:{[id]:{assessment:'The complete supplied review cannot qualify these numerical scopes.',priorRead:priorReads(finalInput),coverage:Object.fromEntries(Object.entries(sourcePlayer.coverage).map(([area,value]:any)=>{const {facts,...raw}=value;void facts;return[area,raw];})),evidenceIds:['e0'],gaps:['No admissible law for these reviewed scopes.'],law:null,confidence:[0,0],exceptions:['Explicit reviewed scope decline.','Explicit reviewed scope decline.']}}};
+const sourcePlayer=b.players[0],declinedWire={wireRelease:PROPS_AI_WIRE_RELEASE,players:{[id]:verifiedReaderFixture(finalInput,id,{assessment:'The complete supplied review cannot qualify these numerical scopes.',priorRead:priorReads(finalInput),coverage:Object.fromEntries(Object.entries(sourcePlayer.coverage).map(([area,value]:any)=>{const {facts,...raw}=value;void facts;return[area,raw];})),evidenceIds:['e0'],gaps:['No admissible law for these reviewed scopes.'],law:null,confidence:[0,0],exceptions:['Explicit reviewed scope decline.','Explicit reviewed scope decline.']})}};
 const allDeclined={...b,...parseJointReview(finalInput,declinedWire)};
 const declinedAuthority=buildAuthorities(finalInput,allDeclined,observed)[0],declinedResult=handoff([declinedAuthority],{nextBoard:native(finalInput),candidateProofs:[]});
 assert.ok(declinedResult.snapshot.memberDecisions.length>0);assert.ok(declinedResult.snapshot.memberDecisions.every((r:any)=>!r.aiReview));

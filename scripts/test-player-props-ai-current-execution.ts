@@ -1,3 +1,4 @@
+import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 import {encodeCanonicalScenarioLaw} from "../lib/playerPropsAi/generativeCoordinates";
 /** Independent-review regressions. Synthetic inputs only; no provider or model calls. */
 import assert from "node:assert/strict";
@@ -92,7 +93,7 @@ const evidence:Evidence[]=[{id:"prior",kind:"independent_model",source:"syntheti
 const physicalPacket:GamePacket={...packet,sport:"nfl",players:[{...nflPlayer,evidence}],quotes:[]};
 const facts=readerEvidence(physicalPacket).p,aliases=new Map([...evidenceAliases(physicalPacket)].map(([alias,id])=>[id,alias]));
 const coverage=Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[area].status,factIds:facts[area].facts.slice(0,1).map(f=>f.id),effect:facts[area].status==="missing"?"unavailable":"uncertain",observation:"The supplied evidence requires contextual caution."}]));
-const response={wireRelease:PROPS_AI_WIRE_RELEASE,players:{p:{assessment:"The forecast uses the supplied evidence.",coverage,priorRead:Object.fromEntries(independentPriorEvents(physicalPacket.players[0]).map(p=>[aliases.get(p.sourceId)!,p.preferredOutcome])),evidenceIds:[aliases.get("prior")!],gaps:[],law:raw,confidence:[2],exceptions:["A prose exception cannot make an impossible passing scenario valid."]}}};
+const response={wireRelease:PROPS_AI_WIRE_RELEASE,players:{p:verifiedReaderFixture(physicalPacket,physicalPacket.players[0].id,{assessment:"The forecast uses the supplied evidence.",coverage,priorRead:Object.fromEntries(independentPriorEvents(physicalPacket.players[0]).map(p=>[aliases.get(p.sourceId)!,p.preferredOutcome])),evidenceIds:[aliases.get("prior")!],gaps:[],law:raw,confidence:[2],exceptions:["A prose exception cannot make an impossible passing scenario valid."]})}};
 assert.throws(()=>encodeCanonicalScenarioLaw("nfl",physicalPacket.players[0],raw),/completed pass/);
 assert.throws(()=>parseJointReview(physicalPacket,{...response,wireRelease:"props_scenario_named_2026_11_09_r3_canonical_statistics"}),/wire release/);
 assert.throws(()=>parseJointReview(physicalPacket,response),/C:named_keys/);

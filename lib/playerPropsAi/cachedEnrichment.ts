@@ -8,6 +8,7 @@ import { PRODUCT_RELEASE, type Evidence, type GamePacket, type Json, type Quote 
 import { digest, instant, slots } from "./evidence";
 import {attachGameReaderContext,type ReaderGameContext} from "./gameContext";
 import {nbaReaderBenchmark} from "./nbaBenchmarks";
+import {NBA_READER_UNIT_CONTRACT} from "./readerUnitContract";
 import {capturedReviewSlots,type CapturedReviewWindow} from "./liveWindow";
 
 type NbaContextGame = { awayTeam: string; homeTeam: string; gameStartAt: string; generatedAt: string; nbaAvailability?: Json };
@@ -37,7 +38,7 @@ export function enrichCachedPacket(packet: GamePacket, source: EnrichedSource): 
   const enriched = { ...packet, players: packet.players.map(player => {
     let evidence = [...player.evidence]; const missing = [...player.missing];
     if (packet.sport === "nba") {
-      if(benchmark)evidence.push({...benchmark,id:`${player.id}:${benchmark.id}`});
+      if(benchmark)evidence.push({...benchmark,id:`${player.id}:${benchmark.id}`,value:{...(benchmark.value as Record<string,Json>),readerUnitContract:NBA_READER_UNIT_CONTRACT}});
       const prior = source.priorNba as typeof source.priorNba & { updatedAt?: string }, current = source.currentNba as typeof source.currentNba & { updatedAt?: string };
       let historicalRejected = false;
       evidence = evidence.flatMap(e => {

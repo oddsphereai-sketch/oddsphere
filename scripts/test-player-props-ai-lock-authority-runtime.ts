@@ -1,3 +1,5 @@
+import {PROPS_AI_WIRE_RELEASE} from "../lib/playerPropsAi/scenarioCoordinates";
+import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 /* eslint-disable @typescript-eslint/no-explicit-any -- Synthetic Supabase/HTTP and malformed JSON boundary fixtures are validated by the actual runtime. */
 /** All data synthetic. Actual site runtime/parser/binding/reconciler; no HTTP, DB, or paid calls. */
 import assert from 'node:assert/strict';
@@ -14,7 +16,7 @@ const {criticalContextHashes}=await import(root+'/lib/playerPropsAi/criticalCont
 const {readerEvidence,READER_AREAS}=await import(root+'/lib/playerPropsAi/readerCoverage.ts');
 const {evidenceAliases}=await import(root+'/lib/playerPropsAi/input.ts');
 const {parseJointReview}=await import(root+'/lib/playerPropsAi/request.ts');
-const {encodeCanonicalScenarioLaw,GENERATIVE_WIRE_RELEASE}=await import(root+'/lib/playerPropsAi/generativeCoordinates.ts');
+const {encodeCanonicalScenarioLaw}=await import(root+'/lib/playerPropsAi/generativeCoordinates.ts');
 const {PRODUCT_RELEASE}=await import(root+'/lib/playerPropsAi/evidenceContract.ts');
 const {digest}=await import(root+'/lib/playerPropsAi/evidence.ts');
 const {independentPriorEvents}=await import(root+'/lib/playerPropsAi/priorEvents.ts');
@@ -87,7 +89,7 @@ function packet(at:string,final=false){const p={id,name:'Synthetic Player',team:
  return{release:PRODUCT_RELEASE,sport:'nfl',gameId:'game',sourceGameId:'game',start,lock,cutoff:at,stage:final?'final':'early',players:[p],quotes:q,executionQuotes:q,sourceLimitations:[]}as any;
 }
 function review(input:any,final=false){const p=input.players[0],facts=readerEvidence(input)[id],alias=[...evidenceAliases(input)][0][0],law={weights:[1,1,...Array(14).fill(0)],outcomes:{receiving_yards:final?[60,80,...v(60).slice(2)]:[40,60,...v(40).slice(2)],receptions:final?[20,30,...v(20).slice(2)]:[2,6,...v(2).slice(2)]}};
- const wire={wireRelease:GENERATIVE_WIRE_RELEASE,players:{[id]:{assessment:'The supplied sources support a conditional forecast.',priorRead:priorReads(input),coverage:Object.fromEntries(READER_AREAS.map((area:string)=>[area,{status:facts[area].status,factIds:facts[area].facts.slice(0,1).map((f:any)=>f.id),effect:'uncertain',observation:'The supplied context requires caution.'}])),evidenceIds:[alias],gaps:[],law:encodeCanonicalScenarioLaw('nfl',p,law),confidence:[2,2],exceptions:final?[null,'Reception range is not supported by the supplied production.']:[null,null]}}};
+ const wire={wireRelease:PROPS_AI_WIRE_RELEASE,players:{[id]:verifiedReaderFixture(input,id,{assessment:'The supplied sources support a conditional forecast.',priorRead:priorReads(input),coverage:Object.fromEntries(READER_AREAS.map((area:string)=>[area,{status:facts[area].status,factIds:facts[area].facts.slice(0,1).map((f:any)=>f.id),effect:'uncertain',observation:'The supplied context requires caution.'}])),evidenceIds:[alias],gaps:[],law:encodeCanonicalScenarioLaw('nfl',p,law),confidence:[2,2],exceptions:final?[null,'Reception range is not supported by the supplied production.']:[null,null]})}};
  const parsed=parseJointReview(input,wire);return{...parsed,gameId:'game',sourceGameId:'game',start,lock,cutoff:input.cutoff,stage:input.stage,issuedAt:input.cutoff,inputHash:digest(input),criticalContextHashes:criticalContextHashes(input),marketScopes:{[id]:p.markets},model:'gpt-6-luna',partProvenance:[],inputEvidence:{digest:digest(input)}}as any;
 }
 function native(input:any){return boardRows(input.quotes.map((q:any)=>({...decision,gameId:'game',providerPlayerId:'1',playerName:'Synthetic Player',team:'BUF',opponent:'MIN',scheduledStart:start,lockAt:lock,state:'unlocked',market:q.market,line:q.line,side:q.side,sportsbook:q.book,provider:q.provider,americanPrice:q.american,observedAt:q.observedAt,projection:q.market==='receiving_yards'?55:4,projectionRange:null,grade:'No Play',roleFingerprint:'current-role',bookEvidence:[],aiReview:undefined})));}
@@ -101,8 +103,8 @@ const earlyPacket=packet(earlyIssued),early=review(earlyPacket),currentPacket=pa
 const earlyCurrent=packet(earlyAt),earlyBoard=applyNflSiteAi(native(earlyCurrent),earlyCurrent,siteAiDecisions(earlyCurrent,early,earlyAt),earlyAt);
 const previous=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:earlyAt,nextBoard:earlyBoard});
 const publicLocked=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:lock,nextBoard:native(earlyCurrent),previous});
-function allDeclined(){const p=final.players[0],wire={wireRelease:GENERATIVE_WIRE_RELEASE,players:{[id]:{assessment:'The supplied sources do not qualify a numerical forecast.',priorRead:priorReads(currentPacket),coverage:Object.fromEntries(Object.entries(p.coverage).map(([area,value]:any)=>{const{facts,...raw}=value;void facts;return[area,raw];})),evidenceIds:['e0'],gaps:['Both scopes explicitly remain unqualified.'],law:null,confidence:[0,0],exceptions:['Reviewed scope is unqualified.','Reviewed scope is unqualified.']}}};return{...final,...parseJointReview(currentPacket,wire)};}
-type Scenario={name:string;initialError?:boolean;finalError?:boolean;afterInitialGet?:string;afterInitialLoad?:string;afterFinalGet?:string;failFreshLoadAfterLock?:boolean;sameEarly?:boolean;declineAll?:boolean;overlayAfterLock?:boolean;previousLocked?:boolean};
+function allDeclined(){const p=final.players[0],wire={wireRelease:PROPS_AI_WIRE_RELEASE,players:{[id]:verifiedReaderFixture(currentPacket,id,{assessment:'The supplied sources do not qualify a numerical forecast.',priorRead:priorReads(currentPacket),coverage:Object.fromEntries(Object.entries(p.coverage).map(([area,value]:any)=>{const{facts,...raw}=value;void facts;return[area,raw];})),evidenceIds:['e0'],gaps:['Both scopes explicitly remain unqualified.'],law:null,confidence:[0,0],exceptions:['Reviewed scope is unqualified.','Reviewed scope is unqualified.']})}};return{...final,...parseJointReview(currentPacket,wire)};}
+type Scenario={name:string;initialError?:boolean;finalError?:boolean;afterInitialGet?:string;afterInitialLoad?:string;afterFinalGet?:string;failFreshLoadAfterLock?:boolean;sameEarly?:boolean;declineAll?:boolean;overlayAfterLock?:boolean;previousLocked?:boolean;currentExecutionEmpty?:boolean};
 async function exercise(s:Scenario){
  let now=initialAt,reviewReads=0,loads=0,forbidden=0;const advance=(at:string)=>{if(Date.parse(at)>Date.parse(now))now=at;};const frames:any[]=[],sourceEvents:any[]=[],reviewEvents:any[]=[],loadedPackets:any[]=[],sourcePurposes:string[]=[];
  const chosen=s.declineAll?allDeclined():s.sameEarly?early:final;
@@ -114,7 +116,7 @@ async function exercise(s:Scenario){
   query.single=resolve;query.then=(yes:any,no:any)=>resolve().then(yes,no);return query;},rpc(){forbidden++;throw Error('No SQL/RPC allowed');}};
  const result=await reviewPropsForSite({client:client as never,sport:'nfl',games:[{id:'game',start,away:'BUF',home:'MIN'}],clock:()=>now,deadline:Date.now()+1000,fetchImpl:(async()=>{forbidden++;throw Error('No model/provider/count HTTP allowed');})as typeof fetch,
   load:async(_game,window,context)=>{sourcePurposes.push(context?.purpose??"missing");loads++;if(s.failFreshLoadAfterLock&&loads===2){advance(afterLock);throw Error('Synthetic source GET failed after lock');}if(Date.parse(window.cutoff)>=Date.parse(lock))throw Error('Synthetic current source refuses a postlock capture');
-   const p={...structuredClone(currentPacket),cutoff:window.cutoff};loadedPackets.push(p);if(loads===1&&s.afterInitialLoad)advance(s.afterInitialLoad);return p;},
+   const p={...structuredClone(currentPacket),cutoff:window.cutoff};if(s.currentExecutionEmpty&&loads===2)p.executionQuotes=[];loadedPackets.push(p);if(loads===1&&s.afterInitialLoad)advance(s.afterInitialLoad);return p;},
   onSourceReady:(p,r,observedAt,lookupAvailable)=>{sourceEvents.push({packet:p,review:r,observedAt,lookupAvailable});frames.push(testNflSourceAuthority(()=>now)(p,r,lookupAvailable));frames.push(testNflHandoffCapture(()=>now)(base.decisions,p,r,'native'));},
   onReviewObserved:(p,r,lookupAvailable)=>{reviewEvents.push({packet:p,review:r,observedAt:now,lookupAvailable});frames.push(testNflSourceAuthority(()=>now)(p,r,lookupAvailable));}
  });
@@ -164,7 +166,67 @@ const sourceFailure=await exercise({name:'fresh source GET fails after lock',fai
 assert.equal(sourceFailure.result.games.length,1);assert.strictEqual(sourceFailure.result.games[0].packet,sourceFailure.sourceEvents[0].packet);assert.equal(sourceFailure.result.games[0].packet.cutoff,initialAt);assert(sourceFailure.result.findings.some(s=>s.startsWith('current_source_unavailable:')));
 assert(!sourceFailure.bundle.authorities.some(a=>a.review?.inputHash===final.inputHash&&Date.parse(a.observedAt)<Date.parse(lock)),'No reconstruction may claim a prelock observation which never occurred');
 assert(sourceFailure.snapshot.memberDecisions.filter(r=>r.aiReview).every(r=>r.aiReview!.lawHash===early.players[0].law!.hash),'A failed current source load after lock cannot backdate final B');
+const currentEmpty=await exercise({name:'actual site source withdraws all current execution',sameEarly:true,currentExecutionEmpty:true});
+assert.equal(currentEmpty.result.games[0].decisions.length,0);assert.equal(currentEmpty.snapshot.memberDecisions.length,0,'Actual runtime explicit empty execution cannot first-lock the earlier AI or native capture');
 const protectedResult=await exercise({name:'existing public locks first',previousLocked:true});assert.deepEqual(protectedResult.snapshot.board.decisions,publicLocked.board.decisions);assert.deepEqual(protectedResult.snapshot.memberDecisions,publicLocked.memberDecisions);
+{
+// A complete current collector observation owns future execution availability,
+// independently of whether its accepted final is newer than the prior board.
+const ready:NflPlayerPropsRuntimeBoard=applyNflSiteAi(base,currentPacket,siteAiDecisions(currentPacket,final,finalAt),finalAt);
+const priorReady:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:finalAt,nextBoard:ready});
+const lockedReady:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:lock,nextBoard:ready,previous:priorReady});
+const changedAt='2026-11-09T21:59:59Z';
+const removed={...structuredClone(currentPacket),cutoff:changedAt,players:currentPacket.players.map((p:any)=>({...p,markets:['receptions']})),quotes:currentPacket.quotes.filter((q:any)=>q.market==='receptions'),executionQuotes:currentPacket.executionQuotes.filter((q:any)=>q.market==='receptions')};
+function framesFor(source:any,rows:NflPlayerPropsRuntimeBoard,at=changedAt,lookup=true){return mergeNflHandoffs([
+ testNflSourceAuthority(()=>at)(source,final,lookup),testNflHandoffCapture(()=>at)(rows.decisions,source,final,'native'),testNflHandoffCapture(()=>at)(rows.decisions,source,final,'ai')]);}
+function reconcileCurrent(source:any,rows:NflPlayerPropsRuntimeBoard,at=afterLock,lookup=true):NflPlayerPropsProductionSnapshot{return reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:at,nextBoard:rows,previous:priorReady,lockHandoff:framesFor(source,rows,source.cutoff,lookup)});}
+const nextNative=native(removed),removedBoard:NflPlayerPropsRuntimeBoard=applyNflSiteAi(nextNative,removed,siteAiDecisions(removed,final,changedAt),changedAt);
+assert(!removedBoard.decisions.some(r=>r.market==='receiving_yards'));
+const removedFirstLock=reconcileCurrent(removed,removedBoard);
+assert(!removedFirstLock.memberDecisions.some(r=>r.market==='receiving_yards'),'An unchanged final cannot resurrect a withdrawn scope at its first lock');
+assert(!reconcileCurrent(removed,removedBoard,changedAt).memberDecisions.some(r=>r.market==='receiving_yards'),'Prelock missing-scope retention cannot restore an explicitly withdrawn event');
+const explicitEmpty={...structuredClone(currentPacket),cutoff:changedAt,executionQuotes:[]};
+assert.equal(reconcileCurrent(explicitEmpty,ready).memberDecisions.length,0,'Explicit empty current execution removes old AI and native first-lock candidates');
+const staleReadyFrames=mergeNflHandoffs([framesFor(currentPacket,ready,finalAt),framesFor(explicitEmpty,ready)]);
+assert.equal(reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:ready,previous:priorReady,lockHandoff:staleReadyFrames}).memberDecisions.length,0,'A real earlier numeric capture cannot defeat a later prelock withdrawal');
+assert.equal(reconcileCurrent(explicitEmpty,ready,afterLock,false).memberDecisions.length,0,'Review GET failure does not erase a successful explicit current execution observation');
+// An absent actor is also covered by the complete game collector observation.
+const otherActor={...structuredClone(currentPacket),cutoff:changedAt,players:currentPacket.players.map((p:any)=>({...p,id:'nfl-bdl-player:2',name:'Another Player'})),quotes:[],executionQuotes:[]};
+assert.equal(reconcileCurrent(otherActor,ready).memberDecisions.length,0,'Whole actor withdrawal cannot fall through the missing actor authority');
+// Losing one book cannot erase a still-current independently priced contract.
+const oneBook={...structuredClone(currentPacket),cutoff:changedAt,quotes:currentPacket.quotes.filter((q:any)=>q.book!=='one'||q.market!=='receiving_yards'),executionQuotes:currentPacket.executionQuotes.filter((q:any)=>q.book!=='one'||q.market!=='receiving_yards')};
+const oneBookResult=reconcileCurrent(oneBook,ready);
+assert(!oneBookResult.memberDecisions.some(r=>r.market==='receiving_yards'&&r.sportsbook==='one'));
+assert(oneBookResult.memberDecisions.some(r=>r.market==='receiving_yards'&&r.sportsbook==='two'&&r.grade==='Best Angle'));
+const repriced={...structuredClone(currentPacket),cutoff:changedAt,quotes:currentPacket.quotes.map((q:any)=>({...q,american:q.market==='receptions'?q.side==='over'?160:-180:q.american})),executionQuotes:currentPacket.executionQuotes.map((q:any)=>({...q,american:q.market==='receptions'?q.side==='over'?160:-180:q.american}))};
+const repricedNative=native(repriced);
+const oldNativeFrame=testNflHandoffCapture(()=>finalAt)(base.decisions,currentPacket,final,'native');
+const newPriceAuthority=testNflSourceAuthority(()=>changedAt)(repriced,final,true);
+const staleNative:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:repricedNative,previous,lockHandoff:mergeNflHandoffs([oldNativeFrame,newPriceAuthority])});
+assert(!staleNative.memberDecisions.some(r=>r.market==='receptions'),'A declined AI scope cannot restore a formerly ready native price withdrawn by the later exact contract observation');
+const freshNative:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:repricedNative,previous,lockHandoff:framesFor(repriced,repricedNative)});
+assert.equal(freshNative.memberDecisions.filter(r=>r.market==='receptions'&&!r.aiReview).length,2,'A genuinely ready current native fallback recovers its exact repriced contract');
+
+// A current return recovers the very same frozen law and normal promotion path.
+const returned={...structuredClone(currentPacket),cutoff:'2026-11-09T21:59:59.500Z'};
+const returnedFrames=mergeNflHandoffs([framesFor(explicitEmpty,ready),framesFor(returned,ready,returned.cutoff)]);
+const recovered:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:ready,previous:priorReady,lockHandoff:returnedFrames});
+assert.equal(recovered.memberDecisions.filter(r=>r.aiReview&&r.grade==='Best Angle').length,2);
+assert(recovered.memberDecisions.filter(r=>r.aiReview).every(r=>r.aiReview!.lawHash===final.players[0].law!.hash),'Return cannot replace or reinterpret the accepted law');
+assert(reconcileCurrent(returned,ready).memberDecisions.some(r=>r.aiReview),'An unchanged current final remains eligible');
+// No actual current execution capture is different from an explicit empty set.
+const unavailable={...structuredClone(currentPacket),cutoff:changedAt};delete unavailable.executionQuotes;
+assert(reconcileCurrent(unavailable,ready).memberDecisions.some(r=>r.aiReview),'Missing execution metadata must not fabricate a withdrawal');
+const afterOnly:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:ready,previous:priorReady,lockHandoff:framesFor(explicitEmpty,ready,afterLock)});
+assert(afterOnly.memberDecisions.some(r=>r.aiReview),'A postlock withdrawal cannot be backdated');
+for(const source of [removed,explicitEmpty,otherActor,oneBook]){
+ const preserved=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:ready,previous:lockedReady,lockHandoff:framesFor(source,ready)});
+ assert.deepEqual(preserved.memberDecisions,lockedReady.memberDecisions,'Every already public member lock retains its exact payload');
+ assert.deepEqual(preserved.board.decisions,lockedReady.board.decisions,'Every already public board lock retains its exact payload');
+}
+assert.equal(priorReady.memberDecisions.filter(r=>r.aiReview&&r.grade==='Best Angle').length,2);
+console.log('NFL current-execution first-lock guard passed: same-final scoped/book/actor withdrawal, explicit empty versus absent metadata, independent review GET failure, prelock suppression and same-law return promotion, postlock refusal and exact stored locks. Synthetic source/parser/binding/reconciler only.');
+}
 {
 Object.assign(process.env,{NODE_ENV:'test'});
 Object.assign(process.env,{PLAYER_PROPS_AI_SITE_ENABLED:'true',PLAYER_PROPS_AI_PAID_RUNS_ENABLED:'true',PLAYER_PROPS_AI_OPENAI_API_KEY:'synthetic-never-real'});
@@ -198,7 +260,7 @@ const fetchImpl=async(url:any)=>{
  assert.equal(String(url),'https://api.openai.com/v1/responses');generationCalls++;
  const p=initialPacket.players[0],aliases=evidenceAliases(initialPacket),lookup=(raw:string)=>[...aliases].find(([,x])=>x===raw)![0];
  const rp=final.players[0],law={weights:rp.law.weights.map((w:number)=>w*2),outcomes:rp.law.outcomes};
- const wire={wireRelease:GENERATIVE_WIRE_RELEASE,players:{[id]:{assessment:rp.assessment,priorRead:Object.fromEntries(Object.entries(rp.priorRead).map(([key,value])=>[lookup(key),value])),coverage:Object.fromEntries(Object.entries(rp.coverage).map(([area,value]:any)=>{const{facts,...rest}=value;void facts;return[area,rest];})),evidenceIds:rp.evidenceIds.map(lookup),gaps:rp.gaps,law:encodeCanonicalScenarioLaw('nfl',p,law),confidence:rp.confidence,exceptions:rp.exceptions}}};
+ const wire={wireRelease:PROPS_AI_WIRE_RELEASE,players:{[id]:verifiedReaderFixture(initialPacket,id,{assessment:rp.assessment,priorRead:Object.fromEntries(Object.entries(rp.priorRead).map(([key,value])=>[lookup(key),value])),coverage:Object.fromEntries(Object.entries(rp.coverage).map(([area,value]:any)=>{const{facts,...rest}=value;void facts;return[area,rest];})),evidenceIds:rp.evidenceIds.map(lookup),gaps:rp.gaps,law:encodeCanonicalScenarioLaw('nfl',p,law),confidence:rp.confidence,exceptions:rp.exceptions})}};
  tick=finalAt;return Response.json({id:'synthetic-response',model:'gpt-6-luna',status:'completed',service_tier:'default',usage:{input_tokens:1000,output_tokens:100},output:[{content:[{type:'output_text',text:JSON.stringify(wire)}]}]});
 };
 localCandidate=nativeBefore;

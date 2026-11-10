@@ -1,3 +1,5 @@
+import {PROPS_AI_WIRE_RELEASE} from "../lib/playerPropsAi/scenarioCoordinates";
+import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 /** Actual parser/publication/binding admission and legacy-lock controls. All
  * sources, responses and receipts are synthetic; no HTTP or paid inference. */
 import assert from 'node:assert/strict';
@@ -7,7 +9,7 @@ import {digest} from '../lib/playerPropsAi/evidence';
 import {compileMarketReport} from '../lib/playerPropsAi/marketReport';
 import {readerEvidence,READER_AREAS} from '../lib/playerPropsAi/readerCoverage';
 import {evidenceAliases} from '../lib/playerPropsAi/input';
-import {GENERATIVE_WIRE_RELEASE,encodeCanonicalScenarioLaw} from '../lib/playerPropsAi/generativeCoordinates';
+import {encodeCanonicalScenarioLaw} from '../lib/playerPropsAi/generativeCoordinates';
 import {parseJointReview} from '../lib/playerPropsAi/request';
 import {PROPS_AI_RELEASE} from '../lib/playerPropsAi/releases';
 import {criticalContextHashes} from '../lib/playerPropsAi/criticalContext';
@@ -45,8 +47,8 @@ function accepted(input:GamePacket,side:'over'|'under'){
  const packet=compileMarketReport(input),player=packet.players[0],facts=readerEvidence(packet)[player.id],aliases=evidenceAliases(packet),low=packet.sport==='mlb'?1:4,high=packet.sport==='mlb'?3:8;
  const outcomes=side==='over'?[low,...v(high).slice(1)]:[high,...v(low).slice(1)];
  const canonical:Record<string,number[]>=packet.sport==='nba'?{points:v(20),rebounds:outcomes,assists:v(3),threes:v(1)}:packet.sport==='nfl'?{receptions:outcomes}:{batter_singles:outcomes,batter_doubles:v(0),batter_triples:v(0),batter_home_runs:v(0),batter_walks:v(0),batter_strikeouts:v(0),batter_rbis:v(0),batter_runs_scored:v(0),batter_stolen_bases:v(0)};
- const actor={assessment:'The supplied evidence supports a conditional participation forecast.',priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[area].status,factIds:facts[area].facts.slice(0,1).map(f=>f.id),effect:'uncertain',observation:'The supplied source requires appropriate participation caution.'}])),evidenceIds:[[...aliases].find(([,id])=>id===player.evidence[0].id)![0]],gaps:[],confidence:[2],exceptions:[null],law:encodeCanonicalScenarioLaw(packet.sport,player,{weights:v(1),outcomes:canonical})};
- const raw={wireRelease:GENERATIVE_WIRE_RELEASE,players:{[player.id]:actor}},parsed=parseJointReview(packet,raw),inputBytes=Buffer.from(JSON.stringify(packet));
+ const actor=verifiedReaderFixture(packet,player.id,{assessment:'The supplied evidence supports a conditional participation forecast.',priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[area].status,factIds:facts[area].facts.slice(0,1).map(f=>f.id),effect:'uncertain',observation:'The supplied source requires appropriate participation caution.'}])),evidenceIds:[[...aliases].find(([,id])=>id===player.evidence[0].id)![0]],gaps:[],confidence:[2],exceptions:[null],law:encodeCanonicalScenarioLaw(packet.sport,player,{weights:v(1),outcomes:canonical})});
+ const raw={wireRelease:PROPS_AI_WIRE_RELEASE,players:{[player.id]:actor}},parsed=parseJointReview(packet,raw),inputBytes=Buffer.from(JSON.stringify(packet));
  const review:AcceptedGameReview={release:PROPS_AI_RELEASE,gameId:packet.gameId,sourceGameId:packet.gameId,start,lock,cutoff:at,stage:'final',issuedAt:now,model:'synthetic-offline',partProvenance:[],marketScopes:{[player.id]:[...player.markets]},criticalContextHashes:criticalContextHashes(packet),players:parsed.players,inputHash:digest(packet),inputEvidence:{encoding:'gzip-base64',digest:digest(packet),bytes:inputBytes.length,data:gzipSync(inputBytes).toString('base64')}};
  return{packet,raw,review};
 }
@@ -94,7 +96,7 @@ for(const sport of ['nba','nfl','mlb'] as const)for(const side of ['over','under
 const captureInput=sourcePacket('nba','no_source'),capture:CapturedNbaParticipationReport={gameId:captureInput.gameId,start,awayTeam:'BOS',homeTeam:'NYK',expectedEventId:'synthetic-espn',availableAt:at,report:{eventId:'synthetic-espn',teams:new Map([['BOS',[{player_id:null,name,status:'out',reported_at:past,source_player_id:'synthetic-9001'}]],['NYK',[]]])}};
 const captured=accepted(attachCapturedNbaParticipationReports(captureInput,[capture]),'over'),captureChoices=siteAiDecisions(captured.packet,captured.review,now),captureMember=applyNbaSiteAi(nbaBaseline(captured.packet),captured.packet,captureChoices,now);
 assert.equal(captureMember.decisions[0].grade,'No Play');assert.equal(captureMember.decisions[0].aiReview!.sourceEligibility!.facts[0].effectiveAt,new Date(past).toISOString());assert.equal(captureMember.decisions[0].aiReview!.sourceEligibility!.facts[0].timeBasis,'provider_reported');assert.equal(siteReviewQualification(captured.packet,captured.review,now).participationBlockedScopes,1);
-const certainty=verify('nba','cleared','over'),id=certainty.packet.players[0].id,bad=structuredClone(certainty.raw);bad.players[id].assessment='Insider money guarantees the player will exceed this line.';
-assert.throws(()=>parseJointReview(certainty.packet,bad),/Unsupported individual assessment certainty/);
-const caution=structuredClone(certainty.raw);caution.players[id].assessment='There is no verified smart money in the supplied source.';assert.equal(parseJointReview(certainty.packet,caution).players[0].assessment,caution.players[id].assessment);
+const certainty=verify('nba','cleared','over'),id=certainty.packet.players[0].id,bad=structuredClone(certainty.raw);Object.assign(bad.players[id],{assessment:'Insider money guarantees the player will exceed this line.'});
+assert.throws(()=>parseJointReview(certainty.packet,bad),/Future assessment must select verified claims/);
+const caution=structuredClone(certainty.raw);Object.assign(caution.players[id],{assessment:'There is no verified smart money in the supplied source.'});assert.throws(()=>parseJointReview(certainty.packet,caution),/Future assessment must select verified claims/,'Even cautious unrestricted factual prose cannot bypass future source claims');
 console.log('Participation publication passed: actual parser→publication→NBA/NFL/MLB; own Out/lineup blocks, paired Over/Under clearance promotions, teammate/opponent/unlisted controls, complete coverage versus blocked qualification, exact law/input/provenance, fresh fetched report, legacy locks and assessment certainty. Synthetic/offline; no paid calls.');

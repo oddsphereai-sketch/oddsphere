@@ -1,3 +1,4 @@
+import {PROPS_AI_WIRE_RELEASE} from './scenarioCoordinates';
 /** Prospective NBA navigation of the exact same source. No law/grade repair. */
 import {COMBOS, type GamePacket, type Json} from './evidenceContract';
 import {evidenceAliases} from './input';
@@ -5,7 +6,6 @@ import {readerEvidence, READER_AREAS, type ReaderArea, type ReaderAreaEvidence} 
 import {readerLogWindows} from './readerLogs';
 import {independentPriorEvents} from './priorEvents';
 import {inspectGenerativeDraft} from './generativeAdmission';
-import {GENERATIVE_WIRE_RELEASE} from './generativeCoordinates';
 import {marketUsesStatistic,validateLaw,lawForecast,type AcceptedPlayerLaw} from './law';
 import type {ForecastSanityIssue} from './forecastSanity';
 
@@ -118,7 +118,7 @@ function issueCategory(issue:ForecastSanityIssue,means:Partial<Record<Statistic,
   return null;
 }
 function coordinateCategory(code:string):string|null{
-  const known:Readonly<Record<string,string>>={weights:'relative weights',named_keys:'named statistic keys',fields_or_identity:'coordinate shape/identity',
+  const known:Readonly<Record<string,string>>={source_claims:'verified source reading selections',weights:'relative weights',named_keys:'named statistic keys',fields_or_identity:'coordinate shape/identity',
     'units:points_excluding_made_threes':'non-three points integer units','units:rebounds':'rebounds integer units','units:assists':'assists integer units','units:threes':'threes integer units',
     'bound:points':'total points bounds','bound:rebounds':'rebounds bounds','bound:assists':'assists bounds','bound:threes':'threes bounds'};
   // Existing generative diagnostics bound code strings to 32 characters.
@@ -130,7 +130,7 @@ function coordinateCategory(code:string):string|null{
 export function namedSourceCorrection(packet:GamePacket,draft:unknown):NamedSourceCorrection{
   if(packet.sport!=='nba')return unavailable('not_applicable',[]);
   const raw=object(draft),players=object(raw?.players);
-  if(!raw||raw.wireRelease!==GENERATIVE_WIRE_RELEASE||Object.keys(raw).sort().join('|')!=='players|wireRelease'||!players||Object.keys(players).sort().join('|')!==packet.players.map(p=>p.id).sort().join('|')||packet.players.some(p=>!object(players[p.id])))return unavailable('not_applicable',packet.players.map(p=>p.id));
+  if(!raw||raw.wireRelease!==PROPS_AI_WIRE_RELEASE||Object.keys(raw).sort().join('|')!=='players|wireRelease'||!players||Object.keys(players).sort().join('|')!==packet.players.map(p=>p.id).sort().join('|')||packet.players.some(p=>!object(players[p.id])))return unavailable('not_applicable',packet.players.map(p=>p.id));
   let inspection:ReturnType<typeof inspectGenerativeDraft>;
   try{inspection=inspectGenerativeDraft(packet,draft);}catch{return unavailable('diagnostic_unavailable',packet.players.map(p=>p.id));}
   const affectedActorIds:string[]=[],rows:string[]=[];
@@ -140,14 +140,15 @@ export function namedSourceCorrection(packet:GamePacket,draft:unknown):NamedSour
     affectedActorIds.push(player.id);
     const rawLaw=inspection.canonical.players[player.id]?.law,accepted=rawLaw?validateLaw('nba',player,rawLaw):null;
     const means:Partial<Record<Statistic,number>>=accepted?Object.fromEntries(STATISTICS.filter(stat=>accepted.outcomes[stat]).map(stat=>[stat,lawForecast(accepted,stat,0).mean])):{};
-    const categories=source.map(issue=>issueCategory(issue,means,accepted)),coordinate=coords.map(c=>coordinateCategory(c.code));
+    const categories=source.map(issue=>issueCategory(issue,means,accepted)),coordinate=coords.filter(c=>c.code!=='source_claims').map(c=>coordinateCategory(c.code));
     const fields=format.map(f=>f.field==='assessment'?'assessment':/^reader[0-7]$/.test(f.field)?READER_AREAS[Number(f.field.slice(6))].replaceAll('_',' '):null);
     if(categories.some(c=>c===null)||coordinate.some(c=>c===null)||fields.some(f=>f===null))return unavailable('not_applicable',packet.players.filter((p,i)=>inspection.source.some(s=>s.playerId===p.id&&s.unhandled.length)||inspection.coordinates.some(c=>c.playerId===p.id)||inspection.format.some(f=>f.playerIndex===i)).map(p=>p.id));
-    const clauses=[...unique(categories as string[]),...(coordinate.length?[`coordinates ${unique(coordinate as string[]).join(',')}`]:[]),...(fields.length?[`complete text ${unique(fields as string[]).join(',')}`]:[])];
+    const clauses=[...unique(categories as string[]),...(coordinate.length?[`coordinates ${unique(coordinate as string[]).join(',')}`]:[]),
+      ...(fields.length?[`verified claim selections ${unique(fields as string[]).join(',')}`]:coords.some(c=>c.code==='source_claims')?['verified source reading selections']:[])];
     rows.push(`P${index}: ${clauses.join('; ')}.`);
   }
   if(!affectedActorIds.length)return unavailable('not_applicable',[]);
-  const prefix='\nP labels are zero-based player order in the named cards. Recheck every listed category against exact sources. Joint x/y pairs need indices i!=j with both weights>0: (x[i]-x[j])*(y[i]-y[j])>0 is concordant (higher-together), <0 is opposing; ties/zero weights do not count. Keep same-index joint scenarios. Tails need opposing event mass. Correct the law or explicitly except unsupported scopes; never invent, clip, or waive a check.\n';
+  const prefix='\nP labels are zero-based player order in the named cards. Recheck listed categories against exact sources. Reader errors require verified claim IDs and bounded judgments, never factual prose. Joint x/y pairs need indices i!=j with both weights>0: (x[i]-x[j])*(y[i]-y[j])>0 is concordant (higher-together), <0 is opposing; ties/zero weights do not count. Keep same-index joint scenarios. Tails need opposing event mass. Correct the law or select a supported exception reason; never invent, clip, or waive a check.\n';
   const text=prefix+rows.join('\n'),bytes=Buffer.byteLength(text,'utf8');
   if(!/^[\x00-\x7f]*$/.test(text))return unavailable('feedback_exceeds_cushion',affectedActorIds,bytes);
   if(bytes>NAMED_SOURCE_CORRECTION_MAX_BYTES)return unavailable('feedback_exceeds_cushion',affectedActorIds,bytes);

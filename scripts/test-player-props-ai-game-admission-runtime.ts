@@ -1,3 +1,5 @@
+import {PROPS_AI_WIRE_RELEASE} from "../lib/playerPropsAi/scenarioCoordinates";
+import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 /** Actual reviewer/shared pools under deterministic virtual time. All data/IO
  * synthetic; no provider, database, token-count endpoint or model request. */
 import assert from 'node:assert/strict';
@@ -8,7 +10,7 @@ import {PRODUCT_RELEASE,type GamePacket,type Player} from '../lib/playerPropsAi/
 import {playerSubset} from '../lib/playerPropsAi/partitions';
 import {readerEvidence,READER_AREAS} from '../lib/playerPropsAi/readerCoverage';
 import {evidenceAliases} from '../lib/playerPropsAi/input';
-import {GENERATIVE_WIRE_RELEASE,encodeCanonicalScenarioLaw} from '../lib/playerPropsAi/generativeCoordinates';
+import {encodeCanonicalScenarioLaw} from '../lib/playerPropsAi/generativeCoordinates';
 import {parseJointReview} from '../lib/playerPropsAi/request';
 import type {PropsAiJob,PropsAiReviewStore} from '../lib/playerPropsAi/budget';
 import {PROPS_AI_MAX_OUTPUT_PER_REQUEST,PROPS_AI_MAX_PARTS,PROPS_AI_PART_CONCURRENCY} from '../lib/playerPropsAi/releases';
@@ -25,7 +27,7 @@ function capturedPacket(game:number,parts:number,cutoff:number):GamePacket{
 }
 function draft(p:GamePacket){
  const facts=readerEvidence(p),aliases=evidenceAliases(p);
- return{wireRelease:GENERATIVE_WIRE_RELEASE,players:Object.fromEntries(p.players.map(player=>[player.id,{assessment:'The supplied evidence supports a conditional forecast.',priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[player.id][area].status,factIds:facts[player.id][area].facts.slice(0,1).map(f=>f.id),effect:'uncertain',observation:'The supplied context requires appropriate caution.'}])),evidenceIds:[[...aliases].find(([,id])=>id===player.evidence[0].id)![0]],gaps:[],confidence:[2],exceptions:[null],law:encodeCanonicalScenarioLaw('nfl',player,{weights:v(1),outcomes:{receptions:[4,8,...v(6).slice(2)]}})}]))};
+ return{wireRelease:PROPS_AI_WIRE_RELEASE,players:Object.fromEntries(p.players.map(player=>[player.id,verifiedReaderFixture(p,player.id,{assessment:'The supplied evidence supports a conditional forecast.',priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[player.id][area].status,factIds:facts[player.id][area].facts.slice(0,1).map(f=>f.id),effect:'uncertain',observation:'The supplied context requires appropriate caution.'}])),evidenceIds:[[...aliases].find(([,id])=>id===player.evidence[0].id)![0]],gaps:[],confidence:[2],exceptions:[null],law:encodeCanonicalScenarioLaw('nfl',player,{weights:v(1),outcomes:{receptions:[4,8,...v(6).slice(2)]}})})]))};
 }
 async function simulation(mode:Mode,secondOrdinaryPass=false){
  let now=mode.sourceMs,active=0,peak=0,claims=0,sends=0,receipts=0,unknownReceipts=0,unbilledReceipts=0,fallbacks=0,strongCounts=0;const inputCounts=0;

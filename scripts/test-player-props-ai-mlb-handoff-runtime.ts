@@ -1,3 +1,5 @@
+import {PROPS_AI_WIRE_RELEASE} from "../lib/playerPropsAi/scenarioCoordinates";
+import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 import {testMlbPrelockHandoff} from '../lib/playerPropsAi/mlbPrelockHandoff';
 import type {PlayerPropPreviewRow} from '../app/mlb/props/components/PlayerPropsDashboard';
 import {siteAiDecisions} from '../lib/playerPropsAi/publication';
@@ -11,7 +13,7 @@ import {playerSubset} from '../lib/playerPropsAi/partitions';
 import {PRODUCT_RELEASE,type GamePacket,type Player} from '../lib/playerPropsAi/evidenceContract';
 import {readerEvidence,READER_AREAS} from '../lib/playerPropsAi/readerCoverage';
 import {evidenceAliases} from '../lib/playerPropsAi/input';
-import {encodeCanonicalScenarioLaw,GENERATIVE_WIRE_RELEASE} from '../lib/playerPropsAi/generativeCoordinates';
+import {encodeCanonicalScenarioLaw} from '../lib/playerPropsAi/generativeCoordinates';
 import type {PropsAiJob} from '../lib/playerPropsAi/budget';
 import type {AcceptedGameReview} from '../lib/playerPropsAi/reviewer';
 import {countAiInput,type AiRequest} from '../lib/playerPropsAi/openai';
@@ -66,7 +68,7 @@ async function exercise(){
 
  function wire(ids:string[]){
   const part=playerSubset(packets.get(ids[0].startsWith('native-bad')?'native-bad':'native-healthy')!,ids),facts=readerEvidence(part),aliases=evidenceAliases(part);
-  return{wireRelease:GENERATIVE_WIRE_RELEASE,players:Object.fromEntries(part.players.map(p=>[p.id,{assessment:'The supplied evidence supports a conditional forecast.',priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[p.id][area].status,factIds:facts[p.id][area].facts.slice(0,1).map(f=>f.id),effect:'uncertain',observation:'The supplied context requires appropriate caution.'}])),evidenceIds:[[...aliases].find(([,id])=>id===p.evidence[0].id)![0]],gaps:[],confidence:[2],exceptions:[null],law:encodeCanonicalScenarioLaw('mlb',p,{weights:v(1),outcomes:{pitcher_strikeouts:[4,8,...v(6).slice(2)],pitcher_outs:v(18),pitcher_hits_allowed:v(5),pitcher_walks:v(2),pitcher_earned_runs:v(2)}})}]))};
+  return{wireRelease:PROPS_AI_WIRE_RELEASE,players:Object.fromEntries(part.players.map(p=>[p.id,verifiedReaderFixture(part,p.id,{assessment:'The supplied evidence supports a conditional forecast.',priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[p.id][area].status,factIds:facts[p.id][area].facts.slice(0,1).map(f=>f.id),effect:'uncertain',observation:'The supplied context requires appropriate caution.'}])),evidenceIds:[[...aliases].find(([,id])=>id===p.evidence[0].id)![0]],gaps:[],confidence:[2],exceptions:[null],law:encodeCanonicalScenarioLaw('mlb',p,{weights:v(1),outcomes:{pitcher_strikeouts:[4,8,...v(6).slice(2)],pitcher_outs:v(18),pitcher_hits_allowed:v(5),pitcher_walks:v(2),pitcher_earned_runs:v(2)}})})]))};
  }
  const fetchImpl:typeof fetch=async(url,options)=>{
   const body=JSON.parse(String(options?.body)),signal=options?.signal??undefined;

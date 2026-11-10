@@ -1,3 +1,6 @@
+import {compileReaderClaims} from "../lib/playerPropsAi/readerClaims";
+import {PROPS_AI_WIRE_RELEASE} from "../lib/playerPropsAi/scenarioCoordinates";
+import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 /** Audit actual reviewer-produced synthetic receipts, then tamper their evidence.
  * No network/database/provider/model/count requests; Responses HTTP is mocked.
  */
@@ -10,7 +13,7 @@ import type {PropsAiJob,PropsAiReviewStore} from "../lib/playerPropsAi/budget";
 import {PRODUCT_RELEASE,type GamePacket,type Player} from "../lib/playerPropsAi/evidenceContract";
 import {readerEvidence,READER_AREAS} from "../lib/playerPropsAi/readerCoverage";
 import {evidenceAliases} from "../lib/playerPropsAi/input";
-import {GENERATIVE_WIRE_RELEASE,encodeCanonicalScenarioLaw} from "../lib/playerPropsAi/generativeCoordinates";
+import {encodeCanonicalScenarioLaw} from "../lib/playerPropsAi/generativeCoordinates";
 import {PROPS_AI_PRIMARY_MODEL,PROPS_AI_STRONG_MODEL} from "../lib/playerPropsAi/releases";
 import {digest} from "../lib/playerPropsAi/evidence";
 import {archiveFailureBytes} from "../lib/playerPropsAi/failureEvidence";
@@ -23,12 +26,12 @@ const packet:GamePacket={release:PRODUCT_RELEASE,sport:"nba",gameId:"synthetic-a
 const facts=readerEvidence(packet),aliases=evidenceAliases(packet);
 function rawPlayer(player:Player,bad=false){
   const declined=player.id==="d",unqualified=player.id==="c";
-  return {assessment:"The supplied evidence requires a cautious conditional forecast.",priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[player.id][area].status,factIds:facts[player.id][area].facts.slice(0,1).map(f=>f.id),effect:"uncertain",observation:"The supplied evidence requires contextual caution."}])),
+  return verifiedReaderFixture(packet,player.id,{assessment:"The supplied evidence requires a cautious conditional forecast.",priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[player.id][area].status,factIds:facts[player.id][area].facts.slice(0,1).map(f=>f.id),effect:"uncertain",observation:"The supplied evidence requires contextual caution."}])),
     evidenceIds:[[...aliases].find(([,id])=>id===player.evidence[0].id)![0]],gaps:unqualified?["The available source does not support a responsible numerical forecast."]:[],
     law:unqualified?null:encodeCanonicalScenarioLaw("nba",player,{weights:v(1),outcomes:{points:bad||declined?v(50):[18,22,...v(20).slice(2)],rebounds:v(4),assists:v(2),threes:v(1)}}),
-    confidence:[declined||unqualified?0:2],exceptions:declined||unqualified?["The supplied source does not support this numerical scope."]:[null]};
+    confidence:[declined||unqualified?0:2],exceptions:declined||unqualified?["The supplied source does not support this numerical scope."]:[null]});
 }
-const first={wireRelease:GENERATIVE_WIRE_RELEASE,players:Object.fromEntries(players.map(p=>[p.id,rawPlayer(p,p.id==="b")]))},second={wireRelease:GENERATIVE_WIRE_RELEASE,players:Object.fromEntries(players.map(p=>[p.id,rawPlayer(p,p.id==="a")]))};
+const first={wireRelease:PROPS_AI_WIRE_RELEASE,players:Object.fromEntries(players.map(p=>[p.id,rawPlayer(p,p.id==="b")]))},second={wireRelease:PROPS_AI_WIRE_RELEASE,players:Object.fromEntries(players.map(p=>[p.id,rawPlayer(p,p.id==="a")]))};
 const job={job_key:"synthetic-audit",sport:"nba",game_id:packet.gameId,game_day:"2026-11-09",stage:"final",scheduled_start:packet.start,lock_at:packet.lock,state:"pending",requested_tier:"default",model:PROPS_AI_STRONG_MODEL,parts:1} as PropsAiJob;
 const attempts:PersistedActorAttempt[]=[],bodies:string[]=[];
 let sends=0,fallbacks=0;
@@ -46,7 +49,8 @@ assert.equal(result.status,"completed");assert.equal(attempts.length,2);assert.e
 assert("review" in result&&result.review);const actualReview=result.review as unknown as {players:{playerId:string;law:{hash:string}|null;sourceDeclinedMarkets:string[]}[];partProvenance:unknown[]};
 const audited=auditPropsActorAdmissionPart({packet,attempts,provenance:actualReview.partProvenance});assert.equal(audited.complete,true);
 if(!audited.complete)throw Error("Expected complete audit");
-assert.equal(digest(audited.review.players),digest(actualReview.players));assert.deepEqual(audited.actorProvenance.map(p=>[p.playerId,p.phase]),[["a",1],["b",2],["c",1],["d",1]]);
+assert.equal(digest(audited.review.players),digest(actualReview.players));
+const originalClaimCatalog=compileReaderClaims(packet);for(const actor of audited.review.players)assert.equal(actor.sourceReadProofs?.catalogHash,digest(originalClaimCatalog[actor.playerId]),"Exact receipt replay retains the original actor claim catalog, not a later reconstructed reading");assert.deepEqual(audited.actorProvenance.map(p=>[p.playerId,p.phase]),[["a",1],["b",2],["c",1],["d",1]]);
 assert.equal(audited.review.players.find(p=>p.playerId==="c")!.law,null);assert.deepEqual(audited.review.players.find(p=>p.playerId==="d")!.sourceDeclinedMarkets,["points"]);
 assert.equal(audited.actorProvenance.find(p=>p.playerId==="a")!.model,PROPS_AI_STRONG_MODEL);assert.equal(audited.actorProvenance.find(p=>p.playerId==="b")!.model,PROPS_AI_PRIMARY_MODEL);
 const initialRequest=JSON.parse(bodies[0]),correctionRequest=JSON.parse(bodies[1]);assert.equal(initialRequest.input,correctionRequest.input);assert.equal(digest(initialRequest.text),digest(correctionRequest.text));assert.equal(initialRequest.max_output_tokens,7000);assert.equal(correctionRequest.max_output_tokens,7000);
@@ -55,6 +59,9 @@ const partial=auditPropsActorAdmissionPart({packet,attempts:attempts.slice(0,1)}
 type MutableUsage={actorAdmissionEvidence:Record<string,unknown>;failureEvidence:Record<string,unknown>;input_tokens:number;output_tokens:number;response_status:string};
 const usage=(a:PersistedActorAttempt)=>a.usage as MutableUsage;
 function tamper(mutator:(copy:PersistedActorAttempt[])=>void){const copy=clone(attempts);mutator(copy);assert.throws(()=>auditPropsActorAdmissionPart({packet,attempts:copy,provenance:actualReview.partProvenance}));}
+const legacyReceipt=clone(attempts);usage(legacyReceipt[0]).actorAdmissionEvidence.release='player_props_ai_actor_admission_2026_11_10_r1_original_part';const legacyReceiptBefore=JSON.stringify(legacyReceipt);
+assert.throws(()=>auditPropsActorAdmissionPart({packet,attempts:legacyReceipt}),/unsupported original admission release/,'Original R1 receipts cannot be reparsed under future R5 claim admission');
+assert.equal(JSON.stringify(legacyReceipt),legacyReceiptBefore,'Refusing a legacy audit never edits its immutable receipt');
 tamper(copy=>{usage(copy[0]).actorAdmissionEvidence.sourceInputHash=sha("wrong");});
 tamper(copy=>{usage(copy[1]).actorAdmissionEvidence.consumedActorIds=["a","b"];});
 tamper(copy=>{(usage(copy[0]).actorAdmissionEvidence.eligibleActors as Record<string,unknown>[])[0].canonicalHash=sha("wrong");});
@@ -90,7 +97,7 @@ const blocked=auditPropsActorAdmissionPart({packet,attempts:unknown});assert.equ
 const unavailable=clone(attempts);usage(unavailable[1]).actorAdmissionEvidence={release:usage(unavailable[0]).actorAdmissionEvidence.release,disposition:"unavailable",reason:"combined_receipt_evidence_bound"};usage(unavailable[1]).failureEvidence={archiveUnavailable:"combined_actor_receipt_evidence_bound"};(usage(unavailable[1]) as unknown as Record<string,unknown>).actorAdmissionUnavailable=true;
 const refused=auditPropsActorAdmissionPart({packet,attempts:unavailable});assert.equal(refused.complete,false);assert.equal(refused.blockedReason,"exact_actor_archive_unavailable");assert.deepEqual(refused.pendingActorIds,["b"]);
 const differentPacket=clone(packet);differentPacket.players[0].name="Changed actor";assert.throws(()=>auditPropsActorAdmissionPart({packet:differentPacket,attempts}),/source/);
-console.log("R28 persisted actor-admission audit passed: actual mocked reviewer receipts, exact source/request/draft SHA and request reconstruction, original actor/full parser replay, mixed models/phases, declined/null scopes, bound/usage/metadata/provenance tamper refusal and incomplete/unknown/archive safety. No I/O or paid calls.");
+console.log("Current R2 persisted actor-admission audit passed: actual mocked reviewer receipts, exact source/request/draft SHA and request reconstruction, original actor/full parser replay, mixed models/phases, declined/null scopes, bound/usage/metadata/provenance tamper refusal and incomplete/unknown/archive safety. No I/O or paid calls.");
 return {packet,attempts,review:result.review as AcceptedGameReview,bodies};
 }
 if(/(?:^|\/)test-player-props-ai-actor-admission-audit\.ts$/.test(process.argv[1]??""))runActorAdmissionAuditSelfTest().catch(error=>{console.error(error);process.exitCode=1;});

@@ -1,10 +1,12 @@
+import {PROPS_AI_WIRE_RELEASE} from "../lib/playerPropsAi/scenarioCoordinates";
+import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 /** Actual NFL producer→adapter→parser→publication controls, synthetic/offline. */
 import assert from 'node:assert/strict';
 import {liveNflPacket} from '../lib/playerPropsAi/liveSources';
 import {playerParticipationEligibility} from '../lib/playerPropsAi/participationEligibility';
 import {readerEvidence,READER_AREAS} from '../lib/playerPropsAi/readerCoverage';
 import {evidenceAliases} from '../lib/playerPropsAi/input';
-import {encodeCanonicalScenarioLaw,GENERATIVE_WIRE_RELEASE} from '../lib/playerPropsAi/generativeCoordinates';
+import {encodeCanonicalScenarioLaw} from '../lib/playerPropsAi/generativeCoordinates';
 import {parseJointReview} from '../lib/playerPropsAi/request';
 import {criticalContextHashes} from '../lib/playerPropsAi/criticalContext';
 import {siteAiDecisions,siteReviewQualification} from '../lib/playerPropsAi/publication';
@@ -35,8 +37,8 @@ function source(options:Options={}):GamePacket{
 }
 function accepted(packet:GamePacket,side:'over'|'under'){
  const p=packet.players[0],facts=readerEvidence(packet)[p.id],aliases=evidenceAliases(packet),before=digest(packet);
- const actor={assessment:'The supplied evidence supports a conditional participation forecast.',priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(a=>[a,{status:facts[a].status,factIds:facts[a].facts.slice(0,1).map(f=>f.id),effect:'uncertain',observation:'The supplied source requires appropriate participation caution.'}])),evidenceIds:[[...aliases][0][0]],gaps:[],confidence:[2],exceptions:[null],law:encodeCanonicalScenarioLaw('nfl',p,{weights:v(1),outcomes:{receptions:side==='over'?[4,...v(8).slice(1)]:[8,...v(4).slice(1)]}} as never)};
- const parsed=parseJointReview(packet,{wireRelease:GENERATIVE_WIRE_RELEASE,players:{[p.id]:actor}});
+ const actor=verifiedReaderFixture(packet,p.id,{assessment:'The supplied evidence supports a conditional participation forecast.',priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(a=>[a,{status:facts[a].status,factIds:facts[a].facts.slice(0,1).map(f=>f.id),effect:'uncertain',observation:'The supplied source requires appropriate participation caution.'}])),evidenceIds:[[...aliases][0][0]],gaps:[],confidence:[2],exceptions:[null],law:encodeCanonicalScenarioLaw('nfl',p,{weights:v(1),outcomes:{receptions:side==='over'?[4,...v(8).slice(1)]:[8,...v(4).slice(1)]}} as never)});
+ const parsed=parseJointReview(packet,{wireRelease:PROPS_AI_WIRE_RELEASE,players:{[p.id]:actor}});
  const review={...parsed,release:PROPS_AI_RELEASE,gameId:game.id,sourceGameId:game.id,start,lock,cutoff:at,stage:'early',issuedAt:at,inputHash:before,criticalContextHashes:criticalContextHashes(packet),marketScopes:{[p.id]:p.markets},partProvenance:[],model:'synthetic',inputEvidence:{digest:before}} as unknown as AcceptedGameReview;
  const choices=siteAiDecisions(packet,review,at);assert.equal(digest(packet),before);assert.equal(choices.length,1);assert.equal(choices[0].side,side);
  return{review,choices,status:playerParticipationEligibility(packet,p)};
