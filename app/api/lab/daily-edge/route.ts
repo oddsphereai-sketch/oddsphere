@@ -6797,7 +6797,7 @@ export async function GET(request: Request) {
       await populateStoredUclPublicSplits(payload);
       return Response.json(payload, { headers: {
         "Cache-Control": "private, max-age=30, stale-while-revalidate=300",
-        "X-Oddsphere-Response-Source": payload.uclUpcomingSchedule ? "UCL_STORED_SCHEDULE" : "UCL_MEMBER_SNAPSHOT",
+        "X-Oddsphere-Response-Source": payload.uclBoardContinuity ? "UCL_SAVED_MEMBER_CARDS" : "UCL_MEMBER_SNAPSHOT",
       } });
     } catch {
       return Response.json({ as_of: new Date().toISOString(), sport: "soccer", date: requestedDate,

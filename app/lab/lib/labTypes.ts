@@ -1292,11 +1292,8 @@ export type DailyEdgeResponse = {
   nbaRollingSchedule?: NbaRollingScheduleDto;
   /** Schedule-only CBB matchups never imply a forecast, Bet grade, or lock. */
   cbbRollingSchedule?: CbbRollingScheduleDto;
-  /** Stored UCL fixtures only; never synthesized forecasts or betting grades. */
-  uclUpcomingSchedule?: {
-    release: string;
-    games: Array<{ externalId: number; gameStartAt: string; homeTeam: string; awayTeam: string }>;
-  };
+  /** Exact last-published member tuples restored from durable writer captures. */
+  uclBoardContinuity?: { release: string; capturedAt: string };
   cbbScheduleCoverage?: { eligibleGameIds: number[]; modelEligibleGameIds: number[] };
   games: DailyEdgeGameDto[];
 };

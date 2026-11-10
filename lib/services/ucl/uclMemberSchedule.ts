@@ -3,12 +3,13 @@ import { currentSoccerBoardDate } from "@/lib/dates/slateDate";
 import { filterWeeklyReaderSnapshot } from "@/lib/services/dailyEdge/weeklyReaderLifecycle";
 import { UCL_EXTERNAL_ID_OFFSET, UCL_EXTERNAL_ID_UPPER_BOUND } from "./uclCompetitionContext";
 
-export const UCL_MEMBER_SCHEDULE_RELEASE = "ucl_member_schedule_2026_11_10_r1_forecast_outage_visibility";
+export const UCL_MEMBER_SCHEDULE_RELEASE = "ucl_member_schedule_2026_11_10_r2_saved_standard_cards";
 type Fixture = { external_id: number; game_date: string; home_team_id: number; away_team_id: number };
-type Team = { id: number; display_name: string };
+type Team = { id: number; display_name: string; abbreviation?: string };
+type Schedule = { release: string; games: Array<{externalId:number;gameStartAt:string;homeTeam:string;awayTeam:string}> };
 
 /** Exact foreign keys and the next contiguous round. No model/provider calls or writes. */
-export function buildUclMemberSchedule(rows: Fixture[], teams: Team[], now = new Date()): NonNullable<DailyEdgeResponse["uclUpcomingSchedule"]> {
+export function buildUclMemberSchedule(rows: Fixture[], teams: Team[], now = new Date()): Schedule {
   const names = new Map(teams.map(team => [team.id, team.display_name]));
   const ordered = rows.filter(row => row.external_id >= UCL_EXTERNAL_ID_OFFSET && row.external_id < UCL_EXTERNAL_ID_UPPER_BOUND
     && Number.isFinite(Date.parse(row.game_date)) && Date.parse(row.game_date) >= now.getTime())
@@ -44,7 +45,20 @@ export async function readUclMemberBoard(snapshot: DailyEdgeResponse | null, now
   const fixtures = await query().lte("game_date", through).limit(65);
   if (fixtures.error || !fixtures.data?.length || fixtures.data.length >= 65) throw Error("UCL schedule round lookup failed or exceeded bound");
   const ids = [...new Set(fixtures.data.flatMap(row => [row.home_team_id, row.away_team_id]))];
-  const teams = await supabase.from("teams").select("id,display_name").eq("sport", "soccer").in("id", ids);
+  const teams = await supabase.from("teams").select("id,display_name,abbreviation").eq("sport", "soccer").in("id", ids);
   if (teams.error) throw Error(`UCL schedule teams lookup failed: ${teams.error.message}`);
-  return { ...fallback, uclUpcomingSchedule: buildUclMemberSchedule(fixtures.data, teams.data ?? [], now) };
+  const schedule = buildUclMemberSchedule(fixtures.data, teams.data ?? [], now);
+  const selectedIds = new Set(schedule.games.map(game => game.externalId));
+  const selected = fixtures.data.filter(row => selectedIds.has(row.external_id));
+  const records = await supabase.from("prediction_records")
+    .select("external_id,game_date,market,model_version,calibration_version,locked_at,snapshot_json")
+    .eq("sport", "soccer").in("external_id", [...selectedIds]).limit(513);
+  if (records.error || records.data?.length === 513) throw Error("UCL saved member forecast lookup unavailable or exceeded bound");
+  const { restoreUclStoredMemberGame, UCL_STORED_MEMBER_READER_RELEASE } = await import("./uclStoredMemberBoard");
+  const games = selected.map(row => restoreUclStoredMemberGame(row, teams.data ?? [], records.data ?? [], now));
+  if (games.some(game => game === null)) return fallback;
+  const restored = games.filter(game => game !== null);
+  const capturedAt = restored.map(game => game.generatedAt!).sort()[0]!;
+  return { ...fallback, as_of: capturedAt, games: restored, slateState: "today_published", slate_status: "published",
+    last_slate_update_at: capturedAt, uclBoardContinuity: { release: UCL_STORED_MEMBER_READER_RELEASE, capturedAt } };
 }
