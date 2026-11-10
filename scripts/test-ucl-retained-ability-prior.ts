@@ -1,0 +1,76 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import artifact from "../lib/services/ucl/artifacts/ucl-retained-ability-2026-11-04.json";
+import { buildUclCurrentStrengthPrior } from "../lib/services/ucl/uclCurrentStrengthPrior";
+import { loadUclRetainedAbilityPrior, uclRetainedAbilityPrecision, validateUclRetainedAbilityArtifact } from "../lib/services/ucl/uclRetainedAbilityPrior";
+import { fitUclOpponentModel, fitAndPredictUcl, UCL_MODEL_RELEASE, UCL_CALIBRATION_RELEASE, UCL_LEGACY_R22_MODEL_RELEASE } from "../lib/services/ucl/uclModel";
+import type { EplTrainingMatch } from "../lib/services/epl/eplShadowModel";
+import type { BdlUclMatch } from "../lib/providers/real_api/BallDontLieUclProvider";
+import type { UclCompetitionContext } from "../lib/services/ucl/uclCompetitionContext";
+import { deriveSoccerMarketProbabilities } from "../lib/services/soccer/soccerMarketProbabilities";
+
+const source = JSON.parse(readFileSync("docs/model-audits/2026-11-04-ucl-official-strength-source.json", "utf8"));
+const names = new Map(artifact.clubs.map(club => [club.teamId, club.name]));
+const originalFetch = globalThis.fetch; let requests = 0;
+globalThis.fetch = async () => { requests++; throw Error("No external source allowed"); };
+try {
+  const retained = loadUclRetainedAbilityPrior(names, [...names.keys()]);
+  assert.equal(requests, 0);
+  const legacy = buildUclCurrentStrengthPrior(source, names, [...names.keys()]);
+  assert.deepEqual(retained.numericPrior, legacy, "every frozen club value and original source field reproduces the attested R22 input");
+  assert.equal(artifact.clubs.length, 58);
+  for (const key of ["asOfDay", "capturedAt", "sourceHash", "sourceUrl"] as const)
+    assert.equal(retained.numericPrior.source[key], source[key], "original source metadata stays exact");
+  assert.throws(() => validateUclRetainedAbilityArtifact({ ...artifact, derivedAt: "2026-11-11T00:00:00Z" }), /identity mismatch/);
+  const wrongName = new Map(names); wrongName.set(artifact.clubs[0]!.teamId, "Different club");
+  assert.throws(() => loadUclRetainedAbilityPrior(wrongName, [...names.keys()]), /identity/);
+  assert.throws(() => loadUclRetainedAbilityPrior(names, [99999]), /missing required/);
+  const kickoff = "2026-11-24T20:00:00Z", availableAt = "2026-11-10T17:00:00Z";
+  const precision = uclRetainedAbilityPrecision(retained, kickoff, availableAt);
+  assert(precision.precisionScale < 1 && precision.precisionScale > .96);
+  assert.equal(precision.sourceAgeDays, (Date.parse(kickoff) - Date.parse("2026-11-04T00:00:00Z")) / 86_400_000);
+  const yearLater = uclRetainedAbilityPrecision(retained, new Date(Date.parse(kickoff) + 365 * 86_400_000).toISOString(), availableAt);
+  assert(Math.abs(yearLater.precisionScale - precision.precisionScale / 2) < 1e-15);
+  assert.throws(() => uclRetainedAbilityPrecision(retained, kickoff, kickoff), /unavailable before/);
+  assert.throws(() => uclRetainedAbilityPrecision(retained, kickoff, source.capturedAt), /unavailable before/);
+  assert.throws(() => uclRetainedAbilityPrecision(retained, "bad", availableAt), /unavailable before/);
+  const changed = { ...retained, numericPrior: { ...retained.numericPrior, ratings: new Map(retained.numericPrior.ratings) } };
+  changed.numericPrior.ratings.set(artifact.clubs[0]!.teamId, 9999);
+  assert.throws(() => uclRetainedAbilityPrecision(changed, kickoff, availableAt), /identity mismatch/);
+  assert.throws(() => uclRetainedAbilityPrecision({ ...retained, numericPrior: { ...retained.numericPrior,
+    source: { ...retained.numericPrior.source, asOfDay: "2026-11-10" } } }, kickoff, availableAt), /identity mismatch/);
+  const sorted = [...artifact.clubs].sort((a, b) => b.rating - a.rating), strong = sorted[0]!.teamId, weak = sorted.at(-1)!.teamId;
+  const rows = Array.from({ length: 40 }, (_, i) => ({ id: i + 1, date: new Date(Date.parse("2026-11-11") + i * 86_400_000).toISOString(),
+    status_state: "final", home_team_id: strong, away_team_id: weak, home_score: 0, away_score: 3, home_xg: null, away_xg: null } as EplTrainingMatch));
+  const before = JSON.stringify([...retained.numericPrior.ratings]);
+  const full = fitUclOpponentModel(rows, "2027-01-01T20:00:00Z", legacy);
+  assert.deepEqual(fitUclOpponentModel(rows, "2027-01-01T20:00:00Z", retained.numericPrior, 1), full, "unit precision is exact R22 math");
+  const aged = fitUclOpponentModel(rows, "2027-01-01T20:00:00Z", retained.numericPrior, .25);
+  const rate = (fit: typeof full) => fit.leagueHomeRate * fit.strengths.get(strong)!.homeAttack * fit.strengths.get(weak)!.awayDefense;
+  assert(rate(aged) < rate(full), "contrary observed goals outweigh an older prior more strongly");
+  assert.equal(JSON.stringify([...retained.numericPrior.ratings]), before);
+  assert.throws(() => fitUclOpponentModel(rows, kickoff, retained.numericPrior, 0), /precision/);
+  assert.throws(() => fitUclOpponentModel(rows, kickoff, retained.numericPrior, 1.1), /precision/);
+  const match = { id: 999, date: kickoff, home_team_id: strong, away_team_id: weak } as BdlUclMatch;
+  const context = { neutralVenue: true } as UclCompetitionContext;
+  const prediction = fitAndPredictUcl({ training: [], match, history: [], context, retainedPrior: retained, availableAt });
+  const swapped = fitAndPredictUcl({ training: [], match: { ...match, home_team_id: weak, away_team_id: strong }, history: [], context, retainedPrior: retained, availableAt });
+  assert.equal(prediction.release, UCL_MODEL_RELEASE); assert.equal(prediction.calibrationRelease, UCL_CALIBRATION_RELEASE);
+  assert.equal(prediction.adjustment.strengthPrior, "retained_dated_ability_prior");
+  assert.equal(prediction.adjustment.currentStrengthPrior, undefined);
+  assert.deepEqual(prediction.adjustment.retainedAbilityPrior?.sourceObservation, legacy.source);
+  assert.equal(prediction.adjustment.retainedAbilityPrior?.availableAt, availableAt);
+  assert(Math.abs(prediction.lambdaHome - swapped.lambdaAway) < 1e-10);
+  assert(Math.abs(prediction.lambdaAway - swapped.lambdaHome) < 1e-10);
+  const markets = deriveSoccerMarketProbabilities({ joint: prediction.coherentJoint!, totalLine: 2.5 });
+  for (const side of ["home", "draw", "away"] as const) assert(Math.abs(prediction.probabilities[side] - markets.match_result[side]) < 1e-12);
+  assert(Math.abs(prediction.probabilities.over25 - markets.total.over) < 1e-12);
+  assert(Math.abs(prediction.probabilities.bttsYes - markets.btts.yes) < 1e-12);
+  assert.equal(fitAndPredictUcl({ training: [], match, history: [], context, strengthPrior: legacy }).release, UCL_LEGACY_R22_MODEL_RELEASE);
+  assert.throws(() => fitAndPredictUcl({ training: [], match, history: [], context, retainedPrior: retained, availableAt: kickoff }), /unavailable before/);
+  const builder = readFileSync("lib/services/ucl/buildUclSlate.ts", "utf8");
+  assert.doesNotMatch(builder, /loadUclOfficialStrength|buildUclCurrentStrengthPrior/);
+  assert.match(builder, /Date.parse\(foundation.availableAt\)<Date.parse\(match.date\)/);
+  assert.equal(requests, 0);
+} finally { globalThis.fetch = originalFetch; }
+console.log("PASS retained UCL prior: exact original58/source/hash, corrupt/foreign/missing refusal, zero network, 365-day precision decay, unchanged unit-precision math, contrary-history update, actual paid clock, active/legacy release separation and shared coherent law");
