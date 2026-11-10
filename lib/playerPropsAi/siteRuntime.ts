@@ -12,23 +12,24 @@ import type {LivePropsGame} from "./liveSources";
 import type {CapturedReviewWindow} from "./liveWindow";
 import {propsAiSiteConfig,PROPS_AI_CONTROL_RELEASE} from "./siteConfig";
 import {PropsAiStore,type PropsAiJob} from "./budget";
-import {loadPropsCalendar,calendarWalletPlan,matchPropsCalendarGame} from "./calendar";
+import {loadPropsCalendar,calendarWalletPlan,matchPropsCalendarGame,reconcilePropsCalendarDay} from "./calendar";
 import {runPropsReview,type AcceptedGameReview} from "./reviewer";
 import {selectSiteReview,siteAiDecisions,siteReviewCoverage,siteReviewQualification,type SiteAiDecision} from "./publication";
 import {instant,etDate} from "./evidence";
-import {PROPS_AI_RELEASE,PROPS_AI_ACCEPTED_RELEASES,PROPS_AI_SELECTION_RELEASE,PROPS_AI_SCHEDULE_RELEASE,PROPS_AI_MIN_REVIEW_WINDOW_MS,PROPS_AI_MAX_OUTPUT_PER_REQUEST,PROPS_AI_MAX_PARTS} from "./releases";
+import {PROPS_AI_RELEASE,PROPS_AI_ACCEPTED_RELEASES,PROPS_AI_SELECTION_RELEASE,PROPS_AI_SCHEDULE_RELEASE,PROPS_AI_MIN_REVIEW_WINDOW_MS,PROPS_AI_MAX_OUTPUT_PER_REQUEST} from "./releases";
+import {NFL_PLAYER_PROPS_EMPTY_CURRENT_RELEASE} from '../services/football/nflPlayerPropsContract';
 /** Purpose is diagnostic context only; it never creates a review or source read. */
 export type PropsAiSourceLoadContext={purpose:"scheduled_review";job:PropsAiJob}|{purpose:"lock_authority"|"member_publication"};
 export type SiteReviewResult={game:LivePropsGame;packet:GamePacket;decisions:SiteAiDecision[];authorityReview:AcceptedGameReview|null;observedAt:string};
-type SiteCoverage={unresolvedSourceScopes:number;unresolvedExecutionContracts:number;gameId:string;players:number;reviewedPlayers:number;contextChangedPlayers:number;unreviewedScopes:number;eligiblePlayers:number;pricedPlayers:number;qualifiedLawPlayers:number;sourceDeclinedScopes:number;unqualifiedTailScopes:number;currentExecutionContracts:number;pricedExecutionContracts:number;unpricedExecutionContracts:number};
+type SiteCoverage={participationBlockedScopes:number;unresolvedSourceScopes:number;unresolvedExecutionContracts:number;gameId:string;players:number;withdrawalContextPlayers:number;reviewedPlayers:number;contextChangedPlayers:number;unreviewedScopes:number;eligiblePlayers:number;pricedPlayers:number;qualifiedLawPlayers:number;sourceDeclinedScopes:number;unqualifiedTailScopes:number;currentExecutionContracts:number;pricedExecutionContracts:number;unpricedExecutionContracts:number};
 export type SiteReviewOutcome={status:string;games:SiteReviewResult[];findings:string[];coverage?:SiteCoverage[]};
-export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport;games:LivePropsGame[];writerRunId?:string;load:(game:LivePropsGame,window:CapturedReviewWindow,context?:PropsAiSourceLoadContext)=>Promise<GamePacket>|GamePacket;fetchImpl?:typeof fetch;clock?:()=>string;deadline?:number;onSourceReady?:(packet:GamePacket,review:AcceptedGameReview|null,observedAt:string,lookupAvailable:boolean)=>void;onReviewObserved?:(packet:GamePacket,review:AcceptedGameReview|null,lookupAvailable:boolean)=>void;onReviewReady?:(packet:GamePacket,review:AcceptedGameReview)=>void}):Promise<SiteReviewOutcome>{
+export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport;games:LivePropsGame[];writerRunId?:string;load:(game:LivePropsGame,window:CapturedReviewWindow,context?:PropsAiSourceLoadContext)=>Promise<GamePacket>|GamePacket;fetchImpl?:typeof fetch;clock?:()=>string;deadline?:number;onSourceReady?:(packet:GamePacket,review:AcceptedGameReview|null,observedAt:string,lookupAvailable:boolean)=>void|Promise<void>;onReviewObserved?:(packet:GamePacket,review:AcceptedGameReview|null,lookupAvailable:boolean)=>void|Promise<void>;onReviewReady?:(packet:GamePacket,review:AcceptedGameReview)=>void|Promise<void>}):Promise<SiteReviewOutcome>{
   const config=propsAiSiteConfig();
   // Counterfactual gate: zero database, calendar, provider, token-count or generation I/O.
   if(!config.integrated)return {status:"disabled",games:[],findings:[]};
   const clock=args.clock??(()=>new Date().toISOString()),now=clock(),deadline=args.deadline??Date.now()+230000,findings:string[]=[],results:SiteReviewResult[]=[];
   const coverage:SiteCoverage[]=[];
-  const finish=(outcome:SiteReviewOutcome)=>{console.info(`PLAYER_PROPS_AI_SITE ${JSON.stringify({release:PROPS_AI_RELEASE,selectionRelease:PROPS_AI_SELECTION_RELEASE,scheduleRelease:PROPS_AI_SCHEDULE_RELEASE,diagnosticsRelease:PROPS_AI_DIAGNOSTIC_RELEASE,sport:args.sport,status:outcome.status,reviewedGames:outcome.games.filter(g=>g.authorityReview).length,sourceGames:outcome.games.length,coverage:outcome.coverage,findings:outcome.findings.slice(0,16)})}`);return outcome;};
+  const finish=(outcome:SiteReviewOutcome)=>{console.info(`PLAYER_PROPS_AI_SITE ${JSON.stringify({release:PROPS_AI_RELEASE,selectionRelease:PROPS_AI_SELECTION_RELEASE,scheduleRelease:PROPS_AI_SCHEDULE_RELEASE,diagnosticsRelease:PROPS_AI_DIAGNOSTIC_RELEASE,sport:args.sport,status:outcome.status,reviewedGames:outcome.games.filter(g=>g.authorityReview&&g.packet.sourceOfferSetStatus!=='empty').length,sourceGames:outcome.games.length,coverage:outcome.coverage,findings:outcome.findings.slice(0,16)})}`);return outcome;};
   const store=new PropsAiStore(args.client);
   try{
     const control=await args.client.from("player_props_ai_control").select("release,paid_enabled").eq("singleton",true).single();
@@ -37,8 +38,11 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
     // Retained results can render with paid runs off. No calendar HTTP/funding is needed to do so.
     let calendar:Awaited<ReturnType<typeof loadPropsCalendar>>|null=null;
     if(paid&&deadline-Date.now()>40000){
-      calendar=await loadPropsCalendar(args.client,now.slice(0,7),now,args.fetchImpl,deadline);
-      const plan=await store.plan(calendarWalletPlan(calendar,now));
+      calendar=await loadPropsCalendar(args.client,now.slice(0,7),now,args.fetchImpl,deadline,clock);
+      const currentGames=args.games.filter(g=>etDate(g.start)===etDate(clock())&&instant(g.start)-3600000>instant(clock()));
+      const refreshed=await reconcilePropsCalendarDay({client:args.client,calendar,sport:args.sport,games:currentGames,writerRunId:args.writerRunId!,now:clock(),clock,fetchImpl:args.fetchImpl,deadline});
+      calendar=refreshed.calendar;findings.push(...refreshed.findings);
+      const plan=await store.plan(calendarWalletPlan(calendar,clock()),calendar);
       if(!plan.funded){findings.push(`ai_unavailable:${plan.reason??"month_not_funded"}`);calendar=null;}
       await store.reap();
     }
@@ -54,7 +58,7 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
       const initial=await args.client.from("player_props_ai_reviews").select("result").eq("sport",args.sport).eq("state","completed").gte("scheduled_start",now.slice(0,10)).order("completed_at",{ascending:false}).limit(256);
       if(initial.error)findings.push("lock_prior_authority_unavailable");
       const prior=(initial.error?[]:initial.data??[]).map(r=>r.result as AcceptedGameReview).filter(r=>r&&PROPS_AI_ACCEPTED_RELEASES.includes(r.release));priorAccepted=prior;initialLookupSucceeded=!initial.error;
-      for(const game of active){try{const packet=await args.load(game,{gameId:game.id,stage:"final",cutoff:clock(),lock:new Date(instant(game.start)-3600000).toISOString()},{purpose:"lock_authority"});const observedAt=clock();capturedPackets.set(game.id,packet);args.onSourceReady(packet,latestForPacket(packet,prior,observedAt),observedAt,!initial.error);}catch(error){findings.push(`lock_source_unavailable:${game.id}:${propsAiFailureCode(error)}`);}}
+      for(const game of active){try{const packet=await args.load(game,{gameId:game.id,stage:"final",cutoff:clock(),lock:new Date(instant(game.start)-3600000).toISOString()},{purpose:"lock_authority"});const observedAt=clock();capturedPackets.set(game.id,packet);await args.onSourceReady(packet,latestForPacket(packet,prior,observedAt),observedAt,!initial.error);}catch(error){findings.push(`lock_source_unavailable:${game.id}:${propsAiFailureCode(error)}`);}}
     }
     const nativeByFundedId=new Map<string,LivePropsGame>();
     if(calendar)for(const g of active){try{nativeByFundedId.set(matchPropsCalendarGame(calendar,args.sport,g).id,g);}catch{findings.push(`calendar_identity_unavailable:${g.id}`);}}
@@ -69,27 +73,47 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
         if(i>0||deadline-Date.now()<PROPS_AI_MIN_REVIEW_WINDOW_MS){findings.push("review_deferred_writer_deadline");break;}
         // Finish all ordinary input counts before any claimed generation can
         // queue behind them. Prepared packets keep the exact funded identity.
-        // One common preparation cutoff retains the declared maximum-part
-        // generation opportunity plus ten seconds for dispatch. This can defer
-        // slow counts sooner but cannot starve a prepared sixteen-part game.
-        // Compare clock durations,
-        // since injected fixture clocks need not share Date.now's epoch.
-        const preparationReserve=propsAiCompletionWindowMs(PROPS_AI_MAX_PARTS)+10000;
+        // Start with one generation wave. Before each count stage queues, its
+        // discovered bin count can shorten the common cutoff and abort active
+        // sibling counts. Small games do not reserve hypothetical extra waves;
+        // a prepared sixteen-part game still retains its complete 210s window.
+        // Compare durations: injected clocks need not share Date.now's epoch.
+        const preparationReserve=propsAiCompletionWindowMs(1)+10000;
         const batch=runnable.slice(i,i+16),preparable=batch.filter(job=>instant(job.lock_at)-instant(clock())>preparationReserve);
         for(const job of batch.filter(job=>!preparable.includes(job)))findings.push(`review_preparation_deferred_lock:${job.game_id}`);
         if(!preparable.length){findings.push("review_preparation_deferred_deadline");break;}
-        const countDeadline=Math.min(deadline,Date.now()+Math.min(...preparable.map(job=>instant(job.lock_at)-instant(clock()))))-preparationReserve;
+        let countDeadline=Math.min(deadline,Date.now()+Math.min(...preparable.map(job=>instant(job.lock_at)-instant(clock()))))-preparationReserve;
         if(countDeadline<=Date.now()){findings.push("review_preparation_deferred_deadline");break;}
+        const countAbort=new AbortController();
+        let detachTimeout=()=>{};
+        const armCountDeadline=()=>{
+          detachTimeout();
+          const remaining=Math.ceil(countDeadline-Date.now());
+          if(remaining<=0){countAbort.abort(new Error("input_count_deadline_exhausted"));return;}
+          const timeout=AbortSignal.timeout(remaining);
+          const abort=()=>countAbort.abort(timeout.reason);
+          timeout.addEventListener("abort",abort,{once:true});
+          detachTimeout=()=>timeout.removeEventListener("abort",abort);
+        };
+        armCountDeadline();
         const pendingCounts=new Set<Promise<number>>();
         const prepared=await Promise.all(preparable.map(async job=>{
           const native=nativeByFundedId.get(job.game_id)!;
           try{
             const packet=await args.load(native,{gameId:native.id,stage:job.stage,cutoff:clock(),lock:job.lock_at},{purpose:"scheduled_review",job});
+            if(packet.sourceOfferSetStatus==='empty'&&(packet.sport==='nba'||packet.sport==='nfl'&&packet.sourceInputRelease===NFL_PLAYER_PROPS_EMPTY_CURRENT_RELEASE)){findings.push(`review_deferred_empty_current_offers:${native.id}`);return null;}
             const fundedPacket={...packet,sourceGameId:native.id,gameId:job.game_id};
-            const parts=await prepareReviewParts(fundedPacket,{key:config.key,fetchImpl:args.fetchImpl,count:(part,model)=>{
+            const parts=await prepareReviewParts(fundedPacket,{key:config.key,fetchImpl:args.fetchImpl,onCountStage:parts=>{
+              const stageDeadline=Math.min(deadline,Date.now()+instant(job.lock_at)-instant(clock()))-propsAiCompletionWindowMs(parts)-10000;
+              // An already infeasible larger game stays pending; it must not
+              // cancel a sibling whose smaller complete window still fits.
+              if(stageDeadline<=Date.now())throw new Error("input_count_deadline_exhausted");
+              if(stageDeadline<countDeadline){countDeadline=stageDeadline;armCountDeadline();}
+              if(countAbort.signal.aborted||countDeadline<=Date.now())throw new Error("input_count_deadline_exhausted");
+            },count:(part,model)=>{
               // The API checks remaining time after this callback leaves the
               // shared pool, so waiting cannot start a late count request.
-              const pending=generationSlot(()=>countAiInput(jointReviewRequest(part,model,PROPS_AI_MAX_OUTPUT_PER_REQUEST),{key:config.key,fetchImpl:args.fetchImpl,deadline:countDeadline}));
+              const pending=generationSlot(()=>countAiInput(jointReviewRequest(part,model,PROPS_AI_MAX_OUTPUT_PER_REQUEST),{key:config.key,fetchImpl:args.fetchImpl,deadline:()=>countDeadline,signal:countAbort.signal}));
               pendingCounts.add(pending);void pending.then(()=>pendingCounts.delete(pending),()=>pendingCounts.delete(pending));return pending;
             }});
             return {job,native,packet,fundedPacket,parts};
@@ -98,14 +122,15 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
           // A failed Promise.all inside partition preparation can leave sibling
           // counts in flight. Await every started/queued count before generation;
           // their real abort signals share the same bounded preparation cutoff.
-          while(pendingCounts.size)await Promise.allSettled([...pendingCounts]);
+          try{while(pendingCounts.size)await Promise.allSettled([...pendingCounts]);}
+          finally{detachTimeout();countAbort.abort(new Error("input_count_preparation_closed"));}
         });
         await Promise.all(prepared.map(async preparedGame=>{
           if(!preparedGame)return;
           const {job,native,packet,fundedPacket,parts}=preparedGame;
           try{
             const result=await runPropsReview({packet:fundedPacket,job,store,key:config.key,writerRunId:args.writerRunId!,generationSlot,gameAdmission,prepare:async()=>parts,preferStronger:job.stage==="final"&&packet.players.some(p=>p.missing.length>0),fetchImpl:args.fetchImpl,clock,deadline});
-            if(result.status==="completed"&&"review" in result&&result.review){localCompleted.set(native.id,{packet,review:result.review});args.onReviewObserved?.(packet,result.review,true);args.onReviewReady?.(packet,result.review);}
+            if(result.status==="completed"&&"review" in result&&result.review){localCompleted.set(native.id,{packet,review:result.review});await args.onReviewObserved?.(packet,result.review,true);await args.onReviewReady?.(packet,result.review);}
             if(result.status!=="completed")findings.push(`review_unavailable:${native.id}:${"reason" in result?result.reason:result.status}`);
           }catch(error){findings.push(`source_or_review_unavailable:${native.id}:${propsAiFailureCode(error)}`);}
         }));
@@ -122,16 +147,16 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
         const packet=await args.load(game,{gameId:game.id,stage:"final",cutoff:clock(),lock:new Date(instant(game.start)-3600000).toISOString()},{purpose:"member_publication"});
         const observedAt=clock();
         const latest=latestForPacket(packet,accepted,observedAt);
-        args.onReviewObserved?.(packet,latest,lookupAvailable(game.id));
+        await args.onReviewObserved?.(packet,latest,lookupAvailable(game.id));
         const review=selectSiteReview(packet,accepted,observedAt);
-        const players=siteReviewCoverage(packet,latest,clock()),decisions=review?siteAiDecisions(packet,review,clock()):[];
-        coverage.push({gameId:game.id,players:players.length,reviewedPlayers:players.filter(p=>p.reviewed).length,
+        const players=packet.sourceOfferSetStatus==='empty'?[]:siteReviewCoverage(packet,latest,clock()),decisions=review?siteAiDecisions(packet,review,clock()):[];
+        coverage.push({gameId:game.id,players:players.length,withdrawalContextPlayers:packet.sourceOfferSetStatus==='empty'?packet.players.length:0,reviewedPlayers:players.filter(p=>p.reviewed).length,
           contextChangedPlayers:players.filter(p=>p.reviewed&&!p.contextCurrent).length,
           unreviewedScopes:players.reduce((n,p)=>n+p.unreviewedMarkets.length,0),
-          eligiblePlayers:players.filter(p=>p.markets.length>0).length,pricedPlayers:new Set(decisions.map(c=>c.playerId)).size,
+          eligiblePlayers:packet.sourceOfferSetStatus==='empty'?0:players.filter(p=>p.markets.length>0).length,pricedPlayers:new Set(decisions.map(c=>c.playerId)).size,
           ...siteReviewQualification(packet,latest,clock(),15*60000,decisions)});
         results.push({game,packet,decisions,authorityReview:latest,observedAt});
-      }catch(error){findings.push(`current_source_unavailable:${game.id}:${propsAiFailureCode(error)}`);const packet=localCompleted.get(game.id)?.packet??capturedPackets.get(game.id);if(packet){const observedAt=clock(),latest=latestForPacket(packet,accepted,observedAt);args.onReviewObserved?.(packet,latest,lookupAvailable(game.id));results.push({game,packet,decisions:[],authorityReview:latest,observedAt});}}
+      }catch(error){findings.push(`current_source_unavailable:${game.id}:${propsAiFailureCode(error)}`);const packet=localCompleted.get(game.id)?.packet??capturedPackets.get(game.id);if(packet){const observedAt=clock(),latest=latestForPacket(packet,accepted,observedAt);await args.onReviewObserved?.(packet,latest,lookupAvailable(game.id));results.push({game,packet,decisions:[],authorityReview:latest,observedAt});}}
 
     }
     return finish({status:paid?"active":"paid_disabled",games:results,findings,coverage});

@@ -4,7 +4,9 @@ import type {SupabaseClient} from "@supabase/supabase-js";
 import {PRODUCT_RELEASE,type GamePacket} from "../lib/playerPropsAi/evidenceContract";
 import {criticalContextHashes} from "../lib/playerPropsAi/criticalContext";
 import {validateLaw} from "../lib/playerPropsAi/law";
-import {PROPS_AI_RELEASE} from "../lib/playerPropsAi/releases";
+import {PROPS_AI_RELEASE,PROPS_AI_READER_CLAIMS_RELEASE} from "../lib/playerPropsAi/releases";
+import {readerAvailabilityContextHash} from '../lib/playerPropsAi/readerClaimFreshness';
+import {readerCanonicalContextHash,PROPS_AI_READER_CONTEXT_RELEASE} from '../lib/playerPropsAi/readerContext';
 import type {AcceptedGameReview} from "../lib/playerPropsAi/reviewer";
 import {selectSiteReview,siteAiDecisions} from "../lib/playerPropsAi/publication";
 import {applyNbaSiteAi,applyNflSiteAi,applyMlbSiteAi} from "../lib/playerPropsAi/siteBindings";
@@ -21,7 +23,7 @@ const now="2026-11-07T20:00:00Z",start="2026-11-07T23:00:00Z",lock="2026-11-07T2
 const packet:GamePacket={release:PRODUCT_RELEASE,sport:"nba",gameId:"native",start,lock,cutoff:now,stage:"final",sourceLimitations:[],players:[{id:"p",name:"Synthetic",team:"BOS",opponent:"NYK",markets:["points"],missing:[],evidence:[{id:"role",kind:"availability",source:"synthetic source",availableAt:now,value:{status:"available",capturedAt:now}}]}],quotes:["over","under"].map(side=>({id:side,playerId:"p",market:"points",provider:"synthetic",book:"one",line:12.5,side:side as "over"|"under",american:-110,observedAt:now,receivedAt:now,receivedAtProvenance:"provider_response",opening:false,live:false}))};
 const vector=(n:number)=>Array(16).fill(n),law=validateLaw("nba",packet.players[0],{weights:[1,8,1,...Array(13).fill(0)],outcomes:{points:[0,10,50,...Array(13).fill(10)],rebounds:vector(2),assists:vector(3),threes:vector(0)}});
 const coverage=Object.fromEntries(READER_AREAS.map(area=>[area,{status:"missing",facts:[],factIds:[],effect:"unavailable",observation:"Source unavailable in this synthetic fixture."}]));
-const review={release:PROPS_AI_RELEASE,gameId:"funded",sourceGameId:"native",start,lock,cutoff:now,stage:"final",issuedAt:now,inputHash:"synthetic",model:"synthetic",criticalContextHashes:criticalContextHashes(packet),marketScopes:{p:["points"]},partProvenance:[],inputEvidence:{digest:"synthetic"},players:[{playerId:"p",assessment:"Synthetic review",law,confidence:[2],exceptions:[null],coverage}]} as unknown as AcceptedGameReview;
+const review={release:PROPS_AI_RELEASE,gameId:"funded",sourceGameId:"native",start,lock,cutoff:now,stage:"final",issuedAt:now,inputHash:"synthetic",model:"synthetic",criticalContextHashes:criticalContextHashes(packet),marketScopes:{p:["points"]},partProvenance:[],inputEvidence:{digest:"synthetic"},players:[{playerId:"p",assessment:"Synthetic review",law,confidence:[2],exceptions:[null],coverage,sourceReadProofs:{release:PROPS_AI_READER_CLAIMS_RELEASE,contextRelease:PROPS_AI_READER_CONTEXT_RELEASE,originalCriticalContextHash:criticalContextHashes(packet).p,canonicalContextHash:readerCanonicalContextHash(packet,'p'),availabilityContextHash:readerAvailabilityContextHash(packet,'p')}}]} as unknown as AcceptedGameReview;
 const choices=siteAiDecisions(packet,review,now);assert.equal(choices.length,1);assert.equal(choices[0].side,"under");assert.equal(choices[0].projection,13);assert.equal(choices[0].probability,.9);
 assert.equal(selectSiteReview(packet,[{...review,release:"old"} as unknown as AcceptedGameReview],now),null);
 assert.equal(selectSiteReview(packet,[review,{...review,stage:"early",issuedAt:"2026-11-07T20:01:00Z"}],"2026-11-07T20:02:00Z"),review);
@@ -58,7 +60,7 @@ const nflApplied=applyNflSiteAi(nflBoard,nflPacket,nflChoices,now);assert.equal(
 const nflLocked={...nflApplied,decisions:nflApplied.decisions.map(r=>({...r,state:"locked" as const}))};assert.strictEqual(applyNflSiteAi(nflLocked,nflPacket,nflChoices,now),nflLocked);
 // Actual failure shape: a nullable source ID and a canonical ID represented the
 // same named actor/book. Both must use one verified current forecast authority.
-const sourceRow={...nflApplied.decisions[0],providerPlayerId:null,playerName:"Synthetic",team:"BOS",opponent:"NYK",aiReview:undefined,grade:"Best Angle" as const,projection:20,finalProbability:.55};
+const sourceRow={...nflApplied.decisions[0],providerPlayerId:null,playerName:"Synthetic",team:"BOS",opponent:"NYK",modelRelease:"synthetic-native-source",aiReview:undefined,grade:"Best Angle" as const,projection:20,finalProbability:.55};
 const underRow={...sourceRow,side:"under" as const};
 const duplicateRows=[sourceRow,underRow,...nflApplied.decisions];
 const coherent=applyNflSiteAi({...nflBoard,decisions:duplicateRows},nflPacket,nflChoices,now);

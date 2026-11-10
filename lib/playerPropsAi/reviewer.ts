@@ -12,7 +12,7 @@ import type { GamePacket } from "./evidenceContract";
 import { digest, invariant, instant, etDate } from "./evidence";
 import { usageMicroUsd, type PropsAiJob, type PropsAiReviewStore } from "./budget";
 import { jointReviewRequest, parseJointReview } from "./request";
-import { countAiInput, generateAiReview,serializeAiRequest, structuredAiText, AiGenerationError } from "./openai";
+import { countAiInput, generateAiReview,serializeAiRequest, structuredAiText, AiGenerationError, AiRequestNotStartedError } from "./openai";
 import { prepareReviewParts } from "./partitions";
 import {criticalContextHashes} from "./criticalContext";
 import {PROPS_AI_WIRE_RELEASE} from "./scenarioCoordinates";
@@ -31,6 +31,7 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
   preferStronger: boolean; writerRunId:string; fetchImpl?: typeof fetch; clock?: () => string; deadline?: number;
   gameAdmission?:PropsAiGameAdmission;generationSlot?:<T>(run:()=>Promise<T>)=>Promise<T>; prepare?:()=>Promise<PreparedPart[]>; countStrong?:(part:PreparedPart)=>Promise<number> }) {
   const clock = args.clock ?? (() => new Date().toISOString()), deadline = args.deadline ?? Date.now() + 250000;
+  const earlyWindowClosed=()=>isMissedPropsEarlyWindow(args.job.stage,args.packet.lock,clock());
   if(args.job.state!=="pending")return {status:"skipped",reason:"not_pending"};
   invariant(args.job.game_id === args.packet.gameId && args.job.sport===args.packet.sport && instant(args.job.scheduled_start) === instant(args.packet.start) && instant(args.job.lock_at)===instant(args.packet.lock) && args.job.stage === args.packet.stage && args.job.game_day===etDate(args.packet.start), "job_input_identity_mismatch");
   invariant(instant(clock()) < instant(args.packet.lock) && instant(args.packet.cutoff) <= instant(clock()), "input_outside_actual_review_window");
@@ -59,20 +60,26 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
   const actorAdmissions=new Map<number,OriginalPartActorAdmission>(),actorProvenance=new Map<number,PartProvenance[]>();
   const sha=(text:string)=>createHash("sha256").update(text,"utf8").digest("hex");
   try {
+    // A claim acknowledgement can arrive after the final-only boundary. Close
+    // its unused escrow rather than purchasing a late early request.
+    invariant(!earlyWindowClosed(),"early_window_closed_final_only");
     while(phase<=2){
       const failures:{index:number;reason:string;known:boolean}[]=[];
       // Whole-player parts retain every market. Successful parts are never regenerated.
       for(let offset=0;offset<pending.length;offset+=PROPS_AI_PART_CONCURRENCY){
         const results=await Promise.allSettled(pending.slice(offset,offset+PROPS_AI_PART_CONCURRENCY).map(index=>slot(async()=>{
+          // Sample inside the acquired slot: another game/wave may have kept
+          // this part queued until the early window closed.
+          invariant(!earlyWindowClosed(),"early_window_closed_final_only");
           const part=parts[index], timeoutMs=Math.floor(Math.min(180000,deadline-Date.now()-10000,instant(args.packet.lock)-instant(clock())-10000));
           invariant(timeoutMs>=90000,"review_completion_window_exhausted");
           const attempt=await args.store.send(job.job_key,token,phase,index+1);
           const request=jointReviewRequest(part.packet,attempt.model,PROPS_AI_MAX_OUTPUT_PER_REQUEST,phase===2?feedback.get(index):undefined,phase===2?feedbackTexts.get(index):undefined),requestBody=serializeAiRequest(request,{serviceTier:attempt.requested_tier});
           let response;
-          try{response=await generateAiReview(request,{key:args.key,timeoutMs,fetchImpl:args.fetchImpl,serviceTier:attempt.requested_tier});}
+          try{response=await generateAiReview(request,{key:args.key,timeoutMs,remainingWindowMs:()=>Math.min(deadline-Date.now()-10000,instant(args.packet.lock)-instant(clock())-10000),minimumTimeoutMs:90000,canStart:()=>!earlyWindowClosed(),fetchImpl:args.fetchImpl,serviceTier:attempt.requested_tier});}
           catch(error){
-            const unbilled=error instanceof AiGenerationError&&error.knownUnbilled;
-            await args.store.receipt(attempt.id,token,unbilled?0:null,null,{kind:unbilled?"known_unbilled":"unknown_transport_outcome",...(error instanceof AiGenerationError?{http_status:error.status,code:error.code,transport:error.diagnostics??null}:{}),requested_tier:attempt.requested_tier,failureEvidence:failureEvidence({packet:part.packet,requestBody,draftText:null,reason:(error as Error).message,physical:[]})});
+            const notStarted=error instanceof AiRequestNotStartedError,unbilled=notStarted||error instanceof AiGenerationError&&error.knownUnbilled;
+            await args.store.receipt(attempt.id,token,unbilled?0:null,null,{kind:notStarted?"known_unbilled_before_http":unbilled?"known_unbilled":"unknown_transport_outcome",...(error instanceof AiGenerationError?{http_status:error.status,code:error.code,transport:error.diagnostics??null}:{}),requested_tier:attempt.requested_tier,failureEvidence:failureEvidence({packet:part.packet,requestBody,draftText:null,reason:(error as Error).message,physical:[]})});
             return {index,reason:(error as Error).message,known:unbilled};
           }
           const texts=response.output?.flatMap(o=>o.content??[]).filter(c=>c.type==="output_text").map(c=>c.text??"")??[];
@@ -159,7 +166,7 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
         return {status:completed.state,review:completed.state==="completed"?completed.result as AcceptedGameReview:null};
       }
       failure=failures[0].reason;
-      if(phase===1&&failures.every(f=>f.known)&&deadline-Date.now()>propsAiCompletionWindowMs(failures.length)&&instant(args.packet.lock)-instant(clock())>propsAiCompletionWindowMs(failures.length)&&await args.store.fallback(job.job_key,token,failures.map(f=>f.index+1),failure)){
+      if(phase===1&&failures.every(f=>f.known)&&!earlyWindowClosed()&&deadline-Date.now()>propsAiCompletionWindowMs(failures.length)&&instant(args.packet.lock)-instant(clock())>propsAiCompletionWindowMs(failures.length)&&await args.store.fallback(job.job_key,token,failures.map(f=>f.index+1),failure)){
         for(const f of failures)feedback.set(f.index,f.reason);
         pending=failures.map(f=>f.index);phase=2;continue;
       }

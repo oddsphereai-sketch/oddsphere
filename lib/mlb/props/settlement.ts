@@ -1,6 +1,11 @@
 import type { MlbPropMarketKey } from "./config";
 import type { PropSettlementResult } from "./providers";
 
+/** Opt-in for newly constructed snapshots/locks only. Absence retains the
+ * original settlement contract; never infer it from a later provider response. */
+export const MLB_PROPS_LOCKED_EVENT_RELEASE = "mlb_props_locked_event_2026_11_10_r1_exact_contract" as const;
+export type MlbPropsLockedEvent = { release: typeof MLB_PROPS_LOCKED_EVENT_RELEASE; market: string; line: number; side: "over" | "under"; contract: "two_way" | "milestone" };
+
 export type PropSettlementInput = {
   marketKey: MlbPropMarketKey;
   playerId: string;
@@ -11,18 +16,32 @@ export type PropSettlementInput = {
   playerStarted?: boolean;
   stakeUnits?: number;
   americanOdds?: number;
+  offerContract?: "two_way" | "milestone";
 };
 
 export type PropSettlementDecision =
   | { status: "settled"; result: "win" | "loss" | "push"; resultValue: number; units: number }
-  | { status: "unresolved"; reason: "player_did_not_start" | "missing_final_stat" | "unsupported_market" };
+  | { status: "unresolved"; reason: "player_did_not_start" | "missing_final_stat" | "unsupported_market" | "invalid_locked_event" };
+
+/** Only the prospectively stored exact contract changes settlement semantics.
+ * Existing locks, including old AI execution metadata, keep their original rule. */
+export function settleTrackedPropPick(input: Omit<PropSettlementInput, "offerContract">, event: unknown): PropSettlementDecision {
+  if (event === undefined) return settlePropPick(input);
+  if (!event || typeof event !== "object" || Array.isArray(event)) return { status: "unresolved", reason: "invalid_locked_event" };
+  const e = event as Partial<MlbPropsLockedEvent>;
+  if (e.release !== MLB_PROPS_LOCKED_EVENT_RELEASE || e.market !== input.marketKey || e.line !== input.line || e.side !== input.side
+    || !["two_way", "milestone"].includes(e.contract ?? "") || e.contract === "milestone" && e.side !== "over") {
+    return { status: "unresolved", reason: "invalid_locked_event" };
+  }
+  return settlePropPick({ ...input, offerContract: e.contract });
+}
 
 export function settlePropPick(input: PropSettlementInput): PropSettlementDecision {
   if (input.playerStarted === false) return { status: "unresolved", reason: "player_did_not_start" };
   const value = statValueForMarket(input.marketKey, input.finalStats);
   if (value === null) return { status: "unresolved", reason: isSupportedSettlementMarket(input.marketKey) ? "missing_final_stat" : "unsupported_market" };
-  if (value === input.line) return { status: "settled", result: "push", resultValue: value, units: 0 };
-  const sideWon = input.side === "over" ? value > input.line : value < input.line;
+  if (input.offerContract !== "milestone" && value === input.line) return { status: "settled", result: "push", resultValue: value, units: 0 };
+  const sideWon = input.side === "over" ? input.offerContract === "milestone" ? value >= input.line : value > input.line : value < input.line;
   const stake = typeof input.stakeUnits === "number" && Number.isFinite(input.stakeUnits) && input.stakeUnits >= 0
     ? input.stakeUnits
     : 1;
@@ -55,9 +74,9 @@ export function settlementResultFromFinalStats(input: Omit<PropSettlementInput, 
     playerId: input.playerId,
     gameId: input.gameId,
     resultValue: value,
-    overWon: value > input.line,
+    overWon: input.offerContract === "milestone" ? value >= input.line : value > input.line,
     underWon: value < input.line,
-    push: value === input.line,
+    push: input.offerContract !== "milestone" && value === input.line,
     settlementStatus: "settled",
     provider: "internal_settlement_scaffold",
     rawPayload: input.finalStats ?? {},

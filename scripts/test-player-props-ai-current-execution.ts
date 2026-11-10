@@ -1,3 +1,4 @@
+import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 import {encodeCanonicalScenarioLaw} from "../lib/playerPropsAi/generativeCoordinates";
 /** Independent-review regressions. Synthetic inputs only; no provider or model calls. */
 import assert from "node:assert/strict";
@@ -12,7 +13,9 @@ import {executionQuotes,latestExecutionQuotes} from "../lib/playerPropsAi/execut
 import {buildNbaPlayerPropsMemberSnapshot} from "../lib/services/nba/nbaPlayerPropsProductContract";
 import {applyNbaSiteAi,applyNflSiteAi,applyMlbSiteAi} from "../lib/playerPropsAi/siteBindings";
 import {needsLegacyLockedAiReader} from "../lib/playerPropsAi/publicationContract";
-import {PROPS_AI_RELEASE} from "../lib/playerPropsAi/releases";
+import {PROPS_AI_RELEASE,PROPS_AI_READER_CLAIMS_RELEASE} from "../lib/playerPropsAi/releases";
+import {readerAvailabilityContextHash} from "../lib/playerPropsAi/readerClaimFreshness";
+import {readerCanonicalContextHash,PROPS_AI_READER_CONTEXT_RELEASE} from '../lib/playerPropsAi/readerContext';
 import type {AcceptedGameReview} from "../lib/playerPropsAi/reviewer";
 import {validateScenarioOpportunities} from "../lib/playerPropsAi/forecastSanity";
 import {MLB_PROPS_STANDARD_STAKE_UNITS} from "../lib/mlb/props/actionabilityPolicy";
@@ -29,7 +32,7 @@ const player={id:"p",name:"Synthetic",team:"BOS",opponent:"NYK",markets:["points
 const quote=(id:string,side:Quote["side"],american:number,at=now,line=12.5):Quote=>({id,playerId:"p",market:"points",provider:"synthetic",book:"one",line,side,american,observedAt:at,receivedAt:at,receivedAtProvenance:"provider_response",opening:false,live:false});
 const packet:GamePacket={release:PRODUCT_RELEASE,sport:"nba",gameId:"native",start,lock,cutoff:now,stage:"final",sourceLimitations:[],players:[player],quotes:[quote("old-over","over",150,old),quote("old-under","under",-170,old),quote("new-over","over",-200),quote("new-under","under",170)]};
 const law=validateLaw("nba",player,{weights:[6,4,...vector(0).slice(2)],outcomes:{points:[20,10,...vector(10).slice(2)],rebounds:vector(2),assists:vector(3),threes:vector(0)}});
-const review={release:PROPS_AI_RELEASE,gameId:"funded",sourceGameId:"native",start,lock,cutoff:now,stage:"final",issuedAt:now,inputHash:"synthetic",model:"synthetic",criticalContextHashes:criticalContextHashes(packet),marketScopes:{p:["points"]},partProvenance:[],inputEvidence:{digest:"synthetic"},players:[{playerId:"p",assessment:"Synthetic complete sentence.",law,confidence:[2],exceptions:[null],coverage:{}}]} as unknown as AcceptedGameReview;
+const review={release:PROPS_AI_RELEASE,gameId:"funded",sourceGameId:"native",start,lock,cutoff:now,stage:"final",issuedAt:now,inputHash:"synthetic",model:"synthetic",criticalContextHashes:criticalContextHashes(packet),marketScopes:{p:["points"]},partProvenance:[],inputEvidence:{digest:"synthetic"},players:[{playerId:"p",assessment:"Synthetic complete sentence.",law,confidence:[2],exceptions:[null],coverage:{},sourceReadProofs:{release:PROPS_AI_READER_CLAIMS_RELEASE,contextRelease:PROPS_AI_READER_CONTEXT_RELEASE,originalCriticalContextHash:criticalContextHashes(packet).p,canonicalContextHash:readerCanonicalContextHash(packet,'p'),availabilityContextHash:readerAvailabilityContextHash(packet,'p')}}]} as unknown as AcceptedGameReview;
 const choice=siteAiDecisions(packet,review,now)[0];
 assert.equal(choice.american,-200);assert.equal(choice.quote.id,"new-over");assert.equal(choice.grade,"Watchlist");assert.ok(Math.abs(choice.expectedValue+.1)<1e-12);
 const improved={...packet,executionQuotes:[quote("new-best-over","over",150),quote("new-best-under","under",-170)]};
@@ -49,7 +52,7 @@ assert.equal(executionQuotes(compiled,now).length,4);
 const nfl={...packet,sport:"nfl" as const,players:[{...player,id:"nfl-bdl-player:1",markets:["passing_tds"]}],quotes:packet.quotes.map(q=>({...q,playerId:"nfl-bdl-player:1",market:"passing_tds",line:1.5}))};
 // Deliberately stale upstream decision proves the adapter regrades its actual bound quote.
 const stale={...choice,grade:"Best Angle" as const,american:150,playerId:"nfl-bdl-player:1",market:"passing_tds",line:1.5,quote:{...choice.quote,american:150,playerId:"nfl-bdl-player:1",market:"passing_tds",line:1.5}};
-const nflRow={gameId:"native",scheduledStart:start,lockAt:lock,state:"unlocked",providerPlayerId:"1",playerName:"Synthetic",team:"BOS",opponent:"NYK",market:"passing_tds",line:1.5,side:"over",sportsbook:"one",provider:"synthetic",americanPrice:-200,bookEvidence:[],forecastContext:{}} as unknown as Parameters<typeof applyNflSiteAi>[0]["decisions"][number];
+const nflRow={gameId:"native",scheduledStart:start,lockAt:lock,state:"unlocked",providerPlayerId:"1",playerName:"Synthetic",team:"BOS",opponent:"NYK",market:"passing_tds",line:1.5,side:"over",sportsbook:"one",provider:"synthetic",americanPrice:-200,observedAt:now,bookEvidence:[],modelRelease:"synthetic-native-source",forecastContext:{featureAsOf:now}} as unknown as Parameters<typeof applyNflSiteAi>[0]["decisions"][number];
 const nflBoard={decisions:[nflRow],counts:{}} as unknown as Parameters<typeof applyNflSiteAi>[0];
 const nflApplied=applyNflSiteAi(nflBoard,nfl,[stale],now).decisions.find(r=>r.side==="over")!;
 assert.equal(nflApplied.americanPrice,-200);assert.equal(nflApplied.grade,"Watchlist");assert.ok(nflApplied.expectedValue<0);
@@ -78,7 +81,7 @@ const ownPrice=applyNbaSiteAi(nbaContractSnapshot,duplicateFeedPacket,[evaluated
 assert.ok(ownPrice.priceLadder.some(q=>q.sportsbook===ownPrice.sportsbook&&q.side===ownPrice.side&&q.line===ownPrice.line&&q.americanPrice===ownPrice.americanPrice),"evaluated provider retains its own exact display slot across duplicate sportsbook feeds");
 const nflMix={...nfl,quotes:(["over","under","yes"] as const).map(side=>({...nfl.quotes[0],id:side,side,line:1,american:side==="yes"?-200:-110,receivedAt:now,observedAt:now}))};
 const tdLaw=validateLaw("nfl",nflMix.players[0],{weights:[4,4,2,...vector(0).slice(3)],outcomes:{passing_attempts:vector(20),passing_completions:vector(15),passing_tds:[0,1,2,...vector(0).slice(3)],interceptions:vector(0)}});
-const tdReview={...review,criticalContextHashes:criticalContextHashes(nflMix),marketScopes:{"nfl-bdl-player:1":["passing_tds"]},players:[{...review.players[0],playerId:"nfl-bdl-player:1",law:tdLaw}]};
+const tdReview={...review,criticalContextHashes:criticalContextHashes(nflMix),marketScopes:{"nfl-bdl-player:1":["passing_tds"]},players:[{...review.players[0],playerId:"nfl-bdl-player:1",law:tdLaw,sourceReadProofs:{...review.players[0].sourceReadProofs,originalCriticalContextHash:criticalContextHashes(nflMix)["nfl-bdl-player:1"],canonicalContextHash:readerCanonicalContextHash(nflMix,"nfl-bdl-player:1"),availabilityContextHash:readerAvailabilityContextHash(nflMix,"nfl-bdl-player:1")}}]};
 const tdChoices=siteAiDecisions(nflMix,tdReview,now),yes=tdChoices.find(c=>c.side==="yes")!;assert.equal(yes.grade,"Watchlist");
 const yesAfter=applyNflSiteAi({...nflBoard,decisions:[{...nflRow,line:1,side:"yes"}]},nflMix,tdChoices,now).decisions.find(r=>r.side==="yes")!;
 assert.equal(yesAfter.grade,"Watchlist","milestone cannot borrow ordinary opposing price to become confidence Lean");
@@ -92,7 +95,7 @@ const evidence:Evidence[]=[{id:"prior",kind:"independent_model",source:"syntheti
 const physicalPacket:GamePacket={...packet,sport:"nfl",players:[{...nflPlayer,evidence}],quotes:[]};
 const facts=readerEvidence(physicalPacket).p,aliases=new Map([...evidenceAliases(physicalPacket)].map(([alias,id])=>[id,alias]));
 const coverage=Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[area].status,factIds:facts[area].facts.slice(0,1).map(f=>f.id),effect:facts[area].status==="missing"?"unavailable":"uncertain",observation:"The supplied evidence requires contextual caution."}]));
-const response={wireRelease:PROPS_AI_WIRE_RELEASE,players:{p:{assessment:"The forecast uses the supplied evidence.",coverage,priorRead:Object.fromEntries(independentPriorEvents(physicalPacket.players[0]).map(p=>[aliases.get(p.sourceId)!,p.preferredOutcome])),evidenceIds:[aliases.get("prior")!],gaps:[],law:raw,confidence:[2],exceptions:["A prose exception cannot make an impossible passing scenario valid."]}}};
+const response={wireRelease:PROPS_AI_WIRE_RELEASE,players:{p:verifiedReaderFixture(physicalPacket,physicalPacket.players[0].id,{assessment:"The forecast uses the supplied evidence.",coverage,priorRead:Object.fromEntries(independentPriorEvents(physicalPacket.players[0]).map(p=>[aliases.get(p.sourceId)!,p.preferredOutcome])),evidenceIds:[aliases.get("prior")!],gaps:[],law:raw,confidence:[2],exceptions:["A prose exception cannot make an impossible passing scenario valid."]})}};
 assert.throws(()=>encodeCanonicalScenarioLaw("nfl",physicalPacket.players[0],raw),/completed pass/);
 assert.throws(()=>parseJointReview(physicalPacket,{...response,wireRelease:"props_scenario_named_2026_11_09_r3_canonical_statistics"}),/wire release/);
 assert.throws(()=>parseJointReview(physicalPacket,response),/C:named_keys/);

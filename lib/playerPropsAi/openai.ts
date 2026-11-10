@@ -8,6 +8,10 @@ export type AiRequest = { model: PropsAiModel; instructions: string; input: stri
 export class AiGenerationError extends Error {
   constructor(readonly status:number,readonly code:string|null,readonly knownUnbilled:boolean,readonly diagnostics?:AiTransportDiagnostics){super(`generation_http_${status}${knownUnbilled?"_resource_unavailable":""}`);}
 }
+/** Only thrown before invoking fetch: this attempt cannot have a vendor charge. */
+export class AiRequestNotStartedError extends Error {
+  constructor(){super("generation_window_closed_before_http");}
+}
 const safeCode=(v:unknown)=>typeof v==="string"&&/^[A-Za-z0-9_.:-]{1,128}$/.test(v)&&!/sk-|bearer/i.test(v)?v:null;
 const rateHeaders=["x-ratelimit-limit-requests","x-ratelimit-limit-tokens","x-ratelimit-remaining-requests","x-ratelimit-remaining-tokens","x-ratelimit-reset-requests","x-ratelimit-reset-tokens","x-ratelimit-limit-project-tokens","x-ratelimit-remaining-project-tokens","x-ratelimit-reset-project-tokens"];
 function transportDiagnostics(response:Response,code:string|null=null,type:string|null=null):AiTransportDiagnostics{
@@ -30,27 +34,36 @@ async function boundedErrorText(response:Response){
  try{while(true){const {value,done}=await reader.read();bytes+=value?.byteLength??0;if(bytes>16384)return "";text+=decoder.decode(value,{stream:!done});if(done)return text;}}
  finally{await reader.cancel().catch(()=>undefined);reader.releaseLock();}
 }
-export async function countAiInput(body: AiRequest, args: { key: string; fetchImpl?: typeof fetch;deadline?:number }) {
+export async function countAiInput(body: AiRequest, args: { key: string; fetchImpl?: typeof fetch;deadline?:number|(()=>number);signal?:AbortSignal }) {
   if(!args.fetchImpl)requireRealPropsAiPermission();
-  const remaining=args.deadline===undefined?45000:Math.floor(args.deadline-Date.now());
+  const deadline=()=>typeof args.deadline==="function"?args.deadline():args.deadline;
+  const limit=deadline(),remaining=limit===undefined?45000:Math.floor(limit-Date.now());
   invariant(Number.isFinite(remaining)&&remaining>0,"input_count_deadline_exhausted");
+  invariant(!args.signal?.aborted,"input_count_deadline_exhausted");
+  const timeout=AbortSignal.timeout(Math.min(45000,remaining));
   const response = await (args.fetchImpl ?? fetch)("https://api.openai.com/v1/responses/input_tokens", {
     method: "POST", headers: { Authorization: `Bearer ${args.key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: body.model, instructions: body.instructions, input: body.input, text: body.text }), signal: AbortSignal.timeout(Math.min(45000,remaining)),
+    body: JSON.stringify({ model: body.model, instructions: body.instructions, input: body.input, text: body.text }), signal: args.signal?AbortSignal.any([timeout,args.signal]):timeout,
   });
   invariant(response.ok, `input_count_http_${response.status}`);
   const data = await response.json();
-  invariant(args.deadline===undefined||Date.now()<=args.deadline,"input_count_completed_after_deadline");
+  const completedLimit=deadline();
+  invariant(!args.signal?.aborted&&(completedLimit===undefined||Date.now()<=completedLimit),"input_count_completed_after_deadline");
   invariant(Number.isSafeInteger(data.input_tokens) && data.input_tokens > 0, "invalid_input_token_count"); return data.input_tokens as number;
 }
-export async function generateAiReview(body: AiRequest, args: { key: string; timeoutMs: number; fetchImpl?: typeof fetch; serviceTier?:"default"|"flex"; stream?:boolean; onOutputText?:(delta:string)=>void; onCreated?: (id: string) => Promise<void>; onProgress?: (event:{type:string;elapsedMs:number;textCharacters:number})=>void }): Promise<AiResponse> {
+export async function generateAiReview(body: AiRequest, args: { key: string; timeoutMs: number; remainingWindowMs?:()=>number; minimumTimeoutMs?:number; canStart?:()=>boolean; fetchImpl?: typeof fetch; serviceTier?:"default"|"flex"; stream?:boolean; onOutputText?:(delta:string)=>void; onCreated?: (id: string) => Promise<void>; onProgress?: (event:{type:string;elapsedMs:number;textCharacters:number})=>void }): Promise<AiResponse> {
   if(!args.fetchImpl)requireRealPropsAiPermission();
   const started=Date.now();let textCharacters=0;
   invariant(args.key && Number.isFinite(args.timeoutMs) && args.timeoutMs > 0 && args.timeoutMs <= 180000, "invalid_generation_configuration");
+  // Serialization and an awaited send acknowledgement may consume the caller's
+  // window. Sample it after serialization, with no await before starting HTTP.
+  const requestBody=serializeAiRequest(body,args);
+  const timeoutMs=Math.floor(Math.min(args.timeoutMs,args.remainingWindowMs?.()??args.timeoutMs));
+  if(!Number.isFinite(timeoutMs)||timeoutMs<(args.minimumTimeoutMs??1)||args.canStart?.()===false)throw new AiRequestNotStartedError();
   const response = await (args.fetchImpl ?? fetch)("https://api.openai.com/v1/responses", { method: "POST",
     headers: { Authorization: `Bearer ${args.key}`, "Content-Type": "application/json" },
-    body: serializeAiRequest(body,args),
-    signal: AbortSignal.timeout(args.timeoutMs),
+    body: requestBody,
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if(!response.ok){
     let code:string|null=null,type:string|null=null,explicitCode=false,explicitType=false;

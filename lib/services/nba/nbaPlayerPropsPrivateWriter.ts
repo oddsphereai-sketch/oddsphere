@@ -1,10 +1,15 @@
 import {reviewPropsForSite} from "../../playerPropsAi/siteRuntime";
 import {liveNbaPacket} from "../../playerPropsAi/liveSources";
-import {applyNbaSiteAi} from "../../playerPropsAi/siteBindings";
+import {applyNbaSiteAi,restoreNbaNativeGame} from "../../playerPropsAi/siteBindings";
+import {siteAiDecisions} from "../../playerPropsAi/publication";
+import {observeNbaSourceAuthority,captureNbaHandoffBundle,mergeNbaHandoffs,type NbaLockHandoff} from "../../playerPropsAi/nbaLockAuthority";
+import type {GamePacket} from "../../playerPropsAi/evidenceContract";
+import type {AcceptedGameReview} from "../../playerPropsAi/reviewer";
+import type {CapturedNbaParticipationReport} from "../../playerPropsAi/participationEligibility";
 import {propsAiSiteConfig} from "../../playerPropsAi/siteConfig";
 import type {EnrichedSource} from "../../playerPropsAi/cachedEnrichment";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { canonicalNbaAbbreviation, fetchEspnNbaGameInjuries } from "./espnNbaInjuries";
+import { canonicalNbaAbbreviation, fetchEspnNbaGameInjuries,type EspnNbaGameInjuries } from "./espnNbaInjuries";
 import {
   buildNbaPlayerPropsForwardDecisions,
   type NbaPlayerPropsForwardDecision,
@@ -39,7 +44,7 @@ import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
 import { buildNbaPlayerPropsMemberPrices } from "./nbaPlayerPropsMemberPrices";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_11_10_r16_exact_execution_evidence" as const;
+  "nba_player_props_private_writer_2026_11_10_r18_verified_reader_claims" as const;
 
 export function nbaPlayerPropsForecastIsPublishable(
   row: Pick<NbaPlayerPropsForwardDecision, "independentProjection" | "finalProjection">,
@@ -210,8 +215,16 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     candidates,
     emitGameIds,
   });
-  const outPlayers = await explicitOutPlayers(slateSchedule, args.fetchImpl);
-  const eligibleFeatures = features.filter((feature) => !outPlayers.has(normalize(feature.player_name ?? "")));
+  const availability = await explicitOutPlayers(slateSchedule, args.fetchImpl);
+  const participationReports:CapturedNbaParticipationReport[]=availability.reports.flatMap(capture=>live.games.filter(game=>nbaPlayerPropsScheduleGameMatches(game,capture.game)&&Date.parse(game.scheduledStart)===Date.parse(capture.game.gameStartAt)).map(game=>({
+    gameId:game.canonicalGameId,start:game.scheduledStart,awayTeam:game.awayTeam,homeTeam:game.homeTeam,expectedEventId:String(capture.game.externalId),availableAt:capture.availableAt,report:capture.report,
+  })));
+  const isOut=(gameId:number,teamId:number,name:string|null)=>{
+    const game=gameById.get(gameId);if(!game)return false;
+    const team=teamId===game.homeTeamId?game.homeTeam:teamId===game.awayTeamId?game.awayTeam:null;
+    return team!==null&&availability.out.has(outPlayerScope(game.startTime,game.awayTeam,game.homeTeam,team,name??""));
+  };
+  const eligibleFeatures = features.filter((feature) => !isOut(feature.game_id,feature.team_id,feature.player_name));
   const forward = buildNbaPlayerPropsForwardDecisions({
     features: eligibleFeatures,
     observations: mergedMarket.history.observations,
@@ -220,8 +233,14 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   });
   const invalidForecasts = forward.filter((row) => !nbaPlayerPropsForecastIsPublishable(row));
   const publishableForward = forward.filter(nbaPlayerPropsForecastIsPublishable);
-  const minimumCoverage = Math.max(1, Math.floor(candidates.length * 0.80));
-  if (eligibleFeatures.length < minimumCoverage || publishableForward.length === 0) {
+  // Known unavailable actors are intentionally excluded from native features.
+  // They are still part of the AI source/review; counting them as missing
+  // features could block every healthy actor and retain yesterday's Leans.
+  const availableCandidates = candidates.filter(candidate => !isOut(candidate.gameId,candidate.teamId,candidate.playerName));
+  const minimumCoverage = availableCandidates.length ? Math.max(1, Math.floor(availableCandidates.length * 0.80)) : 0;
+  const allCandidatesUnavailable = candidates.length > 0 && availableCandidates.length === 0;
+  const noNativeForwardRequired = allCandidatesUnavailable && propsAiSiteConfig().integrated;
+  if (eligibleFeatures.length < minimumCoverage || (publishableForward.length === 0 && !noNativeForwardRequired)) {
     return {
       ...result("last_known_good_preserved"),
       providerRequests: stateRequests + live.providerRequests.balldontlie + live.providerRequests.theOddsApi + live.providerRequests.owls,
@@ -233,7 +252,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       findings: [
         ...live.findings,
         ...(eligibleFeatures.length < minimumCoverage
-          ? [`feature_coverage_below_80_percent:${eligibleFeatures.length}/${candidates.length}`]
+          ? [`feature_coverage_below_80_percent:${eligibleFeatures.length}/${availableCandidates.length}`]
           : []),
         ...(publishableForward.length === 0 ? ["no_publishable_forward_decisions"] : []),
       ],
@@ -313,16 +332,30 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     inputRows: mergedMarket.history.observations.length,
   });
   const aiBaseline=candidate;
-  if(propsAiSiteConfig().integrated&&priorState&&currentState){
+  const integrated=propsAiSiteConfig().integrated,lockFrames:NbaLockHandoff[]=[];
+  if(integrated&&priorState&&currentState){
+    // Actual pre-lock observations/captures bind both new AI-only scopes and
+    // freshly constructed native fallback before later I/O can cross the lock.
+    const observe=(packet:GamePacket,review:AcceptedGameReview|null,lookupAvailable:boolean)=>{
+      lockFrames.push(observeNbaSourceAuthority(packet,review,lookupAvailable));
+      const observedAt=new Date().toISOString();
+      if(Date.parse(observedAt)>=Date.parse(packet.lock))return;
+      lockFrames.push(captureNbaHandoffBundle(aiBaseline.decisions,packet,review,"native"));
+      candidate=restoreNbaNativeGame(candidate,aiBaseline,packet,observedAt);
+      if(review)candidate=applyNbaSiteAi(candidate,packet,siteAiDecisions(packet,review,observedAt),observedAt);
+      lockFrames.push(captureNbaHandoffBundle(candidate.decisions,packet,review,"ai"));
+    };
     const contexts=await args.client.from("lab_response_snapshots").select("payload,generated_at").eq("sport","nba").like("snapshot_key","%current-only::live-copy%").order("generated_at",{ascending:false}).limit(4);
-    const ai=await reviewPropsForSite({client:args.client,sport:"nba",writerRunId:args.writerRunId,deadline:Math.min(Date.parse(now)+480000,args.aiDeadline??Infinity),
+    await reviewPropsForSite({client:args.client,sport:"nba",writerRunId:args.writerRunId,deadline:Math.min(Date.parse(now)+480000,args.aiDeadline??Infinity),
       games:games.map(g=>({id:g.gameId,start:g.scheduledStart,away:g.awayTeam,home:g.homeTeam})),
-      load:(game,window)=>liveNbaPacket({game,window,snapshot:aiBaseline,market:mergedMarket.history,currentObservations:live.observations,prior:priorState,current:currentState!,context:contexts.error?[]:contexts.data as EnrichedSource["nbaContext"]})});
-    for(const game of ai.games)candidate=applyNbaSiteAi(candidate,game.packet,game.decisions,new Date().toISOString());
+      load:(game,window)=>liveNbaPacket({game,window,snapshot:aiBaseline,market:mergedMarket.history,currentObservations:live.observations,prior:priorState,current:currentState!,context:contexts.error?[]:contexts.data as EnrichedSource["nbaContext"],participationReports}),
+      onSourceReady:(packet,review,_at,lookupAvailable)=>observe(packet,review,lookupAvailable),
+      onReviewObserved:(packet,review,lookupAvailable)=>observe(packet,review,lookupAvailable),
+      onReviewReady:(packet,review)=>observe(packet,review,true)});
   }
   const previous = await readNbaPlayerPropsPrivateSnapshot({ client: args.client, slateDate: args.slateDate });
   const publicationNow=propsAiSiteConfig().integrated?new Date().toISOString():now;
-  const lifecycle = advanceNbaPlayerPropsCandidateLifecycle({ now:publicationNow, previous, candidate });
+  const lifecycle = advanceNbaPlayerPropsCandidateLifecycle({ now:publicationNow, previous, candidate,...(integrated?{lockHandoff:mergeNbaHandoffs(lockFrames)}:{}) });
   await writeNbaPlayerPropsPrivateSnapshot({
     client: args.client,
     snapshot: lifecycle.snapshot,
@@ -378,16 +411,23 @@ export function nbaPlayerPropsScheduleGameMatches(
 async function explicitOutPlayers(
   games: readonly NbaRollingScheduleGame[],
   fetchImpl?: typeof fetch,
-): Promise<Set<string>> {
+): Promise<{out:Set<string>;reports:{game:NbaRollingScheduleGame;availableAt:string;report:EspnNbaGameInjuries}[]}> {
   const out = new Set<string>();
+  const reports:{game:NbaRollingScheduleGame;availableAt:string;report:EspnNbaGameInjuries}[]=[];
   for (const game of games) {
     const report = await fetchEspnNbaGameInjuries(game.externalId, game.awayTeam, game.homeTeam, { fetchImpl });
     if (!report) continue;
-    for (const injuries of report.teams.values()) {
-      for (const injury of injuries) if (injury.status === "out") out.add(normalize(injury.name));
+    const teams=[...report.teams.keys()].map(canonicalNbaAbbreviation);
+    if(String(report.eventId)!==String(game.externalId)||teams.length!==2||new Set(teams).size!==2||![game.awayTeam,game.homeTeam].every(team=>teams.includes(canonicalNbaAbbreviation(team))))continue;
+    reports.push({game,availableAt:new Date().toISOString(),report});
+    for (const [team,injuries] of report.teams) {
+      for (const injury of injuries) if (injury.status === "out") out.add(outPlayerScope(game.gameStartAt,game.awayTeam,game.homeTeam,team,injury.name));
     }
   }
-  return out;
+  return {out,reports};
+}
+function outPlayerScope(start:string,away:string,home:string,team:string,name:string){
+  return JSON.stringify([Date.parse(start),canonicalNbaAbbreviation(away),canonicalNbaAbbreviation(home),canonicalNbaAbbreviation(team),normalize(name)]);
 }
 
 function recentDates(now: string, count: number): string[] {

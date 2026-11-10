@@ -1,6 +1,10 @@
 import { OwlsInsightClient } from "@/lib/providers/owls/owlsInsightClient";
+import { assertCompleteBdlPropsResponse, assertCompleteOwlsPropsResponse, assertNoDeclaredContinuation } from "../../providers/playerPropsResponseCompleteness";
 import {
   buildNflPlayerPropsObservationSnapshot,
+  NFL_PLAYER_PROPS_EMPTY_CURRENT_RELEASE,
+  NFL_PLAYER_PROPS_CURRENT_FIXTURE_RELEASE,
+  type NflPlayerPropsEmptyCurrentCapture,
   type NflPlayerPropGameIdentity,
   type NflPlayerPropPhase,
   type NflPlayerPropPriceObservation,
@@ -24,10 +28,13 @@ const MAX_PLAYER_IDENTITIES_PER_GAME = 64;
 const PLAYER_IDENTITY_BATCH_SIZE = 100;
 
 type Json = Record<string, unknown>;
-type Envelope = { data?: unknown; meta?: { next_cursor?: unknown } | null };
+type Envelope = { data?: unknown; meta?: { next_cursor?: unknown } | null; responseStatus?: number };
 
 export type NflPlayerPropsCollectionResult = {
   snapshot: NflPlayerPropsObservationSnapshot;
+  /** Empty current offers are authoritative only after explicit successful
+   * responses; ordinary historical/partial snapshots cannot supply this proof. */
+  emptyCurrentGames: readonly NflPlayerPropsEmptyCurrentCapture[];
   /** Separate target-book-excluded evidence for explicitly qualified market readers. */
   referenceResearchObservations: readonly NflPlayerPropPriceObservation[];
   normalization: {
@@ -73,7 +80,8 @@ export async function collectNflPlayerPropsObservations(args: {
     fetchImpl,
   });
   bdlRequests += 1;
-  if (nextCursor(gamesEnvelope) !== null) throw new Error("NFL props schedule exceeded its one-page safety budget.");
+  const gamesAvailableAt = new Date().toISOString();
+  assertNoDeclaredContinuation(gamesEnvelope, "BALLDONTLIE NFL props schedule");
   const games = data(gamesEnvelope).map((value) => normalizeGame(value, args.phase))
     .filter((game): game is NflPlayerPropGameIdentity => game !== null)
     .sort((a, b) => Date.parse(a.scheduledStart) - Date.parse(b.scheduledStart));
@@ -81,6 +89,7 @@ export async function collectNflPlayerPropsObservations(args: {
   if (games.length > MAX_GAMES) throw new Error(`NFL props slate circuit breaker opened at ${games.length} games.`);
 
   const currentReceipts = new Map<string,string>(), openingReceipts = new Map<string,string>();
+  const successfulEmptyCurrent = new Set<string>();
   const currentPayloads = await inBatches(games, BDL_CONCURRENCY, async (game) => {
     const envelope = await bdlFetch({
       path: "/odds/player_props",
@@ -90,14 +99,18 @@ export async function collectNflPlayerPropsObservations(args: {
       optionalEmpty: true,
     });
     bdlRequests += 1;
+    assertCompleteBdlPropsResponse(envelope, "BALLDONTLIE /odds/player_props");
     currentReceipts.set(game.providerGameId,new Date().toISOString());
+    if (envelope.responseStatus !== undefined && envelope.responseStatus >= 200 && envelope.responseStatus < 300
+      && completeEmptyPagination(envelope) && data(envelope).length === 0) successfulEmptyCurrent.add(game.providerGameId);
     return data(envelope);
   });
   let bdlCurrent = normalizeBalldontlieNflPlayerProps({
     values: currentPayloads.flat(),
     fetchedAt,
   });
-  bdlCurrent = { ...bdlCurrent, rows: bdlCurrent.rows.map(row => ({ ...row, receivedAt: currentReceipts.get(row.providerEventId) })) };
+  bdlCurrent = { ...bdlCurrent, rows: bindCurrentRowsToSchedule(bdlCurrent.rows,games,gamesAvailableAt)
+    .map(row => ({ ...row, receivedAt: currentReceipts.get(row.providerEventId) })) };
 
   let bdlOpenings = normalizeBalldontlieNflPlayerProps({ values: [], fetchedAt, opening: true });
   if (args.includeOpenings === true) {
@@ -110,6 +123,7 @@ export async function collectNflPlayerPropsObservations(args: {
         optionalEmpty: true,
       });
       bdlRequests += 1;
+      assertCompleteBdlPropsResponse(envelope, "BALLDONTLIE /odds/player_props/opening");
       openingReceipts.set(game.providerGameId,new Date().toISOString());
       return data(envelope);
     });
@@ -145,17 +159,26 @@ export async function collectNflPlayerPropsObservations(args: {
 
   let owlsRaw: unknown[] = [];
   let owlsComplete = false;
+  let owlsEmptyProofComplete = false;
   let owlsReceivedAt: string | undefined;
   if (owlsKey) {
     owlsRequests = 1;
     try {
       const result = await new OwlsInsightClient(owlsKey, { fetchImpl, timeoutMs: 20_000 })
         .props<{ data?: unknown }>("nfl");
+      assertCompleteOwlsPropsResponse(result.body, "Owls NFL /props");
       owlsReceivedAt = new Date().toISOString();
       owlsRaw = owlsEvents(result.body);
       validateOwlsCapacity(owlsRaw);
       owlsComplete = true;
+      owlsEmptyProofComplete = completeEmptyPagination(result.body);
     } catch {
+      // No rejected envelope/capacity prefix may leak into normalization or
+      // attest that an absent game's offers were withdrawn.
+      owlsRaw = [];
+      owlsComplete = false;
+      owlsEmptyProofComplete = false;
+      owlsReceivedAt = undefined;
       healthFindings.push("OWLS_PLAYER_PROPS_CAPTURE_FAILED");
     }
   } else {
@@ -201,8 +224,32 @@ export async function collectNflPlayerPropsObservations(args: {
     },
     healthFindings,
   });
+  // Rejected, unknown, stale/future or unreconciled reference rows are not
+  // evidence that an exact game's offers were withdrawn. Optional provider
+  // errors also remain unavailable rather than becoming an empty response.
+  // Conservatively withhold empty attestations when any requested secondary
+  // source is ambiguous; ordinary nonempty collection remains unchanged.
+  const otherCurrentSourcesComplete = !owlsKey || owlsComplete && owlsEmptyProofComplete && owlsReceivedAt !== undefined
+    && owlsNormalization.rejectedRows === 0 && Object.keys(owlsAll.unknownMarkets).length === 0
+    && owlsFreshRows.length === owlsAll.rows.length && owlsRowsInWindow.length === owlsAll.rows.length
+    && owlsReconciliation.unmatchedRows === 0
+    && owlsRaw.every(value => { const event=object(value); return textOrNumber(event.gameId) !== null
+      && text(event.homeTeam) !== null && text(event.awayTeam) !== null && iso(event.commenceTime) !== null
+      && event.isLive !== true && games.some(game => iso(event.commenceTime) === game.scheduledStart
+        && teamMatches(String(event.homeTeam),game.homeTeamName,game.homeTeam) && teamMatches(String(event.awayTeam),game.awayTeamName,game.awayTeam))
+      && Array.isArray(event.books) && event.books.every(value => { const book=object(value); return text(book.key) !== null && Array.isArray(book.props); }); });
+  const emptyCurrentGames: NflPlayerPropsEmptyCurrentCapture[] = snapshot.collectionComplete && otherCurrentSourcesComplete
+    ? games.filter(game => successfulEmptyCurrent.has(game.providerGameId)
+      && !snapshot.observations.some(row => row.canonicalGameId === game.providerGameId && !row.isOpening && !row.isLive))
+      .map(game => {
+        const balldontlie=currentReceipts.get(game.providerGameId)!,providerReceipts={balldontlie,...(owlsKey?{owls:owlsReceivedAt!}:{})};
+        return {release:NFL_PLAYER_PROPS_EMPTY_CURRENT_RELEASE,gameId:game.providerGameId,scheduledStart:game.scheduledStart,
+          awayTeam:game.awayTeam,homeTeam:game.homeTeam,availableAt:new Date(Math.max(...Object.values(providerReceipts).map(Date.parse))).toISOString(),
+          collectionGeneratedAt:snapshot.generatedAt,providerReceipts};
+      }) : [];
   return {
     snapshot,
+    emptyCurrentGames,
     referenceResearchObservations: dedupeObservations(owlsReferenceRows),
     normalization: {
       balldontlie: bdlCurrent,
@@ -263,11 +310,11 @@ async function bdlFetch(args: {
     cache: "no-store",
     signal: AbortSignal.timeout(20_000),
   });
-  if (args.optionalEmpty && (response.status === 404 || response.status === 422)) return { data: [], meta: null };
+  if (args.optionalEmpty && (response.status === 404 || response.status === 422)) return { data: [], meta: null, responseStatus: response.status };
   if (!response.ok) throw new Error(`BALLDONTLIE ${args.path} failed with HTTP ${response.status}.`);
   const body = await response.json() as Envelope;
   if (!Array.isArray(body.data)) throw new Error(`BALLDONTLIE ${args.path} returned malformed data.`);
-  return body;
+  return { ...body, responseStatus: response.status };
 }
 
 function normalizeGame(value: unknown, phase: NflPlayerPropPhase): NflPlayerPropGameIdentity | null {
@@ -309,6 +356,23 @@ function reconcileProviderRowsToSlate(
     matched.push({ ...row, canonicalGameId: candidates[0]!.providerGameId });
   }
   return { rows: matched, unmatchedRows };
+}
+
+/** Current BDL rows omit fixture fields. Bind only their exact provider event
+ * to this same collection's schedule; openings/history are never backfilled. */
+function bindCurrentRowsToSchedule(rows: readonly NflPlayerPropPriceObservation[], games: readonly NflPlayerPropGameIdentity[], availableAt: string): NflPlayerPropPriceObservation[] {
+  if(iso(availableAt)===null)throw new Error('NFL current fixture availability invalid');
+  return rows.map(row=>{
+    if(row.provider!=='balldontlie'||row.isOpening)throw new Error('NFL current fixture binding requires current BDL rows');
+    const candidates=games.filter(game=>game.providerGameId===row.providerEventId);
+    if(candidates.length!==1)throw new Error('NFL current fixture identity missing or ambiguous');
+    const game=candidates[0];
+    if(row.canonicalGameId!==game.providerGameId||row.scheduledStart!==null&&iso(row.scheduledStart)!==game.scheduledStart
+      ||row.homeTeam!==null&&!teamMatches(row.homeTeam,game.homeTeamName,game.homeTeam)
+      ||row.awayTeam!==null&&!teamMatches(row.awayTeam,game.awayTeamName,game.awayTeam))throw new Error('NFL current fixture identity conflict');
+    return {...row,scheduledStart:row.scheduledStart??game.scheduledStart,homeTeam:row.homeTeam??game.homeTeam,awayTeam:row.awayTeam??game.awayTeam,
+      collectedFixture:{release:NFL_PLAYER_PROPS_CURRENT_FIXTURE_RELEASE,availableAt,providerGameId:game.providerGameId,scheduledStart:game.scheduledStart,awayTeam:game.awayTeam,homeTeam:game.homeTeam}};
+  });
 }
 
 function teamMatches(value: string | null, fullName: string, abbreviation: string): boolean {
@@ -360,9 +424,11 @@ function data(envelope: Envelope): unknown[] {
   return Array.isArray(envelope.data) ? envelope.data : [];
 }
 
-function nextCursor(envelope: Envelope): string | null {
-  const value = envelope.meta?.next_cursor;
-  return typeof value === "string" || typeof value === "number" ? String(value) : null;
+/** Known continuation markers cannot establish a complete single response.
+ * Unknown fields alone do not imply an undocumented pagination protocol. */
+function completeEmptyPagination(value: unknown): boolean {
+  try { assertNoDeclaredContinuation(value, "NFL empty current source"); return true; }
+  catch { return false; }
 }
 
 function collectBoundedPlayerIdentities(
@@ -436,6 +502,7 @@ export const __NFL_PLAYER_PROPS_COLLECTOR_TEST__ = {
   enrichPlayerIdentities,
   normalizePlayerIdentity,
   reconcileProviderRowsToSlate,
+  bindCurrentRowsToSchedule,
   collectBoundedPlayerIdentities,
   dedupeObservations,
   owlsEvents,

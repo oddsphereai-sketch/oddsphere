@@ -11,7 +11,8 @@ import {PROPS_AI_FAMILIAR_READER_RELEASE,needsLegacyLockedAiReader,type PropsAiM
 import {PROPS_AI_SITE_RELEASE} from '../lib/playerPropsAi/siteConfig';
 import {applyNflSiteAi} from '../lib/playerPropsAi/siteBindings';
 import type {SiteAiDecision} from '../lib/playerPropsAi/publication';
-import type {GamePacket} from '../lib/playerPropsAi/evidenceContract';
+import {PRODUCT_RELEASE,type GamePacket} from '../lib/playerPropsAi/evidenceContract';
+globalThis.fetch=async()=>{throw Error('Familiar reader proof forbids all HTTP');};
 const at='2026-11-08T13:00:00Z',start='2026-11-08T18:00:00Z',lock='2026-11-08T17:00:00Z';
 const evidence:PropsAiMemberEvidence={release:'synthetic',lawRelease:'synthetic',gradeRelease:'synthetic',publicationRelease:PROPS_AI_FAMILIAR_READER_RELEASE,reviewId:'synthetic',lawHash:'synthetic',inputHash:'synthetic',reviewedAt:at,stage:'early',model:'synthetic',confidence:1,confidenceMeaning:'AI-estimated evidence strength; not empirical calibration',quoteConfirmedAt:at,selectedSide:'under',assessment:'The supplied evidence supports this conditional forecast.',exception:null,coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:'missing',facts:[],factIds:[],effect:'unavailable',observation:'The source is unavailable in this synthetic fixture.'}]))};
 assert.equal(PROPS_AI_SITE_RELEASE,PROPS_AI_FAMILIAR_READER_RELEASE);
@@ -25,7 +26,7 @@ const nba=renderToStaticMarkup(<NbaPlayerPropsProductDashboard snapshot={snapsho
 assert.match(nba,/Prop Reader/);assert.match(nba,/Price and confirmation/);assert.match(nba,/Key drivers for/);assert.match(nba,/13\.7/);assert.match(nba,/90\.0%/);assert.match(nba,/Reviewed|Model estimate/);assert.doesNotMatch(nba,/AI market review/);
 const legacy=renderToStaticMarkup(<NbaPlayerPropsProductDashboard snapshot={{...snapshot,decisions:[{...row,aiReview:old,lockedAt:lock}]}} initialSelectedKey={row.decisionKey} />);
 assert.match(legacy,/AI market review/);assert.match(legacy,/13\.70/);assert.match(legacy,/Locked record/);assert.equal(JSON.stringify(snapshot),before);
-const packet={gameId:'native',start,lock,cutoff:at,players:[{id:'nfl-bdl-player:1',name:'Synthetic Player',team:'BOS',opponent:'NYK',markets:['passing_yards']}],quotes:['under','over'].map(side=>({id:side,playerId:'nfl-bdl-player:1',market:'passing_yards',line:12.5,side,book:'one',provider:'synthetic',american:-110,observedAt:at,receivedAt:at,receivedAtProvenance:'provider_response',opening:false,live:false}))} as unknown as GamePacket;
+const packet:GamePacket={release:PRODUCT_RELEASE,sport:'nfl',gameId:'native',start,lock,cutoff:at,stage:'early',sourceLimitations:[],players:[{id:'nfl-bdl-player:1',name:'Synthetic Player',team:'BOS',opponent:'NYK',markets:['passing_yards'],missing:[],evidence:[]}],quotes:(['under','over'] as const).map(side=>({id:side,playerId:'nfl-bdl-player:1',market:'passing_yards',line:12.5,side,book:'one',provider:'synthetic',american:-110,observedAt:at,receivedAt:at,receivedAtProvenance:'provider_response',opening:false,live:false}))};
 const choice={playerId:'nfl-bdl-player:1',market:'passing_yards',line:12.5,side:'under',book:'one',provider:'synthetic',american:-110,projection:13.7,probability:.9,over:.1,under:.9,push:0,expectedValue:.1,grade:'Lean',quote:packet.quotes[0],evidence} as SiteAiDecision;
 const board=applyNflSiteAi({decisions:[],counts:{}} as never,packet,[choice],at);
 const nflSnapshot={season:2026,week:9,generatedAt:at,memberDecisions:board.decisions,board:{counts:board.counts,diagnostics:{inputOffers:2,completedEvaluations:2,completeExactOffers:2,incompleteExactOffers:0,unavailableNoIndependentBenchmark:0,unavailableStaleQuotes:0,unavailableFeatureContext:0}}} as unknown as NflPlayerPropsMemberSnapshot;

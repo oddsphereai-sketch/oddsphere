@@ -1,3 +1,4 @@
+import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 import {auditPropsActorAdmissionPart} from "./lib/player-props-ai-actor-admission-audit";
 import {encodeCanonicalScenarioLaw} from "../lib/playerPropsAi/generativeCoordinates";
 /** Real PostgreSQL + real reviewer + mock HTTP. No credentials, Internet or paid calls. */
@@ -51,7 +52,7 @@ const clock=()=>"2026-11-07T21:40:00Z";
 const packet=(id:string,stage:"early"|"final"):GamePacket=>({release:PRODUCT_RELEASE,sport:"nba",gameId:id,start:game(id).start,lock:game(id).lock,cutoff:clock(),stage,sourceLimitations:[],quotes:[],players:["a","b"].map(p=>({id:p,name:`Synthetic ${p}`,team:"A",opponent:"B",markets:["points"],missing:[],evidence:[18,20,22].map((points,i)=>({id:`${p}:log:${i}`,kind:"recent_games" as const,availableAt:"2026-11-07T17:00:00Z",source:"synthetic",value:{game:{startTime:`2026-11-0${i+3}T23:00:00Z`,homeTeam:"A",awayTeam:"B"},box:{minutes:30,points}}}))}))});
 function response(part:GamePacket,model:string,tier:string,id:string){
   const facts=readerEvidence(part),aliases=evidenceAliases(part);
-  const players=Object.fromEntries(part.players.map(p=>[p.id,{assessment:"Conditional forecast using the supplied performance sample.",priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[p.id][area].status,factIds:facts[p.id][area].facts.slice(0,1).map(f=>f.id),effect:facts[p.id][area].status==="missing"?"unavailable":"uncertain",observation:area==="recent_form"&&facts[p.id][area].limitations.some(l=>l.includes("old_game_history"))?"The supplied history is dated and cannot establish current workload.":"The supplied sample requires contextual caution."}])),evidenceIds:[...aliases].filter(([,value])=>value===p.evidence[0].id).map(([alias])=>alias),gaps:[],law:encodeCanonicalScenarioLaw(part.sport,p,{weights:Array(16).fill(1),outcomes:{points:Array(16).fill(20),rebounds:Array(16).fill(4),assists:Array(16).fill(3),threes:Array(16).fill(2)}}),confidence:[1],exceptions:[null]}]));
+  const players=Object.fromEntries(part.players.map(p=>[p.id,verifiedReaderFixture(part,p.id,{assessment:"Conditional forecast using the supplied performance sample.",priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[p.id][area].status,factIds:facts[p.id][area].facts.slice(0,1).map(f=>f.id),effect:facts[p.id][area].status==="missing"?"unavailable":"uncertain",observation:area==="recent_form"&&facts[p.id][area].limitations.some(l=>l.includes("old_game_history"))?"The supplied history is dated and cannot establish current workload.":"The supplied sample requires contextual caution."}])),evidenceIds:[...aliases].filter(([,value])=>value===p.evidence[0].id).map(([alias])=>alias),gaps:[],law:encodeCanonicalScenarioLaw(part.sport,p,{weights:Array(16).fill(1),outcomes:{points:Array(16).fill(20),rebounds:Array(16).fill(4),assists:Array(16).fill(3),threes:Array(16).fill(2)}}),confidence:[1],exceptions:[null]})]));
   return {id,model,status:"completed",service_tier:tier,usage:{input_tokens:1000,output_tokens:100},output:[{content:[{type:"output_text",text:JSON.stringify({wireRelease:PROPS_AI_WIRE_RELEASE,players})}]}]};
 }
 async function run(id:string,stage:"early"|"final",failure:"none"|"capacity"|"timeout"|"invalid"|"semantic"|"physical"|"capacityalias"|"physicalformat"|"rate"|"quota"|"missingusage"|"invalidusage"="none",strong=false){
@@ -140,6 +141,7 @@ try{
   await db.query(readFileSync("lib/db/schema-migration-v63-player-props-ai-site-control.sql","utf8"));
   await db.query(readFileSync("lib/db/schema-migration-v66-player-props-ai-slate-capacity.sql","utf8"));
   await db.query(readFileSync("lib/db/schema-migration-v68-player-props-ai-standard-primary-escrow.sql","utf8"));
+  await db.query(readFileSync("lib/db/schema-migration-v70-player-props-ai-calendar-lifecycle.sql","utf8"));
   await db.query("UPDATE player_props_ai_control SET paid_enabled=true");
   await db.query("CREATE TABLE test_clock(at timestamptz); INSERT INTO test_clock VALUES('2026-11-07T21:40:00Z'); CREATE FUNCTION props_ai_test_clock() RETURNS timestamptz LANGUAGE sql VOLATILE AS 'SELECT at FROM test_clock'");
   const functions=await db.query("SELECT pg_get_functiondef(oid) body FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname LIKE 'player_props_ai_%'");
@@ -310,6 +312,41 @@ try{
     else {assert.equal(c.claimed,false);assert.equal(c.reason,"global_concurrency_busy");}
   }
   for(const c of batchClaims)await wallet.finish(c.key,c.token,null,"synthetic_unsent");
+  // Native SQL can commit a prelock send, then deliver its acknowledgement
+  // after lock/deadline. Only this never-started HTTP attempt may be free;
+  // an unrelated prior unknown vendor charge must keep its complete hold.
+  for(const [index,mode] of ["lock","deadline","reaper"].entries()){
+    const month=`2031-${String(index+1).padStart(2,"0")}`,epoch=Date.parse(`${month}-06T21:40:00Z`),originalNow=Date.now;
+    let elapsed=0,httpCalls=0,sends=0;const at=()=>new Date(epoch+elapsed).toISOString();
+    const lateGame={sport:"nba" as const,id:`late-send-${mode}`,start:new Date(epoch+(mode==="deadline"?1200000:130000)+3600000).toISOString(),lock:new Date(epoch+(mode==="deadline"?1200000:130000)).toISOString()};
+    const heldGame={sport:"nba" as const,id:`unknown-held-${mode}`,start:new Date(epoch+4800000).toISOString(),lock:new Date(epoch+1200000).toISOString()};
+    const envelope=[{input_tokens:1000,max_output_tokens:7000}],latePlan=makePropsWalletPlan({month,now:at(),games:[lateGame,heldGame],bounds:{[`nba|${lateGame.id}`]:envelope,[`nba|${heldGame.id}`]:envelope},sources});
+    await db.query("UPDATE test_clock SET at=$1",[at()]);await db.query("UPDATE cron_job_leases SET lease_expires_at=$1",[new Date(epoch+86400000).toISOString()]);
+    assert.equal((await wallet.plan(latePlan)).funded,true);
+    const heldKey=reviewSlots(heldGame)[1].key,held=await wallet.claim(heldKey,"synthetic-prior-unknown",envelope.map(r=>({...r,strong_input_tokens:null})),false,"synthetic-owner");assert(held.claimed);
+    const heldAttempt=await wallet.send(heldKey,held.token!,1,1);await wallet.receipt(heldAttempt.id,held.token!,null,null,{kind:"synthetic_existing_unknown_transport"});await wallet.finish(heldKey,held.token!,null,"synthetic_unknown_hold");
+    const heldBefore=JSON.stringify((await db.query("SELECT to_jsonb(a) v FROM player_props_ai_attempts a WHERE id=$1",[heldAttempt.id])).rows[0].v),consumedBefore=Number((await db.query("SELECT consumed_micro FROM player_props_ai_budgets WHERE month_key=$1",[month])).rows[0].consumed_micro);
+    const lateKey=reviewSlots(lateGame)[1].key,p={...packet(lateGame.id,"final"),start:lateGame.start,lock:lateGame.lock,cutoff:at()},prepared=[{packet:p,inputTokens:1000}];
+    const delayedStore={claim:wallet.claim.bind(wallet),receipt:wallet.receipt.bind(wallet),fallback:wallet.fallback.bind(wallet),finish:wallet.finish.bind(wallet),send:async(...args:Parameters<typeof wallet.send>)=>{
+      const attempt=await wallet.send(...args);sends++;const committed=(await db.query("SELECT started_at< $2::timestamptz prelock FROM player_props_ai_attempts WHERE id=$1",[attempt.id,p.lock])).rows[0];assert.equal(committed.prelock,true);
+      elapsed=140000;await db.query("UPDATE test_clock SET at=$1",[at()]);
+      if(mode==="reaper"){
+        await wallet.reap();const reaped=(await db.query("SELECT state,actual_micro FROM player_props_ai_attempts WHERE id=$1",[attempt.id])).rows[0];assert.equal(reaped.state,"unknown");assert.equal(reaped.actual_micro,null);assert.equal((await job(lateKey)).state,"expired");
+      }
+      return attempt;
+    }};
+    const fetchImpl:typeof fetch=async()=>{httpCalls++;throw Error("Late send must never start HTTP");};
+    try{
+      Date.now=()=>epoch+elapsed;
+      const args={packet:p,job:await job(lateKey),store:delayedStore,key:"synthetic",writerRunId:"synthetic-owner",preferStronger:false,clock:at,deadline:epoch+(mode==="deadline"?130000:390000),prepare:async()=>prepared,fetchImpl};
+      const result=await runPropsReview(args);assert.equal(result.status,mode==="deadline"?"failed":"expired");assert.equal(httpCalls,0);assert.equal(sends,1);
+      const attempt=(await db.query("SELECT state,actual_micro,response_id,usage FROM player_props_ai_attempts WHERE job_key=$1",[lateKey])).rows[0];assert.equal(attempt.state,"completed");assert.equal(Number(attempt.actual_micro),0);assert.equal(attempt.response_id,null);assert.equal(attempt.usage.kind,"known_unbilled_before_http");
+      assert.equal(JSON.stringify((await db.query("SELECT to_jsonb(a) v FROM player_props_ai_attempts a WHERE id=$1",[heldAttempt.id])).rows[0].v),heldBefore,"A proven unsent new attempt cannot release or rewrite an existing unknown hold");
+      assert.equal(Number((await db.query("SELECT consumed_micro FROM player_props_ai_budgets WHERE month_key=$1",[month])).rows[0].consumed_micro),consumedBefore);
+      const replay=await runPropsReview({...args,job:await job(lateKey)});assert.equal(replay.status,"skipped");assert.equal(httpCalls,0);assert.equal(sends,1,"Closed jobs never reset or replay");
+    }finally{Date.now=originalNow;}
+  }
+  console.log("Native delayed-send proof passed: after-lock/deadline and reaper-before-ack start zero HTTP, exact zero unsent receipts, unchanged unrelated unknown holds, no closed-slot replay.");
   console.log("Native slate capacity proof passed: up to sixteen funded games claim atomically; the seventeenth is deferred; no generation or added spending.");
   console.log("Target/emergency proof passed: all core reviews fund above $50, optional upgrades stay below target and daily/monthly 10%, $60 authorizations stop, no AI HTTP for these cases.");
   console.log("Native wallet/reviewer integration passed: exact request funding, full coverage, two stages, Standard primary/strong fallback, unknown charges, duplicates/concurrency, immutable results, cap rejection, UTC boundaries, 40-player partitioning, lock cutoff and RLS. All AI HTTP was mocked; zero paid calls.");

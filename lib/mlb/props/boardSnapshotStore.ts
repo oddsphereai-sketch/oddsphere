@@ -68,6 +68,9 @@ export type MlbPropsBoardSnapshot = {
   marketEvidence?: MlbPropsMarketEvidenceCapture;
   modelContext?: {
     modelReleaseId?: string;
+    /** Future snapshot opt-in; old locked snapshots retain absence. */
+    trackingEventRelease?: string;
+    aiHandoffRelease?: string;
     probablePitcherSeasonStats: Array<[string, RealPitcherSeasonStat]>;
     openingPropOdds?: PropOddsSnapshot[];
     marketModelVersions?: Record<string, string>;

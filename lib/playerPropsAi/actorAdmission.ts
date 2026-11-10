@@ -10,7 +10,7 @@ import {jointReviewSchema,parseJointPlayerReview,parseJointReview} from "./reque
 import {PROPS_AI_WIRE_RELEASE} from "./scenarioCoordinates";
 import {PROPS_AI_PRIMARY_MODEL,type PropsAiModel} from "./releases";
 
-export const ACTOR_ADMISSION_RELEASE="player_props_ai_actor_admission_2026_11_10_r1_original_part" as const;
+export const ACTOR_ADMISSION_RELEASE="player_props_ai_actor_admission_2026_11_10_r2_verified_reader_claims" as const;
 type RawObject=Record<string,unknown>;
 type AdmittedPlayer=ReturnType<typeof parseJointPlayerReview>;
 export type ActorAdmissionLineage={part:number;phase:1|2;model:PropsAiModel;requestedTier:string;actualTier:string;responseId:string;requestHash:string};

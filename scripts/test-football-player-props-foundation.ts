@@ -40,7 +40,7 @@ assert.equal(canonicalNflPlayerPropMarket("rush_rec_yards"), "rushing_receiving_
 assert.equal(canonicalNflPlayerPropMarket("longest_completion"), "longest_pass");
 assert.equal(canonicalNflPlayerPropMarket("field_goals_made"), "fg_made");
 assert.equal(canonicalNflPlayerPropMarket("unknown_fun_prop"), null);
-assert.equal(NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE, "nfl_player_props_provider_observation_2026_10_28_r14_owls_reference_prices");
+assert.equal(NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE, "nfl_player_props_provider_observation_2026_11_10_r16_complete_response");
 assert.deepEqual(NFL_PLAYER_PROPS_PHASE_ONE_MARKETS, [
   "passing_attempts",
   "passing_completions",

@@ -20,6 +20,8 @@ async function run(mode:Mode){
  class Clock extends Date{constructor(value?:string|number){super(value??fixed+elapsed);}static now(){return fixed+elapsed;}}
  const board={release:'synthetic',generatedAt:fixture.snapshot.generatedAt,evaluatedAt:fixture.snapshot.generatedAt,decisions:[],counts:{'Best Angle':0,Lean:0,Watchlist:0,'No Play':0,Held:0,actionable:0},diagnostics:{},marketEvidence:{i:[]}};
  const snapshot={...fixture.snapshot,board,memberDecisions:[]};
+ const emptyCurrentGame={gameId:fixture.game.id,release:'synthetic-explicit-empty-receipt'};
+ const previousSnapshot={...snapshot,source:'synthetic-original-previous'};
  const appendClient={rpc:(name:string,body:{p_writer_run:string;p_capture:evidence.NflIdentityFailureRecord})=>{
   assert.equal(name,'player_props_ai_append_source_failure_v1');assert.equal(body.p_writer_run,fixture.writerRunId);assert.equal(body.p_capture.writerRunId,fixture.writerRunId);rpcs++;trace.push('private_identity_append');
   assert.equal(body.p_capture.observedAtMeaning,'requested_source_cutoff');
@@ -41,9 +43,9 @@ async function run(mode:Mode){
    }
    return{status:'active',games:[],findings:[]};
   }},
-  liveSources:{liveNflPacket:()=>{if(mode==='success')return{};throw sourceError;}},
+  liveSources:{liveNflPacket:(args:{emptyCurrentGame:unknown;withdrawalSnapshot:unknown})=>{assert.strictEqual(args.emptyCurrentGame,emptyCurrentGame,'Sole writer forwards the exact current collection receipt');assert.strictEqual(args.withdrawalSnapshot,previousSnapshot,'Original previous snapshot owns withdrawal-only aliases even when fresh native construction has no actors');if(mode==='success')return{};throw sourceError;}},
   siteBindings:{applyNflSiteAi:()=>board,restoreNflNativeGame:()=>board},
-  nflPlayerPropsCollector:{NFL_PLAYER_PROPS_COLLECTION_LIMITS:{maxGames:18,maxPlayerIdentities:320,playerIdentityBatchSize:40},collectNflPlayerPropsObservations:async()=>({snapshot:fixture.observations,referenceResearchObservations:[]})},
+  nflPlayerPropsCollector:{NFL_PLAYER_PROPS_COLLECTION_LIMITS:{maxGames:18,maxPlayerIdentities:320,playerIdentityBatchSize:40},collectNflPlayerPropsObservations:async()=>({snapshot:fixture.observations,referenceResearchObservations:[],emptyCurrentGames:[emptyCurrentGame]})},
   nflPlayerPropsInferenceContext:{buildNflPlayerPropsInferenceContextFromForwardEvidence:()=>({...fixture.context,requestBudget:{totalMaximum:0}})},
   nflForwardEvidenceStore:{readNflForwardEvidence:async()=>({})},
   nflPlayerPropsMarketBoard:{buildNflPlayerPropsExactBoard:()=>[]},
@@ -51,7 +53,7 @@ async function run(mode:Mode){
    NFL_PLAYER_PROPS_BOARD_RELEASE:'synthetic',NFL_PLAYER_PROPS_CALIBRATION_RELEASE:'synthetic',NFL_PLAYER_PROPS_DECISION_RELEASE:'synthetic',NFL_PLAYER_PROPS_MODEL_RELEASE:'synthetic',NFL_PLAYER_PROPS_SOURCE_AWARE_QUALIFIED_MARKETS:[],
    nflPlayerPropsRuntimePolicy:()=>({maximumQuoteAgeHours:1}),verifyNflPlayerPropsRuntimeParity:()=>{}},
   nflPlayerPropsProductionContract:{buildNflPlayerPropsTrackingRows:()=>[],NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE:'synthetic',reconcileNflPlayerPropsProductionSnapshot:()=>structuredClone(snapshot)},
-  nflPlayerPropsSnapshotStore:{readNflPlayerPropsSnapshot:async()=>null,writeNflPlayerPropsSnapshot:async()=>{trace.push('member_snapshot');}},
+  nflPlayerPropsSnapshotStore:{readNflPlayerPropsSnapshot:async()=>previousSnapshot,writeNflPlayerPropsSnapshot:async()=>{trace.push('member_snapshot');}},
   nflPlayerPropsTrackingStore:{updateNflPlayerPropsClosingPrices:async()=>0,updateNflPlayerPropsClosingPricesFromObserver:async()=>0,writeLockedNflPlayerPropsTracking:async()=>{trace.push('official_tracking');}},
   nflPlayerPropsCurrentSeasonState:{NFL_PLAYER_PROPS_CURRENT_SEASON_GAMES_PAGE_MAXIMUM:1,NFL_PLAYER_PROPS_CURRENT_SEASON_STATS_PAGE_MAXIMUM:1,NFL_PLAYER_PROPS_CURRENT_SEASON_TEAM_STATS_PAGE_MAXIMUM:1,
    readNflPlayerPropsCurrentSeasonState:async()=>null,refreshNflPlayerPropsCurrentSeasonState:async()=>({state:{},apiCalls:0,gamesAdded:0,teamStatsAdded:0,statsAdded:0}),writeNflPlayerPropsCurrentSeasonState:async()=>{trace.push('current_season');}},

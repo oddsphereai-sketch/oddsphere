@@ -1,0 +1,61 @@
+import {PROPS_AI_WIRE_RELEASE} from "../lib/playerPropsAi/scenarioCoordinates";
+import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
+import type {PlayerPropPreviewRow} from '../app/mlb/props/components/PlayerPropsDashboard';
+import type {MlbPropsBoardSnapshot} from '../lib/mlb/props/boardSnapshotStore';
+import type {AcceptedGameReview} from '../lib/playerPropsAi/reviewer';
+import type {TrackingCandidate} from '../lib/mlb/props/internalTracking';
+import type {PropSettlementInput} from '../lib/mlb/props/settlement';
+import {gzipSync} from 'node:zlib';
+import assert from 'node:assert/strict';
+import {parseBallDontLiePlayerProps} from '../lib/mlb/props/providerClients';
+import {liveMlbPacket} from '../lib/playerPropsAi/liveSources';
+import {encodeCanonicalScenarioLaw} from '../lib/playerPropsAi/generativeCoordinates';
+import {parseJointReview} from '../lib/playerPropsAi/request';
+import {readerEvidence,READER_AREAS} from '../lib/playerPropsAi/readerCoverage';
+import {evidenceAliases} from '../lib/playerPropsAi/input';
+import {criticalContextHashes} from '../lib/playerPropsAi/criticalContext';
+import {siteAiDecisions} from '../lib/playerPropsAi/publication';
+import {applyMlbSiteAi} from '../lib/playerPropsAi/siteBindings';
+import {trackingInsert} from '../lib/mlb/props/internalTracking';
+import {settlePropPick,settleTrackedPropPick,MLB_PROPS_LOCKED_EVENT_RELEASE} from '../lib/mlb/props/settlement';
+import {PROPS_AI_RELEASE} from '../lib/playerPropsAi/releases';
+import {independentPriorEvents} from '../lib/playerPropsAi/priorEvents';
+import {digest} from '../lib/playerPropsAi/evidence';
+globalThis.fetch=async()=>{throw Error('No HTTP permitted');};
+const at='2030-06-01T18:00:00Z',now='2030-06-01T18:01:00Z',start='2030-06-01T21:00:00Z',lock='2030-06-01T20:00:00Z';
+const odds=parseBallDontLiePlayerProps({data:[{id:123,prop_type:'hits',game_id:1,player_id:2,vendor:'draftkings',line_value:1,market:{type:'milestone',odds:150}}]},at).map(q=>({...q,providerResponseAt:at}));
+assert.equal(odds.length,1,'Synthetic provider milestone parses');
+const native={id:'synthetic',providerIds:{gameId:'balldontlie-game-1',bdlGameId:'1',bdlPlayerId:2,mlbStatsPlayerId:'mlbstats-player-2'},player:'Synthetic Player',team:'NYY',opponent:'BOS',gameStartTime:start,market:'batter_hits',offerContract:'milestone',line:1,side:'over',book:'draftkings',odds:150,lastUpdated:at,projection:1,finalProbability:.75,playGrade:'WATCHLIST',missingFeatures:[],oddsSanity:[],units:0} as unknown as PlayerPropPreviewRow;
+const snapshot={slateDate:'2030-06-01',snapshotId:'synthetic-snapshot',asOfTimestamp:at,data:{props:[native]},modelContext:{modelReleaseId:'mlb_props_2026_10_21_r44'}} as unknown as MlbPropsBoardSnapshot;
+const packet=liveMlbPacket({game:{id:'balldontlie-game-1',start,away:'NYY',home:'BOS'},window:{gameId:'balldontlie-game-1',stage:'final',cutoff:at,lock},snapshot,currentOdds:odds,openingOdds:[]});
+const player=packet.players[0],v=(n:number)=>Array(16).fill(n),facts=readerEvidence(packet)[player.id],aliases=evidenceAliases(packet);
+const canonical={weights:[1,2,1,...Array(13).fill(0)],outcomes:{batter_singles:[0,1,2,...Array(13).fill(0)],batter_doubles:v(0),batter_triples:v(0),batter_home_runs:v(0),batter_walks:v(0),batter_strikeouts:v(0),batter_rbis:v(0),batter_runs_scored:v(0),batter_stolen_bases:v(0)}};
+const parsed=parseJointReview(packet,{wireRelease:PROPS_AI_WIRE_RELEASE,players:{[player.id]:verifiedReaderFixture(packet,player.id,{assessment:'The supplied sources support a conditional estimate.',priorRead:Object.fromEntries(independentPriorEvents(player).map(e=>[[...aliases].find(([,id])=>id===e.sourceId)![0],e.preferredOutcome])),coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[area].status,factIds:facts[area].facts.slice(0,1).map(f=>f.id),effect:'uncertain',observation:'The supplied source requires contextual caution.'}])),evidenceIds:[[...aliases].find(([,id])=>id===player.evidence[0].id)![0]],gaps:[],confidence:[2],exceptions:[null],law:encodeCanonicalScenarioLaw('mlb',player,canonical)})}});
+const review:AcceptedGameReview={release:PROPS_AI_RELEASE,gameId:packet.gameId,sourceGameId:packet.gameId,start,lock,cutoff:at,stage:'final',issuedAt:now,model:'synthetic',partProvenance:[],marketScopes:{[player.id]:player.markets},criticalContextHashes:criticalContextHashes(packet),players:parsed.players,inputHash:digest(packet),inputEvidence:{digest:digest(packet),encoding:'gzip-base64',bytes:Buffer.byteLength(JSON.stringify(packet)),data:gzipSync(Buffer.from(JSON.stringify(packet))).toString('base64')}};
+const decisions=siteAiDecisions(packet,review,now);assert.equal(decisions.length,1);assert.equal(decisions[0].quote.side,'yes');assert.equal(decisions[0].probability,.75);assert.equal(decisions[0].push,0);
+const row=applyMlbSiteAi([native],packet,decisions,now)[0];assert.equal(row.playGrade,'BEST_ANGLE');assert.equal(row.units,1);
+const before=digest({packet,review,row,snapshot});
+const future={...snapshot,modelContext:{...snapshot.modelContext!,trackingEventRelease:MLB_PROPS_LOCKED_EVENT_RELEASE}};
+const stored=trackingInsert({row,naturalKey:'synthetic-milestone',mlbGamePk:1,mlbPlayerId:2,minutesToStart:179} as TrackingCandidate,{...future,data:{...future.data,props:[row]}},60,now);
+const input={marketKey:stored.market_key as PropSettlementInput["marketKey"],playerId:stored.external_player_id,gameId:stored.external_game_id!,line:stored.line,side:stored.side,playerStarted:true,stakeUnits:stored.stake_units,americanOdds:stored.locked_american_odds};
+for(const [actual,expected,units] of [[0,'loss',-1],[1,'win',1.5],[2,'win',1.5]] as const){
+ const result=settleTrackedPropPick({...input,finalStats:{hits:actual}},stored.metadata_json.lockedEvent);
+ assert.deepEqual(result,{status:'settled',result:expected,resultValue:actual,units});
+}
+const legacy=trackingInsert({row,naturalKey:'synthetic-milestone',mlbGamePk:1,mlbPlayerId:2,minutesToStart:179} as TrackingCandidate,snapshot,60,now);
+assert.equal(Object.hasOwn(legacy.metadata_json,'lockedEvent'),false,'Re-syncing an unstamped old snapshot cannot reconstruct locked event semantics');
+assert.deepEqual(settleTrackedPropPick({...input,finalStats:{hits:1}},legacy.metadata_json.lockedEvent),{status:'settled',result:'push',resultValue:1,units:0},'An old lock retains its exact previous settlement rule, even with AI execution metadata');
+const locked={...row,lockStatus:{status:'locked' as const,lockedAt:lock}};
+const lockedInsert=trackingInsert({row:locked,naturalKey:'synthetic-milestone',mlbGamePk:1,mlbPlayerId:2,minutesToStart:179} as TrackingCandidate,future,60,now);
+assert.equal(Object.hasOwn(lockedInsert.metadata_json,'lockedEvent'),false,'Republishing a stored lock in a new snapshot cannot opt it into new semantics');
+for(const patch of [{market:'batter_walks'},{line:2},{side:'under'},{contract:'guessed'},{release:'future-unknown'}]){
+ assert.deepEqual(settleTrackedPropPick({...input,finalStats:{hits:1}},{...stored.metadata_json.lockedEvent,...patch}),{status:'unresolved',reason:'invalid_locked_event'});
+}
+const ordinary={...stored.metadata_json.lockedEvent,contract:'two_way' as const};
+assert.deepEqual(settleTrackedPropPick({...input,finalStats:{hits:1}},ordinary),{status:'settled',result:'push',resultValue:1,units:0},'Ordinary integer lines keep pushes');
+assert.deepEqual(settlePropPick({...input,line:.5,finalStats:{hits:1}}),{status:'settled',result:'win',resultValue:1,units:1.5},'Legacy half-integer wins remain unchanged');
+assert.deepEqual(settleTrackedPropPick({...input,playerStarted:false,finalStats:{hits:1}},stored.metadata_json.lockedEvent),{status:'unresolved',reason:'player_did_not_start'});
+assert.equal(digest({packet,review,row,snapshot}),before,'Source, accepted law, member row and old snapshot are immutable');
+console.log('MLB exact event tracking passed: actual provider→live source→generative parser→pricing→member→tracking→settlement, inclusive milestone threshold/zero/above, ordinary pushes, exact win units, malformed contract holds, old snapshot/lock precedence and DNP. No HTTP or paid calls.');
+// Reusable synthetic actual-parser fixture for the handoff boundary proof.
+export {packet,review,native,snapshot,at,now,start,lock};

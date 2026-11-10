@@ -1,3 +1,227 @@
+## November 10 future player-prop verified factual readings R31
+
+The owner requested full product correctness and two consecutive clean full
+rounds with three independent reviewers. Future generation is
+`player_props_ai_2026_11_10_r31_verified_reader_claims`; selectionR6 is
+`player_props_ai_selection_2026_11_10_r6_verified_reader_claims`, NFL decisionR13
+is `player_props_ai_nfl_decision_2026_11_10_r13_verified_reader_claims`, and
+claim contractR1 is `player_props_ai_reader_claims_2026_11_10_r1_source_bound`.
+WireR5 `props_scenario_claims_2026_11_10_r5_verified_reader` changes factual
+selections only; named generative coordinatesR4 and canonical lawR1 stay exact.
+Sole NBA writerR18 is
+`nba_player_props_private_writer_2026_11_10_r18_verified_reader_claims`; NFL
+writerR92 is `nfl_player_props_writer_2026_11_10_r92_verified_reader_claims`.
+Future NFL native-qualificationR1 binds the existing missing-native-context
+No Play to the sole writer's actual original baseline and exact current source.
+The adapter and prelock proof independently use that same baseline; an actor's
+source heads or member metadata cannot manufacture a native template. Qualified
+conditional estimates remain visible at first lock with a separate operational
+reason. Current medical exceptions retain precedence, native-context recovery
+uses the existing grade rule, and accepted laws/exceptions and stored locks stay
+exact. This completes the undeployed R31 repair; it does not authorize new action.
+Prospective reader-contextR1
+`player_props_ai_reader_context_2026_11_10_r1_medical_sets` binds canonical
+medical report sets and effective authority for every supplied identity without
+changing the legacy critical hash. Harmless report ordering and same-state clock
+refreshes retain R31; genuine status, detail, role, matchup and authority changes
+invalidate it. The proof also binds the original admitted critical hash. The
+existing early/final timing policy is checked after claim/queue/send waits and
+again immediately before HTTP; an authorized but unsent attempt records zero,
+while genuinely dispatched unknown charges remain reserved. These are
+undeployed R31 correctness repairs, with no new slot, retry or quota.
+Future reviewed NBA rows take the verified current same-ID source label,
+including existing native scopes. New AI row proofs bind that exact name;
+native alias semantics and every stored locked name remain unchanged. This is
+a publication identity repair with no numerical forecast or grade adjustment.
+Future NFL empty-currentR1
+`nfl_player_props_empty_current_2026_11_10_r1_successful_response` requires an
+exact successful complete current response, not optional errors or stored empty
+snapshots. It supplies withdrawal-only prior identity context and zero offered
+coverage, allowing existing source callbacks to suppress only new unlocked
+execution events without paid preparation. Current-fixtureR1
+`nfl_player_props_current_fixture_2026_11_10_r1_collected_schedule` binds missing
+current BDL fixture fields by one exact already fetched provider game ID. Native
+quote clocks/IDs/prices and all openings stay exact; collection-time schedule
+provenance is explicit. Existing event-sourceR3, identityR1 and missing-head
+semantics are preserved. Medical-contextR1 also compares only known equivalent
+ESPN and BDL native/roster/clinical medical encodings across authority clocks;
+raw source, distinct identities, substantive facts and unknown extras remain bound.
+Future NFL provider observationR16
+`nfl_player_props_provider_observation_2026_11_10_r16_complete_response`
+refuses current and opening envelopes that contradict the documented complete
+single-response endpoint contract. Explicit continuation, malformed completion
+metadata or a contradictory returned-count cannot silently establish coverage.
+Healthy full responses retain every offered actor without extra requests or
+invented pagination. R15 archived observations and all legacy locks stay exact.
+NBA collectorR7
+`nba_player_props_live_collector_2026_11_10_r7_complete_response` and shared
+response contractR1 `player_props_response_completeness_2026_11_10_r1_whole_response`
+apply the same documented whole-response boundary across NBA/NFL/MLB. Current
+and opening BDL props refuse contradictory continuation/raw returned counts;
+Owls whole-set responses validate the documented returned-game count, without
+inventing prop-count aggregation or paging. Invalid optional feed data cannot
+leak into observations or attest withdrawal. Explicit MLB current contract
+failures propagate instead of masquerading as a smaller complete slate; normal
+opening fallback keeps only the existing historical rows. Valid source rows,
+quote/receipt clocks and native MLB R44 mathematics remain unchanged. No
+additional provider request, AI phase, review slot or spending ceiling is added.
+NFL memberR60/lifecycleR42 stamp current-execution first-lock authority.
+ParticipationR3 `player_props_ai_participation_2026_11_10_r3_separate_lineup_and_medical`
+keeps lineup opportunity separate from medical availability: one channel cannot
+silently clear the other channel's active hold. Native
+MLB championR44, monetary budgetR5, gradeR3, scheduleR3, output7,000/input145,000,
+local8/global16 capacity, two slots and existing two phases stay unchanged.
+
+An actual accepted R29 output contained source-reading contradictions even when
+its citations and numerical laws passed. R31 compiles truthful actor-bound
+claims from the exact supplied facts and freezes factual text at admission.
+The AI selects claims and estimated effects/judgments, confidence and its joint
+law. Own-player availability, other-player absences, explicit same-unit pace
+comparisons and exact-event prior/paired-book direction cannot be substituted
+by unrestricted observation, assessment, gap or exception prose. Deliberate
+forecast abstention is a reviewer judgment, never a false missing-source claim.
+The compiler does not add independent evidence or prescribe a statistical
+adjustment. Original source packets remain archived. Model input retains the
+supplied logs, quotes and context, with explicitly labelled empirical summaries
+of MLB season sample arrays; those raw arrays remain in the archive. Compact
+model navigation avoids repeating large raw windows, priors and feed arrays; private full claim
+provenance remains bound to each accepted original actor and input.
+
+Actor admissionR2 preserves the original alias/fact/catalog universe and known
+receipt binding across the same two phases; old R1 receipts are not reparsed.
+New success/failure evidenceR3 labels wireR5 separately from coordinateR4.
+Existing accepted R15–R29 text, laws and public locks remain exact; no legacy
+observation is sanitized, rerendered or relabeled as verified R31 reasoning.
+The familiar reader consumes stored canonical text in its existing format.
+Only the exact trusted new NBA unit annotation is context-hash neutral; real
+benchmark/status changes or another convention still invalidate the old read.
+
+The R30 draft repairs below remain included. NBA movement uses exact two-way
+same-line/provider/side history and refuses alternate-line or conflicting-clock
+inference. NFL current-execution authority prevents newly locking withdrawn
+actor/scope/book events, with valid prelock returns recoverable and all existing
+locks first. Repeated capture handoffs bind the exact immutable row and proof,
+not the first matching event. Typed readings retain native dated-history cautions
+and valid effective lineup chronology, including explicit absence and conflicts.
+A private semantic availability proof invalidates new R31 readings when effective
+lineup/medical authority changes, while receipt-only refreshes and legacy accepted
+payloads retain their own semantics. Native fallback action qualification also
+uses current exact-player participation before a new lock. Explicit MLB source
+milestones retain inclusive events; unqualified archived legs remain raw evidence,
+never a synthesized ordinary pair. NBA current-collector identity is independent
+of orphan retained history: historical unresolved names cannot block complete
+identified current retail actors, while unresolved current retail offers and failed
+collection remain refused. Live NBA sourceR2 is
+`player_props_ai_nba_source_2026_11_10_r2_current_actor_authority`;
+legacy offline adapter sourceR1 remains historical. Verified current actors own
+new review scopes, labels and team identity; withdrawn actors, stale names and
+old scopes cannot donate current authority. A successful empty collection may
+observe withdrawal, but cannot initiate paid counts or generation. Native Out
+filtering uses exact fixture/team/name scope.
+R59 snapshot/reader compatibility remains tested. NFL settlementR8
+and per-row eventR1 now pin new decisionR13; old results require separate owner
+approval and are never repaired by a recurring release. TrackingR43 identities
+and ignore-duplicates behavior remain unchanged; compact event projection
+avoids fetching full AI payloads to settle a result.
+
+This establishes bounded supplied-fact presentation and process checks, not
+complete evidence selection, calibrated confidence, causal inference, future
+response reliability or accuracy improvement. Required clean independent
+rounds, full gates, protected latest-main PR, V70 installation and normal live
+review/member/lock proof must be separately completed. No extra paid proof,
+manual cron, replay, third review or larger-model routing is introduced.
+See `model-audits/2026-11-10-props-ai-three-reviewer-repairs.md`.
+
+## November 10 player-prop source and slate authority R30
+
+Future generation `player_props_ai_2026_11_10_r30_source_and_slate_authority`
+retains R29 accepted reviews and their original laws. SelectionR5
+`player_props_ai_selection_2026_11_10_r5_source_and_scope_authority`, gradeR3
+`player_props_ai_grade_2026_11_10_r3_source_participation` and NFL decisionR12
+`player_props_ai_nfl_decision_2026_11_10_r12_source_participation` identify the
+current source/action qualification. Sole NBA writerR17 is
+`nba_player_props_private_writer_2026_11_10_r17_source_and_lock_authority`;
+NFL writerR91 is `nfl_player_props_writer_2026_11_10_r91_source_participation`.
+NBA lifecycleR5 and lock-authorityR1 preserve truthful pre-lock AI-only scopes
+and locally completed finals when later reads cross the lock.
+
+Typed participationR2 `player_props_ai_participation_2026_11_10_r2_verified_nfl_actor_sources`
+independently qualifies exact own-player source facts, including exact-ID-bound NFL
+display aliases and current own-team roster injury status. Same-report omission
+cannot erase an explicit clearance.
+Explicit nonparticipation produces No Play while retaining the conditional law,
+individual review and truthful coverage. Actual later clearances restore the
+existing qualification paths; silence, teammates' injuries and unknown reports
+cannot become a health claim. The NBA writer reuses its already fetched complete
+exact-game injury reports with real completion clocks, rather than discarding
+them after native filtering. Native/provider report clocks remain distinct. Known Out actors remain in AI
+coverage but are excluded from the native readiness denominator. An all-Out
+source still reaches the ordinary AI review without a fabricated native head.
+Actual missing healthy native features retain their existing readiness guard.
+Future native NBA headers cannot supply priors or identities at an earlier
+cutoff; independently available quote-only NBA actors remain reviewable. MLB's
+future native identity mapping remains unavailable until its real header cutoff.
+Top-level assessments share the existing unsupported-certainty check.
+
+Market-reportR4 counts each normalized underlying book once when inferring an
+anchor; feed duplicates cannot create independent votes. Raw provider groups,
+prices, openings and source digests stay intact. A qualified current AI event
+can replace an unqualified native preselection in the same unlocked NBA scope;
+the old native event probability is not relabeled onto the new event. Existing
+public locks always retain exact precedence. New lock authority uses observed
+pre-lock source, current quotes, exact public evidence and actual numeric readiness;
+it cannot invent a late final, missing legacy metadata or withdrawn offer.
+
+V70 adds reconciliationR1/plan-v4 with a compatible old-v3 bridge and immutable
+consumed-slot accounting. A verified same-day clock change can update a pending
+final without rewriting the completed early or freezing unrelated funding.
+Revision-bound atomic calendar updates prevent stale concurrent plans or cache
+writes from replacing newer clocks. A targeted mismatch refresh is bounded to
+one free official daily scoreboard request per writer; it does not renew the
+full-month cache's original age. The reaper honors the exact active sport owner
+before lock; unknown-charge reserves remain held. Standard monetary budgetR5,
+prices, caps, quotas, two slots/two phases and paid provider limits stay exact.
+Preparation starts with the actual one-wave completion reserve; partition-stage
+discovery can shorten the common count deadline to preserve a second wave.
+Already running and queued counts share its abort boundary and drain before any
+claim. OperationsR4 `player_props_ai_operations_2026_11_10_r4_preparation_deadlines`
+retains exact safe deadline diagnostics without printing arbitrary error text.
+The HTTP adapter resamples lock/absolute-deadline eligibility after send
+acknowledgement and serialization. Only a request proven never dispatched can
+record zero usage; existing unknown charges remain held. Completion callbacks are awaited within the existing sport writer.
+Database installation and live permissions/source checks remain separate gates.
+
+No numerical law/calibration artifact, arbitrary grade cutoff, side quota,
+closed-job replay, historical locked correction or paid proof is introduced.
+Native MLB championR44, lawR1/wireR4, readerR14, memberR59/lifecycleR41 for NFL,
+trackingR43 remains, with additive future-only exact-event metadata. NFL
+settlementR8 is `nfl_player_props_settlement_2026_11_10_r8_exact_locked_event`;
+`nfl_props_locked_event_2026_11_10_r1_exact_contract` pins genuinely new R12
+AI decisions to their exact declared/implicit execution event and stored
+threshold. New R12 locks with missing/invalid metadata hold. A newly published
+R12 may retain an older accepted law; older locked decisions are not opted in.
+The settlement query reads only the compact event JSON and scalar identity,
+not the full AI coverage payload. DNP logic and old absent-metadata settlement
+remain exact; historical result corrections require a separate owner decision.
+MLB handoffR1 is
+`mlb_props_ai_handoff_2026_11_10_r1_ready_publication`; awaited same-writer
+callbacks durably publish actual pre-lock readiness through ordinary canonical
+validation and retention. Late writes cannot be backdated. MLB settlementR3 is
+`mlb_props_settlement_2026_11_10_r3_exact_locked_event`; new snapshot opt-in
+`mlb_props_locked_event_2026_11_10_r1_exact_contract` preserves the inclusive
+milestone event through internal tracking. Ordinary integer pushes and absent
+legacy metadata keep the old rule; invalid new event metadata holds. Existing
+tracking natural keys stay unchanged, so this does not create duplicate locks.
+Bounded named correction feedback now states the missing positive-weight joint
+pattern and exact canonical product-sign criterion without changing admission
+checks, scenarios, requests or the retry cushion. Paired active Over/Under promotions,
+nonparticipation demotions, original-header recovery, alternate-event recovery,
+real PostgreSQL concurrency/accounting and immutable writer/reader lock tests
+are required. Owner-directed independent reviews require two consecutive clean
+three-reviewer rounds after fixes, alongside full gates/protected fresh-main PR
+and ordinary source/receipt/coverage/member/lock proof. See
+`model-audits/2026-11-10-props-ai-three-reviewer-repairs.md`.
+
 ## November 10 player-prop identity, execution and scheduling R29
 
 Generation `player_props_ai_2026_11_10_r29_identity_and_execution_evidence`

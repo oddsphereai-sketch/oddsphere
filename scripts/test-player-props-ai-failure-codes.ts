@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {propsAiFailureCode} from '../lib/playerPropsAi/failureCode';
 assert.equal(propsAiFailureCode(new Error('input_count_http_429')),'input_count_http_429');
+for(const code of ['input_count_deadline_exhausted','input_count_completed_after_deadline','generation_window_closed_before_http'])assert.equal(propsAiFailureCode(new Error(code)),code);
 assert.equal(propsAiFailureCode(new Error('input_count_http_401')),'input_count_http_401');
 assert.equal(propsAiFailureCode(new Error('Conflicting NFL provider player identity')),'nfl_provider_identity_conflict');
 assert.equal(propsAiFailureCode(new Error('NFL offered-player identity coverage incomplete:3')),'nfl_offered_player_identity_incomplete');

@@ -1,8 +1,11 @@
+import {PROPS_AI_WIRE_RELEASE} from "../lib/playerPropsAi/scenarioCoordinates";
+import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 /* eslint-disable @typescript-eslint/no-explicit-any -- Synthetic Supabase/HTTP and malformed JSON boundary fixtures are validated by the actual runtime. */
 /** All data synthetic. Actual site runtime/parser/binding/reconciler; no HTTP, DB, or paid calls. */
 import assert from 'node:assert/strict';
 import type {NflPlayerPropsProductionSnapshot} from '../lib/services/football/nflPlayerPropsProductionContract';
 import type {NflPlayerPropsRuntimeDecision,NflPlayerPropsRuntimeBoard} from '../lib/services/football/nflPlayerPropsRuntime';
+import type {SiteAiDecision} from '../lib/playerPropsAi/publication';
 globalThis.fetch=async()=>{throw Error('NETWORK BLOCKED');};
 async function main(){
 const root=process.cwd();
@@ -14,7 +17,7 @@ const {criticalContextHashes}=await import(root+'/lib/playerPropsAi/criticalCont
 const {readerEvidence,READER_AREAS}=await import(root+'/lib/playerPropsAi/readerCoverage.ts');
 const {evidenceAliases}=await import(root+'/lib/playerPropsAi/input.ts');
 const {parseJointReview}=await import(root+'/lib/playerPropsAi/request.ts');
-const {encodeCanonicalScenarioLaw,GENERATIVE_WIRE_RELEASE}=await import(root+'/lib/playerPropsAi/generativeCoordinates.ts');
+const {encodeCanonicalScenarioLaw}=await import(root+'/lib/playerPropsAi/generativeCoordinates.ts');
 const {PRODUCT_RELEASE}=await import(root+'/lib/playerPropsAi/evidenceContract.ts');
 const {digest}=await import(root+'/lib/playerPropsAi/evidence.ts');
 const {independentPriorEvents}=await import(root+'/lib/playerPropsAi/priorEvents.ts');
@@ -87,7 +90,7 @@ function packet(at:string,final=false){const p={id,name:'Synthetic Player',team:
  return{release:PRODUCT_RELEASE,sport:'nfl',gameId:'game',sourceGameId:'game',start,lock,cutoff:at,stage:final?'final':'early',players:[p],quotes:q,executionQuotes:q,sourceLimitations:[]}as any;
 }
 function review(input:any,final=false){const p=input.players[0],facts=readerEvidence(input)[id],alias=[...evidenceAliases(input)][0][0],law={weights:[1,1,...Array(14).fill(0)],outcomes:{receiving_yards:final?[60,80,...v(60).slice(2)]:[40,60,...v(40).slice(2)],receptions:final?[20,30,...v(20).slice(2)]:[2,6,...v(2).slice(2)]}};
- const wire={wireRelease:GENERATIVE_WIRE_RELEASE,players:{[id]:{assessment:'The supplied sources support a conditional forecast.',priorRead:priorReads(input),coverage:Object.fromEntries(READER_AREAS.map((area:string)=>[area,{status:facts[area].status,factIds:facts[area].facts.slice(0,1).map((f:any)=>f.id),effect:'uncertain',observation:'The supplied context requires caution.'}])),evidenceIds:[alias],gaps:[],law:encodeCanonicalScenarioLaw('nfl',p,law),confidence:[2,2],exceptions:final?[null,'Reception range is not supported by the supplied production.']:[null,null]}}};
+ const wire={wireRelease:PROPS_AI_WIRE_RELEASE,players:{[id]:verifiedReaderFixture(input,id,{assessment:'The supplied sources support a conditional forecast.',priorRead:priorReads(input),coverage:Object.fromEntries(READER_AREAS.map((area:string)=>[area,{status:facts[area].status,factIds:facts[area].facts.slice(0,1).map((f:any)=>f.id),effect:'uncertain',observation:'The supplied context requires caution.'}])),evidenceIds:[alias],gaps:[],law:encodeCanonicalScenarioLaw('nfl',p,law),confidence:[2,2],exceptions:final?[null,'Reception range is not supported by the supplied production.']:[null,null]})}};
  const parsed=parseJointReview(input,wire);return{...parsed,gameId:'game',sourceGameId:'game',start,lock,cutoff:input.cutoff,stage:input.stage,issuedAt:input.cutoff,inputHash:digest(input),criticalContextHashes:criticalContextHashes(input),marketScopes:{[id]:p.markets},model:'gpt-6-luna',partProvenance:[],inputEvidence:{digest:digest(input)}}as any;
 }
 function native(input:any){return boardRows(input.quotes.map((q:any)=>({...decision,gameId:'game',providerPlayerId:'1',playerName:'Synthetic Player',team:'BUF',opponent:'MIN',scheduledStart:start,lockAt:lock,state:'unlocked',market:q.market,line:q.line,side:q.side,sportsbook:q.book,provider:q.provider,americanPrice:q.american,observedAt:q.observedAt,projection:q.market==='receiving_yards'?55:4,projectionRange:null,grade:'No Play',roleFingerprint:'current-role',bookEvidence:[],aiReview:undefined})));}
@@ -101,8 +104,8 @@ const earlyPacket=packet(earlyIssued),early=review(earlyPacket),currentPacket=pa
 const earlyCurrent=packet(earlyAt),earlyBoard=applyNflSiteAi(native(earlyCurrent),earlyCurrent,siteAiDecisions(earlyCurrent,early,earlyAt),earlyAt);
 const previous=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:earlyAt,nextBoard:earlyBoard});
 const publicLocked=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:lock,nextBoard:native(earlyCurrent),previous});
-function allDeclined(){const p=final.players[0],wire={wireRelease:GENERATIVE_WIRE_RELEASE,players:{[id]:{assessment:'The supplied sources do not qualify a numerical forecast.',priorRead:priorReads(currentPacket),coverage:Object.fromEntries(Object.entries(p.coverage).map(([area,value]:any)=>{const{facts,...raw}=value;void facts;return[area,raw];})),evidenceIds:['e0'],gaps:['Both scopes explicitly remain unqualified.'],law:null,confidence:[0,0],exceptions:['Reviewed scope is unqualified.','Reviewed scope is unqualified.']}}};return{...final,...parseJointReview(currentPacket,wire)};}
-type Scenario={name:string;initialError?:boolean;finalError?:boolean;afterInitialGet?:string;afterInitialLoad?:string;afterFinalGet?:string;failFreshLoadAfterLock?:boolean;sameEarly?:boolean;declineAll?:boolean;overlayAfterLock?:boolean;previousLocked?:boolean};
+function allDeclined(){const p=final.players[0],wire={wireRelease:PROPS_AI_WIRE_RELEASE,players:{[id]:verifiedReaderFixture(currentPacket,id,{assessment:'The supplied sources do not qualify a numerical forecast.',priorRead:priorReads(currentPacket),coverage:Object.fromEntries(Object.entries(p.coverage).map(([area,value]:any)=>{const{facts,...raw}=value;void facts;return[area,raw];})),evidenceIds:['e0'],gaps:['Both scopes explicitly remain unqualified.'],law:null,confidence:[0,0],exceptions:['Reviewed scope is unqualified.','Reviewed scope is unqualified.']})}};return{...final,...parseJointReview(currentPacket,wire)};}
+type Scenario={name:string;initialError?:boolean;finalError?:boolean;afterInitialGet?:string;afterInitialLoad?:string;afterFinalGet?:string;failFreshLoadAfterLock?:boolean;sameEarly?:boolean;declineAll?:boolean;overlayAfterLock?:boolean;previousLocked?:boolean;currentExecutionEmpty?:boolean};
 async function exercise(s:Scenario){
  let now=initialAt,reviewReads=0,loads=0,forbidden=0;const advance=(at:string)=>{if(Date.parse(at)>Date.parse(now))now=at;};const frames:any[]=[],sourceEvents:any[]=[],reviewEvents:any[]=[],loadedPackets:any[]=[],sourcePurposes:string[]=[];
  const chosen=s.declineAll?allDeclined():s.sameEarly?early:final;
@@ -114,7 +117,7 @@ async function exercise(s:Scenario){
   query.single=resolve;query.then=(yes:any,no:any)=>resolve().then(yes,no);return query;},rpc(){forbidden++;throw Error('No SQL/RPC allowed');}};
  const result=await reviewPropsForSite({client:client as never,sport:'nfl',games:[{id:'game',start,away:'BUF',home:'MIN'}],clock:()=>now,deadline:Date.now()+1000,fetchImpl:(async()=>{forbidden++;throw Error('No model/provider/count HTTP allowed');})as typeof fetch,
   load:async(_game,window,context)=>{sourcePurposes.push(context?.purpose??"missing");loads++;if(s.failFreshLoadAfterLock&&loads===2){advance(afterLock);throw Error('Synthetic source GET failed after lock');}if(Date.parse(window.cutoff)>=Date.parse(lock))throw Error('Synthetic current source refuses a postlock capture');
-   const p={...structuredClone(currentPacket),cutoff:window.cutoff};loadedPackets.push(p);if(loads===1&&s.afterInitialLoad)advance(s.afterInitialLoad);return p;},
+   const p={...structuredClone(currentPacket),cutoff:window.cutoff};if(s.currentExecutionEmpty&&loads===2)p.executionQuotes=[];loadedPackets.push(p);if(loads===1&&s.afterInitialLoad)advance(s.afterInitialLoad);return p;},
   onSourceReady:(p,r,observedAt,lookupAvailable)=>{sourceEvents.push({packet:p,review:r,observedAt,lookupAvailable});frames.push(testNflSourceAuthority(()=>now)(p,r,lookupAvailable));frames.push(testNflHandoffCapture(()=>now)(base.decisions,p,r,'native'));},
   onReviewObserved:(p,r,lookupAvailable)=>{reviewEvents.push({packet:p,review:r,observedAt:now,lookupAvailable});frames.push(testNflSourceAuthority(()=>now)(p,r,lookupAvailable));}
  });
@@ -164,8 +167,68 @@ const sourceFailure=await exercise({name:'fresh source GET fails after lock',fai
 assert.equal(sourceFailure.result.games.length,1);assert.strictEqual(sourceFailure.result.games[0].packet,sourceFailure.sourceEvents[0].packet);assert.equal(sourceFailure.result.games[0].packet.cutoff,initialAt);assert(sourceFailure.result.findings.some(s=>s.startsWith('current_source_unavailable:')));
 assert(!sourceFailure.bundle.authorities.some(a=>a.review?.inputHash===final.inputHash&&Date.parse(a.observedAt)<Date.parse(lock)),'No reconstruction may claim a prelock observation which never occurred');
 assert(sourceFailure.snapshot.memberDecisions.filter(r=>r.aiReview).every(r=>r.aiReview!.lawHash===early.players[0].law!.hash),'A failed current source load after lock cannot backdate final B');
+const currentEmpty=await exercise({name:'actual site source withdraws all current execution',sameEarly:true,currentExecutionEmpty:true});
+assert.equal(currentEmpty.result.games[0].decisions.length,0);assert.equal(currentEmpty.snapshot.memberDecisions.length,0,'Actual runtime explicit empty execution cannot first-lock the earlier AI or native capture');
 const protectedResult=await exercise({name:'existing public locks first',previousLocked:true});assert.deepEqual(protectedResult.snapshot.board.decisions,publicLocked.board.decisions);assert.deepEqual(protectedResult.snapshot.memberDecisions,publicLocked.memberDecisions);
 {
+// A complete current collector observation owns future execution availability,
+// independently of whether its accepted final is newer than the prior board.
+const ready:NflPlayerPropsRuntimeBoard=applyNflSiteAi(base,currentPacket,siteAiDecisions(currentPacket,final,finalAt),finalAt);
+const priorReady:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:finalAt,nextBoard:ready});
+const lockedReady:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:lock,nextBoard:ready,previous:priorReady});
+const changedAt='2026-11-09T21:59:59Z';
+const removed={...structuredClone(currentPacket),cutoff:changedAt,players:currentPacket.players.map((p:any)=>({...p,markets:['receptions']})),quotes:currentPacket.quotes.filter((q:any)=>q.market==='receptions'),executionQuotes:currentPacket.executionQuotes.filter((q:any)=>q.market==='receptions')};
+function framesFor(source:any,rows:NflPlayerPropsRuntimeBoard,at=changedAt,lookup=true){return mergeNflHandoffs([
+ testNflSourceAuthority(()=>at)(source,final,lookup),testNflHandoffCapture(()=>at)(rows.decisions,source,final,'native'),testNflHandoffCapture(()=>at)(rows.decisions,source,final,'ai')]);}
+function reconcileCurrent(source:any,rows:NflPlayerPropsRuntimeBoard,at=afterLock,lookup=true):NflPlayerPropsProductionSnapshot{return reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:at,nextBoard:rows,previous:priorReady,lockHandoff:framesFor(source,rows,source.cutoff,lookup)});}
+const nextNative=native(removed),removedBoard:NflPlayerPropsRuntimeBoard=applyNflSiteAi(nextNative,removed,siteAiDecisions(removed,final,changedAt),changedAt);
+assert(!removedBoard.decisions.some(r=>r.market==='receiving_yards'));
+const removedFirstLock=reconcileCurrent(removed,removedBoard);
+assert(!removedFirstLock.memberDecisions.some(r=>r.market==='receiving_yards'),'An unchanged final cannot resurrect a withdrawn scope at its first lock');
+assert(!reconcileCurrent(removed,removedBoard,changedAt).memberDecisions.some(r=>r.market==='receiving_yards'),'Prelock missing-scope retention cannot restore an explicitly withdrawn event');
+const explicitEmpty={...structuredClone(currentPacket),cutoff:changedAt,executionQuotes:[]};
+assert.equal(reconcileCurrent(explicitEmpty,ready).memberDecisions.length,0,'Explicit empty current execution removes old AI and native first-lock candidates');
+const staleReadyFrames=mergeNflHandoffs([framesFor(currentPacket,ready,finalAt),framesFor(explicitEmpty,ready)]);
+assert.equal(reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:ready,previous:priorReady,lockHandoff:staleReadyFrames}).memberDecisions.length,0,'A real earlier numeric capture cannot defeat a later prelock withdrawal');
+assert.equal(reconcileCurrent(explicitEmpty,ready,afterLock,false).memberDecisions.length,0,'Review GET failure does not erase a successful explicit current execution observation');
+// An absent actor is also covered by the complete game collector observation.
+const otherActor={...structuredClone(currentPacket),cutoff:changedAt,players:currentPacket.players.map((p:any)=>({...p,id:'nfl-bdl-player:2',name:'Another Player'})),quotes:[],executionQuotes:[]};
+assert.equal(reconcileCurrent(otherActor,ready).memberDecisions.length,0,'Whole actor withdrawal cannot fall through the missing actor authority');
+// Losing one book cannot erase a still-current independently priced contract.
+const oneBook={...structuredClone(currentPacket),cutoff:changedAt,quotes:currentPacket.quotes.filter((q:any)=>q.book!=='one'||q.market!=='receiving_yards'),executionQuotes:currentPacket.executionQuotes.filter((q:any)=>q.book!=='one'||q.market!=='receiving_yards')};
+const oneBookResult=reconcileCurrent(oneBook,ready);
+assert(!oneBookResult.memberDecisions.some(r=>r.market==='receiving_yards'&&r.sportsbook==='one'));
+assert(oneBookResult.memberDecisions.some(r=>r.market==='receiving_yards'&&r.sportsbook==='two'&&r.grade==='Best Angle'));
+const repriced={...structuredClone(currentPacket),cutoff:changedAt,quotes:currentPacket.quotes.map((q:any)=>({...q,american:q.market==='receptions'?q.side==='over'?160:-180:q.american})),executionQuotes:currentPacket.executionQuotes.map((q:any)=>({...q,american:q.market==='receptions'?q.side==='over'?160:-180:q.american}))};
+const repricedNative=native(repriced);
+const oldNativeFrame=testNflHandoffCapture(()=>finalAt)(base.decisions,currentPacket,final,'native');
+const newPriceAuthority=testNflSourceAuthority(()=>changedAt)(repriced,final,true);
+const staleNative:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:repricedNative,previous,lockHandoff:mergeNflHandoffs([oldNativeFrame,newPriceAuthority])});
+assert(!staleNative.memberDecisions.some(r=>r.market==='receptions'),'A declined AI scope cannot restore a formerly ready native price withdrawn by the later exact contract observation');
+const freshNative:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:repricedNative,previous,lockHandoff:framesFor(repriced,repricedNative)});
+assert.equal(freshNative.memberDecisions.filter(r=>r.market==='receptions'&&!r.aiReview).length,2,'A genuinely ready current native fallback recovers its exact repriced contract');
+
+// A current return recovers the very same frozen law and normal promotion path.
+const returned={...structuredClone(currentPacket),cutoff:'2026-11-09T21:59:59.500Z'};
+const returnedFrames=mergeNflHandoffs([framesFor(explicitEmpty,ready),framesFor(returned,ready,returned.cutoff)]);
+const recovered:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:ready,previous:priorReady,lockHandoff:returnedFrames});
+assert.equal(recovered.memberDecisions.filter(r=>r.aiReview&&r.grade==='Best Angle').length,2);
+assert(recovered.memberDecisions.filter(r=>r.aiReview).every(r=>r.aiReview!.lawHash===final.players[0].law!.hash),'Return cannot replace or reinterpret the accepted law');
+assert(reconcileCurrent(returned,ready).memberDecisions.some(r=>r.aiReview),'An unchanged current final remains eligible');
+// No actual current execution capture is different from an explicit empty set.
+const unavailable={...structuredClone(currentPacket),cutoff:changedAt};delete unavailable.executionQuotes;
+assert(reconcileCurrent(unavailable,ready).memberDecisions.some(r=>r.aiReview),'Missing execution metadata must not fabricate a withdrawal');
+const afterOnly:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:ready,previous:priorReady,lockHandoff:framesFor(explicitEmpty,ready,afterLock)});
+assert(afterOnly.memberDecisions.some(r=>r.aiReview),'A postlock withdrawal cannot be backdated');
+for(const source of [removed,explicitEmpty,otherActor,oneBook]){
+ const preserved=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:ready,previous:lockedReady,lockHandoff:framesFor(source,ready)});
+ assert.deepEqual(preserved.memberDecisions,lockedReady.memberDecisions,'Every already public member lock retains its exact payload');
+ assert.deepEqual(preserved.board.decisions,lockedReady.board.decisions,'Every already public board lock retains its exact payload');
+}
+assert.equal(priorReady.memberDecisions.filter(r=>r.aiReview&&r.grade==='Best Angle').length,2);
+console.log('NFL current-execution first-lock guard passed: same-final scoped/book/actor withdrawal, explicit empty versus absent metadata, independent review GET failure, prelock suppression and same-law return promotion, postlock refusal and exact stored locks. Synthetic source/parser/binding/reconciler only.');
+}
+for(const crossDuringLookup of [true,false]){
 Object.assign(process.env,{NODE_ENV:'test'});
 Object.assign(process.env,{PLAYER_PROPS_AI_SITE_ENABLED:'true',PLAYER_PROPS_AI_PAID_RUNS_ENABLED:'true',PLAYER_PROPS_AI_OPENAI_API_KEY:'synthetic-never-real'});
 
@@ -183,9 +246,9 @@ const initialPacket=packet(paidSourceAt,true),nativeBefore=native(initialPacket)
 const job={job_key:'synthetic-final',sport:'nfl',game_id:funded,game_day:'2026-11-09',stage:'final',scheduled_start:start,lock_at:lock,due_at:'2026-11-09T21:35:00Z',billing_month:'2026-11',state:'pending'};
 const calendar={release:PROPS_AI_CALENDAR_RELEASE,month:'2026-11',capturedAt:paidSourceAt,games:[{sport:'nfl',id:funded,start,lock,home:'MIN',away:'BUF',confirmed:true}],sources:Object.fromEntries(['nba','nfl','mlb'].map(s=>[s,{complete:true,source:'synthetic complete calendar'}]))};
 const client:any={from:(table:string)=>{
- let selection='';const query:any={select:(s:string)=>{selection=s;return query;},eq:()=>query,gte:()=>query,in:()=>query,lte:()=>query,gt:()=>query,order:()=>query,single:async()=>({data:{release:'player_props_ai_control_2026_11_07_r1_explicit_off',paid_enabled:true},error:null}),maybeSingle:async()=>({data:{release:PROPS_AI_CALENDAR_RELEASE,captured_at:paidSourceAt,payload:calendar},error:null}),limit:async()=>{assert.equal(table,'player_props_ai_reviews');reviewGets++;if(reviewGets===1)return{data:[{result:early}],error:null};assert(finished,'Reviewer returned locally before final GET');completedObservedLocallyAt=tick;tick='2026-11-09T22:00:00.100Z';return{data:[{result:finished},{result:early}],error:null};},then:(resolve:any)=>{assert.equal(selection,'*');return Promise.resolve({data:[job],error:null}).then(resolve);}};return query;
+ let selection='';const query:any={select:(s:string)=>{selection=s;return query;},eq:()=>query,gte:()=>query,in:()=>query,lte:()=>query,gt:()=>query,order:()=>query,single:async()=>({data:{release:'player_props_ai_control_2026_11_07_r1_explicit_off',paid_enabled:true},error:null}),maybeSingle:async()=>({data:{release:PROPS_AI_CALENDAR_RELEASE,captured_at:paidSourceAt,payload:calendar},error:null}),limit:async()=>{assert.equal(table,'player_props_ai_reviews');reviewGets++;if(reviewGets===1)return{data:[{result:early}],error:null};assert(finished,'Reviewer returned locally before final GET');completedObservedLocallyAt=tick;tick=crossDuringLookup?'2026-11-09T22:00:00.100Z':'2026-11-09T21:59:59.950Z';return{data:[{result:finished},{result:early}],error:null};},then:(resolve:any)=>{assert.equal(selection,'*');return Promise.resolve({data:[job],error:null}).then(resolve);}};return query;
 },rpc:async(name:string,args:any)=>{
- if(name==='player_props_ai_plan_v3')return{data:{funded:true,budget:{}},error:null};
+ if(name==='player_props_ai_plan_v4')return{data:{funded:true,budget:{}},error:null};
  if(name==='player_props_ai_reap')return{data:0,error:null};
  if(name==='player_props_ai_claim'){claimHash=args.p_hash;return{data:{claimed:true,token:'00000000-0000-0000-0000-000000000001',job:{...job,state:'running',parts:1,phase:1,model:'gpt-6-luna',requested_tier:'default',claim_token:'00000000-0000-0000-0000-000000000001'}},error:null};}
  if(name==='player_props_ai_send')return{data:{id:'00000000-0000-0000-0000-000000000002',model:'gpt-6-luna',requested_tier:'default',reserved_micro:100000},error:null};
@@ -198,7 +261,7 @@ const fetchImpl=async(url:any)=>{
  assert.equal(String(url),'https://api.openai.com/v1/responses');generationCalls++;
  const p=initialPacket.players[0],aliases=evidenceAliases(initialPacket),lookup=(raw:string)=>[...aliases].find(([,x])=>x===raw)![0];
  const rp=final.players[0],law={weights:rp.law.weights.map((w:number)=>w*2),outcomes:rp.law.outcomes};
- const wire={wireRelease:GENERATIVE_WIRE_RELEASE,players:{[id]:{assessment:rp.assessment,priorRead:Object.fromEntries(Object.entries(rp.priorRead).map(([key,value])=>[lookup(key),value])),coverage:Object.fromEntries(Object.entries(rp.coverage).map(([area,value]:any)=>{const{facts,...rest}=value;void facts;return[area,rest];})),evidenceIds:rp.evidenceIds.map(lookup),gaps:rp.gaps,law:encodeCanonicalScenarioLaw('nfl',p,law),confidence:rp.confidence,exceptions:rp.exceptions}}};
+ const wire={wireRelease:PROPS_AI_WIRE_RELEASE,players:{[id]:verifiedReaderFixture(initialPacket,id,{assessment:rp.assessment,priorRead:Object.fromEntries(Object.entries(rp.priorRead).map(([key,value])=>[lookup(key),value])),coverage:Object.fromEntries(Object.entries(rp.coverage).map(([area,value]:any)=>{const{facts,...rest}=value;void facts;return[area,rest];})),evidenceIds:rp.evidenceIds.map(lookup),gaps:rp.gaps,law:encodeCanonicalScenarioLaw('nfl',p,law),confidence:rp.confidence,exceptions:rp.exceptions})}};
  tick=finalAt;return Response.json({id:'synthetic-response',model:'gpt-6-luna',status:'completed',service_tier:'default',usage:{input_tokens:1000,output_tokens:100},output:[{content:[{type:'output_text',text:JSON.stringify(wire)}]}]});
 };
 localCandidate=nativeBefore;
@@ -214,15 +277,93 @@ assert.equal(generationCalls,1,'Exactly the one scheduled model generation is mo
 assert(finished&&Date.parse(finished.issuedAt)<Date.parse(lock));assert.equal(completedObservedLocallyAt,finalAt);assert.deepEqual(readyAt,[finalAt]);
 assert(observed.some(e=>e.input===finished.inputHash&&e.at===finalAt),'Local completion authority is observed before the accepted-review GET');
 assert.deepEqual(paidSourceContexts.map(c=>c.purpose),['lock_authority','scheduled_review','member_publication']);assert.equal(paidSourceContexts[1].job.job_key,job.job_key,'Only the actual due slot carries its funded job identity');
-assert.equal(outcome.games.length,1);assert(outcome.findings.some(f=>f.startsWith('current_source_unavailable:')));
-assert.equal(outcome.games[0].packet.cutoff,paidSourceAt,'Fallback preserves the exact generated source cutoff');
+assert.equal(outcome.games.length,1);
+if(crossDuringLookup){assert(outcome.findings.some(f=>f.startsWith('current_source_unavailable:')));assert.equal(outcome.games[0].packet.cutoff,paidSourceAt,'Fallback preserves the exact generated source cutoff');}
+else{assert(!outcome.findings.some(f=>f.startsWith('current_source_unavailable:')));assert(outcome.games[0].decisions.length>0,'The normal returned game is priceable before its second application');}
 for(const game of outcome.games){if(Date.parse(tick)>=Date.parse(game.packet.lock))continue;localCandidate=restoreNflNativeGame(localCandidate!,nativeBefore,game.packet,tick);localCandidate=applyNflSiteAi(localCandidate,game.packet,game.decisions,tick);frames.push(testNflHandoffCapture(()=>tick)(localCandidate!.decisions,game.packet,game.authorityReview,'ai'));}
+// Normal writer publication can cross T-60 only after the returned game's
+// second genuine application/capture, with both proof versions accumulated.
+if(!crossDuringLookup)tick='2026-11-09T22:00:00.100Z';
 const result:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:tick,nextBoard:localCandidate!,previous,lockHandoff:mergeNflHandoffs(frames)});
 assert(result.memberDecisions.some(r=>r.market==='receiving_yards'&&r.aiReview?.lawHash===finished.players[0].law.hash&&r.grade==='Best Angle'),'Real mocked scheduled completion B must publish from its actual prelock readiness');
 assert(result.memberDecisions.filter(r=>r.market==='receptions').every(r=>!r.aiReview),'Prelock final decline authority uses native baseline after the later GET crosses lock');
 assert(result.memberDecisions.filter(r=>r.aiReview).every(r=>r.aiReview!.lawHash===finished.players[0].law.hash),'Postlock GET/fallback must not resurrect early law A or undo preprepared B');
-console.log('Mocked paid-path siteRuntime passed: one count/one generation, local B authority and ready callback prelock, accepted-review GET/source fallback postlock, B qualification/native decline preserved without replay.');
+if(!crossDuringLookup){
+ const aiFrames=frames.filter(f=>f.candidateProofs.length);assert.equal(aiFrames.length,2,'Both normal writer AI capture points are exercised');
+ assert(result.memberDecisions.filter(r=>r.aiReview).every(r=>r.aiReview!.executionEvidence!.pricedAt==='2026-11-09T21:59:59.950Z'),'The later exact captured row survives first lock');
+ const reversed=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:tick,nextBoard:localCandidate!,previous,lockHandoff:mergeNflHandoffs([...frames].reverse())});
+ assert.deepEqual(reversed.memberDecisions,result.memberDecisions,'Normal callback/second-application proof order does not change the locked members');
 }
+console.log(`Mocked paid-path siteRuntime passed: one count/one generation, local B ready callback and ${crossDuringLookup?'postlock GET/source fallback':'second prelock returned-game overlay followed by publication crossing lock'}, qualified B/native decline and exact locks preserved.`);
+}
+// A source participation hold qualifies the accepted conditional law; it is
+// not a replacement exception inside that immutable accepted review. Cross the
+// actual parser/adapter/trusted proof/first-lock boundary, including a head for
+// which the native model has no fallback row.
+function participationInput(mode:'healthy'|'out'|'cleared'|'unknown'|'teammate'|'opponent'|'wrong_fixture'){
+ const input=packet(earlyAt),status=(value:string,reportedAt:string,who='Synthetic Player',team='BUF')=>({id:`status:${value}:${reportedAt}:${who}:${team}`,kind:'availability',source:'synthetic exact-game report',availableAt:earlyAt,value:{canonicalGameId:mode==='wrong_fixture'?'foreign-game':'game',scheduledStart:start,context:{away:{team:'BUF',known:true,players:team==='BUF'?[{name:who,status:value,reportedAt}]:[]},home:{team:'MIN',known:true,players:team==='MIN'?[{name:who,status:value,reportedAt}]:[]}}}});
+ if(mode==='out'||mode==='cleared'||mode==='wrong_fixture')input.players[0].evidence.push(status('Out',earlyIssued));
+ if(mode==='cleared')input.players[0].evidence.push(status('Available',earlyAt));
+ if(mode==='unknown')input.players[0].evidence.push(status('Questionable',earlyAt));
+ if(mode==='teammate')input.players[0].evidence.push(status('Out',earlyAt,'Different Player'));
+ if(mode==='opponent')input.players[0].evidence.push(status('Out',earlyAt,'Synthetic Player','MIN'));
+ return input;
+}
+function participationHandoff(mode:Parameters<typeof participationInput>[0]){
+ const input=participationInput(mode),accepted=review(input),sourceBytes=digest(input),reviewBytes=digest(accepted),baseline=native(input);
+ baseline.decisions=baseline.decisions.filter((r:any)=>r.market==='receptions');
+ const choices:SiteAiDecision[]=siteAiDecisions(input,accepted,publishBefore);
+ const applied:NflPlayerPropsRuntimeBoard=applyNflSiteAi(baseline,input,choices,publishBefore),capture=testNflHandoffCapture(()=>publishBefore);
+ const authority=testNflSourceAuthority(()=>publishBefore)(input,accepted,true),ai=capture(applied.decisions,input,accepted,'ai'),nativeFrame=capture(baseline.decisions,input,accepted,'native');
+ assert.equal(ai.candidateProofs.length,4,mode);assert.equal(applied.decisions.length,4,mode);
+ const bundle=mergeNflHandoffs([authority,nativeFrame,ai,capture(applied.decisions,input,accepted,'ai')]);
+ const locked:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:applied,previous:null,lockHandoff:bundle});
+ assert.equal(locked.memberDecisions.length,4,mode);assert(locked.memberDecisions.every(r=>r.aiReview?.lawHash===accepted.players[0].law.hash),mode);
+ assert(locked.memberDecisions.some(r=>r.market==='receiving_yards'&&r.aiReview),'The offered AI-only head retains its actual admitted conditional law');
+ if(mode==='out')assert(locked.memberDecisions.every(r=>r.grade==='No Play'&&r.aiReview?.sourceEligibility?.blocked&&r.aiReview.exception==='Source participation unavailable: explicit_out'));
+ else {assert.equal(locked.memberDecisions.filter(r=>r.grade==='Best Angle').length,2,mode);assert.equal(locked.memberDecisions.filter(r=>r.grade==='Watchlist').length,2,mode);}
+ assert.deepEqual(accepted.players[0].exceptions,[null,null]);assert.equal(digest(accepted),reviewBytes);assert.equal(digest(input),sourceBytes);
+ const retained=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:native(participationInput(mode==='out'?'cleared':'out')),previous:locked,lockHandoff:bundle});
+ assert.deepEqual(retained.memberDecisions,locked.memberDecisions,'Existing public locks precede all new qualification checks');
+ assert.deepEqual(retained.board.decisions,locked.board.decisions);
+ return{input,accepted,applied,capture,locked};
+}
+const ownOut=participationHandoff('out');
+for(const mode of ['healthy','cleared','unknown','teammate','opponent','wrong_fixture'] as const)participationHandoff(mode);
+const forgeries:{name:string;change:(row:any)=>void}[]=[
+ {name:'grade',change:r=>{r.grade='Best Angle';}},
+ {name:'missing guarded exception',change:r=>{r.aiReview.exception=null;}},
+ {name:'arbitrary exception',change:r=>{r.aiReview.exception='Arbitrary source hold';}},
+ {name:'missing source eligibility',change:r=>{delete r.aiReview.sourceEligibility;}},
+ {name:'forged source eligibility',change:r=>{r.aiReview.sourceEligibility.blocked=false;}},
+ {name:'forged source reason',change:r=>{r.aiReview.sourceEligibility.reason='different_reason';}},
+ {name:'forged law',change:r=>{r.aiReview.lawHash='foreign';}},
+ {name:'forged probability',change:r=>{r.finalProbability=.01;}},
+ {name:'forged EV',change:r=>{r.expectedValue=999;}},
+ {name:'forged provider actor',change:r=>{r.providerPlayerId='999';}},
+ {name:'forged model release',change:r=>{r.modelRelease='foreign';}},
+ {name:'forged quote',change:r=>{r.aiReview.executionEvidence.selectedQuote.american=900;}},
+ {name:'forged pricing group',change:r=>{r.aiReview.executionEvidence.pricingQuotes=[];}},
+ {name:'late pricing provenance',change:r=>{r.aiReview.executionEvidence.pricedAt=lock;}},
+];
+for(const f of forgeries){const rows=structuredClone(ownOut.applied.decisions);for(const row of rows)f.change(row);assert.equal(ownOut.capture(rows,ownOut.input,ownOut.accepted,'ai').candidateProofs.length,0,f.name);}
+assert.equal(testNflHandoffCapture(()=>afterLock)(ownOut.applied.decisions,ownOut.input,ownOut.accepted,'ai').candidateProofs.length,0,'Late-only readiness cannot prove a prelock No Play');
+// A genuine current own block is the only supported participation overlay.
+// Unknown/teammate/opponent reports cannot authorize a copied own-Out proof.
+for(const mode of ['unknown','teammate','opponent'] as const){
+ const input=participationInput(mode),accepted=review(input),baseline=native(input),applied=applyNflSiteAi(baseline,input,siteAiDecisions(input,accepted,publishBefore),publishBefore);
+ const rows=structuredClone(applied.decisions);for(const row of rows){row.grade='No Play';row.aiReview!.exception=ownOut.applied.decisions[0].aiReview!.exception;row.aiReview!.sourceEligibility=ownOut.applied.decisions[0].aiReview!.sourceEligibility;}
+ assert.equal(ownOut.capture(rows,input,accepted,'ai').candidateProofs.length,0,mode+' cannot authorize an own-Out exception');
+}
+// Approved non-null source exceptions remain declined even with a real Out;
+// its source hold cannot waive the independent semantic exception.
+const declineInput=packet(finalAt,true);declineInput.players[0].evidence.push(...participationInput('out').players[0].evidence.filter((e:any)=>e.kind==='availability'));
+const declinedReview=review(declineInput,true),declinedBytes=digest(declinedReview);
+const declinedChoices:SiteAiDecision[]=siteAiDecisions(declineInput,declinedReview,publishBefore);
+assert.deepEqual(declinedReview.players[0].sourceDeclinedMarkets,['receptions']);assert(declinedReview.players[0].exceptions[1]);assert(declinedChoices.every(c=>c.market!=='receptions'));
+const declinedApplied:NflPlayerPropsRuntimeBoard=applyNflSiteAi(native(declineInput),declineInput,declinedChoices,publishBefore),declinedCapture=testNflHandoffCapture(()=>publishBefore)(declinedApplied.decisions,declineInput,declinedReview,'ai');
+assert.equal(declinedCapture.candidateProofs.length,4);assert(declinedApplied.decisions.filter(r=>r.market==='receptions').every(r=>!r.aiReview));assert.equal(digest(declinedReview),declinedBytes);
+console.log('NFL own-participation AI proof passed: actual parser/binding/trusted capture/first lock retains all four AI law rows including AI-only scope; own Out No Play, paired clearance/healthy promotions, repeated capture, exact old locks, approved semantic decline and forged grade/exception/source/probability/price/provenance/actor/late refusal. No IO.');
 console.log('Actual siteRuntime lock-authority controls passed: pre/post GET/source boundaries, source-before-overlay readiness, zero-price all-declined authority, lookup failures, unchanged early retention, exact cached cutoff and immutable public locks. Supabase and every network/model/count path mocked.');
 }
 void main().catch(error=>{console.error(error);process.exitCode=1});

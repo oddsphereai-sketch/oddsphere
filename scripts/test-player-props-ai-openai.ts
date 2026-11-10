@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {generateAiReview,structuredAiText,AiGenerationError,unbilledFlexCapacity,type AiRequest} from "../lib/playerPropsAi/openai";
+import {generateAiReview,structuredAiText,AiGenerationError,AiRequestNotStartedError,unbilledFlexCapacity,type AiRequest} from "../lib/playerPropsAi/openai";
 const body:AiRequest={model:"gpt-6-luna",instructions:"Synthetic parser test",input:"{}",text:{},max_output_tokens:100,store:false};
 const complete={id:"synthetic",model:"gpt-6-luna",status:"completed",usage:{input_tokens:10,output_tokens:5},output:[{content:[{type:"output_text",text:'{"ok":true}'}]}]};
 async function main(){
@@ -34,6 +34,24 @@ async function main(){
   assert.throws(()=>structuredAiText({...complete,output:[{content:[{type:"refusal"}]}]}),/refused/);
   const ended=async()=>new Response('data: {"type":"response.created","response":{"id":"unknown"}}\n\n',{headers:{"content-type":"text/event-stream"}});
   await assert.rejects(()=>generateAiReview(body,{key:"synthetic-key",timeoutMs:10000,fetchImpl:ended as typeof fetch}),/without_usage/);
+  let remaining=120000,httpCalls=0,configuredTimeout=0;
+  const originalTimeout=AbortSignal.timeout;
+  const countedFetch:typeof fetch=async()=>{httpCalls++;return Response.json(complete);};
+  try{
+    AbortSignal.timeout=ms=>{configuredTimeout=ms;return new AbortController().signal;};
+    const delayedSerialization={...body,text:{toJSON(){remaining=0;return {};}}};
+    await assert.rejects(()=>generateAiReview(delayedSerialization,{key:"synthetic",timeoutMs:120000,minimumTimeoutMs:90000,remainingWindowMs:()=>remaining,fetchImpl:countedFetch}),AiRequestNotStartedError);
+    assert.equal(httpCalls,0,"Serialization may close the window without starting HTTP");assert.equal(configuredTimeout,0);
+    remaining=89999;
+    await assert.rejects(()=>generateAiReview(body,{key:"synthetic",timeoutMs:120000,minimumTimeoutMs:90000,remainingWindowMs:()=>remaining,fetchImpl:countedFetch}),AiRequestNotStartedError);
+    assert.equal(httpCalls,0,"An already closed minimum completion window cannot start HTTP");
+    remaining=90000;
+    await generateAiReview(body,{key:"synthetic",timeoutMs:120000,minimumTimeoutMs:90000,remainingWindowMs:()=>remaining,fetchImpl:countedFetch});
+    assert.equal(httpCalls,1);assert.equal(configuredTimeout,90000,"A still-open window uses the actual remaining timeout");
+    const unknown=new Error("synthetic_post_start_transport_failure");
+    await assert.rejects(()=>generateAiReview(body,{key:"synthetic",timeoutMs:120000,minimumTimeoutMs:90000,remainingWindowMs:()=>remaining,fetchImpl:async()=>{httpCalls++;throw unknown;}}),error=>error===unknown&&!(error instanceof AiRequestNotStartedError));
+    assert.equal(httpCalls,2,"A thrown fetch is an unknown charge, never a not-started request");
+  }finally{AbortSignal.timeout=originalTimeout;}
   console.log("AI client stream checks passed: split network frames, exact usage receipts, privacy-safe progress, refusal/incomplete and unknown-completion handling. No real API calls.");
 }
 void main();

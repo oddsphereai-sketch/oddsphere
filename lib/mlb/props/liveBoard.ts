@@ -1,8 +1,9 @@
 import {createClient as createPropsAiDbClient} from "@supabase/supabase-js";
 import {reviewPropsForSite} from "../../playerPropsAi/siteRuntime";
 import {liveMlbPacket} from "../../playerPropsAi/liveSources";
-import {applyMlbSiteAi} from "../../playerPropsAi/siteBindings";
 import {propsAiSiteConfig} from "../../playerPropsAi/siteConfig";
+import {createMlbPrelockHandoff,MLB_PROPS_AI_HANDOFF_RELEASE} from "../../playerPropsAi/mlbPrelockHandoff";
+import {MLB_PROPS_LOCKED_EVENT_RELEASE} from "./settlement";
 import { createHash, randomUUID } from "node:crypto";
 import type {
   PlayerPropPreviewRow,
@@ -108,6 +109,7 @@ import {
 } from "./batterHomeRunsResidualModel";
 import { shouldReplaceBestPriceRow } from "./bestPriceSelection";
 import {
+  ensureMlbPropsGameLocks,
   syncInternalMlbPropsTracking,
   type MlbPropsTrackingSyncResult,
 } from "./internalTracking";
@@ -529,6 +531,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     marketEvidence: marketEvidence.capture,
     modelContext: {
       modelReleaseId: MLB_PROPS_MODEL_RELEASE_ID,
+      trackingEventRelease: MLB_PROPS_LOCKED_EVENT_RELEASE,
       probablePitcherSeasonStats: [...seasonStats.entries()],
       openingPropOdds: snapshotOpeningOdds,
       marketModelVersions: activeMlbPropMarketModelVersions(),
@@ -542,13 +545,51 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
       })) ?? [],
     },
   };
+  // All provider work is complete before any prospective ready publication.
+  // Apply the same existing provider ceiling before the first durable write.
+  const providerCalls = {
+    balldontlieOdds: oddsClient.getClient().getRequestCount(),
+    balldontlieResearch: researchClient.getClient().getRequestCount(),
+    balldontlieLineups: lineupResult.balldontlieCalls,
+  };
+  const balldontlieCalls = providerCalls.balldontlieOdds + providerCalls.balldontlieResearch + providerCalls.balldontlieLineups;
+  const maxBdlCalls = envPositiveInteger("ODDSPHERE_PROPS_MAX_BDL_CALLS_PER_REFRESH", DEFAULT_MAX_BDL_CALLS_PER_REFRESH);
+  if (balldontlieCalls > maxBdlCalls) {
+    throw new Error(`MLB props BDL request budget exceeded: ${balldontlieCalls}/${maxBdlCalls}.`);
+  }
   if(args.persist!==false&&propsAiSiteConfig().integrated){
     const client=createPropsAiDbClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
     const captured={...snapshot,data:buildDashboardData({slateDate:args.slateDate,asOfTimestamp,games,probablePitchers,props:expandedDecisionProps,sourceOdds:boardSourceOdds,environmentErrors:environment.errors})};
-    const ai=await reviewPropsForSite({client,sport:"mlb",writerRunId:args.writerRunId,deadline:Date.parse(asOfTimestamp)+260000,
+    const handoff=createMlbPrelockHandoff(snapshot.data.props,async(rows)=>{
+      // This is an actual canonical publication, not a snapshot backdated to
+      // review completion. The existing cutoff loader still requires its DB
+      // creation time AND payload availability to precede a future lock.
+      const publishedAt=new Date().toISOString();
+      const ready:MlbPropsBoardSnapshot={...snapshot,snapshotId:randomUUID(),asOfTimestamp:publishedAt,
+        modelContext:{...snapshot.modelContext!,aiHandoffRelease:MLB_PROPS_AI_HANDOFF_RELEASE},
+        data:buildDashboardData({slateDate:args.slateDate,asOfTimestamp:publishedAt,games,probablePitchers,props:rows,research:snapshot.data.research,sourceOdds:boardSourceOdds,environmentErrors:environment.errors}),
+        movement:compareMlbPropsBoardMovement(previous,rows)};
+      ready.validation=validateMlbPropsBoardData({data:ready.data,sourceRows:boardSourceOdds.length,mappedRows:mappedOdds.length,asOfTimestamp:publishedAt,providerCoverage,playerGameIdentityConflictRows,previousSnapshot:previous,probablePitcherFallbackAssignments:probablePitcherResolution.fallbackAssignments.length,probablePitcherFallbackFindings:probablePitcherResolution.findings});
+      enforceSnapshotPayloadLimits(ready);
+      if(!ready.validation.publishable)throw new Error(`MLB ready publication invalid:${ready.validation.errors.join("|")}`);
+      // Freeze any already-due existing canonical source before the normal
+      // publisher's retention pass can prune it. Existing game locks win first.
+      await ensureMlbPropsGameLocks(ready,new Date().toISOString());
+      await publishMlbPropsBoardSnapshot(ready);
+      Object.assign(snapshot,ready);
+    });
+    await reviewPropsForSite({client,sport:"mlb",writerRunId:args.writerRunId,deadline:Date.parse(asOfTimestamp)+260000,
+      onSourceReady:(packet,review,_observedAt,lookupAvailable)=>handoff.observe(packet,review,lookupAvailable),
+      onReviewObserved:(packet,review,lookupAvailable)=>handoff.observe(packet,review,lookupAvailable),
+      onReviewReady:(packet,review)=>handoff.observe(packet,review,true),
       games:games.map(g=>({id:g.id,start:g.scheduledStart,away:resolveMlbStatsTeamId(g.awayTeamId)?.abbreviation??g.awayTeamId,home:resolveMlbStatsTeamId(g.homeTeamId)?.abbreviation??g.homeTeamId})),
       load:(game,window)=>liveMlbPacket({game,window,snapshot:captured,currentOdds:boardSourceOdds,openingOdds})});
-    for(const game of ai.games)snapshot.data.props=applyMlbSiteAi(snapshot.data.props,game.packet,game.decisions,new Date().toISOString());
+    // Callback publications already owned every actual pre-lock observation.
+    // A later game's completion/lookup cannot erase a timely materialization.
+    snapshot.data.props=handoff.rows();
+    // Every persisted payload owns a unique immutable snapshot identity. The
+    // ordinary later publication must never reuse a ready lock source's ID.
+    snapshot.snapshotId=randomUUID();
     snapshot.asOfTimestamp=new Date().toISOString();
     snapshot.data=buildDashboardData({slateDate:args.slateDate,asOfTimestamp:snapshot.asOfTimestamp,games,probablePitchers,props:snapshot.data.props,research:snapshot.data.research,sourceOdds:boardSourceOdds,environmentErrors:environment.errors});
     snapshot.movement=compareMlbPropsBoardMovement(previous,snapshot.data.props);
@@ -561,17 +602,6 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     persist: args.persist !== false,
   });
   console.info(`MLB_PROPS_FORECAST_TELEMETRY ${JSON.stringify(forecastTelemetry)}`);
-
-  const providerCalls = {
-    balldontlieOdds: oddsClient.getClient().getRequestCount(),
-    balldontlieResearch: researchClient.getClient().getRequestCount(),
-    balldontlieLineups: lineupResult.balldontlieCalls,
-  };
-  const balldontlieCalls = providerCalls.balldontlieOdds + providerCalls.balldontlieResearch + providerCalls.balldontlieLineups;
-  const maxBdlCalls = envPositiveInteger("ODDSPHERE_PROPS_MAX_BDL_CALLS_PER_REFRESH", DEFAULT_MAX_BDL_CALLS_PER_REFRESH);
-  if (balldontlieCalls > maxBdlCalls) {
-    throw new Error(`MLB props BDL request budget exceeded: ${balldontlieCalls}/${maxBdlCalls}.`);
-  }
 
   if (!snapshot.validation.publishable || args.persist === false) {
     return {

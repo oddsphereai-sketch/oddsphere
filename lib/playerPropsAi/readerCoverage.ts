@@ -3,6 +3,7 @@ import type {Evidence,GamePacket,Json,Player} from "./evidenceContract";
 import {digest,invariant,instant,stable} from "./evidence";
 import {readerLogWindows} from "./readerLogs";
 import {independentPriorEvents} from "./priorEvents";
+import {PROPS_AI_NBA_CURRENT_SOURCE_RELEASE} from './nbaSourceIdentity';
 export const READER_AREAS=["recent_form","opportunity_role","matchup","head_to_head","availability","game_environment","market","independent_model"] as const;
 export type ReaderArea=typeof READER_AREAS[number];
 export type SourceCoverage="available"|"partial"|"missing";
@@ -61,7 +62,8 @@ export function playerReaderEvidence(packet:GamePacket,player:Player,allocate:(n
         rows:rows.map(r=>({gameId:r.gameId??null,date:r.date??null,plateAppearances:r.plateAppearances??null,suppliedWorkloadLabel:r.secondaryLabel??null}))},[e],"partial");
     }
   }
-  const metricRows=(key:string)=>[...new Map(heads.flatMap(e=>Array.isArray(obj(e.value)[key])?(obj(e.value)[key] as Json[]).map(v=>({e,value:v})):[]).map(row=>[stable(row.value),row])).values()];
+  const nativeContexts=packet.sport==='nba'?player.evidence.filter(e=>e.kind==='matchup'&&obj(e.value).nativeContextRelease===PROPS_AI_NBA_CURRENT_SOURCE_RELEASE):[];
+  const metricRows=(key:string)=>[...new Map([...heads,...nativeContexts].flatMap(e=>Array.isArray(obj(e.value)[key])?(obj(e.value)[key] as Json[]).map(v=>({e,value:v})):[]).map(row=>[stable(row.value),row])).values()];
   const role=metricRows("role"),production=metricRows("production"),matchup=metricRows("matchup");
   if(role.length)add("opportunity_role","Timestamped workload/usage inputs",role.map(x=>x.value),[...new Map(role.map(x=>[x.e.id,x.e])).values()]);
   if(production.length)add("recent_form","Timestamped production/efficiency inputs",production.map(x=>x.value),[...new Map(production.map(x=>[x.e.id,x.e])).values()]);
@@ -84,6 +86,7 @@ export function playerReaderEvidence(packet:GamePacket,player:Player,allocate:(n
   for(const e of h2h.filter(e=>!nonempty(obj(e.value).box))){const v=obj(e.value);const empty=v.status==="no_history"||v.gamesPlayed===0||v.plateAppearances===0;
     add("head_to_head",empty?"No usable direct historical sample in this source":"Retained direct opponent history",v,[e],empty?"missing":"available");}
   for(const e of player.evidence.filter(e=>e.kind==="matchup")){
+    if(nativeContexts.includes(e))continue;
     const reference=obj(obj(e.value).reference);
     if(obj(e.value).readerBenchmarks===true){
       const common={asOf:obj(e.value).asOf??null,meaning:obj(e.value).meaning??null,currentTeamGames:reference.league_current_season_team_games??null,priorTeamGames:reference.league_prior_season_team_games??null};
@@ -150,16 +153,16 @@ export function coverageSchema(evidence:Record<ReaderArea,ReaderAreaEvidence>){
     observation:{type:"string",minLength:1,maxLength:300,pattern:"^[^0-9]*[.!?]$",description:"One short complete qualitative sentence, target under 100 characters; finish with punctuation and no digits."}}}];}));
   return {type:"object",additionalProperties:false,required:[...READER_AREAS],properties:fields};
 }
-export function validateCoverage(evidence:Record<ReaderArea,ReaderAreaEvidence>,coverage:ReaderCoverage){
+export function validateCoverage(evidence:Record<ReaderArea,ReaderAreaEvidence>,coverage:ReaderCoverage,verifiedClaimRendering=false){
   invariant(coverage&&Object.keys(coverage).sort().join("|")===READER_AREAS.slice().sort().join("|"),"Reader omitted a required area");
   return Object.fromEntries(READER_AREAS.map(area=>{
     const row=coverage[area],source=evidence[area];
     invariant(row.status===source.status,`Reader misrepresented ${area} source coverage`);
-    invariant(row.factIds.length>=(source.facts.length?1:0)&&row.factIds.length<=Math.min(4,source.facts.length)&&new Set(row.factIds).size===row.factIds.length&&row.factIds.every(id=>source.facts.some(f=>f.id===id)),`Reader omitted/fabricated ${area} facts`);
-    invariant(typeof row.observation==="string"&&row.observation.trim().length>0&&row.observation.length<=300,"Invalid reader interpretation");
+    invariant(row.factIds.length>=(source.facts.length?1:0)&&row.factIds.length<=(verifiedClaimRendering?source.facts.length:Math.min(4,source.facts.length))&&new Set(row.factIds).size===row.factIds.length&&row.factIds.every(id=>source.facts.some(f=>f.id===id)),`Reader omitted/fabricated ${area} facts`);
+    invariant(typeof row.observation==="string"&&row.observation.trim().length>0&&row.observation.length<=(verifiedClaimRendering?1400:300),"Invalid reader interpretation");
     invariant(/[.!?]$/.test(row.observation.trim()),"Reader interpretation must end as a complete sentence");
     invariant(["upward","downward","mixed","neutral","uncertain","unavailable"].includes(row.effect),"Invalid reader effect");
-    invariant(!/\d/.test(row.observation),"Reader must cite exact backend facts, not restate figures in prose");
+    invariant(verifiedClaimRendering||!/\d/.test(row.observation),"Reader must cite exact backend facts, not restate figures in prose");
     invariant(!hasUnsupportedCertainty(row.observation),"Unsupported reader factual certainty");
     invariant(source.status!=="missing"||["uncertain","unavailable"].includes(row.effect),"Missing history/context cannot create a directional signal");
     // New NBA catalogs bind this requirement at trusted source-construction
@@ -170,8 +173,8 @@ export function validateCoverage(evidence:Record<ReaderArea,ReaderAreaEvidence>,
     return [area,{...row,facts:row.factIds.map(id=>source.facts.find(f=>f.id===id)!)}];
   }));
 }
-export function validatePlayerCoverage(player:Pick<Player,"markets">,evidence:Record<ReaderArea,ReaderAreaEvidence>,coverage:ReaderCoverage){
-  const result=validateCoverage(evidence,coverage);
+export function validatePlayerCoverage(player:Pick<Player,"markets">,evidence:Record<ReaderArea,ReaderAreaEvidence>,coverage:ReaderCoverage,verifiedClaimRendering=false){
+  const result=validateCoverage(evidence,coverage,verifiedClaimRendering);
   if(player.markets.some(m=>m.startsWith("pitcher_"))){
     const text=coverage.matchup.observation;
     invariant(![...text.matchAll(/against\s+(?:left|right)[ -]handed\s+(?:hitters|batters)/gi)].some(m=>!negatedBefore(text,m.index!)),"Aggregate pitcher arsenal cannot establish an opponent-handedness split");

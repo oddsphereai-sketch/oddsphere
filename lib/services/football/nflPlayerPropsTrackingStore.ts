@@ -5,6 +5,7 @@ import type { NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract
 import type { NflPlayerPropsMarketObserverRow } from "./nflPlayerPropsMarketObserverStore";
 import type { NflPlayerPropsInferenceContext } from "./nflPlayerPropsInferenceContext";
 import { nflPlayerPropsTrackingIdentity } from "./nflPlayerPropsTrackingIdentity";
+import { buildNflPropsLockedEvent } from "./nflPlayerPropsLockedEvent";
 
 export const NFL_PLAYER_PROPS_TRACKING_RELEASE =
   "nfl_player_props_tracking_2026_11_08_r43_exact_quote_evidence" as const;
@@ -18,6 +19,7 @@ export async function writeLockedNflPlayerPropsTracking(args: {
   if (tracked.length === 0) return { proposed: 0, insertedOrExisting: 0 };
   const rows = tracked.map(({ row, decision }) => {
     const identity = nflPlayerPropsTrackingIdentity({ decision, context: args.context });
+    const lockedEvent = buildNflPropsLockedEvent(decision);
     return {
       tracking_key: row.trackingKey,
       provider_game_id: row.gameId,
@@ -36,7 +38,8 @@ export async function writeLockedNflPlayerPropsTracking(args: {
       model_release: row.modelRelease,
       calibration_release: row.calibrationRelease,
       decision_release: row.decisionRelease,
-      snapshot_json: { trackingRelease: NFL_PLAYER_PROPS_TRACKING_RELEASE, decision, settlementIdentity: identity },
+      snapshot_json: { trackingRelease: NFL_PLAYER_PROPS_TRACKING_RELEASE, decision, settlementIdentity: identity,
+        ...(lockedEvent !== undefined ? { lockedEvent } : {}) },
     };
   });
   const { error } = await args.client.from("nfl_player_prop_records").upsert(rows, {
