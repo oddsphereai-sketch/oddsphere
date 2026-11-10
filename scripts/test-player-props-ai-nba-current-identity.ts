@@ -35,6 +35,10 @@ assert.throws(()=>liveNbaPacket({...args,currentObservations:[...known,orphans[0
 for(const extra of [{...unknown,isOpening:true},{...unknown,isLive:true},{...unknown,receivedAt:'2026-11-10T18:52:00Z'},{...unknown,canonicalGameId:'other-game'},{...unknown,market:'blocks'}] as Observation[]){
  const p=liveNbaPacket({...args,currentObservations:[...known,extra]});assert.deepEqual(p.players,recovered.players);assert.deepEqual(p.executionQuotes,recovered.executionQuotes,'Only qualifying exact-game supported prelock current quotes enter execution');
 }
+const unresolvedReference=liveNbaPacket({...args,currentObservations:[...known,{...unknown,provider:'owls'}]});
+assert.deepEqual(unresolvedReference.players,recovered.players);assert.deepEqual(unresolvedReference.executionQuotes,recovered.executionQuotes);
+assert(unresolvedReference.sourceLimitations.some(s=>s.includes('1 current reference-source rows have unresolved actor identity')),'Reference-only exemptions cannot silently imply complete actor/price coverage');
+assert(!unresolvedReference.players.some(p=>p.name==='Synthetic Historical Name'),'An unresolved reference is neither a guessed alias nor a fabricated additional player');
 const openingArgs={...args,market:{...args.market,observations:[...known,...orphans.map(q=>({...q,isOpening:true}))]}};
 assert.doesNotThrow(()=>liveNbaPacket(openingArgs),'Unresolved opening history alone is supplemental, never a current offered actor');
 assert.equal(liveNbaPacket({...args,currentObservations:[]}).executionQuotes?.length,0,'An explicitly empty successful collection cannot resurrect retained execution offers');

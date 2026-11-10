@@ -63,7 +63,12 @@ export function liveNbaPacket(args:{game:LivePropsGame;window:CapturedReviewWind
   const current=fromCachedExport({...source,nba:[{...source.nba[0],market:{...args.market,observations:args.currentObservations}}]},args.window).packets[0]?.quotes??[];
   const priced=finish(attachCapturedNbaParticipationReports(enrichCachedPacket(packet,source),args.participationReports??[]),at,current);
   const orphanHistory=args.market.observations.filter(retailIdentityMissing).length;
-  const result=orphanHistory?{...priced,sourceLimitations:[...priced.sourceLimitations,`Retained NBA market history contains ${orphanHistory} retail records without verified actor IDs; they cannot establish identity or current offer coverage. Current collector observations independently qualify current retail actors.`]}:priced;
+  const unresolvedReferenceRows=currentAtCutoff.filter(q=>q.provider==='owls'&&!q.canonicalPlayerId).length;
+  const identityLimitations=[
+    ...(orphanHistory?[`Retained NBA market history contains ${orphanHistory} retail records without verified actor IDs; they cannot establish identity or current offer coverage. Current collector observations independently qualify current retail actors.`]:[]),
+    ...(unresolvedReferenceRows?[`${unresolvedReferenceRows} current reference-source rows have unresolved actor identity. They cannot establish a known-player price, an alias or an additional player; reference coverage is partial.`]:[]),
+  ];
+  const result=identityLimitations.length?{...priced,sourceLimitations:[...priced.sourceLimitations,...identityLimitations]}:priced;
   return nativeAvailable?result:{...result,sourceLimitations:[...result.sourceLimitations,`Original NBA native snapshot availability ${args.snapshot.generatedAt} is after cutoff; its priors, labels and scopes were not supplied. Current quote-only actor coverage remains independent.`]};
 }
 export function liveNflPacket(args:{game:LivePropsGame;window:CapturedReviewWindow;snapshot:NflPlayerPropsProductionSnapshot;observations:NflPlayerPropsObservationSnapshot;history:NflPlayerPropsCurrentSeasonState;context:NflPlayerPropsInferenceContext;retainedQuotes?:Quote[];marketHistory?:Parameters<typeof attachNflReaderMarkets>[1]}):GamePacket{
