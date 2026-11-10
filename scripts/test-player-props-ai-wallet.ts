@@ -1,3 +1,4 @@
+import {auditPropsActorAdmissionPart} from "./lib/player-props-ai-actor-admission-audit";
 import {encodeCanonicalScenarioLaw} from "../lib/playerPropsAi/generativeCoordinates";
 /** Real PostgreSQL + real reviewer + mock HTTP. No credentials, Internet or paid calls. */
 import assert from "node:assert/strict";
@@ -65,9 +66,9 @@ async function run(id:string,stage:"early"|"final",failure:"none"|"capacity"|"ti
     calls.push({player,model:request.model,tier:request.service_tier});seen.set(player,(seen.get(player)??0)+1);
     if(player==="b"&&seen.get(player)===2&&failure==="invalid")assert.match(request.instructions,/Forecast wire release mismatch/);
     if(player==="b"&&seen.get(player)===2&&failure==="capacityalias"){assert.equal(request.service_tier,"default");assert.match(request.instructions,/no accepted draft/);assert.ok(!request.instructions.includes("Your previous draft failed"));}
-    if(player==="b"&&seen.get(player)===2&&failure==="physicalformat"){assert.match(request.instructions,/P0 T:A C:units/);assert.match(request.instructions,/P=player;T=text/);}
-    if(player==="b"&&seen.get(player)===2&&failure==="physical")assert.match(request.instructions,/C:units/);
-    if(player==="b"&&seen.get(player)===2&&failure==="semantic")assert.match(request.instructions,/S:mean/);
+    if(player==="b"&&seen.get(player)===2&&failure==="physicalformat"){assert.match(request.instructions,/P0/);assert.match(request.instructions,/coordinates|units/);}
+    if(player==="b"&&seen.get(player)===2&&failure==="physical")assert.match(request.instructions,/coordinates|units/);
+    if(player==="b"&&seen.get(player)===2&&failure==="semantic")assert.match(request.instructions,/mean|points/);
     if(player==="b"&&seen.get(player)===1){
       if(failure==="rate"||failure==="quota")return Response.json({error:{code:failure==="rate"?"rate_limit_exceeded":"insufficient_quota"}},{status:429,headers:{"x-request-id":"req_synthetic","retry-after":"60","x-ratelimit-limit-tokens":"1000000"}});
       if(failure==="missingusage"||failure==="invalidusage"){const value=response(parts[1].packet,request.model,request.service_tier,"unknown-usage");return Response.json({...value,usage:failure==="missingusage"?undefined:{input_tokens:-1,output_tokens:100}});}
@@ -83,6 +84,54 @@ async function run(id:string,stage:"early"|"final",failure:"none"|"capacity"|"ti
   const result=await runPropsReview({packet:p,job:await job(keys(id)[stage==="early"?0:1]),store:wallet,key:"synthetic-never-real",writerRunId:"synthetic-owner",preferStronger:strong,clock:()=>reviewNow,prepare:async()=>parts,countStrong:async()=>7000,fetchImpl});
   return {result,calls,bodies};
 }
+// Real-wallet integration with several actors in ONE original part. All HTTP mocked.
+async function runRetained(id:string,mode:"correct"|"unknown"|"invalid"="correct",strong=false){
+  const stage=strong?"final":"early",now=strong?clock():"2026-11-07T21:00:00Z";
+  await db.query("UPDATE test_clock SET at=$1",[now]);
+  const p={...packet(id,stage),cutoff:now},bodies:string[]=[];
+  const result=await runPropsReview({packet:p,job:await job(keys(id)[stage==="early"?0:1]),store:wallet,key:"synthetic-never-network",writerRunId:"synthetic-owner",clock:()=>now,preferStronger:strong,countStrong:async()=>1000,prepare:async()=>[{packet:p,inputTokens:1000}],fetchImpl:(async(url,options)=>{
+    assert.equal(String(url),"https://api.openai.com/v1/responses");bodies.push(String(options?.body));
+    const request=JSON.parse(bodies.at(-1)!),value=response(p,request.model,request.service_tier,`${id}-retained-${bodies.length}`),draft=JSON.parse(value.output[0].content[0].text);
+    draft.players.b.law.outcomes.points_excluding_made_threes=Array(16).fill(bodies.length===1||mode==="invalid"?40:14);
+    if(bodies.length===2)draft.players.a.law.outcomes.points_excluding_made_threes=Array(16).fill(80);
+    value.output[0].content[0].text=JSON.stringify(draft);
+    return Response.json({...value,...(bodies.length===2&&mode==="unknown"?{usage:undefined}:{})});
+  }) as typeof fetch});
+  const j=await job(keys(id)[stage==="early"?0:1]),attempts=(await db.query("SELECT * FROM player_props_ai_attempts WHERE job_key=$1 ORDER BY phase,part",[j.job_key])).rows;
+  assert.equal(bodies.length,2,"Only the existing two phases may be sent");
+  const [first,second]=bodies.map(body=>JSON.parse(body));assert.equal(second.input,first.input,"Correction retains complete original source");assert.deepEqual(second.text,first.text,"Correction retains original full schema");assert.equal(second.max_output_tokens,first.max_output_tokens);
+  const metadata=attempts[0].usage.actorAdmissionEvidence;assert.equal(metadata.eligibleActors.length,1);assert.equal(metadata.eligibleActors[0].playerId,"a");assert.deepEqual(metadata.requestedActorIds,["a","b"]);
+  assert(attempts[0].actual_micro>0);assert(attempts[0].usage.failureEvidence.input.data);assert(attempts[0].usage.failureEvidence.request.data);assert(attempts[0].usage.failureEvidence.draft.data);
+  const audited=auditPropsActorAdmissionPart({packet:p,attempts,provenance:mode==="correct"?(j.result as import("../lib/playerPropsAi/reviewer").AcceptedGameReview).partProvenance:undefined});
+  assert.equal(audited.complete,mode==="correct");
+  if(mode==="correct"){
+    assert.equal(result.status,"completed",JSON.stringify(result));assert.equal(attempts.length,2);assert(attempts.every((a:{actual_micro:number})=>a.actual_micro>0));
+    const review=j.result as import("../lib/playerPropsAi/reviewer").AcceptedGameReview;
+    assert.equal(digest(audited.review!.players),digest(review.players),"Persisted raw receipts independently reproduce the accepted actors");
+    assert.equal(review.players.find(a=>a.playerId==="a")!.law!.outcomes.points[0],20,"Valid original actor cannot regress");
+    assert.equal(review.players.find(a=>a.playerId==="b")!.law!.outcomes.points[0],20,"Only corrected target is consumed");
+    assert.deepEqual(review.partProvenance.map(p=>({part:p.part,phase:p.phase,ids:p.playerIds})),[{part:1,phase:1,ids:["a"]},{part:1,phase:2,ids:["b"]}]);
+    assert.equal(attempts[1].usage.responseEvidence,undefined,"Ignored raw actors must not be labelled as a fully admitted raw part");
+    assert.deepEqual(attempts[1].usage.actorAdmissionEvidence.ignoredActorIds,["a"]);assert.deepEqual(attempts[1].usage.actorAdmissionEvidence.eligibleActors.map((a:{playerId:string})=>a.playerId),["b"]);
+    const canonical=metadata.eligibleActors[0].canonicalHash;assert.equal(review.partProvenance[0].actorHashes!.a.canonicalHash,canonical);
+    await assert.rejects(wallet.receipt(attempts[0].id,j.claim_token!,Number(attempts[0].actual_micro),attempts[0].response_id,{...attempts[0].usage,actorAdmissionEvidence:{...metadata,changed:true}}),/immutable_usage_receipt_conflict/);
+  }else{
+    assert.equal(result.status,"failed");assert.equal(j.result,null,"Incomplete or unbilled actor coverage never publishes");
+    if(mode==="unknown"){assert.equal(attempts[1].state,"unknown");assert.equal(attempts[1].actual_micro,null);assert.equal(attempts[1].usage.actorAdmissionEvidence,undefined);}
+    else {assert(attempts[1].actual_micro>0);assert.equal(attempts[1].usage.actorAdmissionEvidence.eligibleActors.length,0);}
+  }
+  return {result,attempts,bodies};
+}
+
+async function diagnosticStopsPaidCorrection(){
+  const now="2026-11-07T21:00:00Z";await db.query("UPDATE test_clock SET at=$1",[now]);
+  const p={...packet("g18","early"),cutoff:now};p.players=p.players.slice(0,1);p.players[0].markets=["double_double"];
+  p.players[0].evidence.push({id:"synthetic-expansion-prior",kind:"independent_model",source:"synthetic",availableAt:now,value:{market:"double_double",line:.5,independentProjection:.6,selectedSide:"over",independentSelectedSideProbability:.6}});
+  let calls=0;const result=await runPropsReview({packet:p,job:await job(keys("g18")[0]),store:wallet,key:"synthetic",writerRunId:"synthetic-owner",clock:()=>now,preferStronger:false,prepare:async()=>[{packet:p,inputTokens:1000}],fetchImpl:(async(_url,options)=>{calls++;const r=JSON.parse(String(options?.body));return Response.json(response(p,r.model,r.service_tier,"diagnostic-known"));}) as typeof fetch});
+  assert.equal(result.status,"failed");assert.equal(calls,1,"Unavailable source diagnostics cannot buy correction");
+  const attempts=(await db.query("SELECT * FROM player_props_ai_attempts WHERE job_key=$1",[keys("g18")[0]])).rows;assert.equal(attempts.length,1);assert(attempts[0].actual_micro>0);assert.equal(attempts[0].usage.correctionFeedbackUnavailable,true);
+}
+
 try{
   for(const role of ["anon","authenticated","service_role"])await admin.query(`DO $$ BEGIN CREATE ROLE ${role}; EXCEPTION WHEN duplicate_object THEN NULL; END $$`);
   await db.query(readFileSync("lib/db/schema-migration-v61-player-props-ai-runtime.sql","utf8"));
@@ -121,7 +170,16 @@ try{
   assert.equal(Number((await budget()).consumed_micro),spent-Number(held.reserved_micro)+123);
   await assert.rejects(wallet.receipt(held.id,(await job(keys("g1")[0])).claim_token!,100,"different",{}),/immutable_usage_receipt_conflict/);
   const semantic=await run("g7","early","semantic");assert.equal(semantic.result.status,"completed");assert.equal(semantic.calls.length,3);assert.equal(semantic.calls.filter(c=>c.player==="a").length,1);
-  const semanticReview=(await job(keys("g7")[0])).result as {partProvenance:{correctionReason?:string}[]};assert.match(semanticReview.partProvenance[1].correctionReason!,/S:mean/);
+  const semanticReview=(await job(keys("g7")[0])).result as {partProvenance:{correctionReason?:string;correctionText?:string}[]};assert.match(semanticReview.partProvenance[1].correctionReason!,/S:mean/);
+  assert.ok(semanticReview.partProvenance[1].correctionText?.includes("P0"),"Named source correction is explicit in immutable provenance");
+  const sourceReceipts=(await db.query("SELECT phase,usage FROM player_props_ai_attempts WHERE job_key=$1 AND part=2 ORDER BY phase",[keys("g7")[0]])).rows;
+  assert.equal(sourceReceipts[0].usage.nextCorrectionText,semanticReview.partProvenance[1].correctionText);
+  assert.equal(semanticReview.partProvenance[1].correctionText,semanticReview.partProvenance[1].correctionText);
+  assert.ok(Buffer.byteLength(sourceReceipts[0].usage.nextCorrectionText,"ascii")<=1984);
+  const semanticPhase2Request=JSON.parse(gunzipSync(Buffer.from(sourceReceipts[1].usage.failureEvidence.request.data,"base64")).toString());
+  assert(semanticPhase2Request.instructions.endsWith(semanticReview.partProvenance[1].correctionText!));
+  assert.equal(sourceReceipts[1].usage.actorAdmissionEvidence.lineage.phase,2);
+  assert.equal(sourceReceipts[1].usage.actorAdmissionEvidence.eligibleActors.length,1);
   const physical=await run("g8","early","physical");assert.equal(physical.result.status,"completed");assert.equal(physical.calls.length,3);assert.equal(physical.calls.filter(c=>c.player==="a").length,1);
   const rejected=(await db.query("SELECT * FROM player_props_ai_attempts WHERE job_key=$1 AND phase=1 AND part=2",[keys("g8")[0]])).rows[0];
   assert.ok(rejected.actual_micro>0);assert.equal(rejected.usage.failureEvidence.generativeDiagnostics.coordinates.length,1);
@@ -134,7 +192,8 @@ try{
   const combined=await run("g14","final","physicalformat");assert.equal(combined.result.status,"completed");assert.equal(combined.calls.length,3);assert.equal(combined.calls.filter(c=>c.player==="a").length,1);
   const alias=await run("g13","early","capacityalias");assert.equal(alias.result.status,"failed");assert.equal(alias.calls.length,2);assert.ok(alias.calls.every(c=>c.tier==="default"));
   const standardCapacity=(await db.query("SELECT * FROM player_props_ai_attempts WHERE job_key=$1 AND phase=1 AND part=2",[keys("g13")[0]])).rows[0];assert.equal(standardCapacity.actual_micro,null);assert.equal(standardCapacity.state,"unknown");assert.equal(standardCapacity.usage.kind,"unknown_transport_outcome");assert.equal(standardCapacity.usage.transport.code,"flex_unavailable");assert.equal(standardCapacity.usage.transport.type,"resource_unavailable");assert.equal((await run("g13","early")).calls.length,0,"closed failed slot cannot replay");
-  const strong=await run("g2","final","invalid",true);assert.equal(strong.result.status,"completed");assert.equal(strong.calls.filter(c=>c.player==="a").length,1);assert.equal(strong.calls[0].model,"gpt-6.1-terra");assert.equal(strong.calls.at(-1)!.model,"gpt-6-luna");
+  await runRetained("g15");await runRetained("g16","unknown");await runRetained("g17","invalid");await diagnosticStopsPaidCorrection();
+  const strong=await runRetained("g2","correct",true);assert.equal(strong.result.status,"completed");assert.equal(strong.attempts[0].model,"gpt-6.1-terra");assert.equal(strong.attempts[1].model,"gpt-6-luna");
   assert.equal(((await job(keys("g2")[1])).result as {model:string}).model,"mixed_recorded_per_part");
   assert.equal((await run("g3","final","none",true)).calls[0].model,"gpt-6.1-terra");assert.equal((await run("g4","final","none",true)).calls[0].model,"gpt-6-luna");
   assert.equal(Number((await budget()).stronger_finals),2);

@@ -39,7 +39,7 @@ assert.equal(compiled.quotes.filter(q=>q.opening).length,2); // Opening is a DIF
 const report=compiled.players[0].evidence.find(e=>e.kind==="market")!.value as {books:{openingPairs:{line:number}[]}[]};
 assert.equal(report.books[0].openingPairs[0].line,20.5);
 const input=readableInput(compiled,{compactClocks:true,readerCoverage:true});
-assert.equal(input.format,"player_props_readable_tables_r13_generative_coordinates");
+assert.equal(input.format,"player_props_readable_tables_r14_named_source_checks");
 assert.match(input.schema.bookRow,/allSuppliedOpeningPairs/);
 assert.ok(input.players[0].readerAreas);
 assert.match(JSON.stringify(input.players[0].readerAreas?.market),/readFromEvidence/);

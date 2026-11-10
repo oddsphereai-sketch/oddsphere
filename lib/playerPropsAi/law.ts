@@ -70,17 +70,18 @@ export function lawForecast(law: AcceptedPlayerLaw, market: string, line: number
   }
   return { mean, over, under, push, preferredSide: over >= under ? "over" as const : "under" as const };
 }
-export function validateGameReview(packet: GamePacket, review: GameReview) {
-  const reader = readerEvidence(packet);
-  invariant(Object.keys(review.players).sort().join("|") === packet.players.map(p => p.id).sort().join("|"), "Review omitted/added players");
-  return packet.players.map(player => {
-    const row = review.players[player.id];
+/** Validate one actor under the ORIGINAL packet/fact universe, never a reindexed subset. */
+export function validatePlayerReview(packet: GamePacket, playerId:string, row:PlayerReview) {
+  const player=packet.players.find(p=>p.id===playerId);invariant(player,"Unexpected player in forecast");
     invariant(typeof row.assessment === "string" && row.assessment.trim().length > 0 && row.assessment.length <= 180, "Missing/oversize individual assessment");
     invariant(row.evidenceIds.length > 0 && row.evidenceIds.length <= 6 && row.evidenceIds.every(id => player.evidence.some(e => e.id === id)), "Fabricated/cross-player evidence citation");
     invariant(row.confidence.length === player.markets.length && row.confidence.every(c => [0, 1, 2].includes(c)), "Missing/invalid market confidence");
     invariant(row.exceptions.length === player.markets.length && row.exceptions.every(s => s === null || typeof s === "string" && s.trim().length > 0 && s.length <= 140), "Missing/invalid market exceptions");
     invariant(row.gaps.length <= 6 && row.gaps.every(s => typeof s === "string" && s.length > 0 && s.length <= 140), "Invalid evidence gaps");
     invariant(row.law !== null || row.gaps.length > 0 && row.exceptions.every(s => s !== null), "Unsupported player requires explicit exceptions");
-    return { playerId: player.id, ...row, coverage: validatePlayerCoverage(player,reader[player.id],row.coverage), law: row.law ? validateLaw(packet.sport, player, row.law) : null };
-  });
+    return { playerId: player.id, ...row, coverage: validatePlayerCoverage(player,readerEvidence(packet)[player.id],row.coverage), law: row.law ? validateLaw(packet.sport, player, row.law) : null };
+}
+export function validateGameReview(packet: GamePacket, review: GameReview) {
+  invariant(Object.keys(review.players).sort().join("|") === packet.players.map(p => p.id).sort().join("|"), "Review omitted/added players");
+  return packet.players.map(player=>validatePlayerReview(packet,player.id,review.players[player.id]));
 }
