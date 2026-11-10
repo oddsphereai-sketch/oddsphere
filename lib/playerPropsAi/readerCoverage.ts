@@ -3,6 +3,7 @@ import type {Evidence,GamePacket,Json,Player} from "./evidenceContract";
 import {digest,invariant,instant,stable} from "./evidence";
 import {readerLogWindows} from "./readerLogs";
 import {independentPriorEvents} from "./priorEvents";
+import {PROPS_AI_NBA_CURRENT_SOURCE_RELEASE} from './nbaSourceIdentity';
 export const READER_AREAS=["recent_form","opportunity_role","matchup","head_to_head","availability","game_environment","market","independent_model"] as const;
 export type ReaderArea=typeof READER_AREAS[number];
 export type SourceCoverage="available"|"partial"|"missing";
@@ -61,7 +62,8 @@ export function playerReaderEvidence(packet:GamePacket,player:Player,allocate:(n
         rows:rows.map(r=>({gameId:r.gameId??null,date:r.date??null,plateAppearances:r.plateAppearances??null,suppliedWorkloadLabel:r.secondaryLabel??null}))},[e],"partial");
     }
   }
-  const metricRows=(key:string)=>[...new Map(heads.flatMap(e=>Array.isArray(obj(e.value)[key])?(obj(e.value)[key] as Json[]).map(v=>({e,value:v})):[]).map(row=>[stable(row.value),row])).values()];
+  const nativeContexts=packet.sport==='nba'?player.evidence.filter(e=>e.kind==='matchup'&&obj(e.value).nativeContextRelease===PROPS_AI_NBA_CURRENT_SOURCE_RELEASE):[];
+  const metricRows=(key:string)=>[...new Map([...heads,...nativeContexts].flatMap(e=>Array.isArray(obj(e.value)[key])?(obj(e.value)[key] as Json[]).map(v=>({e,value:v})):[]).map(row=>[stable(row.value),row])).values()];
   const role=metricRows("role"),production=metricRows("production"),matchup=metricRows("matchup");
   if(role.length)add("opportunity_role","Timestamped workload/usage inputs",role.map(x=>x.value),[...new Map(role.map(x=>[x.e.id,x.e])).values()]);
   if(production.length)add("recent_form","Timestamped production/efficiency inputs",production.map(x=>x.value),[...new Map(production.map(x=>[x.e.id,x.e])).values()]);
@@ -84,6 +86,7 @@ export function playerReaderEvidence(packet:GamePacket,player:Player,allocate:(n
   for(const e of h2h.filter(e=>!nonempty(obj(e.value).box))){const v=obj(e.value);const empty=v.status==="no_history"||v.gamesPlayed===0||v.plateAppearances===0;
     add("head_to_head",empty?"No usable direct historical sample in this source":"Retained direct opponent history",v,[e],empty?"missing":"available");}
   for(const e of player.evidence.filter(e=>e.kind==="matchup")){
+    if(nativeContexts.includes(e))continue;
     const reference=obj(obj(e.value).reference);
     if(obj(e.value).readerBenchmarks===true){
       const common={asOf:obj(e.value).asOf??null,meaning:obj(e.value).meaning??null,currentTeamGames:reference.league_current_season_team_games??null,priorTeamGames:reference.league_prior_season_team_games??null};

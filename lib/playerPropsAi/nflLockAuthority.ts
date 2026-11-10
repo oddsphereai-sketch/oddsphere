@@ -14,9 +14,12 @@ import {executionQuotes} from './executionQuotes';
 import {quoteContract} from './executionQuotes';
 import {sameNflPropActorName} from './nflPlayerIdentity';
 import {lawForecast} from './law';
-import {playerParticipationEligibility} from './participationEligibility';
+import {playerParticipationEligibility,qualifiedParticipationException} from './participationEligibility';
 import {qualifyNflSourceParticipation} from './siteBindings';
 import {reviewedReaderContextCurrent} from './readerClaimFreshness';
+import {siteAiDecisions} from './publication';
+import {PROPS_AI_EXECUTION_EVIDENCE_RELEASE} from './publicationContract';
+import {PROPS_AI_ESTIMATE_RELEASE,PROPS_AI_NFL_DECISION_RELEASE} from './releases';
 export type State='qualified'|'declined'|'context_changed'|'unreviewed_actor'|'unreviewed_scope'|'source_unresolved'|'review_lookup_unavailable'|'review_authority_missing';
 type Bound<T> = T&{binding:string};
 export type Authority=Bound<{gameId:string;actorId:string;scheduledStart:string;team:string;opponent:string;lockAt:string;observedAt:string;currentContextHash:string;participationBlocked:boolean;participationReason:string|null;review:null|{release:string;inputHash:string;stage:string;issuedAt:string;contextHash:string|null;lawHash:string|null;playerDigest:string|null};scopes:{market:string;status:State}[]}>;
@@ -62,6 +65,7 @@ function captureRowProofs(rows:Row[],packet:GamePacket,kind:'ai'|'native',readyA
  assert(instant(packet.cutoff)<=instant(readyAt),'Packet not available at row observation');
  if(!Object.hasOwn(packet,'executionQuotes')||!Array.isArray(packet.executionQuotes))return[];
  const contexts=criticalContextHashes(packet),sourcePacketHash=digest(packet),quotes=executionQuotes(packet,readyAt),proofs:Proof[]=[];
+ const choices=kind==='ai'&&review?siteAiDecisions(packet,review,readyAt):[];
  const book=(s:string)=>s.toLowerCase().replace(/[^a-z0-9]/g,'');
  for(const row of rows){
   const id=actor(row),player=packet.players.find(p=>p.id===id);
@@ -74,8 +78,22 @@ function captureRowProofs(rows:Row[],packet:GamePacket,kind:'ai'|'native',readyA
   if(kind==='ai'){
    const approved=review?.players.find(p=>p.playerId===id),e=row.aiReview;
    if(!review||!e||!approved?.law||!reviewedReaderContextCurrent(packet,review,id!)||e.release!==review.release||e.inputHash!==(review.inputHash??review.inputEvidence.digest)||e.lawHash!==approved.law.hash||e.stage!==review.stage||instant(e.reviewedAt)!==instant(review.issuedAt!)||!review.marketScopes[id!]?.includes(row.market)||approved.sourceDeclinedMarkets?.includes(row.market))continue;
+   if(row.modelRelease!==e.release||row.calibrationRelease!==PROPS_AI_ESTIMATE_RELEASE||row.decisionRelease!==PROPS_AI_NFL_DECISION_RELEASE)continue;
    const index=review.marketScopes[id!].indexOf(row.market),f=lawForecast(approved.law,row.market,row.line,row.side==='yes'||row.market==='anytime_td'),prob=row.side==='under'?f.under:f.over,loss=row.side==='under'?f.over:f.under;
-   if(e.confidence!==approved.confidence[index]||e.exception!==approved.exceptions[index]||e.assessment!==approved.assessment||Math.abs(row.projection-f.mean)>1e-10||Math.abs(row.finalProbability-prob)>1e-10||Math.abs(row.expectedValue-(prob*(row.americanPrice>0?row.americanPrice/100:100/-row.americanPrice)-loss))>1e-10)continue;
+   const participation=playerParticipationEligibility(packet,player);
+   if(e.exception!==qualifiedParticipationException(participation,approved.exceptions[index])||!e.sourceEligibility||digest(e.sourceEligibility)!==digest(participation))continue;
+   if(e.confidence!==approved.confidence[index]||e.assessment!==approved.assessment||Math.abs(row.projection-f.mean)>1e-10||Math.abs(row.finalProbability-prob)>1e-10||Math.abs(row.expectedValue-(prob*(row.americanPrice>0?row.americanPrice/100:100/-row.americanPrice)-loss))>1e-10)continue;
+   // The accepted conditional-law exception stays immutable. Publication may
+   // independently add a genuine current own-player participation hold. Bind
+   // that exact qualification, grade and evidence rather than either rejecting
+   // the valid No Play or accepting an arbitrary replacement exception.
+   const choice=choices.find(c=>c.playerId===id&&c.market===row.market&&c.line===row.line&&c.provider===row.provider&&book(c.book)===book(row.sportsbook)&&quoteContract(c.quote)===(row.side==='yes'?'milestone':'two_way'));
+   const selected=quotes.find(q=>q.playerId===id&&q.market===row.market&&q.line===row.line&&q.side===row.side&&q.provider===row.provider&&book(q.book)===book(row.sportsbook)&&q.american===row.americanPrice&&quoteContract(q)===(row.side==='yes'?'milestone':'two_way'));
+   if(!choice||!selected||row.grade!==(choice.evidence.exception?'No Play':row.side!==choice.side?'Watchlist':choice.grade))continue;
+   const {executionEvidence:storedExecution,...storedEvidence}=e,{executionEvidence:ignoredExecution,...expectedEvidence}=choice.evidence;void ignoredExecution;
+   if(digest(storedEvidence)!==digest({...expectedEvidence,quoteConfirmedAt:selected.receivedAt}))continue;
+   const group=quotes.filter(q=>q.playerId===id&&q.market===row.market&&q.line===row.line&&q.provider===row.provider&&book(q.book)===book(row.sportsbook)&&quoteContract(q)===quoteContract(selected));
+   if(!storedExecution||storedExecution.release!==PROPS_AI_EXECUTION_EVIDENCE_RELEASE||storedExecution.operation!=='member_row'||digest(storedExecution.selectedQuote)!==digest(selected)||digest(storedExecution.pricingQuotes)!==digest(group)||instant(storedExecution.pricedAt)<instant(selected.receivedAt)||instant(storedExecution.pricedAt)<instant(e.reviewedAt)||instant(storedExecution.pricedAt)>instant(readyAt)||instant(storedExecution.pricedAt)>=instant(packet.lock))continue;
   }
   const quote=quotes.find(q=>q.playerId===id&&q.market===row.market&&q.line===row.line&&q.side===row.side&&quoteContract(q)===(row.side==='yes'?'milestone':'two_way')&&book(q.book)===book(row.sportsbook)&&q.provider===row.provider&&q.american===row.americanPrice&&instant(q.observedAt)===instant(row.observedAt)&&q.receivedAtProvenance==='provider_response'&&!q.opening&&!q.live&&instant(q.observedAt)<=instant(q.receivedAt)&&instant(q.receivedAt)<=instant(readyAt)&&(!row.aiReview||row.aiReview.quoteConfirmedAt===q.receivedAt));
   if(quote)proofs.push(proveRow(row,kind,contexts[id!],readyAt,quote.receivedAt,sourcePacketHash));
@@ -128,6 +146,10 @@ export function resolveScope(args:{authority:Authority;market:string;previousLoc
  return{kind:'unavailable',row:null,status,reason:'No eligible exact prelock candidate/baseline; never resurrect an older AI scope'};
 }
 function qualifyAuthorityParticipation(row:Row,a:Authority):Row{
+ // Its guarded AI publication already owns the exact source exception and
+ // eligibility evidence. Keep that actual No Play tuple stable for its proof;
+ // adding a native health-hold label here would change the captured row hash.
+ if(row.aiReview&&row.grade==='No Play')return row;
  return a.participationBlocked&&row.gameId===a.gameId&&actor(row)===a.actorId&&instant(row.scheduledStart)===instant(a.scheduledStart)&&instant(row.lockAt)===instant(a.lockAt)&&propsTeam(row.team)===a.team&&propsTeam(row.opponent)===a.opponent?{...row,grade:row.grade==='Held'?'Held':'No Play',healthHolds:[...new Set([...row.healthHolds,`source_participation_unavailable:${a.participationReason}`])]}:row;
 }
 
@@ -140,7 +162,10 @@ function captureBundle(rows:Row[],packet:GamePacket,review:AcceptedGameReview|nu
  const source:GamePacket=freeze(JSON.parse(JSON.stringify(packet)));
  const gameId=source.sourceGameId??source.gameId;
  const readyAt=clock();validatePacket(source);
- const frozen:Row[]=freeze(JSON.parse(JSON.stringify(qualifyNflSourceParticipation(rows.filter(r=>r.gameId===gameId),source,readyAt))));
+ const gameRows=rows.filter(r=>r.gameId===gameId);
+ // Native fallback owns its separate qualification. An AI proof must validate
+ // the already materialized publication exactly, never repair its grade here.
+ const frozen:Row[]=freeze(JSON.parse(JSON.stringify(kind==='native'?qualifyNflSourceParticipation(gameRows,source,readyAt):gameRows)));
  const proofs=captureRowProofs(frozen,source,kind,readyAt,review);
  return{authorities:[],nativeRows:kind==='native'?frozen:[],nativeProofs:kind==='native'?proofs:[],candidateProofs:kind==='ai'?proofs:[],sourceFrames:[{gameId,kind,sourcePacketHash:digest(source),cutoff:source.cutoff,readyAt,lockAt:source.lock}]};
 }

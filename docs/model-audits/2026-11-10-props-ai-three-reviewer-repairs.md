@@ -183,3 +183,14 @@ retail actors and retains the old history unchanged with an unresolved-source
 limitation. A failed collection is never interpreted as an empty one, and an
 unresolved current actor still prevents a falsely complete review. This repair
 does not remap an old name or replay an already closed slot.
+
+The seventh full round expanded the NBA history defect to withdrawn canonical
+actors, historical names/teams and withdrawn scopes. Live NBA sourceR2 uses an
+explicit verified current actor authority while retaining genuine historical
+context and exact archived inputs. Empty successful collections can observe
+withdrawal but cannot buy a new evaluation from an old actor universe. The same
+round found valid NFL source-qualified AI No Play rows could fail proof capture
+because a current participation exception differed from the accepted conditional
+exception. Their distinct meanings must be validated without modifying the
+accepted review or accepting a forged grade. These prospective fixes again
+require fresh full independent rounds; existing locks remain exact.

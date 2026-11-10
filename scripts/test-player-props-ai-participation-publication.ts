@@ -17,7 +17,7 @@ import {readerAvailabilityContextHash,reviewedReaderContextCurrent} from '../lib
 import {testNbaSourceAuthority,testNbaHandoffCapture,mergeNbaHandoffs} from '../lib/playerPropsAi/nbaLockAuthority';
 import {siteAiDecisions,siteReviewCoverage,siteReviewQualification} from '../lib/playerPropsAi/publication';
 import {applyNbaSiteAi,applyNflSiteAi,applyMlbSiteAi} from '../lib/playerPropsAi/siteBindings';
-import {playerParticipationEligibility,attachCapturedNbaParticipationReports,type CapturedNbaParticipationReport} from '../lib/playerPropsAi/participationEligibility';
+import {playerParticipationEligibility,qualifiedParticipationException,attachCapturedNbaParticipationReports,type CapturedNbaParticipationReport} from '../lib/playerPropsAi/participationEligibility';
 import type {AcceptedGameReview} from '../lib/playerPropsAi/reviewer';
 import type {NflPlayerPropsRuntimeBoard} from '../lib/services/football/nflPlayerPropsRuntime';
 import {buildNbaPlayerPropsMemberSnapshot} from '../lib/services/nba/nbaPlayerPropsProductContract';
@@ -44,6 +44,13 @@ function sourcePacket(sport:GamePacket['sport'],statusCase:StatusCase):GamePacke
  const history:Evidence[]=sport==='mlb'?[{id:`${id}:batter_hits:recentForm`,kind:'recent_games',availableAt:past,source:'synthetic played batting games',value:{sampleLabel:'games',statLabel:'Hits',logs:[1,2,3].map((value,i)=>({gameId:i+1,date:`2026-11-0${6+i}`,value,plateAppearances:4}))}}]:[4,6,8].map((value,i):Evidence=>({id:`log:${i}`,kind:'recent_games',availableAt:past,source:'synthetic played stat games',value:{game:{startTime:`2026-11-0${6+i}T00:00:00Z`,homeTeam:team,awayTeam:opponent},box:sport==='nba'?{minutes:30,points:20,oreb:1,dreb:value-1,ast:3,fg3m:1}:{receptions:value,receiving_yards:value*10}}}));
  const quotes:Quote[]=(['over','under'] as const).map(side=>({id:`q:${side}`,playerId:id,market,provider:'synthetic-feed',book:'synthetic-book',line,side,american:-110,opening:false,live:false,observedAt:at,receivedAt:at,receivedAtProvenance:'provider_response'}));
  return{release:PRODUCT_RELEASE,sport,gameId:`synthetic-${sport}`,start,lock,cutoff:at,stage:'final',sourceLimitations:[],players:[{id,name,team,opponent,markets:[market],missing:[],evidence:[...history,...statusEvidence(statusCase,team,opponent)]}],quotes};
+}
+for(const statusCase of ['out','cleared','teammate','opponent','unlisted','no_source'] as const){
+ const packet=sourcePacket('nfl',statusCase),eligibility=playerParticipationEligibility(packet,packet.players[0]),before=digest(eligibility),approved='Immutable accepted semantic exception.';
+ assert.equal(qualifiedParticipationException(eligibility,approved),statusCase==='out'?'Source participation unavailable: explicit_out':approved);
+ assert.equal(qualifiedParticipationException(eligibility,null),statusCase==='out'?'Source participation unavailable: explicit_out':null);
+ assert.equal(qualifiedParticipationException({...eligibility,blocked:1 as unknown as boolean},approved),approved,'A truthy malformed flag cannot authorize the own-player overlay');
+ assert.equal(digest(eligibility),before);
 }
 function accepted(input:GamePacket,side:'over'|'under'){
  const packet=compileMarketReport(input),player=packet.players[0],facts=readerEvidence(packet)[player.id],aliases=evidenceAliases(packet),low=packet.sport==='mlb'?1:4,high=packet.sport==='mlb'?3:8;

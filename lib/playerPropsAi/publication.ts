@@ -11,7 +11,7 @@ import {lawForecast} from "./law";
 import {instant} from "./evidence";
 import {executionQuotes,latestExecutionQuotes,quoteContract,executionContractKey} from "./executionQuotes";
 import {unqualifiedEventTail} from "./forecastSanity";
-import {playerParticipationEligibility} from "./participationEligibility";
+import {playerParticipationEligibility,qualifiedParticipationException} from "./participationEligibility";
 
 export type SiteAiDecision={playerId:string;market:string;line:number;side:Quote["side"];book:string;provider:string;american:number;projection:number;probability:number;over:number;under:number;push:number;expectedValue:number;fairAmerican:number|null;grade:PropsAiGrade;quote:Quote;evidence:PropsAiMemberEvidence};
 function sameReviewGame(packet:GamePacket,review:AcceptedGameReview,now:string){
@@ -76,7 +76,7 @@ export function siteAiDecisions(packet:GamePacket,review:AcceptedGameReview,now:
       // Confidence and exceptions belong to the immutable reviewed scope order,
       // never the current offering order or a newly added market.
       const index=review.marketScopes[player.id].indexOf(market);
-      const exception=sourceEligibility.blocked?`Source participation unavailable: ${sourceEligibility.reason}`:reviewed.exceptions[index];
+      const exception=qualifiedParticipationException(sourceEligibility,reviewed.exceptions[index]);
       if(!qualifiedForecastMarkets(player).includes(market)||propsReviewHasSemanticChecks(review.release)&&reviewed.sourceDeclinedMarkets?.includes(market))continue;
       // Every exact main/alternate event is priced from the SAME stored outcome law.
       const quotes=currentQuotes.filter(q=>q.playerId===player.id&&q.market===market&&!q.opening&&q.receivedAtProvenance==="provider_response"&&!q.live);

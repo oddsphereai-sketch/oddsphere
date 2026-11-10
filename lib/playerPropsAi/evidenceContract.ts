@@ -51,6 +51,9 @@ export type Player = {
   missing: string[];
 };
 export type GamePacket = {
+  /** Prospective NBA collector authority. Empty may observe withdrawal only,
+   * never authorize a scheduled count, claim or paid review. Legacy is absent. */
+  sourceOfferSetStatus?:'empty'|'nonempty';
   release: typeof PRODUCT_RELEASE; sport: Sport; gameId: string; start: string; lock: string;
   stage: Stage; cutoff: string; players: Player[]; quotes: Quote[];
   sourceLimitations: string[];

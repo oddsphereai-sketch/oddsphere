@@ -11,6 +11,11 @@ import {sameNflPropActorName} from './nflPlayerIdentity';
 export const PROPS_AI_PARTICIPATION_ELIGIBILITY_RELEASE='player_props_ai_participation_2026_11_10_r3_separate_lineup_and_medical' as const;
 export type ParticipationFact={evidenceId:string;source:string;availableAt:string;effectiveAt:string;rawStatus:string;status:'blocked'|'eligible'|'unknown';reason:string;ownIdentityBasis:'exact_team_and_name'|'exact_team_report_omission'|'attached_native_actor'|'attached_batter_lineup'|'exact_team_and_id_bound_alias'|'exact_team_and_provider_id';sourcePlayerName?:string;sourcePlayerId?:string;actorProviderId?:string;sourceTeam?:string;timeBasis:'source_response_availability'|'provider_reported'|'source_report_updated'|'source_capture_clock'|'evidence_availability'};
 export type PlayerParticipationEligibility={release:typeof PROPS_AI_PARTICIPATION_ELIGIBILITY_RELEASE;status:'blocked'|'eligible'|'unknown';blocked:boolean;reason:string|null;availableAt:string|null;effectiveAt:string|null;facts:ParticipationFact[];conflict:boolean};
+/** Current participation qualification is separate from the immutable accepted
+ * conditional-law exception. Unknown/unrelated reports cannot replace it. */
+export function qualifiedParticipationException(eligibility:PlayerParticipationEligibility,approvedException:string|null):string|null{
+ return eligibility.blocked===true?`Source participation unavailable: ${eligibility.reason}`:approvedException;
+}
 const obj=(v:unknown):Record<string,unknown>=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const name=(s:unknown)=>typeof s==='string'?s.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/\b(jr|sr|ii|iii|iv)\b/g,'').replace(/[^a-z0-9]/g,''):'';
 const time=(value:unknown)=>typeof value==='string'&&/(?:Z|[+-]\d\d:\d\d)$/.test(value)&&Number.isFinite(Date.parse(value))?Date.parse(value):NaN;

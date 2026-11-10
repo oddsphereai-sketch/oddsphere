@@ -55,7 +55,13 @@ milestones retain inclusive events; unqualified archived legs remain raw evidenc
 never a synthesized ordinary pair. NBA current-collector identity is independent
 of orphan retained history: historical unresolved names cannot block complete
 identified current retail actors, while unresolved current retail offers and failed
-collection remain refused. Native Out filtering uses exact fixture/team/name scope.
+collection remain refused. Live NBA sourceR2 is
+`player_props_ai_nba_source_2026_11_10_r2_current_actor_authority`;
+legacy offline adapter sourceR1 remains historical. Verified current actors own
+new review scopes, labels and team identity; withdrawn actors, stale names and
+old scopes cannot donate current authority. A successful empty collection may
+observe withdrawal, but cannot initiate paid counts or generation. Native Out
+filtering uses exact fixture/team/name scope.
 R59 snapshot/reader compatibility remains tested. NFL settlementR8
 and per-row eventR1 now pin new decisionR13; old results require separate owner
 approval and are never repaired by a recurring release. TrackingR43 identities

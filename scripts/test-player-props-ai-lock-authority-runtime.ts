@@ -5,6 +5,7 @@ import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 import assert from 'node:assert/strict';
 import type {NflPlayerPropsProductionSnapshot} from '../lib/services/football/nflPlayerPropsProductionContract';
 import type {NflPlayerPropsRuntimeDecision,NflPlayerPropsRuntimeBoard} from '../lib/services/football/nflPlayerPropsRuntime';
+import type {SiteAiDecision} from '../lib/playerPropsAi/publication';
 globalThis.fetch=async()=>{throw Error('NETWORK BLOCKED');};
 async function main(){
 const root=process.cwd();
@@ -295,6 +296,74 @@ if(!crossDuringLookup){
 }
 console.log(`Mocked paid-path siteRuntime passed: one count/one generation, local B ready callback and ${crossDuringLookup?'postlock GET/source fallback':'second prelock returned-game overlay followed by publication crossing lock'}, qualified B/native decline and exact locks preserved.`);
 }
+// A source participation hold qualifies the accepted conditional law; it is
+// not a replacement exception inside that immutable accepted review. Cross the
+// actual parser/adapter/trusted proof/first-lock boundary, including a head for
+// which the native model has no fallback row.
+function participationInput(mode:'healthy'|'out'|'cleared'|'unknown'|'teammate'|'opponent'|'wrong_fixture'){
+ const input=packet(earlyAt),status=(value:string,reportedAt:string,who='Synthetic Player',team='BUF')=>({id:`status:${value}:${reportedAt}:${who}:${team}`,kind:'availability',source:'synthetic exact-game report',availableAt:earlyAt,value:{canonicalGameId:mode==='wrong_fixture'?'foreign-game':'game',scheduledStart:start,context:{away:{team:'BUF',known:true,players:team==='BUF'?[{name:who,status:value,reportedAt}]:[]},home:{team:'MIN',known:true,players:team==='MIN'?[{name:who,status:value,reportedAt}]:[]}}}});
+ if(mode==='out'||mode==='cleared'||mode==='wrong_fixture')input.players[0].evidence.push(status('Out',earlyIssued));
+ if(mode==='cleared')input.players[0].evidence.push(status('Available',earlyAt));
+ if(mode==='unknown')input.players[0].evidence.push(status('Questionable',earlyAt));
+ if(mode==='teammate')input.players[0].evidence.push(status('Out',earlyAt,'Different Player'));
+ if(mode==='opponent')input.players[0].evidence.push(status('Out',earlyAt,'Synthetic Player','MIN'));
+ return input;
+}
+function participationHandoff(mode:Parameters<typeof participationInput>[0]){
+ const input=participationInput(mode),accepted=review(input),sourceBytes=digest(input),reviewBytes=digest(accepted),baseline=native(input);
+ baseline.decisions=baseline.decisions.filter((r:any)=>r.market==='receptions');
+ const choices:SiteAiDecision[]=siteAiDecisions(input,accepted,publishBefore);
+ const applied:NflPlayerPropsRuntimeBoard=applyNflSiteAi(baseline,input,choices,publishBefore),capture=testNflHandoffCapture(()=>publishBefore);
+ const authority=testNflSourceAuthority(()=>publishBefore)(input,accepted,true),ai=capture(applied.decisions,input,accepted,'ai'),nativeFrame=capture(baseline.decisions,input,accepted,'native');
+ assert.equal(ai.candidateProofs.length,4,mode);assert.equal(applied.decisions.length,4,mode);
+ const bundle=mergeNflHandoffs([authority,nativeFrame,ai,capture(applied.decisions,input,accepted,'ai')]);
+ const locked:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:applied,previous:null,lockHandoff:bundle});
+ assert.equal(locked.memberDecisions.length,4,mode);assert(locked.memberDecisions.every(r=>r.aiReview?.lawHash===accepted.players[0].law.hash),mode);
+ assert(locked.memberDecisions.some(r=>r.market==='receiving_yards'&&r.aiReview),'The offered AI-only head retains its actual admitted conditional law');
+ if(mode==='out')assert(locked.memberDecisions.every(r=>r.grade==='No Play'&&r.aiReview?.sourceEligibility?.blocked&&r.aiReview.exception==='Source participation unavailable: explicit_out'));
+ else {assert.equal(locked.memberDecisions.filter(r=>r.grade==='Best Angle').length,2,mode);assert.equal(locked.memberDecisions.filter(r=>r.grade==='Watchlist').length,2,mode);}
+ assert.deepEqual(accepted.players[0].exceptions,[null,null]);assert.equal(digest(accepted),reviewBytes);assert.equal(digest(input),sourceBytes);
+ const retained=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:native(participationInput(mode==='out'?'cleared':'out')),previous:locked,lockHandoff:bundle});
+ assert.deepEqual(retained.memberDecisions,locked.memberDecisions,'Existing public locks precede all new qualification checks');
+ assert.deepEqual(retained.board.decisions,locked.board.decisions);
+ return{input,accepted,applied,capture,locked};
+}
+const ownOut=participationHandoff('out');
+for(const mode of ['healthy','cleared','unknown','teammate','opponent','wrong_fixture'] as const)participationHandoff(mode);
+const forgeries:{name:string;change:(row:any)=>void}[]=[
+ {name:'grade',change:r=>{r.grade='Best Angle';}},
+ {name:'missing guarded exception',change:r=>{r.aiReview.exception=null;}},
+ {name:'arbitrary exception',change:r=>{r.aiReview.exception='Arbitrary source hold';}},
+ {name:'missing source eligibility',change:r=>{delete r.aiReview.sourceEligibility;}},
+ {name:'forged source eligibility',change:r=>{r.aiReview.sourceEligibility.blocked=false;}},
+ {name:'forged source reason',change:r=>{r.aiReview.sourceEligibility.reason='different_reason';}},
+ {name:'forged law',change:r=>{r.aiReview.lawHash='foreign';}},
+ {name:'forged probability',change:r=>{r.finalProbability=.01;}},
+ {name:'forged EV',change:r=>{r.expectedValue=999;}},
+ {name:'forged provider actor',change:r=>{r.providerPlayerId='999';}},
+ {name:'forged model release',change:r=>{r.modelRelease='foreign';}},
+ {name:'forged quote',change:r=>{r.aiReview.executionEvidence.selectedQuote.american=900;}},
+ {name:'forged pricing group',change:r=>{r.aiReview.executionEvidence.pricingQuotes=[];}},
+ {name:'late pricing provenance',change:r=>{r.aiReview.executionEvidence.pricedAt=lock;}},
+];
+for(const f of forgeries){const rows=structuredClone(ownOut.applied.decisions);for(const row of rows)f.change(row);assert.equal(ownOut.capture(rows,ownOut.input,ownOut.accepted,'ai').candidateProofs.length,0,f.name);}
+assert.equal(testNflHandoffCapture(()=>afterLock)(ownOut.applied.decisions,ownOut.input,ownOut.accepted,'ai').candidateProofs.length,0,'Late-only readiness cannot prove a prelock No Play');
+// A genuine current own block is the only supported participation overlay.
+// Unknown/teammate/opponent reports cannot authorize a copied own-Out proof.
+for(const mode of ['unknown','teammate','opponent'] as const){
+ const input=participationInput(mode),accepted=review(input),baseline=native(input),applied=applyNflSiteAi(baseline,input,siteAiDecisions(input,accepted,publishBefore),publishBefore);
+ const rows=structuredClone(applied.decisions);for(const row of rows){row.grade='No Play';row.aiReview!.exception=ownOut.applied.decisions[0].aiReview!.exception;row.aiReview!.sourceEligibility=ownOut.applied.decisions[0].aiReview!.sourceEligibility;}
+ assert.equal(ownOut.capture(rows,input,accepted,'ai').candidateProofs.length,0,mode+' cannot authorize an own-Out exception');
+}
+// Approved non-null source exceptions remain declined even with a real Out;
+// its source hold cannot waive the independent semantic exception.
+const declineInput=packet(finalAt,true);declineInput.players[0].evidence.push(...participationInput('out').players[0].evidence.filter((e:any)=>e.kind==='availability'));
+const declinedReview=review(declineInput,true),declinedBytes=digest(declinedReview);
+const declinedChoices:SiteAiDecision[]=siteAiDecisions(declineInput,declinedReview,publishBefore);
+assert.deepEqual(declinedReview.players[0].sourceDeclinedMarkets,['receptions']);assert(declinedReview.players[0].exceptions[1]);assert(declinedChoices.every(c=>c.market!=='receptions'));
+const declinedApplied:NflPlayerPropsRuntimeBoard=applyNflSiteAi(native(declineInput),declineInput,declinedChoices,publishBefore),declinedCapture=testNflHandoffCapture(()=>publishBefore)(declinedApplied.decisions,declineInput,declinedReview,'ai');
+assert.equal(declinedCapture.candidateProofs.length,4);assert(declinedApplied.decisions.filter(r=>r.market==='receptions').every(r=>!r.aiReview));assert.equal(digest(declinedReview),declinedBytes);
+console.log('NFL own-participation AI proof passed: actual parser/binding/trusted capture/first lock retains all four AI law rows including AI-only scope; own Out No Play, paired clearance/healthy promotions, repeated capture, exact old locks, approved semantic decline and forged grade/exception/source/probability/price/provenance/actor/late refusal. No IO.');
 console.log('Actual siteRuntime lock-authority controls passed: pre/post GET/source boundaries, source-before-overlay readiness, zero-price all-declined authority, lookup failures, unchanged early retention, exact cached cutoff and immutable public locks. Supabase and every network/model/count path mocked.');
 }
 void main().catch(error=>{console.error(error);process.exitCode=1});

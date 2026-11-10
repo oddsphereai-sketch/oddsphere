@@ -100,6 +100,7 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
           const native=nativeByFundedId.get(job.game_id)!;
           try{
             const packet=await args.load(native,{gameId:native.id,stage:job.stage,cutoff:clock(),lock:job.lock_at},{purpose:"scheduled_review",job});
+            if(packet.sport==='nba'&&packet.sourceOfferSetStatus==='empty'){findings.push(`review_deferred_empty_current_offers:${native.id}`);return null;}
             const fundedPacket={...packet,sourceGameId:native.id,gameId:job.game_id};
             const parts=await prepareReviewParts(fundedPacket,{key:config.key,fetchImpl:args.fetchImpl,onCountStage:parts=>{
               const stageDeadline=Math.min(deadline,Date.now()+instant(job.lock_at)-instant(clock()))-propsAiCompletionWindowMs(parts)-10000;

@@ -1,4 +1,5 @@
-import {resolveNbaOfferedPlayerTeam,nbaIndependentProbabilityEvent,PROPS_AI_NBA_SOURCE_RELEASE} from './nbaSourceIdentity';
+import {resolveNbaOfferedPlayerTeam,nbaIndependentProbabilityEvent,PROPS_AI_NBA_SOURCE_RELEASE,PROPS_AI_NBA_CURRENT_SOURCE_RELEASE,type NbaCurrentActorAuthority} from './nbaSourceIdentity';
+import {propsTeam} from './teamIdentity';
 /** Pure adapters for a LOCAL read-only export. No provider, database, writer or cron imports. */
 import type { NbaPlayerPropsCurrentState } from "../services/nba/nbaPlayerPropsCurrentState";
 import type { NbaPlayerPropsMarketHistory } from "../services/nba/nbaPlayerPropsPrivateStore";
@@ -19,7 +20,7 @@ const evidence = (id: string, kind: Evidence["kind"], availableAt: string, sourc
 // Same name/team join used for cost identity; provider-ID coverage must be established before runtime use.
 const nflIdentity = (team: string, name: string) => `${team}:${name.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
 
-export function fromCachedExport(source: CachedExport,window?:CapturedReviewWindow) {
+export function fromCachedExport(source: CachedExport,window?:CapturedReviewWindow,live?:{nbaActors:ReadonlyMap<string,readonly NbaCurrentActorAuthority[]>}) {
   if (source.readOnly !== true) throw new Error("Expected read-only local source export");
   const packets: GamePacket[] = [];
   const skipped: { sport: string; gameId: string; reason: string }[] = [];
@@ -33,9 +34,10 @@ export function fromCachedExport(source: CachedExport,window?:CapturedReviewWind
     if (!day.snapshot) { skipped.push({ sport: "nba", gameId: day.date, reason: "No published source snapshot; pending is not zero workload" }); continue; }
     const snapshot = day.snapshot;
     for (const game of snapshot.games) {
-      const decisions = snapshot.decisions.filter(d => d.gameId === game.gameId);
-      const observations = (day.market?.observations ?? []).filter(q => q.canonicalGameId === game.gameId && (CATALOG.nba.required as readonly string[]).includes(q.market));
-      const ids = [...new Set([...decisions.map(d => d.playerId), ...observations.flatMap(q => q.canonicalPlayerId ? [q.canonicalPlayerId] : [])])];
+      const authority=live?.nbaActors.get(game.gameId),actorById=authority?new Map(authority.map(actor=>[actor.id,actor])):null;
+      const decisions = snapshot.decisions.filter(d => d.gameId === game.gameId&&(!actorById||actorById.get(d.playerId)?.markets.includes(d.market)));
+      const observations = (day.market?.observations ?? []).filter(q => q.canonicalGameId === game.gameId && (CATALOG.nba.required as readonly string[]).includes(q.market)&&(!actorById||q.canonicalPlayerId&&actorById.get(q.canonicalPlayerId)?.markets.includes(q.market)));
+      const ids = authority?authority.map(actor=>actor.id):[...new Set([...decisions.map(d => d.playerId), ...observations.flatMap(q => q.canonicalPlayerId ? [q.canonicalPlayerId] : [])])];
       const locks = [...new Set(decisions.flatMap(d => d.lockedAt ? [d.lockedAt] : []))];
       const lock = window?.gameId===game.gameId?window.lock:locks.length === 1 ? locks[0] : new Date(instant(game.scheduledStart) - 3600_000).toISOString();
       for (const slot of capturedReviewSlots({gameId:game.gameId,start:game.scheduledStart,lock},window,()=>slots({ sport: "nba", gameId: game.gameId, start: game.scheduledStart, lock }))) {
@@ -43,7 +45,8 @@ export function fromCachedExport(source: CachedExport,window?:CapturedReviewWind
         const players: Player[] = ids.map(id => {
           const rows = decisions.filter(d => d.playerId === id), first = rows[0];
           const raw = observations.find(q => q.canonicalPlayerId === id);
-          const {team,opponent}=resolveNbaOfferedPlayerTeam({native:rows,offers:observations.filter(q=>q.canonicalPlayerId===id),teamNames,home:game.homeTeam,away:game.awayTeam,snapshotAt:snapshot.generatedAt,archiveAt:day.market?.updatedAt??source.generatedAt,cutoff:slot.at});
+          const currentActor=actorById?.get(id);
+          const {team,opponent}=currentActor??resolveNbaOfferedPlayerTeam({native:rows,offers:observations.filter(q=>q.canonicalPlayerId===id),teamNames,home:game.homeTeam,away:game.awayTeam,snapshotAt:snapshot.generatedAt,archiveAt:day.market?.updatedAt??source.generatedAt,cutoff:slot.at});
           const numericId = Number(id.replace(/^.*:/, ""));
           const knownHistory = boxes.filter(b => b.playerId === numericId && games.has(b.gameId) && instant(games.get(b.gameId)!.startTime) < cutoff);
           const history = knownHistory.filter(b => {
@@ -71,13 +74,26 @@ export function fromCachedExport(source: CachedExport,window?:CapturedReviewWind
               market:row.market,side:row.side,movement:row.movement,limitation:"Stored opening/prior/current values; individual observation/receipt clocks not supplied by this derived member field. Do not infer who moved first or a confirmed main-line change."}));
           }
           const missing = ["separate timestamped injury/lineup feed missing", "qualified joint outcome law not attached"];
+          if(currentActor){
+            // A withdrawn native market can still carry genuine same-actor
+            // workload/production/matchup observations. Keep only new context
+            // entries, never its projection, probabilities or event as a prior.
+            const keys=['role','production','matchup'] as const;
+            const seenContext=Object.fromEntries(keys.map(key=>[key,new Set(valid.flatMap(row=>Array.isArray(row[key])?row[key]:[]).map(value=>digest(value)))]));
+            for(const row of snapshot.decisions.filter(row=>row.gameId===game.gameId&&row.playerId===id&&!currentActor.markets.includes(row.market)&&instant(snapshot.generatedAt)<=cutoff&&instant(row.evaluatedAt)<=cutoff)){
+              if(propsTeam(row.team)!==team||propsTeam(row.opponent)!==opponent||row.scheduledStart!==undefined&&instant(row.scheduledStart)!==instant(game.scheduledStart)){missing.push('noncurrent native context identity mismatch; source context rejected');continue;}
+              const context=Object.fromEntries(keys.map(key=>[key,(Array.isArray(row[key])?row[key]:[]).filter(value=>{const hash=digest(value);if(seenContext[key].has(hash))return false;seenContext[key].add(hash);return true;})]));
+              if(!keys.some(key=>(context[key] as unknown[]).length))continue;
+              values.push(evidence(`${id}:noncurrent-native-context:${row.market}`,'matchup',new Date(Math.max(instant(row.evaluatedAt),instant(snapshot.generatedAt))).toISOString(),`${row.modelRelease??'unversioned native source'}; same-actor noncurrent-market context, not an independent event prior`,{nativeContextRelease:PROPS_AI_NBA_CURRENT_SOURCE_RELEASE,sourceMarket:row.market,...context,meaning:'Original available exact-actor/fixture context only. This market is not currently offered; its projection, probabilities, name and event cannot supply a current prior, scope or actor identity. Repeated metrics already supplied by current heads are omitted as correlated duplicates.'}));
+            }
+          }
           if (history.length !== knownHistory.length) missing.push("historical stat cache unavailable at this cutoff; later fetch cannot be backdated");
           if (!history.length) missing.push("no recent game logs in cached seasons");
           if (!opponentHistory.length) missing.push("no opponent history in cached seasons");
-          if (valid.length !== rows.length || !rows.length) missing.push("independent baseline missing at this review cutoff for some offered markets");
+          if (valid.length !== rows.length || !rows.length || currentActor?.markets.some(market=>!valid.some(row=>row.market===market))) missing.push("independent baseline missing at this review cutoff for some offered markets");
           if (valid.some(r => !r.modelRelease)) missing.push("model release absent for some independent baselines");
-          return { id, name: first?.playerName ?? raw?.playerName ?? id, team, opponent,
-            markets: [...new Set([...rows.map(r => r.market), ...observations.filter(q => q.canonicalPlayerId === id).map(q => q.market)])].sort(), evidence: values, missing };
+          return { id, name: currentActor?.name??first?.playerName ?? raw?.playerName ?? id, team, opponent,
+            markets: currentActor?[...currentActor.markets]:[...new Set([...rows.map(r => r.market), ...observations.filter(q => q.canonicalPlayerId === id).map(q => q.market)])].sort(), evidence: values, missing };
         });
         const quotes = new Map<string, Quote>();
         let rejected = 0;
