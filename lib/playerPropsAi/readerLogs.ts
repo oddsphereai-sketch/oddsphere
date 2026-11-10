@@ -57,6 +57,13 @@ export function readerLogWindows(sport: Sport, logs: Evidence[], cutoff?: string
     })) }];
   }));
   const jointStats=sport==="nba"?["points","rebounds","assists","threes"]:[];
+  // Match the generated coordinate to actual SAME-game source observations.
+  // Separately averaged points/threes can have different missing denominators.
+  const nonThreePoints=sport==="nba"?active.flatMap(row=>{
+    if(row.values.points?.size!==1||row.values.threes?.size!==1)return [];
+    const points=[...row.values.points][0],threes=[...row.values.threes][0];
+    return Number.isSafeInteger(points)&&Number.isSafeInteger(threes)&&threes>=0&&points>=3*threes?[points-3*threes]:[];
+  }):[];
   const observedPairOrderings=jointStats.flatMap((first,i)=>jointStats.slice(i+1).flatMap(second=>{
     const pairs=active.flatMap(row=>row.values[first]?.size===1&&row.values[second]?.size===1?[[[...row.values[first]][0],[...row.values[second]][0]]]:[]);
     let concordant=0,discordant=0;
@@ -65,6 +72,10 @@ export function readerLogWindows(sport: Sport, logs: Evidence[], cutoff?: string
     }
     return pairs.length>=3&&concordant&&discordant?[{first,second,records:pairs.length,concordant,discordant}]:[];
   }));
+  const observedSupport:Record<string,{n:number;minimum:number;maximum:number;mean:number}>={...Object.fromEntries(Object.keys(fields).flatMap(field=>{
+      const values=active.flatMap(row=>row.values[field]?.size===1?[...row.values[field]]:[]);
+      return values.length?[[field,{n:values.length,minimum:Math.min(...values),maximum:Math.max(...values),mean:values.reduce((a,b)=>a+b,0)/values.length}]]:[];
+    })),...(nonThreePoints.length?{points_excluding_made_threes:{n:nonThreePoints.length,minimum:Math.min(...nonThreePoints),maximum:Math.max(...nonThreePoints),mean:nonThreePoints.reduce((a,b)=>a+b,0)/nonThreePoints.length}}:{})};
   return {
     recordedSourceRows: logs.length, distinctGames: ordered.length, summarizedGames: active.length,
     newestGameAt:ordered[0]?.at?new Date(ordered[0].at).toISOString():null,
@@ -72,10 +83,7 @@ export function readerLogWindows(sport: Sport, logs: Evidence[], cutoff?: string
     newestGameAgeDays:cutoff&&ordered[0]?.at?(Date.parse(cutoff)-ordered[0].at)/86400000:null,
     newestQualifyingGameAgeDays:cutoff&&active[0]?.at?(Date.parse(cutoff)-active[0].at)/86400000:null,
     windows, conflicts,observedPairOrderings,
-    observedSupport:Object.fromEntries(Object.keys(fields).flatMap(field=>{
-      const values=active.flatMap(row=>row.values[field]?.size===1?[...row.values[field]]:[]);
-      return values.length?[[field,{n:values.length,minimum:Math.min(...values),maximum:Math.max(...values),mean:values.reduce((a,b)=>a+b,0)/values.length}]]:[];
-    })),
+    observedSupport,
     denominator: sport === "nba"
       ? "Distinct games with positive minutes or nonzero recorded production; zero/unknown participation rows remain in raw evidence, excluded from conditional summaries"
       : "Distinct recorded player-game rows; zero production does not establish nonparticipation",
