@@ -1292,6 +1292,8 @@ export type DailyEdgeResponse = {
   nbaRollingSchedule?: NbaRollingScheduleDto;
   /** Schedule-only CBB matchups never imply a forecast, Bet grade, or lock. */
   cbbRollingSchedule?: CbbRollingScheduleDto;
+  /** Exact last-published member tuples restored from durable writer captures. */
+  uclBoardContinuity?: { release: string; capturedAt: string };
   cbbScheduleCoverage?: { eligibleGameIds: number[]; modelEligibleGameIds: number[] };
   games: DailyEdgeGameDto[];
 };

@@ -144,7 +144,7 @@ export default async function CandidateDailyEdgePage({
       fallback: emptyPreviewSnapshot(sport, "temporarily_unavailable"),
       read: async () => (await import("@/lib/services/ucl/uclMemberSnapshotStore"))
         .readCurrentUclMemberSnapshot()
-        .then((value) => value ?? emptyPreviewSnapshot(sport)),
+        .then(async (value) => (await import("@/lib/services/ucl/uclMemberSchedule")).readUclMemberBoard(value)),
     });
     snapshot = result.value;
     snapshotUnavailable = result.unavailable;

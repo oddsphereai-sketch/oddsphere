@@ -6790,28 +6790,21 @@ export async function GET(request: Request) {
       } satisfies DailyEdgeResponse, { headers: DAILY_EDGE_NO_STORE_HEADERS });
     }
     const { readCurrentUclMemberSnapshot } = await import("@/lib/services/ucl/uclMemberSnapshotStore");
-    const payload = await readCurrentUclMemberSnapshot();
-    if (payload) {
-      const {populateStoredUclPublicSplits}=await import("@/lib/services/ucl/uclPublicSplitSource");
+    const { readUclMemberBoard } = await import("@/lib/services/ucl/uclMemberSchedule");
+    try {
+      const payload = await readUclMemberBoard(await readCurrentUclMemberSnapshot());
+      const { populateStoredUclPublicSplits } = await import("@/lib/services/ucl/uclPublicSplitSource");
       await populateStoredUclPublicSplits(payload);
-      return Response.json(payload, {
-        headers: {
-          "Cache-Control": "private, max-age=30, stale-while-revalidate=300",
-          "X-Oddsphere-Response-Source": "UCL_MEMBER_SNAPSHOT",
-        },
-      });
+      return Response.json(payload, { headers: {
+        "Cache-Control": "private, max-age=30, stale-while-revalidate=300",
+        "X-Oddsphere-Response-Source": payload.uclBoardContinuity ? "UCL_SAVED_MEMBER_CARDS" : "UCL_MEMBER_SNAPSHOT",
+      } });
+    } catch {
+      return Response.json({ as_of: new Date().toISOString(), sport: "soccer", date: requestedDate,
+        requested_date: requestedDate, fallback_used: false, slateState: "temporarily_unavailable",
+        slate_status: null, last_slate_update_at: null, games: [],
+      } satisfies DailyEdgeResponse, { status: 503, headers: DAILY_EDGE_NO_STORE_HEADERS });
     }
-    return Response.json({
-      as_of: new Date().toISOString(),
-      sport: "soccer",
-      date: requestedDate,
-      requested_date: requestedDate,
-      fallback_used: false,
-      slateState: "no_data",
-      slate_status: null,
-      last_slate_update_at: null,
-      games: [],
-    } satisfies DailyEdgeResponse, { headers: DAILY_EDGE_NO_STORE_HEADERS });
   }
 
   // Member reads must never rebuild the full Daily Edge response. Cron jobs
