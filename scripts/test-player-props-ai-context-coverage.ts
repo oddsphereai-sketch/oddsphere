@@ -61,11 +61,41 @@ const nullSource=catalog(append(packet,nullMetrics));assert.equal(nullSource.mat
 const nativeContext=evidence("native-context",{market:"points",line:10.5,context:{opponentAllowance:{label:"Opponent allowance",value:12,format:"count"},teamImpliedPoints:25}},"synthetic native","independent_model");
 const withContext=catalog(append(packet,nativeContext));assert.equal(withContext.matchup.status,"available");assert.equal(withContext.game_environment.status,"available");assert.doesNotThrow(()=>validateCoverage(withContext,coverage(withContext)));
 
+// Flags, identity metadata and exact missing placeholders are not actual
+// opponent/environment facts. Preserve them visibly, with paired real-value
+// recovery; booleans and categorical context are not rejected wholesale.
+for(const [key,value]of [["available",false],["available",true],["known",false],["known",true],["isAvailable",true],["isKnown",false],["hasData",true],["playerId",123],["teamId",456],["opponentId",789],["opponentTeamId",789]] as const){
+  const flag=evidence(`flag-${key}-${value}`,{opponent:"B",profile:{[key]:value}});
+  const flagEnvironment=evidence(`flag-environment-${key}-${value}`,{gameId:packet.gameId,profile:{[key]:value}},"synthetic exact-game environment");
+  const flaggedPacket=append(packet,flag,flagEnvironment),flaggedBefore=digest(flaggedPacket),flagged=catalog(flaggedPacket);
+  for(const area of ["matchup","game_environment"] as const){assert.equal(flagged[area].status,"partial");assert.deepEqual(flagged[area].eligibleContextFactIds,[]);assert(flagged[area].facts.some(f=>f.sourceIds.includes(area==="matchup"?flag.id:flagEnvironment.id)),"Metadata remains visible with its exact source binding");}
+  assert.equal(digest(flaggedPacket),flaggedBefore);
+}
+for(const missing of ["unknown"," UNKNOWN ","unavailable","not_available","not-provided","missing","n/a","pending","unverified"]){
+  const nativeMissing=evidence(`native-missing-${missing}`,{market:"points",line:10.5,context:{opponentAllowance:{label:"Opponent allowance",value:missing}}},"synthetic native","independent_model");
+  const profileMissing=evidence(`profile-missing-${missing}`,{opponent:"B",defenseScheme:missing});
+  const missingCatalog=catalog(append(packet,nativeMissing,profileMissing));assert.equal(missingCatalog.matchup.status,"partial");assert.deepEqual(missingCatalog.matchup.eligibleContextFactIds,[]);
+}
+const flagOnlyNative=evidence("flag-only-native",{market:"points",line:10.5,context:{opponentAllowance:{known:false,available:false}}},"synthetic native","independent_model");
+const flagNative=catalog(append(packet,flagOnlyNative));assert.equal(flagNative.matchup.status,"partial");assert.deepEqual(flagNative.matchup.eligibleContextFactIds,[]);
+const realCategorical=evidence("categorical-opponent",{opponent:"B",defenseScheme:"switch-heavy"});
+const realZero=evidence("zero-opponent",{opponent:"B",defenseAdjustment:0});
+const realBoolean=evidence("boolean-environment",{gameId:packet.gameId,roofClosed:false},"synthetic exact-game environment");
+const realNegativeBoolean=evidence("boolean-environment-true",{gameId:packet.gameId,roofClosed:true},"synthetic exact-game environment");
+for(const actualOpponent of [realCategorical,realZero]){
+  const recoveredPacket=append(packet,flagOnlyNative,actualOpponent,realBoolean),recoveredBefore=digest(recoveredPacket),recovered=catalog(recoveredPacket);
+  assert.equal(recovered.matchup.status,"available");assert.equal(recovered.game_environment.status,"available");assert(recovered.matchup.eligibleContextFactIds!.length>0);assert(recovered.game_environment.eligibleContextFactIds!.length>0);assert.doesNotThrow(()=>validateCoverage(recovered,coverage(recovered)));assert.equal(digest(recoveredPacket),recoveredBefore);
+  const placeholderOnly=coverage(recovered);placeholderOnly.matchup.factIds=[recovered.matchup.facts.find(f=>f.sourceIds.includes(flagOnlyNative.id))!.id];assert.throws(()=>validateCoverage(recovered,placeholderOnly),/actual context citation/);
+}
+assert.equal(catalog(append(packet,realNegativeBoolean)).game_environment.status,"available","A meaningful boolean context fact remains usable in either state");
+assert.equal(catalog(append(packet,evidence("unknown-substring",{defenseScheme:"Unknown individual assignment within a switching-heavy scheme"}))).matchup.status,"available","Only exact placeholder strings are excluded, never substantive descriptions containing a caveat");
+
 // Non-NBA semantics, values, hashes and validation remain unchanged.
 for(const sport of ["nfl","mlb"] as const){
   const prior=catalog({...packet,sport});
   for(const area of ["matchup","game_environment"] as const){assert.equal(prior[area].status,"available");assert.equal(prior[area].eligibleContextFactIds,undefined);assert.deepEqual(prior[area].facts,baseline[area].facts);}
   assert.doesNotThrow(()=>validateCoverage(prior,coverage(prior)));
+  const legacyFlags=catalog({...append(packet,flagOnlyNative),sport});assert.equal(legacyFlags.matchup.status,"available");assert.equal(legacyFlags.matchup.eligibleContextFactIds,undefined);
 }
 // Existing accepted/locked coverage is retained as stored; new requirements are
 // catalog metadata for future parsing, not a reconstruction of old evidence.

@@ -21,10 +21,13 @@ const obj=(v:unknown):Record<string,Json>=>v&&typeof v==="object"&&!Array.isArra
 const clean=(v:unknown):Json=>JSON.parse(JSON.stringify(v));
 const normalized=(s:string)=>s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g,"").replace(/\b(jr|sr|ii|iii|iv)\b/g,"").replace(/[^a-z]/g,"");
 const nonempty=(v:unknown)=>Array.isArray(v)?v.length>0:v!==null&&v!==undefined&&typeof v==="object"?Object.keys(v).length>0:typeof v==="number"?Number.isFinite(v):Boolean(v);
-const contextMetadata=new Set(["status","coverageStatus","gameId","opponent","team","source","availableAt","asOf","asOfTimestamp","capturedAt","generatedAt","meaning","interpretation","label","format","provenance","key","unit"]);
+// Coverage flags and actor IDs describe source availability/identity, not an
+// opponent profile. Keep their exact payloads visible without promoting them.
+const contextMetadata=new Set(["status","coverageStatus","available","known","isAvailable","isKnown","hasData","gameId","playerId","teamId","opponentId","opponentTeamId","opponent","team","source","availableAt","asOf","asOfTimestamp","capturedAt","generatedAt","meaning","interpretation","label","format","provenance","key","unit"]);
+const missingContextStrings=new Set(["unknown","unavailable","missing","not available","not provided","not supplied","n/a","na","null","undefined","pending","unverified"]);
 const hasContextValue=(value:unknown):boolean=>Array.isArray(value)?value.some(hasContextValue):value!==null&&typeof value==="object"
   ?Object.entries(value).some(([key,v])=>!contextMetadata.has(key)&&hasContextValue(v))
-  :typeof value==="number"?Number.isFinite(value):typeof value==="string"?value.trim().length>0:typeof value==="boolean";
+  :typeof value==="number"?Number.isFinite(value):typeof value==="string"?value.trim().length>0&&!missingContextStrings.has(value.trim().toLowerCase().replace(/[_-]+/g," ")):typeof value==="boolean";
 
 export function playerReaderEvidence(packet:GamePacket,player:Player,allocate:(n:number)=>string) {
   const result=Object.fromEntries(READER_AREAS.map(a=>[a,{status:"missing",facts:[],limitations:[],...(packet.sport==="nba"&&(a==="matchup"||a==="game_environment")?{eligibleContextFactIds:[]}:{} )} as ReaderAreaEvidence])) as Record<ReaderArea,ReaderAreaEvidence>;
