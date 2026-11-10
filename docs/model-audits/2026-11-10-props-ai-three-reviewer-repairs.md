@@ -226,3 +226,36 @@ instead of stripping AI metadata from an AI release; positive assertions remain.
 Persisted JSON semantics normalize legitimate optional undefined baseline fields.
 Both new tests run in the existing PostgreSQL-proof workflow. R31 remains future,
 V70/live/paid proof remains separately gated, and the clean-round streak resets.
+
+## Round 10 medical context and dispatch timing repairs
+
+Fresh full-product review independently reproduced two more process defects.
+An otherwise identical normalized ESPN injury report could revoke an admitted
+R31 review solely because its team/player arrays reordered or an unchanged
+status had a refreshed report timestamp. Actual parser, admission, publication
+and first-lock reproduction replaced three AI Best Angles with three native
+Leans. Separately, a delayed claim or send acknowledgement let an early review
+start generation after the established final-only boundary.
+
+Prospective reader-contextR1 adds a canonical full-context proof only for future
+R31. It preserves the admitted original critical hash and the exact legacy hash
+function. Only recognized unordered medical source sets and meaningless clock
+refreshes are neutral; genuine own/teammate/opponent medical facts, identities,
+details, role, matchup, lineup and clock-selected authority remain consequential.
+The full original source and canonical factual text remain archived, and stored
+accepted reviews and locks are never reconstructed. Same-input paired controls
+retain all three qualified AI rows without changing their law or grade rule;
+genuine changed-context controls retain their existing qualification barriers.
+
+Stage-aware checks now run after claim and acquired-slot waits and immediately
+before HTTP after serialization. Queued parts and corrections cannot buy a missed
+early request after final time. A send-authorized attempt that demonstrably never
+started HTTP records exact zero usage; genuinely dispatched unknown charges keep
+their hold. The normal final and a legitimate early request started just before
+the boundary remain supported. No SQL, calendar, quota, output/input bound,
+monthly policy, writer, source request or logical review slot is added.
+
+The existing workflow includes actual-producer context/first-lock and delayed
+claim/send/queue/phase-two dispatch regressions. Both repairs require another
+fresh pair of full three-reviewer rounds, final clean CI, protected latest-main
+integration and normal production evidence; prior clean-round credit is reset.

@@ -4,6 +4,7 @@ import {PRODUCT_RELEASE,type GamePacket,type Quote} from '../lib/playerPropsAi/e
 import {PROPS_AI_EXECUTION_EVIDENCE_RELEASE} from '../lib/playerPropsAi/publicationContract';
 import {PROPS_AI_RELEASE,PROPS_AI_READER_CLAIMS_RELEASE} from '../lib/playerPropsAi/releases';
 import {readerAvailabilityContextHash} from '../lib/playerPropsAi/readerClaimFreshness';
+import {readerCanonicalContextHash,PROPS_AI_READER_CONTEXT_RELEASE} from '../lib/playerPropsAi/readerContext';
 import {criticalContextHashes} from '../lib/playerPropsAi/criticalContext';
 import {validateLaw,lawForecast,type AcceptedPlayerLaw} from '../lib/playerPropsAi/law';
 import {siteAiDecisions,type SiteAiDecision} from '../lib/playerPropsAi/publication';
@@ -28,7 +29,7 @@ function fixture(sport:GamePacket['sport'],markets:string[],lawValues:Record<str
  const id=sport==='nfl'?'nfl-bdl-player:1':'synthetic-player';
  const packet:GamePacket={release:PRODUCT_RELEASE,sport,gameId:'synthetic-game',start,lock,cutoff:at,stage:'final',sourceLimitations:[],players:[{id,name:'Synthetic Player',team:'BOS',opponent:'NYK',markets,missing:[],evidence:[]}],quotes:[]};
  const law=validateLaw(sport,packet.players[0],{weights,outcomes:lawValues});
- const review={release:PROPS_AI_RELEASE,gameId:'funded-synthetic',sourceGameId:packet.gameId,start,lock,cutoff:at,issuedAt:at,stage:'final',inputHash:'synthetic-source',inputEvidence:{digest:'synthetic-source'},model:'synthetic',partProvenance:[],criticalContextHashes:criticalContextHashes(packet),marketScopes:{[id]:markets},players:[{playerId:id,law,assessment:'Synthetic complete assessment.',confidence:markets.map(()=>2),exceptions:markets.map(()=>null),coverage:{},sourceReadProofs:{release:PROPS_AI_READER_CLAIMS_RELEASE,availabilityContextHash:readerAvailabilityContextHash(packet,id)}}]} as unknown as AcceptedGameReview;
+ const review={release:PROPS_AI_RELEASE,gameId:'funded-synthetic',sourceGameId:packet.gameId,start,lock,cutoff:at,issuedAt:at,stage:'final',inputHash:'synthetic-source',inputEvidence:{digest:'synthetic-source'},model:'synthetic',partProvenance:[],criticalContextHashes:criticalContextHashes(packet),marketScopes:{[id]:markets},players:[{playerId:id,law,assessment:'Synthetic complete assessment.',confidence:markets.map(()=>2),exceptions:markets.map(()=>null),coverage:{},sourceReadProofs:{release:PROPS_AI_READER_CLAIMS_RELEASE,contextRelease:PROPS_AI_READER_CONTEXT_RELEASE,originalCriticalContextHash:criticalContextHashes(packet)[id],canonicalContextHash:readerCanonicalContextHash(packet,id),availabilityContextHash:readerAvailabilityContextHash(packet,id)}}]} as unknown as AcceptedGameReview;
  return{packet,review,law,id};
 }
 function replay(c:SiteAiDecision,law:AcceptedPlayerLaw){

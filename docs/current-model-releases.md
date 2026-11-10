@@ -19,6 +19,16 @@ conditional estimates remain visible at first lock with a separate operational
 reason. Current medical exceptions retain precedence, native-context recovery
 uses the existing grade rule, and accepted laws/exceptions and stored locks stay
 exact. This completes the undeployed R31 repair; it does not authorize new action.
+Prospective reader-contextR1
+`player_props_ai_reader_context_2026_11_10_r1_medical_sets` binds canonical
+medical report sets and effective authority for every supplied identity without
+changing the legacy critical hash. Harmless report ordering and same-state clock
+refreshes retain R31; genuine status, detail, role, matchup and authority changes
+invalidate it. The proof also binds the original admitted critical hash. The
+existing early/final timing policy is checked after claim/queue/send waits and
+again immediately before HTTP; an authorized but unsent attempt records zero,
+while genuinely dispatched unknown charges remain reserved. These are
+undeployed R31 correctness repairs, with no new slot, retry or quota.
 NFL memberR60/lifecycleR42 stamp current-execution first-lock authority.
 ParticipationR3 `player_props_ai_participation_2026_11_10_r3_separate_lineup_and_medical`
 keeps lineup opportunity separate from medical availability: one channel cannot

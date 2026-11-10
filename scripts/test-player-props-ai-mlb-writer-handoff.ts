@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Synthetic fluent Supabase rows and isolated actual-module VM boundaries intentionally exercise runtime admission, publication and retention. */
 /** Actual MLB writer AI block, canonical publisher/retention/cutoff reader and
  * game-lock writer. All DB/provider I/O is an in-memory fixture. */
+import {readerCanonicalContextHash} from '../lib/playerPropsAi/readerContext';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
@@ -30,6 +31,9 @@ async function main(){
  const lock=new Date(Date.parse(at)+240000).toISOString(),start=new Date(Date.parse(lock)+3600000).toISOString();
  const packet={...structuredClone(originalPacket),start,lock},native={...originalNative,gameStartTime:start};
  const review={...structuredClone(originalReview),start,lock,criticalContextHashes:criticalContextHashes(packet),inputHash:digest(packet),inputEvidence:{...originalReview.inputEvidence,digest:digest(packet)}};
+ // This synthetic callback fixture retimes its source before publication; bind
+ // the prospective proof to that fixture, never to a real stored review.
+ for(const player of review.players){player.sourceReadProofs!.originalCriticalContextHash=review.criticalContextHashes[player.playerId];player.sourceReadProofs!.canonicalContextHash=readerCanonicalContextHash(packet,player.playerId);}
  let tick=at,serial=0,readies=0,providerCalls=0;
  const env={NODE_ENV:'test',NEXT_PUBLIC_SUPABASE_URL:'http://127.0.0.1',SUPABASE_SERVICE_ROLE_KEY:'synthetic-never-real',ODDSPHERE_PROPS_INTERNAL_TRACKING_ENABLED:'true',ODDSPHERE_PROPS_SNAPSHOT_RETENTION_PER_SLATE:'2',ODDSPHERE_PROPS_REAL_PUBLISH_ENABLED:'true',ODDSPHERE_PROPS_DISPLAY_ENABLED:'true'};
  const tables:Record<string,any[]>={prop_scoring_runs:[],admin_audit_log:[],mlb_prop_tracking_entries:[]};

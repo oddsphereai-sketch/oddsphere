@@ -5,6 +5,8 @@ import {compileReaderClaims,type ReaderClaim,type ReaderClaimCatalog} from './re
 import {READER_AREAS,type ReaderCoverage} from './readerCoverage';
 import {unresolvedForecastMarkets,UNRESOLVED_INTERCEPTION_EVENT} from './sourceEvents';
 import {readerAvailabilityContextHash} from './readerClaimFreshness';
+import {readerCanonicalContextHash,PROPS_AI_READER_CONTEXT_RELEASE} from './readerContext';
+import {criticalContextHashes} from './criticalContext';
 
 export {PROPS_AI_READER_CLAIMS_RELEASE} from './releases';
 import {PROPS_AI_READER_CLAIMS_RELEASE} from './releases';
@@ -82,7 +84,7 @@ export function renderReaderClaimSelections(packet:GamePacket,playerId:string,va
  // The original input plus this pinned release can reproduce the catalog.
  const claims=catalog.claims.filter(c=>selectedIds.has(c.id)).map(c=>({id:c.id,claimHash:digest(c),area:c.area,kind:c.kind,
   factIds:[...c.factIds],factHashes:[...c.factHashes],sourceIds:[...c.sourceIds],availableAt:c.availableAt}));
- return {...row,assessment,coverage,gaps,exceptions,sourceReadProofs:{release:PROPS_AI_READER_CLAIMS_RELEASE,availabilityContextHash:readerAvailabilityContextHash(packet,playerId),catalogHash:digest(catalog),claims,assessment:assessmentChoice.selection,areas:proof,gaps:[...row.gaps],exceptions:[...row.exceptions]}};
+ return {...row,assessment,coverage,gaps,exceptions,sourceReadProofs:{release:PROPS_AI_READER_CLAIMS_RELEASE,contextRelease:PROPS_AI_READER_CONTEXT_RELEASE,originalCriticalContextHash:criticalContextHashes({...packet,players:[player]})[playerId],canonicalContextHash:readerCanonicalContextHash(packet,playerId),availabilityContextHash:readerAvailabilityContextHash(packet,playerId),catalogHash:digest(catalog),claims,assessment:assessmentChoice.selection,areas:proof,gaps:[...row.gaps],exceptions:[...row.exceptions]}};
 }
 
 /** Reader-only checks share the same required selections and factual renderer. */

@@ -51,7 +51,7 @@ export async function countAiInput(body: AiRequest, args: { key: string; fetchIm
   invariant(!args.signal?.aborted&&(completedLimit===undefined||Date.now()<=completedLimit),"input_count_completed_after_deadline");
   invariant(Number.isSafeInteger(data.input_tokens) && data.input_tokens > 0, "invalid_input_token_count"); return data.input_tokens as number;
 }
-export async function generateAiReview(body: AiRequest, args: { key: string; timeoutMs: number; remainingWindowMs?:()=>number; minimumTimeoutMs?:number; fetchImpl?: typeof fetch; serviceTier?:"default"|"flex"; stream?:boolean; onOutputText?:(delta:string)=>void; onCreated?: (id: string) => Promise<void>; onProgress?: (event:{type:string;elapsedMs:number;textCharacters:number})=>void }): Promise<AiResponse> {
+export async function generateAiReview(body: AiRequest, args: { key: string; timeoutMs: number; remainingWindowMs?:()=>number; minimumTimeoutMs?:number; canStart?:()=>boolean; fetchImpl?: typeof fetch; serviceTier?:"default"|"flex"; stream?:boolean; onOutputText?:(delta:string)=>void; onCreated?: (id: string) => Promise<void>; onProgress?: (event:{type:string;elapsedMs:number;textCharacters:number})=>void }): Promise<AiResponse> {
   if(!args.fetchImpl)requireRealPropsAiPermission();
   const started=Date.now();let textCharacters=0;
   invariant(args.key && Number.isFinite(args.timeoutMs) && args.timeoutMs > 0 && args.timeoutMs <= 180000, "invalid_generation_configuration");
@@ -59,7 +59,7 @@ export async function generateAiReview(body: AiRequest, args: { key: string; tim
   // window. Sample it after serialization, with no await before starting HTTP.
   const requestBody=serializeAiRequest(body,args);
   const timeoutMs=Math.floor(Math.min(args.timeoutMs,args.remainingWindowMs?.()??args.timeoutMs));
-  if(!Number.isFinite(timeoutMs)||timeoutMs<(args.minimumTimeoutMs??1))throw new AiRequestNotStartedError();
+  if(!Number.isFinite(timeoutMs)||timeoutMs<(args.minimumTimeoutMs??1)||args.canStart?.()===false)throw new AiRequestNotStartedError();
   const response = await (args.fetchImpl ?? fetch)("https://api.openai.com/v1/responses", { method: "POST",
     headers: { Authorization: `Bearer ${args.key}`, "Content-Type": "application/json" },
     body: requestBody,
