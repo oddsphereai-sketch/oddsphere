@@ -210,3 +210,17 @@ Prove writer immutability and exact legacy locked reader precedence. Run all req
 model/integration checks from a clean fresh-main branch and publish only through a PR.
 Verify live release, cron health, coherence, data coverage and reader snapshots after any
 future qualified deployment. Until those gates pass, keep these artifacts offline.
+
+## November 10 R29 verification handoff
+
+R29 adds exact cutoff-aware NFL identity, future exact execution quote metadata,
+whole-game admission and a pending-only NBA scheduling opportunity. Its process
+and limitations are documented in
+`model-audits/2026-11-10-props-ai-process-reliability.md`. R28 named source checks
+and actor receipts remain required. Deployment, schema acceptance and matching
+row counts alone do not prove substantive decisions or member publication.
+Verify both scheduled slots against original submitted inputs, all actors and
+markets, source-grounded numbers, actual persisted usage/admission provenance,
+current execution contracts and final lock precedence. Preserve failed slots
+and old locked payloads. V69 diagnostics require separate database installation
+and private-access proof. No manual or paid proof run is authorized.

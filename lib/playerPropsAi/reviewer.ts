@@ -5,7 +5,8 @@ import {acceptedResponseEvidence} from "./responseEvidence";
 import {physicalLawFindings} from "./physicalDiagnostics";
 import {failureEvidence} from "./failureEvidence";
 import {isMissedPropsEarlyWindow} from "./schedule";
-import {propsAiCompletionWindowMs} from "./completionWindow";
+import {propsAiCompletionWindowMs,propsAiGenerationPool} from "./completionWindow";
+import type {PropsAiGameAdmission} from "./gameAdmission";
 import { gzipSync } from "node:zlib";
 import type { GamePacket } from "./evidenceContract";
 import { digest, invariant, instant, etDate } from "./evidence";
@@ -28,18 +29,24 @@ export type AcceptedGameReview = { release: (typeof PROPS_AI_ACCEPTED_RELEASES)[
   inputEvidence: { encoding: "gzip-base64"; digest: string; bytes: number; data: string } };
 export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob; store: PropsAiReviewStore; key: string;
   preferStronger: boolean; writerRunId:string; fetchImpl?: typeof fetch; clock?: () => string; deadline?: number;
-  generationSlot?:<T>(run:()=>Promise<T>)=>Promise<T>; prepare?:()=>Promise<PreparedPart[]>; countStrong?:(part:PreparedPart)=>Promise<number> }) {
+  gameAdmission?:PropsAiGameAdmission;generationSlot?:<T>(run:()=>Promise<T>)=>Promise<T>; prepare?:()=>Promise<PreparedPart[]>; countStrong?:(part:PreparedPart)=>Promise<number> }) {
   const clock = args.clock ?? (() => new Date().toISOString()), deadline = args.deadline ?? Date.now() + 250000;
   if(args.job.state!=="pending")return {status:"skipped",reason:"not_pending"};
   invariant(args.job.game_id === args.packet.gameId && args.job.sport===args.packet.sport && instant(args.job.scheduled_start) === instant(args.packet.start) && instant(args.job.lock_at)===instant(args.packet.lock) && args.job.stage === args.packet.stage && args.job.game_day===etDate(args.packet.start), "job_input_identity_mismatch");
   invariant(instant(clock()) < instant(args.packet.lock) && instant(args.packet.cutoff) <= instant(clock()), "input_outside_actual_review_window");
   if(isMissedPropsEarlyWindow(args.job.stage,args.packet.lock,clock()))return {status:"skipped",reason:"early_window_closed_final_only"};
-  const slot=args.generationSlot??(async <T>(run:()=>Promise<T>)=>run());
+  const globalSlot=args.generationSlot??(async <T>(run:()=>Promise<T>)=>run()),localSlot=propsAiGenerationPool(PROPS_AI_PART_CONCURRENCY);
+  const slot=<T>(run:()=>Promise<T>)=>localSlot(()=>globalSlot(run));
   const parts = await (args.prepare?.() ?? prepareReviewParts(args.packet, { key: args.key, fetchImpl: args.fetchImpl, count:(packet,model)=>slot(()=>countAiInput(jointReviewRequest(packet,model,PROPS_AI_MAX_OUTPUT_PER_REQUEST),args)) }));
   invariant(digest(parts.flatMap(p=>p.packet.players.map(p=>p.id)).sort())===digest(args.packet.players.map(p=>p.id).sort()),"partition_player_coverage_mismatch");
+  const releaseGame=await (args.gameAdmission?.(parts.length)??Promise.resolve(()=>{}));
+  try{
   const preferStronger=args.preferStronger&&args.job.stage==="final";
+  // Optional stronger-model counting must not consume the primary review's
+  // complete generation/publication window while holding whole-game admission.
+  const strongCountDeadline=Date.now()+Math.min(deadline-Date.now(),instant(args.packet.lock)-instant(clock()))-propsAiCompletionWindowMs(parts.length)-10000;
   const requests = await Promise.all(parts.map(async part=>({input_tokens:part.inputTokens,max_output_tokens:PROPS_AI_MAX_OUTPUT_PER_REQUEST,
-    strong_input_tokens:preferStronger ? await slot(()=>(args.countStrong?.(part) ?? countAiInput(jointReviewRequest(part.packet,PROPS_AI_STRONG_MODEL,PROPS_AI_MAX_OUTPUT_PER_REQUEST),{key:args.key,fetchImpl:args.fetchImpl}))).catch(()=>null) : null})));
+    strong_input_tokens:preferStronger ? await slot(async()=>{invariant(Date.now()<strongCountDeadline,"optional_strong_count_window_closed");const count=await(args.countStrong?.(part)??countAiInput(jointReviewRequest(part.packet,PROPS_AI_STRONG_MODEL,PROPS_AI_MAX_OUTPUT_PER_REQUEST),{key:args.key,fetchImpl:args.fetchImpl,deadline:strongCountDeadline}));invariant(Date.now()<=strongCountDeadline,"optional_strong_count_window_closed");return count;}).catch(()=>null) : null})));
   if(Math.min(deadline-Date.now(),instant(args.packet.lock)-instant(clock()))<propsAiCompletionWindowMs(parts.length)) return {status:"skipped",reason:"insufficient_completion_window"};
   if(isMissedPropsEarlyWindow(args.job.stage,args.packet.lock,clock()))return {status:"skipped",reason:"early_window_closed_final_only"};
   const sourcePacketJson=JSON.stringify(args.packet);
@@ -161,4 +168,5 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
   }catch(error){failure=(error as Error).message;}
   const failed=await args.store.finish(job.job_key,token,null,failure.replace(/sk-[\w-]+/g,"redacted").slice(0,200));
   return {status:failed.state,reason:failed.error_code};
+  }finally{releaseGame();}
 }

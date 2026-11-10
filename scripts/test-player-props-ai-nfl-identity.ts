@@ -1,3 +1,4 @@
+import {validatePacket,digest} from "../lib/playerPropsAi/evidence";
 import assert from 'node:assert/strict';
 import {resolveNflPropSourcePlayer,sameNflPropActorName,PROPS_AI_NFL_SOURCE_RELEASE,PROPS_AI_NFL_IDENTITY_RELEASE} from '../lib/playerPropsAi/nflPlayerIdentity';
 import {liveNflPacket} from '../lib/playerPropsAi/liveSources';
@@ -28,6 +29,13 @@ const snapshot={week:9,generatedAt:at,board:{decisions:[stored]},memberDecisions
 const history={updatedAt:at,games:[],stats:[],teamStats:[],playMetrics:[],release:'synthetic'} as unknown as LiveArgs['history'];
 const orphan={...quote,playerName:'Unresolved historical actor',isOpening:true};
 const packet=liveNflPacket({game,window:{gameId:game.id,stage:'early',cutoff:at,lock},snapshot,observations:{generatedAt:at,observations:[native,quote,orphan]} as never,history,context});
+assert.equal(packet.sourceIdentityAvailableAt,at,'Exact original enrichment-completion clock stays bound to the immutable input');
+const packetBefore=digest(packet);assert.doesNotThrow(()=>validatePacket(packet));
+assert.throws(()=>validatePacket({...packet,sourceIdentityAvailableAt:'2026-11-08T17:00:01Z'}),/identity source unavailable/);
+assert.throws(()=>validatePacket({...packet,sourceIdentityAvailableAt:undefined}),/identity source unavailable/);
+assert.throws(()=>validatePacket({...packet,sourceIdentityAvailableAt:at.slice(0,-1)}),/Invalid zoned timestamp/);
+assert.equal(resolveNflPropSourcePlayer({...args,observationsAvailableAt:at.slice(0,-1)}),null,'An unzoned header cannot establish source availability');
+assert.equal(digest(packet),packetBefore,'No packet/legacy payload is rewritten by chronology checks');
 assert.equal(packet.sourceInputRelease,PROPS_AI_NFL_SOURCE_RELEASE);assert.equal(packet.sourceIdentityRelease,PROPS_AI_NFL_IDENTITY_RELEASE);assert.equal(packet.players.length,1);assert.equal(packet.players[0].id,'nfl-bdl-player:12');assert.equal(packet.quotes.length,2,'orphan history does not become a currently offered actor');
 assert.throws(()=>liveNflPacket({game,window:{gameId:game.id,stage:'early',cutoff:at,lock},snapshot,observations:{generatedAt:at,observations:[native,quote,{...orphan,isOpening:false}]} as never,history,context}),/offered-player identity coverage incomplete/,'unresolved current actors still block completion');
 // Regression from the ordinary producer: same actor represented by separate
@@ -37,7 +45,7 @@ const aliasedSnapshot={...snapshot,memberDecisions:[priorHead,{...priorHead,play
 const merged=liveNflPacket({game,window:{gameId:game.id,stage:'early',cutoff:at,lock},snapshot:aliasedSnapshot,observations:{generatedAt:at,observations:[native,quote]} as never,history,context});
 assert.equal(merged.players.length,1);assert.equal(merged.players[0].evidence.filter(e=>e.kind==='independent_model').length,1,'identical facts from suffix groups are deduplicated');
 const pricedHead={...priorHead,decisionSupport:{projection:{independent:2.1},probability:{independentSelectedSide:.55},price:{currentPrice:-110}}};
-const pricedSnapshot={...snapshot,memberDecisions:[pricedHead]} as never;
+const pricedSnapshot={...snapshot,memberDecisions:[pricedHead]} as unknown as LiveArgs["snapshot"];
 const pricedBefore=JSON.stringify(pricedSnapshot);
 const withMovement=liveNflPacket({game,window:{gameId:game.id,stage:'early',cutoff:at,lock},snapshot:pricedSnapshot,observations:{generatedAt:at,observations:[native,quote]} as never,history,context});
 assert.ok(withMovement.players[0].evidence.some(e=>e.kind==='market'),'retained price movement remains supplied');
@@ -63,7 +71,7 @@ assert.ok(enriched.players[0].evidence.some(e=>e.kind==='recent_games'));
 // The same primary ID may be carried by a partially enriched current row. It
 // must join the complete current sibling before optional target-name matching.
 const noRoster={...context,games:[{...context.games[0],awayDepth:{...context.games[0].awayDepth,roster:[]},homeDepth:{...context.games[0].homeDepth,roster:[]}}]};
-const quoteOnlySnapshot={...snapshot,board:{decisions:[]},memberDecisions:[]};
+const quoteOnlySnapshot={...snapshot,board:{...snapshot.board,decisions:[]},memberDecisions:[]};
 const partialPrimary={...native,providerObservationId:'partial',playerName:null,playerTeam:null,market:'receiving_yards',line:20.5} as IdentityArgs['row'];
 const capture=(observations:IdentityArgs['row'][],generatedAt=at)=>({generatedAt,observations}) as LiveArgs['observations'];
 const live=(observations:IdentityArgs['row'][],extra:Partial<LiveArgs>={})=>liveNflPacket({game,window:{gameId:game.id,stage:'early',cutoff:at,lock},snapshot:quoteOnlySnapshot,observations:capture(observations),history,context:noRoster,...extra});

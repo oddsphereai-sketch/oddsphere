@@ -47,6 +47,10 @@
  */
 
 import { cronHandler } from "@/lib/cron/runCron";
+import { validateCronAuth } from "@/lib/cron/auth";
+import { hasDuePropsAiReview } from "@/lib/playerPropsAi/dueReview";
+import { runNbaPropsReviewRescue } from "@/lib/playerPropsAi/nbaReviewRescue";
+import { currentNbaProviderSeason } from "@/lib/services/nba/nbaProviderSeason";
 import { supabase } from "@/lib/db/supabase";
 import { currentSlateDate } from "@/lib/dates/slateDate";
 import { nbaPlayerPropsRefreshFailure } from "@/lib/cron/playerPropsRefreshTelemetry";
@@ -74,7 +78,7 @@ export const maxDuration = 540;
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
 const NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV = "NBA_PLAYER_PROPS_PRIVATE_WRITER_ENABLED";
-const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_11_04_r24_paid_consumer_book_coverage";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_11_10_r25_pending_props_opportunity";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year
@@ -86,11 +90,6 @@ function currentNbaRatingsSeason(now: Date): number {
   const utcMonth = now.getUTCMonth(); // 0 = Jan, 9 = Oct
   const utcYear = now.getUTCFullYear();
   return utcMonth >= 9 ? utcYear + 1 : utcYear;
-}
-
-/** BALLDONTLIE keys an NBA season by its starting calendar year. */
-function currentNbaProviderSeason(now: Date): number {
-  return now.getUTCMonth() >= 9 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
 }
 
 function recentUtcDates(now: Date, count: number): string[] {
@@ -108,11 +107,22 @@ function dashedToEspnDate(dashed: string): string | undefined {
 }
 
 export async function GET(request: Request): Promise<Response> {
+  const requestStartedAt=Date.now();
+  const propsReviewRescue=new URL(request.url).searchParams.get("propsReviewRescue")==="true";
+  if(propsReviewRescue){
+    // Authenticate before the read-only scheduling hint. Empty rescue polls do
+    // not contend for the sport lease or touch any provider or Daily Edge work.
+    const auth=validateCronAuth(request);if(!auth.ok)return auth.response;
+    if(process.env[NBA_CRON_ENV]!=="true"||process.env[NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV]!=="true")return Response.json({ok:true,skipped:true,reason:"props_writer_disabled"});
+    try{if(!await hasDuePropsAiReview({client:supabase,sport:"nba",now:new Date(requestStartedAt).toISOString()}))return Response.json({ok:true,skipped:true,reason:"no_due_pending_props_review"});}
+    catch{return Response.json({ok:false,reason:"pending_props_read_unavailable"},{status:503});}
+  }
   const intraday = new URL(request.url).searchParams.get("intraday") === "true";
   return cronHandler(
     request,
     "nba_daily_refresh",
     async ({runId}) => {
+      if(propsReviewRescue)return runNbaPropsReviewRescue({client:supabase,writerRunId:runId,requestStartedAt});
       // ─── Gate 1: NBA_CRON_ENABLED env flag ────────────────────────
       // Default off. When unset, the route logs a clean "disabled"
       // success row so we can verify the cron is firing without
@@ -560,6 +570,7 @@ export async function GET(request: Request): Promise<Response> {
       leaseGroup: "prediction_pipeline",
       requireLease: true,
       lockMinutes: 10,
+      ...(propsReviewRescue?{leaseRetryMaxWaitMs:120000,leaseRetryIntervalMs:1000}:{}),
     },
   );
 }

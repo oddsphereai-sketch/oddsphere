@@ -58,6 +58,8 @@ export type GamePacket = {
   sourceInputRelease?:string;
   /** Independent identity chronology contract; absence on stored legacy inputs remains exact. */
   sourceIdentityRelease?:string;
+  /** Original post-enrichment collector completion, not a price receipt or a reconstructed cutoff. */
+  sourceIdentityAvailableAt?:string;
   sharedGameContext?: Json;
   /** Native collector identity when the funding calendar uses a separately bound fixture ID. */
   sourceGameId?:string;

@@ -21,7 +21,7 @@ export function sameNflPropActorName(a:string,b:string,id?:string|null):boolean{
  return aliases.some(group=>group.id===id&&group.names.some(n=>norm(n)===norm(a))&&group.names.some(n=>norm(n)===norm(b)));
 }
 type IdentityFact={id:string;name:string|null;team:string|null;position?:string|null};
-const time=(s:string|null|undefined)=>s?Date.parse(s):NaN;
+const time=(s:string|null|undefined)=>s&&/(?:Z|[+-]\d\d:\d\d)$/.test(s)?Date.parse(s):NaN;
 const present=(s:string|null|undefined):s is string=>Boolean(s?.trim());
 export function resolveNflPropSourcePlayer(args:{row:NflPlayerPropPriceObservation;rows:readonly NflPlayerPropsRuntimeDecision[];observations:readonly NflPlayerPropPriceObservation[];context:NflPlayerPropsInferenceContext;game:LivePropsGame;cutoff:string;
  /** Actual completed collector snapshot, including the later player-name/team enrichment. */

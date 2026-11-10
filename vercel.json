@@ -114,6 +114,10 @@
       "schedule": "12,42 0-5,13-23 * * *"
     },
     {
+      "path": "/api/cron/nba-daily-refresh?propsReviewRescue=true",
+      "schedule": "21,51 0-5,13-23 * * *"
+    },
+    {
       "path": "/api/cron/nhl-daily-refresh",
       "schedule": "47 11 * * *"
     },

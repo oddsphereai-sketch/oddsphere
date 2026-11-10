@@ -13,9 +13,16 @@ import {nflAiSourceBinding} from "./nflSourceBinding";
 import {PROPS_AI_ESTIMATE_RELEASE,PROPS_AI_NFL_DECISION_RELEASE} from "./releases";
 import type {GamePacket} from "./evidenceContract";
 import {digest,instant} from "./evidence";
+import {PROPS_AI_EXECUTION_EVIDENCE_RELEASE,type PropsAiMemberEvidence} from "./publicationContract";
 
 const book=(value:string)=>value.toLowerCase().replace(/[^a-z0-9]/g,"");
 const choice=(all:SiteAiDecision[],id:string,market:string,line:number,sportsbook:string,provider?:string)=>all.find(c=>c.side!=="yes"&&quoteContract(c.quote)==="two_way"&&c.playerId===id&&c.market===market&&c.line===line&&book(c.book)===book(sportsbook)&&(!provider||c.provider===provider));
+/** Row repricing can use a later execution quote than the original decision.
+ * Retain exactly that row and current contract group without changing pricing. */
+function memberExecutionEvidence(packet:GamePacket,c:SiteAiDecision,q:GamePacket['quotes'][number],now:string):PropsAiMemberEvidence{
+ const group=executionQuotes(packet,now).filter(o=>o.playerId===q.playerId&&o.market===q.market&&o.line===q.line&&book(o.book)===book(q.book)&&o.provider===q.provider&&quoteContract(o)===quoteContract(q));
+ return {...c.evidence,quoteConfirmedAt:q.receivedAt,executionEvidence:{release:PROPS_AI_EXECUTION_EVIDENCE_RELEASE,operation:'member_row',pricedAt:now,selectedQuote:structuredClone(q),pricingQuotes:structuredClone(group)}};
+}
 function currentGrade(packet:GamePacket,c:SiteAiDecision,q:GamePacket["quotes"][number],now:string){
   if(c.evidence.exception)return "No Play" as const;
   if(q.side!==c.side)return "Watchlist" as const;
@@ -48,7 +55,7 @@ export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:Game
     const c=choice(choices,row.playerId,row.market,row.line,row.sportsbook);if(!c||c.side==="yes")return row;
     changed=true;
     return {...row,decisionKey:[c.evidence.release,row.gameId,row.playerId,row.market,c.line].join("|"),projection:c.projection,probability:c.probability,side:c.side,grade:c.grade,sportsbook:c.book,americanPrice:c.american,expectedValue:c.expectedValue,
-      modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:c.evidence.selectionRelease??c.evidence.publicationRelease,targetExcludedProbability:null,targetExcludedBooks:0,targetExcludedReferenceBooks:0,marketEvidenceMode:"ai_joint_law" as const,gradePolicySource:"ai_source_review" as const,evaluatedAt:now,aiReview:c.evidence,
+      modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:c.evidence.selectionRelease??c.evidence.publicationRelease,targetExcludedProbability:null,targetExcludedBooks:0,targetExcludedReferenceBooks:0,marketEvidenceMode:"ai_joint_law" as const,gradePolicySource:"ai_source_review" as const,evaluatedAt:now,aiReview:structuredClone(c.evidence),
       priceLadder:nbaAiPrices(packet,c,now),movement:nbaMovement(packet,c)};
   });
   for(const player of packet.players)for(const market of player.markets){
@@ -57,7 +64,7 @@ export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:Game
     const game=snapshot.games.find(g=>g.gameId===packet.gameId);if(!c||!game||instant(now)>=instant(packet.lock))continue;
     decisions.push({decisionKey:[c.evidence.release,game.gameId,player.id,market,c.line].join("|"),gameId:game.gameId,scheduledStart:game.scheduledStart,homeTeam:game.homeTeam,awayTeam:game.awayTeam,
       playerId:player.id,playerName:player.name,team:player.team,opponent:player.opponent,market:market as NbaPlayerPropsMemberDecision["market"],line:c.line,projection:c.projection,independentProjection:null,independentProbability:null,
-      modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:c.evidence.selectionRelease??c.evidence.publicationRelease,aiReview:c.evidence,side:c.side as "over"|"under",probability:c.probability,grade:c.grade,sportsbook:c.book,americanPrice:c.american,expectedValue:c.expectedValue,
+      modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:c.evidence.selectionRelease??c.evidence.publicationRelease,aiReview:structuredClone(c.evidence),side:c.side as "over"|"under",probability:c.probability,grade:c.grade,sportsbook:c.book,americanPrice:c.american,expectedValue:c.expectedValue,
       targetExcludedProbability:null,targetExcludedBooks:0,targetExcludedReferenceBooks:0,marketEvidenceMode:"ai_joint_law",gradePolicySource:"ai_source_review",role:[],production:[],matchup:[],priceLadder:nbaAiPrices(packet,c,now),movement:nbaMovement(packet,c),evaluatedAt:now,lockedAt:null});changed=true;
   }
   return changed?buildNbaPlayerPropsMemberSnapshot({...snapshot,generatedAt:now,decisions,inputRows:snapshot.diagnostics.inputRows}):snapshot;
@@ -82,7 +89,7 @@ export function applyNflSiteAi(board:NflPlayerPropsRuntimeBoard,packet:GamePacke
     const marketProbability=q.american>0?100/(100+q.american):-q.american/(100-q.american);
     changed=true;
     const next={...row,providerPlayerId:bound.id.replace(/^nfl-bdl-player:/,""),americanPrice:q.american,observedAt:q.observedAt,projection:c.projection,projectionRange:null,rawModelProbability:probability,finalProbability:probability,expectedValue:ev,marketProbability,probabilityEdge:probability-marketProbability,bookEvidence:row.bookEvidence.map(b=>book(b.sportsbook)===book(q.book)&&b.provider===q.provider?{...b,americanPrice:q.american,observedAt:q.observedAt}:b),grade:currentGrade(packet,c,q,now),
-      modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:PROPS_AI_NFL_DECISION_RELEASE,aiReview:{...c.evidence,quoteConfirmedAt:q.receivedAt}};
+      modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:PROPS_AI_NFL_DECISION_RELEASE,aiReview:memberExecutionEvidence(packet,c,q,now)};
     // These predecessor explanations describe a different forecast. Raw market evidence remains intact.
     delete next.projectionEvidence;delete next.decisionSupport;delete next.passingMarketEvidence;delete next.qualifiedReferenceEvidence;delete next.marketEvidenceId;
     return next;
@@ -103,7 +110,7 @@ export function applyNflSiteAi(board:NflPlayerPropsRuntimeBoard,packet:GamePacke
         playerName:player.name,team:player.team,opponent:player.opponent,projection:c.projection,projectionRange:null,rawModelProbability:probability,finalProbability:probability,marketProbability,probabilityEdge:probability-marketProbability,
         expectedValue:probability*(q.american>0?q.american/100:100/-q.american)-loss,grade:!template?"No Play":currentGrade(packet,c,q,now),marketMovement:"neutral",healthHolds:[],
         bookEvidence:[{sportsbook:q.book,provider:q.provider,americanPrice:q.american,observedAt:q.observedAt,openingObservedAt:null,openingLine:null,openingAmericanPrice:null}],
-        forecastContext:context,modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:PROPS_AI_NFL_DECISION_RELEASE,aiReview:{...c.evidence,quoteConfirmedAt:q.receivedAt}};
+        forecastContext:context,modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:PROPS_AI_NFL_DECISION_RELEASE,aiReview:memberExecutionEvidence(packet,c,q,now)};
       delete next.projectionEvidence;delete next.decisionSupport;delete next.passingMarketEvidence;delete next.qualifiedReferenceEvidence;delete next.marketEvidenceId;
       decisions.push(next);changed=true;
     }
@@ -138,7 +145,7 @@ export function applyMlbSiteAi(rows:PlayerPropPreviewRow[],packet:GamePacket,cho
       fairOdds:probability>0&&loss>0?probability>=loss?-100*probability/loss:100*loss/probability:null,marketProbability,shrinkageWeight:0,modelEdge:marketProbability===null?null:probability-marketProbability,
       odds:q.american,book:q.book,playGrade:grade,units:grade==="BEST_ANGLE"||grade==="LEAN"?MLB_PROPS_STANDARD_STAKE_UNITS:0,
       confidence:probability,confidenceBucket:c.evidence.confidence===2?"high" as const:c.evidence.confidence===1?"medium" as const:"low" as const,
-      source:"AI source review; conditional estimated outcome law",lastUpdated:q.observedAt,aiReview:c.evidence};
+      source:"AI source review; conditional estimated outcome law",lastUpdated:q.observedAt,aiReview:memberExecutionEvidence(packet,c,q,now)};
   });
   return changed?next:rows;
 }
