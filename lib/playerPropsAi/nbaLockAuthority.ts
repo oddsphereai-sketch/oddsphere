@@ -52,6 +52,9 @@ function capture(rows:readonly Row[],packet:GamePacket,review:AcceptedGameReview
   if(row.lockedAt!==null||!rowInPacket(row,source)||!numericRow(row)||Boolean(row.aiReview)!==(kind==='ai')||instant(row.evaluatedAt)>instant(readyAt))continue;
   let quote:Quote|undefined;
   if(kind==='ai'){
+   // Future reviewed rows use the exact current source label; native aliases
+   // and every previously stored lock retain their own identity contract.
+   if(row.playerName!==source.players.find(p=>p.id===row.playerId)!.name)continue;
    const choice=choices.find(c=>c.playerId===row.playerId&&c.market===row.market&&c.line===row.line&&c.side===row.side&&quoteBook(c.book)===quoteBook(row.sportsbook)&&c.american===row.americanPrice),e=row.aiReview;
    if(!choice||!e||!review||e.release!==review.release||e.inputHash!==(review.inputHash??review.inputEvidence.digest)||e.lawHash!==choice.evidence.lawHash||e.stage!==review.stage||!sameTime(e.reviewedAt,review.issuedAt!)||e.selectedSide!==row.side||e.confidence!==choice.evidence.confidence||e.exception!==choice.evidence.exception||e.assessment!==choice.evidence.assessment||row.grade!==choice.grade||!close(row.projection,choice.projection)||!close(row.probability,choice.probability)||!close(row.expectedValue,choice.expectedValue))continue;
    const proof=e.executionEvidence;

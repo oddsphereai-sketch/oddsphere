@@ -29,6 +29,10 @@ existing early/final timing policy is checked after claim/queue/send waits and
 again immediately before HTTP; an authorized but unsent attempt records zero,
 while genuinely dispatched unknown charges remain reserved. These are
 undeployed R31 correctness repairs, with no new slot, retry or quota.
+Future reviewed NBA rows take the verified current same-ID source label,
+including existing native scopes. New AI row proofs bind that exact name;
+native alias semantics and every stored locked name remain unchanged. This is
+a publication identity repair with no numerical forecast or grade adjustment.
 NFL memberR60/lifecycleR42 stamp current-execution first-lock authority.
 ParticipationR3 `player_props_ai_participation_2026_11_10_r3_separate_lineup_and_medical`
 keeps lineup opportunity separate from medical availability: one channel cannot

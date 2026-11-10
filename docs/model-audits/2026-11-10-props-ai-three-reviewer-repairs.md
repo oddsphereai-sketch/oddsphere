@@ -259,3 +259,25 @@ The existing workflow includes actual-producer context/first-lock and delayed
 claim/send/queue/phase-two dispatch regressions. Both repairs require another
 fresh pair of full three-reviewer rounds, final clean CI, protected latest-main
 integration and normal production evidence; prior clean-round credit is reset.
+
+## Round 11 current NBA reviewed identity labels
+
+Actual current BDL source names already owned the verified canonical actor,
+but an existing native scope could retain its historical display label when
+its forecast was replaced by an accepted review. The authentic new AI proof
+also checked ID/team/event without checking that label, so a new member lock
+could carry the stale name. The numeric actor, law, probability, price and grade
+were unchanged; this was a public identity-label handoff defect.
+
+The future unlocked reviewed NBA adapter now carries its exact same-ID current
+source name. New AI proof capture requires that label; native aliases retain
+their existing proof path, and stored locks win before new name semantics.
+The actual normalizer/history/source/parser/member/first-lock regression covers
+current labels, repeated overlays, later legitimate same-ID label updates,
+forged-name refusal, missing/conflicting source identity, no/declined review,
+old accepted-law reuse and exact legacy locks. No generic native writer, NFL or
+MLB naming policy is changed without a corresponding confirmed defect.
+The existing familiar-reader fixture now supplies its actual typed NFL packet
+fields and keeps every original rendering assertion; both reader and label
+regressions run in the existing workflow. No inference, grade, model input,
+source request, quota, schedule, budget or stored record is changed.

@@ -94,8 +94,9 @@ export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:Game
   const decisions=snapshot.decisions.map((row):NbaPlayerPropsMemberDecision=>{
     if(row.lockedAt!==null||row.gameId!==packet.gameId||instant(now)>=instant(packet.lock))return row;
     const c=choice(available,row.playerId,row.market,row.line,row.sportsbook)??preferred(row.playerId,row.market);if(!c||c.side==="yes")return row;
+    const player=packet.players.find(player=>player.id===row.playerId);if(!player)return row;
     changed=true;
-    return {...row,decisionKey:[c.evidence.release,row.gameId,row.playerId,row.market,c.line].join("|"),line:c.line,projection:c.projection,probability:c.probability,side:c.side,grade:c.grade,sportsbook:c.book,americanPrice:c.american,expectedValue:c.expectedValue,
+    return {...row,playerName:player.name,decisionKey:[c.evidence.release,row.gameId,row.playerId,row.market,c.line].join("|"),line:c.line,projection:c.projection,probability:c.probability,side:c.side,grade:c.grade,sportsbook:c.book,americanPrice:c.american,expectedValue:c.expectedValue,
       ...(c.line!==row.line?{independentProbability:null,independentSide:undefined}:{}),
       modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:c.evidence.selectionRelease??c.evidence.publicationRelease,targetExcludedProbability:null,targetExcludedBooks:0,targetExcludedReferenceBooks:0,marketEvidenceMode:"ai_joint_law" as const,gradePolicySource:"ai_source_review" as const,evaluatedAt:now,aiReview:structuredClone(c.evidence),
       priceLadder:nbaAiPrices(packet,c,now),movement:nbaMovement(packet,c)};
