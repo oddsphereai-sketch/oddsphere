@@ -30,14 +30,18 @@ async function boundedErrorText(response:Response){
  try{while(true){const {value,done}=await reader.read();bytes+=value?.byteLength??0;if(bytes>16384)return "";text+=decoder.decode(value,{stream:!done});if(done)return text;}}
  finally{await reader.cancel().catch(()=>undefined);reader.releaseLock();}
 }
-export async function countAiInput(body: AiRequest, args: { key: string; fetchImpl?: typeof fetch }) {
+export async function countAiInput(body: AiRequest, args: { key: string; fetchImpl?: typeof fetch;deadline?:number }) {
   if(!args.fetchImpl)requireRealPropsAiPermission();
+  const remaining=args.deadline===undefined?45000:Math.floor(args.deadline-Date.now());
+  invariant(Number.isFinite(remaining)&&remaining>0,"input_count_deadline_exhausted");
   const response = await (args.fetchImpl ?? fetch)("https://api.openai.com/v1/responses/input_tokens", {
     method: "POST", headers: { Authorization: `Bearer ${args.key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: body.model, instructions: body.instructions, input: body.input, text: body.text }), signal: AbortSignal.timeout(45000),
+    body: JSON.stringify({ model: body.model, instructions: body.instructions, input: body.input, text: body.text }), signal: AbortSignal.timeout(Math.min(45000,remaining)),
   });
   invariant(response.ok, `input_count_http_${response.status}`);
-  const data = await response.json(); invariant(Number.isSafeInteger(data.input_tokens) && data.input_tokens > 0, "invalid_input_token_count"); return data.input_tokens as number;
+  const data = await response.json();
+  invariant(args.deadline===undefined||Date.now()<=args.deadline,"input_count_completed_after_deadline");
+  invariant(Number.isSafeInteger(data.input_tokens) && data.input_tokens > 0, "invalid_input_token_count"); return data.input_tokens as number;
 }
 export async function generateAiReview(body: AiRequest, args: { key: string; timeoutMs: number; fetchImpl?: typeof fetch; serviceTier?:"default"|"flex"; stream?:boolean; onOutputText?:(delta:string)=>void; onCreated?: (id: string) => Promise<void>; onProgress?: (event:{type:string;elapsedMs:number;textCharacters:number})=>void }): Promise<AiResponse> {
   if(!args.fetchImpl)requireRealPropsAiPermission();

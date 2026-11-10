@@ -1,3 +1,50 @@
+## November 10 player-prop identity, execution and scheduling R29
+
+Generation `player_props_ai_2026_11_10_r29_identity_and_execution_evidence`
+supersedes R28 for future normal reviews. NBA writer is
+`nba_player_props_private_writer_2026_11_10_r16_exact_execution_evidence`;
+NFL writer is `nfl_player_props_writer_2026_11_10_r90_exact_identity_execution`.
+NFL identity `player_props_ai_nfl_identity_2026_11_10_r1_cutoff_exact_id`
+uses exact provider-ID siblings only for missing labels, rejects supplied
+conflicts and binds availability to the original post-enrichment collection
+header. Stored fallback headers cannot be backdated to the review cutoff.
+This is distinct from the unchanged NFL event/source qualification R3.
+
+Future AI member rows retain exact execution-evidence R1: selected quote,
+original provider/receipt clocks and the actual pricing group at that operation.
+The group does not imply every quote qualified for an opposing-margin pair.
+Metadata alone changes no projection, probability, side, grade or price. Old
+locks without this field stay absent and retain exact stored precedence.
+
+Whole-game weighted admission checks the remaining completion window after
+waiting and before claiming. Count preparation is deadline bounded, drains
+in-flight counts, and leaves generation/publication time. Deferred games remain
+pending rather than becoming paid terminal failures before a request is sent.
+The existing NBA route gets a due-pending-only opportunity at :21/:51, alongside
+the retained :12/:42 primary cadence. Authenticated empty polls perform no
+provider/AI work. Eligible work uses the same canonical writer and sport lease,
+with a post-lease due recheck and an absolute invocation deadline. It does not
+run Daily Edge, rebuild season stats, reset closed jobs or add a third slot.
+Fresh props collection on a genuinely due rescue is not represented as free.
+
+V69 adds service-only append-only bounded NFL source-failure evidence under
+the existing NFL lease. Its installation and live access proof are separate
+from code deployment. Diagnostics never claim coverage or mutate paid attempts,
+funding, predictions or locks, and are failure-isolated after essential writes.
+
+R28 named evidence and actor retention remain. LawR1/wireR4/gradeR2,
+selectionR4/decisionR11, sourceR1/R3, memberR59/lifecycleR41, settlementR7,
+trackingR43, Standard budgetR5 and native MLB championR44 remain exact.
+Two logical slots/two bounded phases, per-game8/global16 generation concurrency,
+output bounds, stronger quota and $50 target/$60 emergency cap are unchanged.
+Source admission can restore a previously unavailable valid player; it cannot
+invent a native model head. Synthetic paired Over/Under promotions and legacy
+lock controls remain; no arbitrary grade demotion or board-size quota is added.
+Offline capacity examples are not a vendor SLA or monthly cost guarantee.
+Fresh-main protected PR, complete checks, production and normal end-to-end
+source/receipt/coverage/publication/lock proof are required. See
+`model-audits/2026-11-10-props-ai-process-reliability.md`.
+
 ## November 10 NBA evidence and actor retention R28
 
 Future generation `player_props_ai_2026_11_10_r28_evidence_and_actor_retention`,

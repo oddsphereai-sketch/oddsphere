@@ -104,7 +104,7 @@ const publicLocked=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9
 function allDeclined(){const p=final.players[0],wire={wireRelease:GENERATIVE_WIRE_RELEASE,players:{[id]:{assessment:'The supplied sources do not qualify a numerical forecast.',priorRead:priorReads(currentPacket),coverage:Object.fromEntries(Object.entries(p.coverage).map(([area,value]:any)=>{const{facts,...raw}=value;void facts;return[area,raw];})),evidenceIds:['e0'],gaps:['Both scopes explicitly remain unqualified.'],law:null,confidence:[0,0],exceptions:['Reviewed scope is unqualified.','Reviewed scope is unqualified.']}}};return{...final,...parseJointReview(currentPacket,wire)};}
 type Scenario={name:string;initialError?:boolean;finalError?:boolean;afterInitialGet?:string;afterInitialLoad?:string;afterFinalGet?:string;failFreshLoadAfterLock?:boolean;sameEarly?:boolean;declineAll?:boolean;overlayAfterLock?:boolean;previousLocked?:boolean};
 async function exercise(s:Scenario){
- let now=initialAt,reviewReads=0,loads=0,forbidden=0;const advance=(at:string)=>{if(Date.parse(at)>Date.parse(now))now=at;};const frames:any[]=[],sourceEvents:any[]=[],reviewEvents:any[]=[],loadedPackets:any[]=[];
+ let now=initialAt,reviewReads=0,loads=0,forbidden=0;const advance=(at:string)=>{if(Date.parse(at)>Date.parse(now))now=at;};const frames:any[]=[],sourceEvents:any[]=[],reviewEvents:any[]=[],loadedPackets:any[]=[],sourcePurposes:string[]=[];
  const chosen=s.declineAll?allDeclined():s.sameEarly?early:final;
  const control={data:{release:PROPS_AI_CONTROL_RELEASE,paid_enabled:false},error:null};
  const client={from(table:string){assert(['player_props_ai_control','player_props_ai_reviews'].includes(table),'Unexpected database table');const query:any={};
@@ -113,7 +113,7 @@ async function exercise(s:Scenario){
    return{data:(first?s.initialError:s.finalError)?null:(first?[{result:early}]:[{result:chosen},{result:early}]),error:(first?s.initialError:s.finalError)?{message:'Synthetic review GET failure'}:null};};
   query.single=resolve;query.then=(yes:any,no:any)=>resolve().then(yes,no);return query;},rpc(){forbidden++;throw Error('No SQL/RPC allowed');}};
  const result=await reviewPropsForSite({client:client as never,sport:'nfl',games:[{id:'game',start,away:'BUF',home:'MIN'}],clock:()=>now,deadline:Date.now()+1000,fetchImpl:(async()=>{forbidden++;throw Error('No model/provider/count HTTP allowed');})as typeof fetch,
-  load:async(_game,window)=>{loads++;if(s.failFreshLoadAfterLock&&loads===2){advance(afterLock);throw Error('Synthetic source GET failed after lock');}if(Date.parse(window.cutoff)>=Date.parse(lock))throw Error('Synthetic current source refuses a postlock capture');
+  load:async(_game,window,context)=>{sourcePurposes.push(context?.purpose??"missing");loads++;if(s.failFreshLoadAfterLock&&loads===2){advance(afterLock);throw Error('Synthetic source GET failed after lock');}if(Date.parse(window.cutoff)>=Date.parse(lock))throw Error('Synthetic current source refuses a postlock capture');
    const p={...structuredClone(currentPacket),cutoff:window.cutoff};loadedPackets.push(p);if(loads===1&&s.afterInitialLoad)advance(s.afterInitialLoad);return p;},
   onSourceReady:(p,r,observedAt,lookupAvailable)=>{sourceEvents.push({packet:p,review:r,observedAt,lookupAvailable});frames.push(testNflSourceAuthority(()=>now)(p,r,lookupAvailable));frames.push(testNflHandoffCapture(()=>now)(base.decisions,p,r,'native'));},
   onReviewObserved:(p,r,lookupAvailable)=>{reviewEvents.push({packet:p,review:r,observedAt:now,lookupAvailable});frames.push(testNflSourceAuthority(()=>now)(p,r,lookupAvailable));}
@@ -121,7 +121,7 @@ async function exercise(s:Scenario){
  let candidate=base;
  for(const game of result.games){advance(overlayAt);candidate=applyNflSiteAi(candidate,game.packet,game.decisions,now);advance(s.overlayAfterLock?afterLock:overlayAt);const frame=testNflHandoffCapture(()=>now)(candidate.decisions,game.packet,game.authorityReview,'ai');assert.equal(frame.authorities.length,0,'Numeric readiness cannot create/backdate a source authority');frames.push(frame);}
  const bundle=mergeNflHandoffs(frames),snapshot:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:candidate,previous:s.previousLocked?publicLocked:previous,lockHandoff:bundle});
- assert.equal(forbidden,0);assert.equal(reviewReads,2);return{scenario:s,result,snapshot,bundle,sourceEvents,reviewEvents,loadedPackets,chosen,loads};
+ assert.equal(forbidden,0);assert.equal(reviewReads,2);assert.deepEqual(sourcePurposes,["lock_authority","member_publication"]);return{scenario:s,result,snapshot,bundle,sourceEvents,reviewEvents,loadedPackets,chosen,loads};
 }
 const positive=await exercise({name:'all prelock: final B and explicit native decline'});
 assert.equal(positive.result.games.length,1);assert.equal(positive.result.games[0].authorityReview?.inputHash,final.inputHash);
@@ -172,14 +172,18 @@ Object.assign(process.env,{PLAYER_PROPS_AI_SITE_ENABLED:'true',PLAYER_PROPS_AI_P
 const {capturedReviewSlots}=await import('../lib/playerPropsAi/liveWindow');
 
 const {PROPS_AI_CALENDAR_RELEASE}=await import('../lib/playerPropsAi/calendar');
-let tick=earlyAt,reviewGets=0,generationCalls=0,countCalls=0,completedObservedLocallyAt:string|null=null,finished:any=null,claimHash:string|null=null;
+// The preparation phase now reserves generation opportunity before counting.
+// Begin this paid-path fixture five minutes before lock; completion and the
+// later GET/source crossing still exercise the original exact lock boundary.
+const paidSourceAt='2026-11-09T21:55:00Z';
+let tick=paidSourceAt,reviewGets=0,generationCalls=0,countCalls=0,completedObservedLocallyAt:string|null=null,finished:any=null,claimHash:string|null=null;
 const frames:any[]=[],observed:any[]=[];let localCandidate:NflPlayerPropsRuntimeBoard|null=null;const readyAt:string[]=[];
 const {restoreNflNativeGame}=await import('../lib/playerPropsAi/siteBindings');
-const initialPacket=packet(earlyAt,true),nativeBefore=native(initialPacket),funded='espn:nfl:synthetic';
+const initialPacket=packet(paidSourceAt,true),nativeBefore=native(initialPacket),funded='espn:nfl:synthetic';
 const job={job_key:'synthetic-final',sport:'nfl',game_id:funded,game_day:'2026-11-09',stage:'final',scheduled_start:start,lock_at:lock,due_at:'2026-11-09T21:35:00Z',billing_month:'2026-11',state:'pending'};
-const calendar={release:PROPS_AI_CALENDAR_RELEASE,month:'2026-11',capturedAt:earlyAt,games:[{sport:'nfl',id:funded,start,lock,home:'MIN',away:'BUF',confirmed:true}],sources:Object.fromEntries(['nba','nfl','mlb'].map(s=>[s,{complete:true,source:'synthetic complete calendar'}]))};
+const calendar={release:PROPS_AI_CALENDAR_RELEASE,month:'2026-11',capturedAt:paidSourceAt,games:[{sport:'nfl',id:funded,start,lock,home:'MIN',away:'BUF',confirmed:true}],sources:Object.fromEntries(['nba','nfl','mlb'].map(s=>[s,{complete:true,source:'synthetic complete calendar'}]))};
 const client:any={from:(table:string)=>{
- let selection='';const query:any={select:(s:string)=>{selection=s;return query;},eq:()=>query,gte:()=>query,in:()=>query,lte:()=>query,gt:()=>query,order:()=>query,single:async()=>({data:{release:'player_props_ai_control_2026_11_07_r1_explicit_off',paid_enabled:true},error:null}),maybeSingle:async()=>({data:{release:PROPS_AI_CALENDAR_RELEASE,captured_at:earlyAt,payload:calendar},error:null}),limit:async()=>{assert.equal(table,'player_props_ai_reviews');reviewGets++;if(reviewGets===1)return{data:[{result:early}],error:null};assert(finished,'Reviewer returned locally before final GET');completedObservedLocallyAt=tick;tick='2026-11-09T22:00:00.100Z';return{data:[{result:finished},{result:early}],error:null};},then:(resolve:any)=>{assert.equal(selection,'*');return Promise.resolve({data:[job],error:null}).then(resolve);}};return query;
+ let selection='';const query:any={select:(s:string)=>{selection=s;return query;},eq:()=>query,gte:()=>query,in:()=>query,lte:()=>query,gt:()=>query,order:()=>query,single:async()=>({data:{release:'player_props_ai_control_2026_11_07_r1_explicit_off',paid_enabled:true},error:null}),maybeSingle:async()=>({data:{release:PROPS_AI_CALENDAR_RELEASE,captured_at:paidSourceAt,payload:calendar},error:null}),limit:async()=>{assert.equal(table,'player_props_ai_reviews');reviewGets++;if(reviewGets===1)return{data:[{result:early}],error:null};assert(finished,'Reviewer returned locally before final GET');completedObservedLocallyAt=tick;tick='2026-11-09T22:00:00.100Z';return{data:[{result:finished},{result:early}],error:null};},then:(resolve:any)=>{assert.equal(selection,'*');return Promise.resolve({data:[job],error:null}).then(resolve);}};return query;
 },rpc:async(name:string,args:any)=>{
  if(name==='player_props_ai_plan_v3')return{data:{funded:true,budget:{}},error:null};
  if(name==='player_props_ai_reap')return{data:0,error:null};
@@ -198,8 +202,9 @@ const fetchImpl=async(url:any)=>{
  tick=finalAt;return Response.json({id:'synthetic-response',model:'gpt-6-luna',status:'completed',service_tier:'default',usage:{input_tokens:1000,output_tokens:100},output:[{content:[{type:'output_text',text:JSON.stringify(wire)}]}]});
 };
 localCandidate=nativeBefore;
+const paidSourceContexts:any[]=[];
 const outcome=await reviewPropsForSite({client,sport:'nfl',writerRunId:'synthetic-owner',games:[{id:'game',start,away:'BUF',home:'MIN'}],deadline:Date.now()+300000,clock:()=>tick,fetchImpl:fetchImpl as typeof fetch,
- load:(_game:any,window:any)=>{capturedReviewSlots({gameId:'game',start,lock},window,()=>[]);return packet(window.cutoff,true);},
+ load:(_game:any,window:any,context:any)=>{paidSourceContexts.push(context);capturedReviewSlots({gameId:'game',start,lock},window,()=>[]);return packet(window.cutoff,true);},
  onSourceReady:(p:any,r:any,_at:any,lookupAvailable:boolean)=>{frames.push(testNflSourceAuthority(()=>tick)(p,r,lookupAvailable));frames.push(testNflHandoffCapture(()=>tick)(nativeBefore.decisions,p,r,'native'));},
  onReviewObserved:(p,r,lookupAvailable)=>{observed.push({input:r?.inputHash,at:tick});frames.push(testNflSourceAuthority(()=>tick)(p,r,lookupAvailable));},
  onReviewReady:(p,r)=>{readyAt.push(tick);localCandidate=restoreNflNativeGame(localCandidate!,nativeBefore,p,tick);localCandidate=applyNflSiteAi(localCandidate,p,siteAiDecisions(p,r,tick),tick);frames.push(testNflHandoffCapture(()=>tick)(localCandidate!.decisions,p,r,'ai'));}
@@ -208,8 +213,9 @@ const outcome=await reviewPropsForSite({client,sport:'nfl',writerRunId:'syntheti
 assert.equal(generationCalls,1,'Exactly the one scheduled model generation is mocked');assert.equal(countCalls,1,'Exactly one scheduled request count is mocked');assert.equal(reviewGets,2);
 assert(finished&&Date.parse(finished.issuedAt)<Date.parse(lock));assert.equal(completedObservedLocallyAt,finalAt);assert.deepEqual(readyAt,[finalAt]);
 assert(observed.some(e=>e.input===finished.inputHash&&e.at===finalAt),'Local completion authority is observed before the accepted-review GET');
+assert.deepEqual(paidSourceContexts.map(c=>c.purpose),['lock_authority','scheduled_review','member_publication']);assert.equal(paidSourceContexts[1].job.job_key,job.job_key,'Only the actual due slot carries its funded job identity');
 assert.equal(outcome.games.length,1);assert(outcome.findings.some(f=>f.startsWith('current_source_unavailable:')));
-assert.equal(outcome.games[0].packet.cutoff,earlyAt,'Fallback preserves the exact generated source cutoff');
+assert.equal(outcome.games[0].packet.cutoff,paidSourceAt,'Fallback preserves the exact generated source cutoff');
 for(const game of outcome.games){if(Date.parse(tick)>=Date.parse(game.packet.lock))continue;localCandidate=restoreNflNativeGame(localCandidate!,nativeBefore,game.packet,tick);localCandidate=applyNflSiteAi(localCandidate,game.packet,game.decisions,tick);frames.push(testNflHandoffCapture(()=>tick)(localCandidate!.decisions,game.packet,game.authorityReview,'ai'));}
 const result:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:tick,nextBoard:localCandidate!,previous,lockHandoff:mergeNflHandoffs(frames)});
 assert(result.memberDecisions.some(r=>r.market==='receiving_yards'&&r.aiReview?.lawHash===finished.players[0].law.hash&&r.grade==='Best Angle'),'Real mocked scheduled completion B must publish from its actual prelock readiness');

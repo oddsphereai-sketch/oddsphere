@@ -1,3 +1,4 @@
+import {buildNflIdentityFailureEvidence,appendNflIdentityFailureEvidence,nflIdentityFailureTrigger,type NflIdentityFailureCapture} from "../../playerPropsAi/nflIdentityFailureEvidence";
 import {siteAiDecisions} from "../../playerPropsAi/publication";
 import {captureNflHandoffBundle,observeNflSourceAuthority,mergeNflHandoffs,type NflLockHandoff} from "../../playerPropsAi/nflLockAuthority";
 import {propsAiSiteConfig} from "../../playerPropsAi/siteConfig";
@@ -79,7 +80,7 @@ import {
 } from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_11_09_r89_reader_request_evidence" as const;
+  "nfl_player_props_writer_2026_11_10_r90_exact_identity_execution" as const;
 export const NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES = 60 as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
@@ -134,6 +135,7 @@ export type NflPlayerPropsCandidateImpact = {
 };
 
 export type NflPlayerPropsWriterResult = {
+  identityFailureEvidence?:{captures:number;constructionFailures:number;statuses:Record<string,number>};
   writerRelease: typeof NFL_PLAYER_PROPS_WRITER_RELEASE;
   settlementRelease: typeof NFL_PLAYER_PROPS_SETTLEMENT_RELEASE;
   contextSource: "nfl_forward_evidence";
@@ -418,6 +420,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
         .reduce((count, identity) => count + identity[2].filter((book) => book[0] === sportsbook).length, 0)]),
   );
   const aiLockFrames:NflLockHandoff[]=[];
+  const identitySourceFailures=new Map<string,NflIdentityFailureCapture>(),identitySourceFailureAttempts=new Set<string>();let identityCaptureConstructionFailures=0;
   const nativeAiBaseline=nextBoard;
   if(args.apply&&propsAiSiteConfig().integrated){
     const observer=await readNflPlayerPropsMarketObserverHistory({client:args.client,season:args.season,week:args.week}).catch(()=>null);
@@ -425,7 +428,20 @@ export async function runNflPlayerPropsProductionWriter(args: {
     const aiBaseline=reconcileNflPlayerPropsProductionSnapshot({requireVerifiedInterceptionSource:true,season:args.season,week:args.week,evaluatedAt:args.now,nextBoard,previous});
     const ai=await reviewPropsForSite({client:args.client,sport:"nfl",writerRunId:args.writerRunId,onSourceReady:(packet,review,_observedAt,lookupAvailable)=>{aiLockFrames.push(observeNflSourceAuthority(packet,review,lookupAvailable));aiLockFrames.push(captureNflHandoffBundle(nextBoard.decisions,packet,review,"native"));},onReviewObserved:(packet,review,lookupAvailable)=>{aiLockFrames.push(observeNflSourceAuthority(packet,review,lookupAvailable));},onReviewReady:(packet,review)=>{const at=new Date().toISOString();nextBoard=restoreNflNativeGame(nextBoard,nativeAiBaseline,packet,at);nextBoard=applyNflSiteAi(nextBoard,packet,siteAiDecisions(packet,review,at),at);aiLockFrames.push(captureNflHandoffBundle(nextBoard.decisions,packet,review,"ai"));},deadline:Date.parse(args.now)+390000,
       games:context.games.map(g=>({id:g.canonicalGameId,start:g.scheduledStart,away:g.awayTeam,home:g.homeTeam})),
-      load:(game,window)=>liveNflPacket({game,window,snapshot:aiBaseline,observations:collection.snapshot,history:currentSeason.state,context,marketHistory})});
+      load:(game,window,loadContext)=>{
+        try{return liveNflPacket({game,window,snapshot:aiBaseline,observations:collection.snapshot,history:currentSeason.state,context,marketHistory});}
+        catch(error){
+          const failureCode=nflIdentityFailureTrigger(error);
+          // Only the actual due slot may create a diagnostic. Routine authority
+          // and publication reads must never stand in for a scheduled review.
+          if(failureCode&&loadContext?.purpose==="scheduled_review"&&args.writerRunId&&!identitySourceFailureAttempts.has(loadContext.job.job_key)&&identitySourceFailureAttempts.size<16){
+            identitySourceFailureAttempts.add(loadContext.job.job_key);
+            try{identitySourceFailures.set(loadContext.job.job_key,buildNflIdentityFailureEvidence({purpose:loadContext.purpose,job:loadContext.job,writerRunId:args.writerRunId,writerRelease:NFL_PLAYER_PROPS_WRITER_RELEASE,game,window,observedAt:window.cutoff,capturedAt:new Date().toISOString(),snapshot:aiBaseline,observations:collection.snapshot,context,failureCode}));}
+            catch{identityCaptureConstructionFailures++;}
+          }
+          throw error;
+        }
+      }});
     for(const game of ai.games){const applyAt=new Date().toISOString();if(Date.parse(applyAt)>=Date.parse(game.packet.lock))continue;nextBoard=restoreNflNativeGame(nextBoard,nativeAiBaseline,game.packet,applyAt);nextBoard=applyNflSiteAi(nextBoard,game.packet,game.decisions,new Date().toISOString());aiLockFrames.push(captureNflHandoffBundle(nextBoard.decisions,game.packet,game.authorityReview,"ai"));}
   }
   const publicationNow=args.apply&&propsAiSiteConfig().integrated?new Date().toISOString():args.now;
@@ -513,6 +529,13 @@ export async function runNflPlayerPropsProductionWriter(args: {
       writerRelease: NFL_PLAYER_PROPS_WRITER_RELEASE,
     }))
     : null;
+  // Essential member publication and tracking precede this bounded private flush.
+  // No retry, review claim, provider call or raw source payload enters telemetry.
+  const sourceFailureCaptureResults=Date.now()-Date.parse(args.now)<439000
+    ?await Promise.all([...identitySourceFailures.values()].map(capture=>appendNflIdentityFailureEvidence(args.client,capture)))
+    :[...identitySourceFailures.values()].map(()=>({status:"unavailable",reason:"writer_deadline"}));
+  const identityFailureEvidence={captures:identitySourceFailures.size,constructionFailures:identityCaptureConstructionFailures,
+    statuses:Object.fromEntries([...new Set(sourceFailureCaptureResults.map(r=>r.status))].map(status=>[status,sourceFailureCaptureResults.filter(r=>r.status===status).length]))};
   const providerRequests = Object.values(collection.snapshot.providerRequests).reduce((sum, value) => sum + (value ?? 0), 0);
   if (providerRequests > NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM) {
     throw new Error(`NFL player props collection exceeded its ${NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM}-call production budget.`);
@@ -523,6 +546,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
   }
   return {
     writerRelease: NFL_PLAYER_PROPS_WRITER_RELEASE,
+    identityFailureEvidence,
     settlementRelease: NFL_PLAYER_PROPS_SETTLEMENT_RELEASE,
     contextSource: context.source,
     published: args.apply,
