@@ -6,7 +6,7 @@ import type {NbaPlayerPropsMemberSnapshot} from "../services/nba/nbaPlayerPropsP
 import type {NbaPlayerPropsMarketHistory} from "../services/nba/nbaPlayerPropsPrivateStore";
 import type {NflPlayerPropsProductionSnapshot} from "../services/football/nflPlayerPropsProductionContract";
 import type {NflPlayerPropsCurrentSeasonState} from "../services/football/nflPlayerPropsCurrentSeasonState";
-import type {NflPlayerPropsObservationSnapshot} from "../services/football/nflPlayerPropsContract";
+import {NFL_PLAYER_PROPS_EMPTY_CURRENT_RELEASE,type NflPlayerPropsEmptyCurrentCapture,type NflPlayerPropsObservationSnapshot} from "../services/football/nflPlayerPropsContract";
 import type {NflPlayerPropsInferenceContext} from "../services/football/nflPlayerPropsInferenceContext";
 import type {MlbPropsBoardSnapshot} from "../mlb/props/boardSnapshotStore";
 import type {PropOddsSnapshot} from "../mlb/props/providers";
@@ -97,7 +97,7 @@ export function liveNbaPacket(args:{game:LivePropsGame;window:CapturedReviewWind
   const result=identityLimitations.length?{...priced,sourceLimitations:[...priced.sourceLimitations,...identityLimitations]}:priced;
   return nativeAvailable?result:{...result,sourceLimitations:[...result.sourceLimitations,`Original NBA native snapshot availability ${args.snapshot.generatedAt} is after cutoff; its priors, labels and scopes were not supplied. Current quote-only actor coverage remains independent.`]};
 }
-export function liveNflPacket(args:{game:LivePropsGame;window:CapturedReviewWindow;snapshot:NflPlayerPropsProductionSnapshot;observations:NflPlayerPropsObservationSnapshot;history:NflPlayerPropsCurrentSeasonState;context:NflPlayerPropsInferenceContext;retainedQuotes?:Quote[];marketHistory?:Parameters<typeof attachNflReaderMarkets>[1]}):GamePacket{
+export function liveNflPacket(args:{game:LivePropsGame;window:CapturedReviewWindow;snapshot:NflPlayerPropsProductionSnapshot;observations:NflPlayerPropsObservationSnapshot;history:NflPlayerPropsCurrentSeasonState;context:NflPlayerPropsInferenceContext;emptyCurrentGame?:NflPlayerPropsEmptyCurrentCapture;withdrawalSnapshot?:NflPlayerPropsProductionSnapshot;retainedQuotes?:Quote[];marketHistory?:Parameters<typeof attachNflReaderMarkets>[1]}):GamePacket{
   const at=args.window.cutoff,source:EnrichedSource={...emptyCapturedSource(at),nfl:[{week:args.snapshot.week,snapshot:args.snapshot}],nflHistory:args.history};
   const cached=fromCachedExport(source,args.window).packets[0];
   const packet:GamePacket=cached??{release:PRODUCT_RELEASE,sport:"nfl",gameId:args.game.id,start:args.game.start,lock:args.window.lock,cutoff:at,stage:args.window.stage,players:[],quotes:[],sourceLimitations:[]};
@@ -135,6 +135,34 @@ export function liveNflPacket(args:{game:LivePropsGame;window:CapturedReviewWind
   }
   // Never silently omit a book-offered player with an unresolved identity.
   invariant(unresolved===0,`NFL offered-player identity coverage incomplete:${unresolved}`);
+  if(!players.size&&args.emptyCurrentGame){
+    const proof=args.emptyCurrentGame,available=instant(proof.availableAt),completed=instant(args.observations.generatedAt);
+    const receipts=Object.values(proof.providerReceipts).map(instant);
+    const games=args.observations.games.filter(game=>game.providerGameId===args.game.id);
+    invariant(proof.release===NFL_PLAYER_PROPS_EMPTY_CURRENT_RELEASE&&args.observations.collectionComplete===true
+      &&proof.gameId===args.game.id&&instant(proof.scheduledStart)===instant(args.game.start)
+      &&propsTeam(proof.awayTeam)===propsTeam(args.game.away)&&propsTeam(proof.homeTeam)===propsTeam(args.game.home)
+      &&games.length===1&&instant(games[0].scheduledStart)===instant(args.game.start)
+      &&propsTeam(games[0].awayTeam)===propsTeam(args.game.away)&&propsTeam(games[0].homeTeam)===propsTeam(args.game.home)
+      &&typeof proof.providerReceipts.balldontlie==='string'&&(!(args.observations.providerRequests.owls??0)||typeof proof.providerReceipts.owls==='string')
+      &&receipts.every(receipt=>instant(args.observations.fetchedAt)<=receipt&&receipt<=completed)
+      &&Math.max(...receipts)===available&&instant(proof.collectionGeneratedAt)===completed&&completed<=instant(at)
+      &&native.every(row=>row.isOpening||row.isLive)&&!args.retainedQuotes?.length,
+      'NFL empty current collection proof unavailable');
+    // The exact stored aliases/scopes are withdrawal context only. They never
+    // become offered actors, reconciled IDs, independent new heads or a paid
+    // review. A game-wide empty execution authority also covers absent actors.
+    const prior=args.withdrawalSnapshot??args.snapshot;
+    const withdrawal=fromCachedExport({...source,nfl:[{week:prior.week,snapshot:prior}]},args.window).packets[0];
+    invariant(withdrawal&&withdrawal.players.length>0&&instant(prior.generatedAt)<=instant(at)
+      &&withdrawal.gameId===args.game.id&&instant(withdrawal.start)===instant(args.game.start)&&instant(withdrawal.lock)===instant(args.window.lock)
+      &&withdrawal.players.every(player=>propsTeam(player.team)!==propsTeam(player.opponent)
+        &&[args.game.away,args.game.home].some(team=>propsTeam(team)===propsTeam(player.team))
+        &&[args.game.away,args.game.home].some(team=>propsTeam(team)===propsTeam(player.opponent))),
+      'NFL empty current collection has no exact available withdrawal identity');
+    return {...withdrawal,sourceInputRelease:NFL_PLAYER_PROPS_EMPTY_CURRENT_RELEASE,sourceOfferSetStatus:'empty',sourceOfferSetEvidence:json(proof),quotes:[],executionQuotes:[],
+      sourceLimitations:[...withdrawal.sourceLimitations,'The successful complete current collection has no supported offered actors. Exact stored aliases, scopes and original evidence describe withdrawal context only; they are not current offer authority, a new independent forecast or a completed review. No scheduled token count, claim or generation is permitted.']};
+  }
   invariant(players.size>0,"NFL complete source has no offered supported players");
   const qualifiedQuotes=qualifyConflictingSourceObservations(quotes);quotes.splice(0,quotes.length,...qualifiedQuotes);
   for(const player of players.values())if(player.markets.includes("interceptions")){
@@ -143,7 +171,7 @@ export function liveNflPacket(args:{game:LivePropsGame;window:CapturedReviewWind
     player.evidence.push({id:`source-event:${player.id}:interceptions`,kind:"market",availableAt:at,source:"exact captured NFL provider declaration and same-actor roster context",value:json({market:"interceptions",sourceEventQualification:qualification})});
   }
   const retained=(args.retainedQuotes??[]).map(q=>q.market!=="interceptions"||q.sourceEvent?q:{...q,sourceEvent:qualifyNflSourceEvent({market:q.market,provider:q.provider,providerMarket:null,rosterPosition:null})!});
-  const current={...packet,sourceInputRelease:PROPS_AI_NFL_SOURCE_RELEASE,sourceIdentityRelease:PROPS_AI_NFL_IDENTITY_RELEASE,sourceIdentityAvailableAt:args.observations.generatedAt,sourceLimitations:["Verified same-game current actor IDs. Stored model priors sharing a release remain correlated, including display aliases.",`Current rows without admissible provider receipt chronology: ${native.filter(q=>!q.isOpening&&!q.isLive).length-currentNative.length}; they cannot establish a current price.`,"Opening history supplements verified current actors and markets; orphan historical actors are not current offers."],players:[...players.values()].map(p=>({...p,markets:p.markets.sort()})),quotes:[...quotes,...retained]};
+  const current={...packet,sourceInputRelease:PROPS_AI_NFL_SOURCE_RELEASE,sourceIdentityRelease:PROPS_AI_NFL_IDENTITY_RELEASE,sourceIdentityAvailableAt:args.observations.generatedAt,sourceLimitations:["Verified same-game current actor IDs. Stored model priors sharing a release remain correlated, including display aliases.",`Current rows without admissible provider receipt chronology: ${native.filter(q=>!q.isOpening&&!q.isLive).length-currentNative.length}; they cannot establish a current price.`,"Opening history supplements verified current actors and markets; orphan historical actors are not current offers.",...(currentNative.some(row=>row.collectedFixture)?["Current BDL fixture start/teams use the exact same-provider game ID from this collection's already fetched schedule. This is collection-time fixture context, not an original native quote schedule or quote/update clock; opening/history fields were not backfilled."]:[])],players:[...players.values()].map(p=>({...p,markets:p.markets.sort()})),quotes:[...quotes,...retained]};
   const enriched=enrichCachedPacket(current,source);
   const contexts:ReaderGameContext[]=args.context.games.map(g=>({id:`live:${g.canonicalGameId}`,gameId:g.canonicalGameId,start:g.scheduledStart,awayTeam:g.awayTeam,homeTeam:g.homeTeam,availableAt:args.context.capturedAt,source:"existing exact-game NFL collector",injuries:json(g.injuries),depth:json({away:g.awayDepth,home:g.homeDepth}),weather:json(g.weather??null)}));
   const contextual=attachGameReaderContext(enriched,contexts);

@@ -17,6 +17,17 @@ export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
   "nfl_player_props_decision_unfit_2026_08_20_r1" as const;
 
+/** Prospective live-collection receipt only; never inferred from a stored empty
+ * snapshot or a provider's optional 404/422 response. */
+export const NFL_PLAYER_PROPS_EMPTY_CURRENT_RELEASE = "nfl_player_props_empty_current_2026_11_10_r1_successful_response" as const;
+export const NFL_PLAYER_PROPS_CURRENT_FIXTURE_RELEASE = "nfl_player_props_current_fixture_2026_11_10_r1_collected_schedule" as const;
+export type NflPlayerPropsEmptyCurrentCapture = {
+  release: typeof NFL_PLAYER_PROPS_EMPTY_CURRENT_RELEASE;
+  gameId: string; scheduledStart: string; awayTeam: string; homeTeam: string;
+  availableAt: string; collectionGeneratedAt: string;
+  providerReceipts: { balldontlie: string; owls?: string };
+};
+
 export const NFL_PLAYER_PROPS_PHASE_ONE_MARKETS = [
   "passing_attempts",
   "passing_completions",
@@ -62,6 +73,10 @@ export type NflPlayerPropGameIdentity = {
 };
 
 export type NflPlayerPropPriceObservation = {
+  /** Exact fixture from this collector's already fetched same-provider schedule;
+   * not a native quote schedule field or a provider quote/update clock. */
+  collectedFixture?: { release: typeof NFL_PLAYER_PROPS_CURRENT_FIXTURE_RELEASE; availableAt: string;
+    providerGameId: string; scheduledStart: string; awayTeam: string; homeTeam: string };
   provider: NflPlayerPropProvider;
   providerObservationId: string;
   providerEventId: string;

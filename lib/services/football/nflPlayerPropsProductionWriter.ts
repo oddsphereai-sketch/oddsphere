@@ -429,7 +429,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
     const ai=await reviewPropsForSite({client:args.client,sport:"nfl",writerRunId:args.writerRunId,onSourceReady:(packet,review,_observedAt,lookupAvailable)=>{aiLockFrames.push(observeNflSourceAuthority(packet,review,lookupAvailable));aiLockFrames.push(captureNflHandoffBundle(nextBoard.decisions,packet,review,"native"));},onReviewObserved:(packet,review,lookupAvailable)=>{aiLockFrames.push(observeNflSourceAuthority(packet,review,lookupAvailable));},onReviewReady:(packet,review)=>{const at=new Date().toISOString();nextBoard=restoreNflNativeGame(nextBoard,nativeAiBaseline,packet,at);nextBoard=applyNflSiteAi(nextBoard,packet,siteAiDecisions(packet,review,at),at,nativeAiBaseline.decisions);aiLockFrames.push(captureNflHandoffBundle(nextBoard.decisions,packet,review,"ai",nativeAiBaseline.decisions));},deadline:Date.parse(args.now)+390000,
       games:context.games.map(g=>({id:g.canonicalGameId,start:g.scheduledStart,away:g.awayTeam,home:g.homeTeam})),
       load:(game,window,loadContext)=>{
-        try{return liveNflPacket({game,window,snapshot:aiBaseline,observations:collection.snapshot,history:currentSeason.state,context,marketHistory});}
+        try{return liveNflPacket({game,window,snapshot:aiBaseline,observations:collection.snapshot,history:currentSeason.state,context,marketHistory,emptyCurrentGame:collection.emptyCurrentGames?.find(capture=>capture.gameId===game.id),withdrawalSnapshot:previous??undefined});}
         catch(error){
           const failureCode=nflIdentityFailureTrigger(error);
           // Only the actual due slot may create a diagnostic. Routine authority

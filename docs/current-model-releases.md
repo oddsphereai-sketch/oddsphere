@@ -33,6 +33,19 @@ Future reviewed NBA rows take the verified current same-ID source label,
 including existing native scopes. New AI row proofs bind that exact name;
 native alias semantics and every stored locked name remain unchanged. This is
 a publication identity repair with no numerical forecast or grade adjustment.
+Future NFL empty-currentR1
+`nfl_player_props_empty_current_2026_11_10_r1_successful_response` requires an
+exact successful complete current response, not optional errors or stored empty
+snapshots. It supplies withdrawal-only prior identity context and zero offered
+coverage, allowing existing source callbacks to suppress only new unlocked
+execution events without paid preparation. Current-fixtureR1
+`nfl_player_props_current_fixture_2026_11_10_r1_collected_schedule` binds missing
+current BDL fixture fields by one exact already fetched provider game ID. Native
+quote clocks/IDs/prices and all openings stay exact; collection-time schedule
+provenance is explicit. Existing event-sourceR3, identityR1 and missing-head
+semantics are preserved. Medical-contextR1 also compares only known equivalent
+ESPN and BDL native/roster/clinical medical encodings across authority clocks;
+raw source, distinct identities, substantive facts and unknown extras remain bound.
 NFL memberR60/lifecycleR42 stamp current-execution first-lock authority.
 ParticipationR3 `player_props_ai_participation_2026_11_10_r3_separate_lineup_and_medical`
 keeps lineup opportunity separate from medical availability: one channel cannot

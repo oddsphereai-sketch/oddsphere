@@ -17,10 +17,11 @@ import {runPropsReview,type AcceptedGameReview} from "./reviewer";
 import {selectSiteReview,siteAiDecisions,siteReviewCoverage,siteReviewQualification,type SiteAiDecision} from "./publication";
 import {instant,etDate} from "./evidence";
 import {PROPS_AI_RELEASE,PROPS_AI_ACCEPTED_RELEASES,PROPS_AI_SELECTION_RELEASE,PROPS_AI_SCHEDULE_RELEASE,PROPS_AI_MIN_REVIEW_WINDOW_MS,PROPS_AI_MAX_OUTPUT_PER_REQUEST} from "./releases";
+import {NFL_PLAYER_PROPS_EMPTY_CURRENT_RELEASE} from '../services/football/nflPlayerPropsContract';
 /** Purpose is diagnostic context only; it never creates a review or source read. */
 export type PropsAiSourceLoadContext={purpose:"scheduled_review";job:PropsAiJob}|{purpose:"lock_authority"|"member_publication"};
 export type SiteReviewResult={game:LivePropsGame;packet:GamePacket;decisions:SiteAiDecision[];authorityReview:AcceptedGameReview|null;observedAt:string};
-type SiteCoverage={participationBlockedScopes:number;unresolvedSourceScopes:number;unresolvedExecutionContracts:number;gameId:string;players:number;reviewedPlayers:number;contextChangedPlayers:number;unreviewedScopes:number;eligiblePlayers:number;pricedPlayers:number;qualifiedLawPlayers:number;sourceDeclinedScopes:number;unqualifiedTailScopes:number;currentExecutionContracts:number;pricedExecutionContracts:number;unpricedExecutionContracts:number};
+type SiteCoverage={participationBlockedScopes:number;unresolvedSourceScopes:number;unresolvedExecutionContracts:number;gameId:string;players:number;withdrawalContextPlayers:number;reviewedPlayers:number;contextChangedPlayers:number;unreviewedScopes:number;eligiblePlayers:number;pricedPlayers:number;qualifiedLawPlayers:number;sourceDeclinedScopes:number;unqualifiedTailScopes:number;currentExecutionContracts:number;pricedExecutionContracts:number;unpricedExecutionContracts:number};
 export type SiteReviewOutcome={status:string;games:SiteReviewResult[];findings:string[];coverage?:SiteCoverage[]};
 export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport;games:LivePropsGame[];writerRunId?:string;load:(game:LivePropsGame,window:CapturedReviewWindow,context?:PropsAiSourceLoadContext)=>Promise<GamePacket>|GamePacket;fetchImpl?:typeof fetch;clock?:()=>string;deadline?:number;onSourceReady?:(packet:GamePacket,review:AcceptedGameReview|null,observedAt:string,lookupAvailable:boolean)=>void|Promise<void>;onReviewObserved?:(packet:GamePacket,review:AcceptedGameReview|null,lookupAvailable:boolean)=>void|Promise<void>;onReviewReady?:(packet:GamePacket,review:AcceptedGameReview)=>void|Promise<void>}):Promise<SiteReviewOutcome>{
   const config=propsAiSiteConfig();
@@ -28,7 +29,7 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
   if(!config.integrated)return {status:"disabled",games:[],findings:[]};
   const clock=args.clock??(()=>new Date().toISOString()),now=clock(),deadline=args.deadline??Date.now()+230000,findings:string[]=[],results:SiteReviewResult[]=[];
   const coverage:SiteCoverage[]=[];
-  const finish=(outcome:SiteReviewOutcome)=>{console.info(`PLAYER_PROPS_AI_SITE ${JSON.stringify({release:PROPS_AI_RELEASE,selectionRelease:PROPS_AI_SELECTION_RELEASE,scheduleRelease:PROPS_AI_SCHEDULE_RELEASE,diagnosticsRelease:PROPS_AI_DIAGNOSTIC_RELEASE,sport:args.sport,status:outcome.status,reviewedGames:outcome.games.filter(g=>g.authorityReview).length,sourceGames:outcome.games.length,coverage:outcome.coverage,findings:outcome.findings.slice(0,16)})}`);return outcome;};
+  const finish=(outcome:SiteReviewOutcome)=>{console.info(`PLAYER_PROPS_AI_SITE ${JSON.stringify({release:PROPS_AI_RELEASE,selectionRelease:PROPS_AI_SELECTION_RELEASE,scheduleRelease:PROPS_AI_SCHEDULE_RELEASE,diagnosticsRelease:PROPS_AI_DIAGNOSTIC_RELEASE,sport:args.sport,status:outcome.status,reviewedGames:outcome.games.filter(g=>g.authorityReview&&g.packet.sourceOfferSetStatus!=='empty').length,sourceGames:outcome.games.length,coverage:outcome.coverage,findings:outcome.findings.slice(0,16)})}`);return outcome;};
   const store=new PropsAiStore(args.client);
   try{
     const control=await args.client.from("player_props_ai_control").select("release,paid_enabled").eq("singleton",true).single();
@@ -100,7 +101,7 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
           const native=nativeByFundedId.get(job.game_id)!;
           try{
             const packet=await args.load(native,{gameId:native.id,stage:job.stage,cutoff:clock(),lock:job.lock_at},{purpose:"scheduled_review",job});
-            if(packet.sport==='nba'&&packet.sourceOfferSetStatus==='empty'){findings.push(`review_deferred_empty_current_offers:${native.id}`);return null;}
+            if(packet.sourceOfferSetStatus==='empty'&&(packet.sport==='nba'||packet.sport==='nfl'&&packet.sourceInputRelease===NFL_PLAYER_PROPS_EMPTY_CURRENT_RELEASE)){findings.push(`review_deferred_empty_current_offers:${native.id}`);return null;}
             const fundedPacket={...packet,sourceGameId:native.id,gameId:job.game_id};
             const parts=await prepareReviewParts(fundedPacket,{key:config.key,fetchImpl:args.fetchImpl,onCountStage:parts=>{
               const stageDeadline=Math.min(deadline,Date.now()+instant(job.lock_at)-instant(clock()))-propsAiCompletionWindowMs(parts)-10000;
@@ -148,11 +149,11 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
         const latest=latestForPacket(packet,accepted,observedAt);
         await args.onReviewObserved?.(packet,latest,lookupAvailable(game.id));
         const review=selectSiteReview(packet,accepted,observedAt);
-        const players=siteReviewCoverage(packet,latest,clock()),decisions=review?siteAiDecisions(packet,review,clock()):[];
-        coverage.push({gameId:game.id,players:players.length,reviewedPlayers:players.filter(p=>p.reviewed).length,
+        const players=packet.sourceOfferSetStatus==='empty'?[]:siteReviewCoverage(packet,latest,clock()),decisions=review?siteAiDecisions(packet,review,clock()):[];
+        coverage.push({gameId:game.id,players:players.length,withdrawalContextPlayers:packet.sourceOfferSetStatus==='empty'?packet.players.length:0,reviewedPlayers:players.filter(p=>p.reviewed).length,
           contextChangedPlayers:players.filter(p=>p.reviewed&&!p.contextCurrent).length,
           unreviewedScopes:players.reduce((n,p)=>n+p.unreviewedMarkets.length,0),
-          eligiblePlayers:players.filter(p=>p.markets.length>0).length,pricedPlayers:new Set(decisions.map(c=>c.playerId)).size,
+          eligiblePlayers:packet.sourceOfferSetStatus==='empty'?0:players.filter(p=>p.markets.length>0).length,pricedPlayers:new Set(decisions.map(c=>c.playerId)).size,
           ...siteReviewQualification(packet,latest,clock(),15*60000,decisions)});
         results.push({game,packet,decisions,authorityReview:latest,observedAt});
       }catch(error){findings.push(`current_source_unavailable:${game.id}:${propsAiFailureCode(error)}`);const packet=localCompleted.get(game.id)?.packet??capturedPackets.get(game.id);if(packet){const observedAt=clock(),latest=latestForPacket(packet,accepted,observedAt);await args.onReviewObserved?.(packet,latest,lookupAvailable(game.id));results.push({game,packet,decisions:[],authorityReview:latest,observedAt});}}

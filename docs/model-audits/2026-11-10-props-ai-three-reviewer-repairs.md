@@ -281,3 +281,42 @@ The existing familiar-reader fixture now supplies its actual typed NFL packet
 fields and keeps every original rendering assertion; both reader and label
 regressions run in the existing workflow. No inference, grade, model input,
 source request, quota, schedule, budget or stored record is changed.
+
+## Round 12 medical encodings and genuine NFL source completion
+
+A same-state newer ESPN report could still revoke R31 when cached camelCase and
+current raw-plus-camelCase encodings represented the same known medical fact.
+The authority comparison now recognizes only the exact typed equivalent forms;
+all raw evidence, unknown/conflicting extras, substantive medical fields and
+legacy hashes remain exact. Actual NFL roster-ID, name-only clinical and attached
+native medical encodings receive equally strict semantic comparison, preserving
+same-state authority refreshes while genuine status/detail/role/identity changes
+and multiple-ID ambiguities remain material.
+
+The actual NFL collector could complete successfully with no offers, while the
+source compiler refused an empty actor set and emitted no withdrawal authority.
+Prior unlocked AI events could then become new locks. Empty-currentR1 records
+only genuine successful current completion with exact fixture/receipt clocks,
+not optional404/422 responses, rejected/partial/unknown payloads or stored empties.
+Exact previously captured identities are withdrawal context only. The existing
+writer passes the receipt and original prior snapshot; ordinary source callbacks
+observe an empty execution set, with zero offered actors/scopes and zero paid
+preparation. Existing locked rows and postlock observations retain precedence.
+
+A real healthy collector control additionally exposed missing BDL fixture fields:
+the identity compiler requires the scheduled start, but provider prop payloads
+omit it. Current-fixtureR1 supplies only missing current fields from the exact
+same-provider game ID in the schedule already fetched by that collector, with
+explicit collection-time provenance. Missing/ambiguous/conflicting mappings
+refuse. Quote IDs, native clocks, prices and opening/history observations are
+unchanged, and no additional provider request is made. Event-sourceR3 and the
+existing identity/event checks remain authoritative.
+
+The actual collector/context/source/site-callback/reconciler regression covers
+successful withdrawal and healthy return, prior AI/native/AI-only scopes, zero
+count/claim/generation on empty, error/partial/malformed/chronology refusals and
+exact prior locks. Existing source-failure tests prove the sole writer forwards
+the exact receipt and original previous snapshot. The foundation fixture's stale
+R14 expectation is updated to the already exported/registered R15 provider release;
+no production behavior is changed for that assertion. These source/process repairs
+reset the clean-round streak and require new full independent rounds and gates.

@@ -43,6 +43,7 @@ export function selectSiteReview(packet:GamePacket,reviews:AcceptedGameReview[],
 }
 /** Internal qualification accounting; an admitted player is not necessarily a priced event. */
 export function siteReviewQualification(packet:GamePacket,review:AcceptedGameReview|null,now:string,maxQuoteAgeMs=15*60000,priced?:SiteAiDecision[]){
+  if(packet.sourceOfferSetStatus==='empty')return{unresolvedSourceScopes:0,unresolvedExecutionContracts:0,qualifiedLawPlayers:0,sourceDeclinedScopes:0,participationBlockedScopes:0,unqualifiedTailScopes:0,currentExecutionContracts:0,pricedExecutionContracts:0,unpricedExecutionContracts:0};
   const coverage=siteReviewCoverage(packet,review,now),tails=new Set<string>();let sourceDeclinedScopes=0,qualifiedLawPlayers=0,participationBlockedScopes=0;
   for(const current of coverage){
     const player=review?.players.find(p=>p.playerId===current.playerId);if(!player)continue;
