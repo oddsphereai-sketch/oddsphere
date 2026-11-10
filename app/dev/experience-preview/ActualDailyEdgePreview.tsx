@@ -1,7 +1,5 @@
 "use client";
 
-import { UclUpcomingSchedule } from "./UclUpcomingSchedule";
-
 import { startTransition, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import {CbbRecoveredMarketContext} from "@/app/lab/components/daily-edge/CbbRecoveredMarketContext";
@@ -482,7 +480,7 @@ export default function ActualDailyEdgePreview({
   if (!game) {
     const basketballSchedule = sport === "nba" ? displaySnapshot.nbaRollingSchedule :
       sport === "cbb" ? cbbDailySchedule : undefined;
-    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} cbbBoardDate={cbbBoardDate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} sportActivity={sportActivity} />{sport === "cbb" && cbbDays.length > 0 ? <CbbDateNavigation days={cbbDays} selectedDate={cbbBoardDate} onChange={changeCbbBoardDate} /> : null}{sport === "cbb" && selectedCbbSchedule ? <div ref={readerRef} className="scroll-mt-4"><CbbScheduledReader game={selectedCbbSchedule} /></div> : null}{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && renderedWeeklySlate ? <NflEvidenceUnavailable label={renderedWeeklySlate.label} /> : renderedWeeklySlate?.unavailable ? <WeeklySlateEvidenceUnavailable sport={sport} /> : displaySnapshot.uclUpcomingSchedule?.games.length ? <UclUpcomingSchedule schedule={displaySnapshot.uclUpcomingSchedule} /> : displaySnapshot.slateState === "temporarily_unavailable" ? <DailySlateEvidenceUnavailable sport={sport} displayLabel={soccerCompetition?.label} /> : sport === "cbb" && basketballSchedule && basketballSchedule.games.length > 0 ? <EdgeBoard games={[]} sport={sport} activeId="" activeMarket="moneyline" selectGame={selectGame} prefetchGameDetail={prefetchGameDetail} cbbScheduledGames={basketballSchedule.games} activeCbbScheduledId={selectedCbbScheduleId} selectCbbScheduledGame={selectCbbScheduledGame} /> : sport === "nba" && displaySnapshot.nbaRollingSchedule?.games.length ? <BasketballRollingSchedule schedule={displaySnapshot.nbaRollingSchedule} sport="nba" /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
+    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} cbbBoardDate={cbbBoardDate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} sportActivity={sportActivity} />{sport === "cbb" && cbbDays.length > 0 ? <CbbDateNavigation days={cbbDays} selectedDate={cbbBoardDate} onChange={changeCbbBoardDate} /> : null}{sport === "cbb" && selectedCbbSchedule ? <div ref={readerRef} className="scroll-mt-4"><CbbScheduledReader game={selectedCbbSchedule} /></div> : null}{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && renderedWeeklySlate ? <NflEvidenceUnavailable label={renderedWeeklySlate.label} /> : renderedWeeklySlate?.unavailable ? <WeeklySlateEvidenceUnavailable sport={sport} /> : displaySnapshot.slateState === "temporarily_unavailable" ? <DailySlateEvidenceUnavailable sport={sport} displayLabel={soccerCompetition?.label} /> : sport === "cbb" && basketballSchedule && basketballSchedule.games.length > 0 ? <EdgeBoard games={[]} sport={sport} activeId="" activeMarket="moneyline" selectGame={selectGame} prefetchGameDetail={prefetchGameDetail} cbbScheduledGames={basketballSchedule.games} activeCbbScheduledId={selectedCbbScheduleId} selectCbbScheduledGame={selectCbbScheduledGame} /> : sport === "nba" && displaySnapshot.nbaRollingSchedule?.games.length ? <BasketballRollingSchedule schedule={displaySnapshot.nbaRollingSchedule} sport="nba" /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
   }
 
   const selectedGame = game;
@@ -640,6 +638,8 @@ export default function ActualDailyEdgePreview({
       <SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} sample={embeddedSample} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} cbbBoardDate={cbbBoardDate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} sportActivity={sportActivity} />
 
       {sport === "cbb" && cbbDays.length > 0 ? <CbbDateNavigation days={cbbDays} selectedDate={cbbBoardDate} onChange={changeCbbBoardDate} /> : null}
+
+      {displaySnapshot.uclBoardContinuity ? <p role="status" className="rounded-lg border border-amber-300/15 bg-amber-400/[0.04] px-4 py-3 text-xs text-amber-100/80">Last published {formatTimestamp(displaySnapshot.uclBoardContinuity.capturedAt)} · Forecast and market refresh delayed. Prices and play grades below retain their saved observation times.</p> : null}
 
       <div ref={readerRef} className={selectedCbbSchedule ? "scroll-mt-4" : "hidden scroll-mt-4 sm:block"}>
         {selectedCbbSchedule ? <CbbScheduledReader game={selectedCbbSchedule} /> : readerOpen ? <div>
@@ -990,7 +990,7 @@ function SlateHeader({ snapshot, sport, onSportChange, onSportPrefetch, sample =
   const nbaScheduleOnlyCount = sport === "nba" ? snapshot.nbaRollingSchedule?.games.length ?? 0 : 0;
   const cbbDay = sport === "cbb" ? cbbSlateDays(snapshot).find((day) => day.date === cbbBoardDate) : undefined;
   const displayGameCount = sport === "cbb" ? (cbbDay?.analyzed ?? 0) + (cbbDay?.scheduled ?? 0)
-    : weeklySlate?.displayGameCount ?? snapshot.games.length + nbaScheduleOnlyCount + (snapshot.uclUpcomingSchedule?.games.length ?? 0);
+    : weeklySlate?.displayGameCount ?? snapshot.games.length + nbaScheduleOnlyCount;
   const displayAsOf = weeklySlate?.asOf ?? snapshot.as_of;
   const sportAvailability = previewSportAvailability(activePreviewSports, sportActivity, soccerCompetition, sport, displayGameCount > 0);
   const orderedSports = orderDailyEdgeSportKeys(DAILY_EDGE_TOP_LEVEL_SPORT_KEYS, sportAvailability)
@@ -1002,7 +1002,7 @@ function SlateHeader({ snapshot, sport, onSportChange, onSportPrefetch, sample =
         <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-gray-600"><span className="text-gray-400">Update rhythm</span> · {weeklySlate?.cadenceLabel ?? (weeklySlate ? "30-minute board" : "hourly board")} · separate market feeds · minute lock checks</p>
       </div>
       <div className="mt-5"><SportSelector active={sport} onChange={onSportChange} onPrefetch={onSportPrefetch} sports={orderedSports} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} density={sample ? "sample" : "default"} /></div>
-      {sport === "soccer" && soccerCompetition ? <SoccerCompetitionBar active={soccerCompetition.active} reviewMode={reviewMode} hasGames={snapshot.games.length > 0 || Boolean(snapshot.uclUpcomingSchedule?.games.length)} eplAvailable={soccerCompetition.eplAvailable !== false} uclAvailable={soccerCompetition.uclAvailable === true} /> : null}
+      {sport === "soccer" && soccerCompetition ? <SoccerCompetitionBar active={soccerCompetition.active} reviewMode={reviewMode} hasGames={snapshot.games.length > 0} eplAvailable={soccerCompetition.eplAvailable !== false} uclAvailable={soccerCompetition.uclAvailable === true} /> : null}
       {weeklySlate ? <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5"><p className="min-w-0 text-[9px] font-black uppercase tracking-[0.15em] text-gray-400">{weeklySlate.label}</p><div className="flex shrink-0 gap-2">{weeklySlate.previousHref ? <Link href={weeklySlate.previousHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">← Previous</Link> : null}{weeklySlate.nextHref ? <Link href={weeklySlate.nextHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">Next →</Link> : null}</div></div> : null}
     </div>
   );
