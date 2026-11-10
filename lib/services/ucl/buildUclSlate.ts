@@ -10,17 +10,17 @@ import {
   type BdlUclTeamMatchStats,
   type UclHistoryFetchTelemetry,
 } from "@/lib/providers/real_api/BallDontLieUclProvider";
-import type { EplShadowSlate, EplShadowSlateMatch, EplTeamEvidence } from "@/lib/services/epl/buildEplShadowSlate";
+import { loadEplLicensedTrainingFoundation, type EplShadowSlate, type EplShadowSlateMatch, type EplTeamEvidence } from "@/lib/services/epl/buildEplShadowSlate";
 import { recentComparableEplMatches } from "@/lib/services/epl/eplEvidence";
 import { buildUclCompetitionContexts, regulationScore, type UclCompetitionContext } from "./uclCompetitionContext";
-import { fitAndPredictUcl, joinUclMatchStats, UCL_CALIBRATION_RELEASE, UCL_MODEL_RELEASE } from "./uclModel";
+import { fitAndPredictUclPaidStats, joinUclMatchStats, UCL_CALIBRATION_RELEASE, UCL_MODEL_RELEASE } from "./uclModel";
 import { readUclHistoricalFoundation, writeUclHistoricalFoundation } from "./uclHistoricalFoundationStore";
 import { resolveUclFeatureFlags } from "./uclFeatureFlags";
 import { assertFrozenUclHistoricalInputs } from "./uclChronologicalManifest";
 import { computeSlateDate } from "@/lib/dates/slateDate";
-import { loadUclOfficialStrength } from "./uclOfficialStrengthSource";
-import { buildUclCurrentStrengthPrior, normalizeUclStrengthClub, type UclCurrentStrengthPrior } from "./uclCurrentStrengthPrior";
+import { normalizeUclStrengthClub } from "./uclCurrentStrengthPrior";
 import { fitAndPredictUclBaseline } from "./uclModel";
+import { uclPaidTrainingInputs, type UclPaidTrainingMatch } from "./uclPaidStatsFit";
 
 export const UCL_CURRENT_SEASON = 2026;
 const UCL_TRAINING_SEASONS = [2024, 2025] as const;
@@ -35,7 +35,8 @@ type Foundation = {
   teamStats: BdlUclTeamMatchStats[];
   statsCoverage: number;
   providerHistory: UclHistoryProviderHealth;
-  strengthPrior: UclCurrentStrengthPrior;
+  paidTraining: UclPaidTrainingMatch[];
+  availableAt: string;
 };
 
 export type UclHistoryProviderHealth = {
@@ -100,10 +101,11 @@ async function loadFoundation(provider: BallDontLieUclProvider): Promise<Foundat
       if (result.providerHistory.status === "degraded") historicalPromise = null;
       return result;
     }).catch((error) => { historicalPromise = null; throw error; });
-    const [prior, teams, seasonMatches] = await Promise.all([
+    const [prior, teams, seasonMatches, epl] = await Promise.all([
       historicalPromise,
       provider.listTeams(UCL_CURRENT_SEASON),
       provider.listCurrentSeasonMatches(UCL_CURRENT_SEASON),
+      loadEplLicensedTrainingFoundation(process.env.BALLDONTLIE_API_KEY!),
     ]);
     const completed = seasonMatches.filter((match) => match.status_state === "final");
     const currentStats = completed.length ? await provider.listTeamMatchStats(completed.map((match) => match.id)) : [];
@@ -121,8 +123,17 @@ async function loadFoundation(provider: BallDontLieUclProvider): Promise<Foundat
         if(!previous)teamNames.set(id,name);
       }
     }
-    const strengthPrior = buildUclCurrentStrengthPrior(
-      await loadUclOfficialStrength(resolveUclFeatureFlags().foundationWrites),teamNames,teams.map(t=>t.id));
+    // Reuse EPL's existing licensed foundation/cache. UCL keeps its own scoring
+    // environment; overlapping club IDs must resolve to the exact same club.
+    const eplTraining = epl.trainingMatches.filter(match => match.season >= UCL_CURRENT_SEASON - 2);
+    for (const season of UCL_TRAINING_SEASONS) {
+      if (eplTraining.filter(match => match.season === season).length !== 380)
+        throw Error(`Incomplete licensed EPL history season ${season}`);
+    }
+    if (epl.seasonMatches.length !== 380 || eplTraining.filter(match => match.season === UCL_CURRENT_SEASON).length
+      !== epl.seasonMatches.filter(match => match.status_state === "final").length)
+      throw Error("Incomplete current licensed EPL foundation");
+    const paidTraining = uclPaidTrainingInputs(trainingMatches, eplTraining);
     const xgMatches = trainingMatches.filter((match) => match.home_xg !== null && match.away_xg !== null).length;
     return {
       teams,
@@ -132,7 +143,9 @@ async function loadFoundation(provider: BallDontLieUclProvider): Promise<Foundat
       teamStats,
       statsCoverage: trainingMatches.length ? xgMatches / trainingMatches.length : 0,
       providerHistory: prior.providerHistory,
-      strengthPrior,
+      paidTraining,
+      // Actual input completion is distinct from fixture time and stats dates.
+      availableAt: new Date().toISOString(),
     };
   })().catch((error) => { if (foundationCache?.promise === promise) foundationCache = null; throw error; });
   foundationCache = { expiresAt: Date.now() + CURRENT_FOUNDATION_TTL_MS, promise };
@@ -282,11 +295,11 @@ async function buildUclSlateUncached(requestedMatchweek?: number, selectionNow =
     if (!homeTeam || !awayTeam || !context) return [];
     const score = regulationScore(match).score;
     const predictionInput={training:foundation.trainingMatches,match,history:foundation.historyMatches,context};
-    // A current rating is never backdated into a historical forecast. Elapsed
+    // A newly collected input is never backdated into a historical forecast. Elapsed
     // rows are display scaffolding only: the member/lock path must restore the
     // exact stored lock. The legacy comparator retains its own release.
-    const prediction=Date.parse(foundation.strengthPrior.source.capturedAt)<Date.parse(match.date)
-      ? fitAndPredictUcl({...predictionInput,strengthPrior:foundation.strengthPrior})
+    const prediction=Date.parse(foundation.availableAt)<Date.parse(match.date)
+      ? fitAndPredictUclPaidStats({...predictionInput,paidTraining:foundation.paidTraining,availableAt:foundation.availableAt})
       : fitAndPredictUclBaseline(predictionInput);
     return [{
       id: match.id,
@@ -330,8 +343,8 @@ async function buildUclSlateUncached(requestedMatchweek?: number, selectionNow =
     availableRounds: groups.map((_, index) => index + 1),
     matches,
     generatedAt: new Date().toISOString(),
-    trainedThrough: foundation.trainingMatches.reduce((latest, match) => match.date > latest ? match.date : latest, ""),
-    trainingMatches: foundation.trainingMatches.length,
+    trainedThrough: foundation.paidTraining.reduce((latest, match) => match.date > latest ? match.date : latest, ""),
+    trainingMatches: foundation.paidTraining.length,
     modelRelease: UCL_MODEL_RELEASE,
     calibrationRelease: UCL_CALIBRATION_RELEASE,
     recentHistory,

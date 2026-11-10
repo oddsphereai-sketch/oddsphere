@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { preserveLockedEplGames } from "../lib/services/epl/eplLockedSnapshot";
 import { verifyUclRefreshAllMarketLocks, writeUclPredictionRecords, verifyUclAllMarketLocks } from "../lib/services/ucl/uclProductionPipeline";
 import { UCL_EXTERNAL_ID_OFFSET } from "../lib/services/ucl/uclCompetitionContext";
-import { UCL_CALIBRATION_RELEASE, UCL_MODEL_RELEASE } from "../lib/services/ucl/uclModel";
+import { UCL_CALIBRATION_RELEASE, UCL_MODEL_RELEASE, UCL_LEGACY_R22_MODEL_RELEASE, UCL_LEGACY_R22_CALIBRATION_RELEASE } from "../lib/services/ucl/uclModel";
 import { supabase } from "../lib/db/supabase";
 import { ingestUclFinalScores } from "../lib/services/ucl/uclScoreIngestService";
 import { gradePrediction } from "../lib/services/predictionGrader";
@@ -19,7 +19,7 @@ import { soccerPublishedScorePresentation } from "../app/lab/lib/soccerPublished
 
 type Operation = { table: string; kind: string; payload?: Record<string, unknown>; filters: Record<string, unknown> };
 
-function writerClient(operations: Operation[]) {
+function writerClient(operations: Operation[], lockedRows?: PredictionRecordRow[]) {
   return {
     from(table: string) {
       const operation: Operation = { table, kind: "", filters: {} };
@@ -34,6 +34,7 @@ function writerClient(operations: Operation[]) {
         then(resolve: (value: unknown) => void) {
           if (table === "games") return Promise.resolve(resolve({ data: [{ id: 501, external_id: UCL_EXTERNAL_ID_OFFSET + 34 }], error: null }));
           if (operation.kind === "select") {
+            if (lockedRows) return Promise.resolve(resolve({ data: lockedRows.filter(row => row.market === operation.filters.market), error: null }));
             const prior = operation.filters.market === "total"
               ? [{ id: 77, model_version: UCL_MODEL_RELEASE, calibration_version: UCL_CALIBRATION_RELEASE, locked_at: null, held: false, snapshot_json: { immutable: "prior", current_price: -115 } }]
               : [];
@@ -219,8 +220,8 @@ const wrongCompetition = four.map((row) => row.market === "btts" ? { ...row, sna
 assert.deepEqual((await verifyUclAllMarketLocks(lockInput, lockVerificationClient(wrongCompetition))).incompleteProviderIds, [34]);
 const wrongTuple = four.map((row) => row.market === "btts" ? { ...row, odds_american: -999 } : row);
 assert.deepEqual((await verifyUclAllMarketLocks(lockInput, lockVerificationClient(wrongTuple))).incompleteProviderIds, [34]);
-const legacyModelRelease = "ucl_legacy_model_release";
-const legacyCalibrationRelease = "ucl_legacy_calibration_release";
+const legacyModelRelease = UCL_LEGACY_R22_MODEL_RELEASE;
+const legacyCalibrationRelease = UCL_LEGACY_R22_CALIBRATION_RELEASE;
 const legacyFour = four.map((row) => ({
   ...row,
   model_version: legacyModelRelease,
@@ -238,6 +239,17 @@ const legacyFour = four.map((row) => ({
 const legacyVerified = await verifyUclAllMarketLocks(lockInput, lockVerificationClient(legacyFour));
 assert.deepEqual(legacyVerified.completeProviderIds, [34], "a complete prior-release lock cohort remains the authoritative member record");
 assert.equal(legacyVerified.lockedResponse.games[0]?.markets.total.currentPriceAmerican, -115, "the reader renders the exact prior-release captured price");
+const legacyBytes = JSON.stringify(legacyFour), legacyOperations: Operation[] = [];
+const preserveR22 = await writeUclPredictionRecords({ slate, response, apply: true,
+  now: new Date("2026-09-08T16:45:00Z"), client: writerClient(legacyOperations, legacyFour as PredictionRecordRow[]) });
+assert.equal(preserveR22.lockedPreserved, 4, "every R22/R25 lock blocks a newer R23 proposal");
+assert(!legacyOperations.some(operation => operation.table === "prediction_records" && operation.kind !== "select"), "no old locked field may be updated or replaced");
+assert.equal(JSON.stringify(legacyFour), legacyBytes);
+for (const [name, captured] of [["match_result", legacyVerified.lockedResponse.games[0]!.markets.moneyline],
+  ["double_chance", legacyVerified.lockedResponse.games[0]!.soccerDoubleChanceMarket],
+  ["total", legacyVerified.lockedResponse.games[0]!.markets.total], ["btts", legacyVerified.lockedResponse.games[0]!.markets.first_inning]] as const)
+  assert.deepEqual(captured, legacyFour.find(row => row.market === name)!.snapshot_json!.member_market_at_capture,
+    "R22 reader renders the exact stored full market, including old price/grade/evidence");
 const legacyOutsideStoragePrecision = legacyFour.map((row) => row.market === "total" ? { ...row, edge: (row.edge ?? 0) + 0.001 } : row);
 assert.deepEqual(
   (await verifyUclAllMarketLocks(lockInput, lockVerificationClient(legacyOutsideStoragePrecision))).incompleteProviderIds,

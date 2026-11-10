@@ -157,6 +157,12 @@ function loadFoundation(provider: BallDontLieEplProvider): Promise<Foundation> {
   return promise;
 }
 
+/** Reuse the existing licensed data/cache path; does not run an EPL model,
+ * collect odds, create a second refresh, or write predictions. */
+export function loadEplLicensedTrainingFoundation(apiKey: string): Promise<Foundation> {
+  return loadFoundation(new BallDontLieEplProvider(apiKey));
+}
+
 function average(values: Array<number | null | undefined>): number | null {
   const present = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
   return present.length > 0 ? present.reduce((sum, value) => sum + value, 0) / present.length : null;
