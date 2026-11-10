@@ -1,0 +1,305 @@
+{
+  "schemaVersion": 1,
+  "release": "ucl_retained_ability_prior_2026_11_10_r2_original_2026_11_04",
+  "derivedAt": "2026-11-10T16:53:03.215Z",
+  "sourceObservation": {
+    "release": "ucl_official_strength_2026_11_04_r1_dated_original_source",
+    "sourceUrl": "https://clubelo.com/",
+    "asOfDay": "2026-11-04",
+    "capturedAt": "2026-11-04T14:33:00Z",
+    "sourceHash": "3cddd29ed3ed2d06e2c59f682995b369aaf1c2b61e459f66b6d4a2e21a33bd48"
+  },
+  "coefficientPer400": 0.6748444915670129,
+  "clubs": [
+    {
+      "teamId": 2,
+      "name": "Arsenal",
+      "rating": 2045
+    },
+    {
+      "teamId": 3,
+      "name": "Aston Villa",
+      "rating": 1898
+    },
+    {
+      "teamId": 7,
+      "name": "Chelsea",
+      "rating": 1893
+    },
+    {
+      "teamId": 12,
+      "name": "Liverpool",
+      "rating": 1939
+    },
+    {
+      "teamId": 13,
+      "name": "Manchester City",
+      "rating": 2011
+    },
+    {
+      "teamId": 14,
+      "name": "Manchester United",
+      "rating": 1852
+    },
+    {
+      "teamId": 15,
+      "name": "Newcastle United",
+      "rating": 1854
+    },
+    {
+      "teamId": 18,
+      "name": "Tottenham Hotspur",
+      "rating": 1819
+    },
+    {
+      "teamId": 23,
+      "name": "Bayer Leverkusen",
+      "rating": 1865
+    },
+    {
+      "teamId": 24,
+      "name": "Bayern Munich",
+      "rating": 2044
+    },
+    {
+      "teamId": 25,
+      "name": "Borussia Dortmund",
+      "rating": 1894
+    },
+    {
+      "teamId": 32,
+      "name": "RB Leipzig",
+      "rating": 1831
+    },
+    {
+      "teamId": 36,
+      "name": "VfB Stuttgart",
+      "rating": 1816
+    },
+    {
+      "teamId": 40,
+      "name": "Athletic Club",
+      "rating": 1769
+    },
+    {
+      "teamId": 41,
+      "name": "Atlético Madrid",
+      "rating": 1915
+    },
+    {
+      "teamId": 42,
+      "name": "Barcelona",
+      "rating": 2030
+    },
+    {
+      "teamId": 47,
+      "name": "Girona",
+      "rating": 1721
+    },
+    {
+      "teamId": 52,
+      "name": "Real Betis",
+      "rating": 1827
+    },
+    {
+      "teamId": 53,
+      "name": "Real Madrid",
+      "rating": 1995
+    },
+    {
+      "teamId": 58,
+      "name": "Villarreal",
+      "rating": 1786
+    },
+    {
+      "teamId": 60,
+      "name": "AS Monaco",
+      "rating": 1790
+    },
+    {
+      "teamId": 62,
+      "name": "Brest",
+      "rating": 1685
+    },
+    {
+      "teamId": 64,
+      "name": "Lens",
+      "rating": 1802
+    },
+    {
+      "teamId": 65,
+      "name": "Lille",
+      "rating": 1775
+    },
+    {
+      "teamId": 68,
+      "name": "Marseille",
+      "rating": 1765
+    },
+    {
+      "teamId": 73,
+      "name": "Paris Saint-Germain",
+      "rating": 1989
+    },
+    {
+      "teamId": 78,
+      "name": "Ajax Amsterdam",
+      "rating": 1701
+    },
+    {
+      "teamId": 80,
+      "name": "Atalanta",
+      "rating": 1781
+    },
+    {
+      "teamId": 86,
+      "name": "Benfica",
+      "rating": 1866
+    },
+    {
+      "teamId": 87,
+      "name": "Bodo/Glimt",
+      "rating": 1775
+    },
+    {
+      "teamId": 90,
+      "name": "Club Brugge",
+      "rating": 1836
+    },
+    {
+      "teamId": 94,
+      "name": "Galatasaray",
+      "rating": 1821
+    },
+    {
+      "teamId": 95,
+      "name": "Internazionale",
+      "rating": 1945
+    },
+    {
+      "teamId": 96,
+      "name": "Juventus",
+      "rating": 1828
+    },
+    {
+      "teamId": 101,
+      "name": "Napoli",
+      "rating": 1826
+    },
+    {
+      "teamId": 103,
+      "name": "Olympiacos",
+      "rating": 1745
+    },
+    {
+      "teamId": 104,
+      "name": "PSV Eindhoven",
+      "rating": 1783
+    },
+    {
+      "teamId": 108,
+      "name": "Slavia Prague",
+      "rating": 1746
+    },
+    {
+      "teamId": 109,
+      "name": "Sporting CP",
+      "rating": 1860
+    },
+    {
+      "teamId": 2859,
+      "name": "Young Boys",
+      "rating": 1613
+    },
+    {
+      "teamId": 2861,
+      "name": "AC Milan",
+      "rating": 1831
+    },
+    {
+      "teamId": 2864,
+      "name": "Dinamo Zagreb",
+      "rating": 1655
+    },
+    {
+      "teamId": 2869,
+      "name": "Bologna",
+      "rating": 1772
+    },
+    {
+      "teamId": 2870,
+      "name": "Shakhtar Donetsk",
+      "rating": 1689
+    },
+    {
+      "teamId": 2872,
+      "name": "RB Salzburg",
+      "rating": 1660
+    },
+    {
+      "teamId": 2873,
+      "name": "Celtic",
+      "rating": 1650
+    },
+    {
+      "teamId": 2874,
+      "name": "Slovan Bratislava",
+      "rating": 1545
+    },
+    {
+      "teamId": 2881,
+      "name": "Feyenoord Rotterdam",
+      "rating": 1724
+    },
+    {
+      "teamId": 2883,
+      "name": "Red Star Belgrade",
+      "rating": 1559
+    },
+    {
+      "teamId": 2892,
+      "name": "SK Sturm Graz",
+      "rating": 1631
+    },
+    {
+      "teamId": 9442,
+      "name": "FC Porto",
+      "rating": 1833
+    },
+    {
+      "teamId": 22240,
+      "name": "AS Roma",
+      "rating": 1862
+    },
+    {
+      "teamId": 37697,
+      "name": "Como",
+      "rating": 1827
+    },
+    {
+      "teamId": 76897,
+      "name": "AEK Athens",
+      "rating": 1693
+    },
+    {
+      "teamId": 8564340,
+      "name": "LASK Linz",
+      "rating": 1643
+    },
+    {
+      "teamId": 8564362,
+      "name": "Viking FK",
+      "rating": 1707
+    },
+    {
+      "teamId": 8564371,
+      "name": "Fenerbahce",
+      "rating": 1767
+    },
+    {
+      "teamId": 8564380,
+      "name": "Sabah FK",
+      "rating": 1567
+    }
+  ]
+}

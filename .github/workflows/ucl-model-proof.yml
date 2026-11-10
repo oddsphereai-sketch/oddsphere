@@ -1,0 +1,33 @@
+name: UCL model proof
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'lib/services/ucl/**'
+      - 'scripts/test-ucl*'
+      - 'package.json'
+      - '.github/workflows/ucl-model-proof.yml'
+  merge_group:
+permissions:
+  contents: read
+jobs:
+  ucl-model-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1
+      SUPABASE_SERVICE_ROLE_KEY: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Configure isolated test environment
+        run: |
+          printf 'NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1\nSUPABASE_SERVICE_ROLE_KEY=test\n' > .env.local
+      - name: Full repository model gate
+        run: npm run verify:model-change
+      - name: Licensed input and immutable member record checks
+        run: node --import tsx scripts/test-ucl-retained-ability-prior.ts && npm run test:ucl-production && node --import tsx scripts/test-ucl-member-schedule.ts && node --import tsx scripts/test-ucl-stored-member-board.ts

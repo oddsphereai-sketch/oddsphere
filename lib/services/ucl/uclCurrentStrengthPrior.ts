@@ -1,4 +1,4 @@
-import { normalizeUclEloClub } from "./uclEloStrengthFoundation";
+import { normalizeUclEloClub } from "./uclClubIdentity";
 import type { UclOfficialStrength } from "./uclOfficialStrengthSource";
 
 export const UCL_CURRENT_STRENGTH_PRIOR_RELEASE = "ucl_strength_score_prior_2026_11_04_r1_original_dated_ratings" as const;
