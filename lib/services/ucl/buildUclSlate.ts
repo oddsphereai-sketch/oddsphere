@@ -18,8 +18,8 @@ import { readUclHistoricalFoundation, writeUclHistoricalFoundation } from "./ucl
 import { resolveUclFeatureFlags } from "./uclFeatureFlags";
 import { assertFrozenUclHistoricalInputs } from "./uclChronologicalManifest";
 import { computeSlateDate } from "@/lib/dates/slateDate";
-import { loadUclOfficialStrength } from "./uclOfficialStrengthSource";
-import { buildUclCurrentStrengthPrior, normalizeUclStrengthClub, type UclCurrentStrengthPrior } from "./uclCurrentStrengthPrior";
+import { normalizeUclStrengthClub } from "./uclCurrentStrengthPrior";
+import { loadUclRetainedAbilityPrior, type UclRetainedAbilityPrior } from "./uclRetainedAbilityPrior";
 import { fitAndPredictUclBaseline } from "./uclModel";
 
 export const UCL_CURRENT_SEASON = 2026;
@@ -35,7 +35,8 @@ type Foundation = {
   teamStats: BdlUclTeamMatchStats[];
   statsCoverage: number;
   providerHistory: UclHistoryProviderHealth;
-  strengthPrior: UclCurrentStrengthPrior;
+  retainedPrior: UclRetainedAbilityPrior;
+  availableAt: string;
 };
 
 export type UclHistoryProviderHealth = {
@@ -121,8 +122,7 @@ async function loadFoundation(provider: BallDontLieUclProvider): Promise<Foundat
         if(!previous)teamNames.set(id,name);
       }
     }
-    const strengthPrior = buildUclCurrentStrengthPrior(
-      await loadUclOfficialStrength(resolveUclFeatureFlags().foundationWrites),teamNames,teams.map(t=>t.id));
+    const retainedPrior = loadUclRetainedAbilityPrior(teamNames, teams.map(team => team.id));
     const xgMatches = trainingMatches.filter((match) => match.home_xg !== null && match.away_xg !== null).length;
     return {
       teams,
@@ -132,7 +132,8 @@ async function loadFoundation(provider: BallDontLieUclProvider): Promise<Foundat
       teamStats,
       statsCoverage: trainingMatches.length ? xgMatches / trainingMatches.length : 0,
       providerHistory: prior.providerHistory,
-      strengthPrior,
+      retainedPrior,
+      availableAt: new Date().toISOString(),
     };
   })().catch((error) => { if (foundationCache?.promise === promise) foundationCache = null; throw error; });
   foundationCache = { expiresAt: Date.now() + CURRENT_FOUNDATION_TTL_MS, promise };
@@ -282,11 +283,12 @@ async function buildUclSlateUncached(requestedMatchweek?: number, selectionNow =
     if (!homeTeam || !awayTeam || !context) return [];
     const score = regulationScore(match).score;
     const predictionInput={training:foundation.trainingMatches,match,history:foundation.historyMatches,context};
-    // A current rating is never backdated into a historical forecast. Elapsed
+    // Completed paid inputs and the model prior are never backdated. Elapsed
     // rows are display scaffolding only: the member/lock path must restore the
     // exact stored lock. The legacy comparator retains its own release.
-    const prediction=Date.parse(foundation.strengthPrior.source.capturedAt)<Date.parse(match.date)
-      ? fitAndPredictUcl({...predictionInput,strengthPrior:foundation.strengthPrior})
+    const prediction=Date.parse(foundation.availableAt)<Date.parse(match.date)
+      && Date.parse(foundation.retainedPrior.derivedAt)<Date.parse(match.date)
+      ? fitAndPredictUcl({...predictionInput,retainedPrior:foundation.retainedPrior,availableAt:foundation.availableAt})
       : fitAndPredictUclBaseline(predictionInput);
     return [{
       id: match.id,

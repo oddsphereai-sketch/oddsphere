@@ -4,7 +4,7 @@ import {readFileSync} from "node:fs";
 import {fitUclStrengthScoreRate} from "../lib/services/ucl/uclStrengthScoreFit";
 import {parseUclOfficialStrength,loadUclOfficialStrength,validUclOfficialStrength,UCL_OFFICIAL_STRENGTH_SOURCE_RELEASE,UCL_OFFICIAL_STRENGTH_URL} from "../lib/services/ucl/uclOfficialStrengthSource";
 import {buildUclCurrentStrengthPrior,UCL_CURRENT_STRENGTH_PRIOR_RELEASE,UCL_STRENGTH_SCORE_COEFFICIENT} from "../lib/services/ucl/uclCurrentStrengthPrior";
-import {fitUclOpponentModel,fitAndPredictUcl,UCL_MODEL_RELEASE} from "../lib/services/ucl/uclModel";
+import {fitUclOpponentModel,fitAndPredictUcl,UCL_LEGACY_R22_MODEL_RELEASE} from "../lib/services/ucl/uclModel";
 import {uclScoreDistribution} from "../lib/services/ucl/uclScoreDistribution";
 import type {EplTrainingMatch} from "../lib/services/epl/eplShadowModel";
 import type {BdlUclMatch} from "../lib/providers/real_api/BallDontLieUclProvider";
@@ -53,7 +53,7 @@ const match={id:999,date:"2026-11-05T20:00:00Z",home_team_id:1,away_team_id:8} a
 const context={neutralVenue:true} as UclCompetitionContext;
 const prediction=fitAndPredictUcl({training:[],match,history:[],context,strengthPrior:prior});
 const swapped=fitAndPredictUcl({training:[],match:{...match,home_team_id:8,away_team_id:1},history:[],context,strengthPrior:prior});
-assert.equal(prediction.release,UCL_MODEL_RELEASE);assert.equal(prior.release,UCL_CURRENT_STRENGTH_PRIOR_RELEASE);
+assert.equal(prediction.release,UCL_LEGACY_R22_MODEL_RELEASE);assert.equal(prior.release,UCL_CURRENT_STRENGTH_PRIOR_RELEASE);
 assert(Math.abs(prediction.lambdaHome-swapped.lambdaAway)<1e-10);assert(Math.abs(prediction.lambdaAway-swapped.lambdaHome)<1e-10,"neutral designations cannot retain a home advantage");
 assert.deepEqual(prediction.adjustment.effectiveMatches,{home:0,away:0});
 assert.equal(prediction.adjustment.strengthPrior,"dated_current_strength_residual_prior");
