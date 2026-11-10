@@ -40,3 +40,19 @@ negative cohort/fixture/release/clock tests, lock reader precedence and no-write
 immutability checks, standard Daily Edge and UCL production regressions, type,
 lint/build and latest-main protected integration. Verify standard cards and
 click-through readers in actual production after deployment.
+
+Actual read-only parity: 18 games, 72/72 stored markets and every projection
+match exactly; saved grade counts are 17 Lean / 43 Watchlist / 12 No Play.
+This restores prior publication, without a promotion/demotion policy or model
+change. All clocks remain November 5 at 22:17:47.006 UTC. The current standalone
+reader completes in approximately 2.25 seconds in the production-read rehearsal.
+
+Focused tests, UCL production suite, all 234 Daily Edge experience assertions,
+full TypeScript, ESLint and webpack build pass. The optional repository-wide
+model gate stops in unchanged `test-cbb-economic-total-release-build.ts`: an
+existing v8 local audit file points to missing
+`/private/tmp/cbb-contextual-release-v5-frozen-raw-rows-20261105.json`.
+The unavailable unrelated fixture is not recreated, skipped or changed. This
+reader-only restoration does not change a model, input, policy, writer or lock;
+its required UCL and immutability checks pass independently. Do not describe the
+repository-wide gate as passing.

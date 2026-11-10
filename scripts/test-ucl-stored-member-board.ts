@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync, existsSync } from "node:fs";
 import { restoreUclStoredMemberGame, type UclStoredMemberRecord } from "../lib/services/ucl/uclStoredMemberBoard";
 const now = new Date("2026-11-10T13:00Z");
 const fixture = { external_id: 34_000_001, game_date: "2026-11-24T20:00Z", home_team_id: 1, away_team_id: 2 };
@@ -40,3 +41,8 @@ assert.deepEqual(lockResult.markets.moneyline, locked[0]!.snapshot_json!.member_
 assert.equal(JSON.stringify(locked), frozen);
 assert.equal(restoreUclStoredMemberGame(fixture, teams, [...locked.slice(0, 3), ...newer], now), null, "incomplete lock forbids unlocked replacement");
 console.log("PASS exact saved UCL cards: all-market/capture/fixture/release checks, original clocks, legacy lock precedence, no model inference or stored mutation");
+
+const ui = readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx", "utf8");
+assert.match(ui, /<EdgeBoard[^>]+games=\{scopedGames\}/);
+assert.doesNotMatch(ui, /UclUpcomingSchedule/);
+assert.equal(existsSync("app/dev/experience-preview/UclUpcomingSchedule.tsx"), false);
