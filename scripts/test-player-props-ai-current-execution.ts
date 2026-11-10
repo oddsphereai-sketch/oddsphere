@@ -51,7 +51,7 @@ assert.equal(executionQuotes(compiled,now).length,4);
 const nfl={...packet,sport:"nfl" as const,players:[{...player,id:"nfl-bdl-player:1",markets:["passing_tds"]}],quotes:packet.quotes.map(q=>({...q,playerId:"nfl-bdl-player:1",market:"passing_tds",line:1.5}))};
 // Deliberately stale upstream decision proves the adapter regrades its actual bound quote.
 const stale={...choice,grade:"Best Angle" as const,american:150,playerId:"nfl-bdl-player:1",market:"passing_tds",line:1.5,quote:{...choice.quote,american:150,playerId:"nfl-bdl-player:1",market:"passing_tds",line:1.5}};
-const nflRow={gameId:"native",scheduledStart:start,lockAt:lock,state:"unlocked",providerPlayerId:"1",playerName:"Synthetic",team:"BOS",opponent:"NYK",market:"passing_tds",line:1.5,side:"over",sportsbook:"one",provider:"synthetic",americanPrice:-200,bookEvidence:[],forecastContext:{}} as unknown as Parameters<typeof applyNflSiteAi>[0]["decisions"][number];
+const nflRow={gameId:"native",scheduledStart:start,lockAt:lock,state:"unlocked",providerPlayerId:"1",playerName:"Synthetic",team:"BOS",opponent:"NYK",market:"passing_tds",line:1.5,side:"over",sportsbook:"one",provider:"synthetic",americanPrice:-200,observedAt:now,bookEvidence:[],modelRelease:"synthetic-native-source",forecastContext:{featureAsOf:now}} as unknown as Parameters<typeof applyNflSiteAi>[0]["decisions"][number];
 const nflBoard={decisions:[nflRow],counts:{}} as unknown as Parameters<typeof applyNflSiteAi>[0];
 const nflApplied=applyNflSiteAi(nflBoard,nfl,[stale],now).decisions.find(r=>r.side==="over")!;
 assert.equal(nflApplied.americanPrice,-200);assert.equal(nflApplied.grade,"Watchlist");assert.ok(nflApplied.expectedValue<0);

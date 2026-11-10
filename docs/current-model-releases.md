@@ -11,6 +11,14 @@ selections only; named generative coordinatesR4 and canonical lawR1 stay exact.
 Sole NBA writerR18 is
 `nba_player_props_private_writer_2026_11_10_r18_verified_reader_claims`; NFL
 writerR92 is `nfl_player_props_writer_2026_11_10_r92_verified_reader_claims`.
+Future NFL native-qualificationR1 binds the existing missing-native-context
+No Play to the sole writer's actual original baseline and exact current source.
+The adapter and prelock proof independently use that same baseline; an actor's
+source heads or member metadata cannot manufacture a native template. Qualified
+conditional estimates remain visible at first lock with a separate operational
+reason. Current medical exceptions retain precedence, native-context recovery
+uses the existing grade rule, and accepted laws/exceptions and stored locks stay
+exact. This completes the undeployed R31 repair; it does not authorize new action.
 NFL memberR60/lifecycleR42 stamp current-execution first-lock authority.
 ParticipationR3 `player_props_ai_participation_2026_11_10_r3_separate_lineup_and_medical`
 keeps lineup opportunity separate from medical availability: one channel cannot

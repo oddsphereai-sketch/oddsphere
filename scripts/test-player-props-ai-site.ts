@@ -59,7 +59,7 @@ const nflApplied=applyNflSiteAi(nflBoard,nflPacket,nflChoices,now);assert.equal(
 const nflLocked={...nflApplied,decisions:nflApplied.decisions.map(r=>({...r,state:"locked" as const}))};assert.strictEqual(applyNflSiteAi(nflLocked,nflPacket,nflChoices,now),nflLocked);
 // Actual failure shape: a nullable source ID and a canonical ID represented the
 // same named actor/book. Both must use one verified current forecast authority.
-const sourceRow={...nflApplied.decisions[0],providerPlayerId:null,playerName:"Synthetic",team:"BOS",opponent:"NYK",aiReview:undefined,grade:"Best Angle" as const,projection:20,finalProbability:.55};
+const sourceRow={...nflApplied.decisions[0],providerPlayerId:null,playerName:"Synthetic",team:"BOS",opponent:"NYK",modelRelease:"synthetic-native-source",aiReview:undefined,grade:"Best Angle" as const,projection:20,finalProbability:.55};
 const underRow={...sourceRow,side:"under" as const};
 const duplicateRows=[sourceRow,underRow,...nflApplied.decisions];
 const coherent=applyNflSiteAi({...nflBoard,decisions:duplicateRows},nflPacket,nflChoices,now);

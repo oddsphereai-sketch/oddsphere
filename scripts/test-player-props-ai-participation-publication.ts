@@ -82,7 +82,7 @@ function verify(sport:GamePacket['sport'],statusCase:StatusCase,side:'over'|'und
   assert.strictEqual(applyNbaSiteAi(locked,packet,decisions,now),locked);assert.equal(JSON.stringify(locked),bytes,'An existing NBA lock wins before new participation metadata');
  }else if(sport==='nfl'){
   const empty={decisions:[],counts:{},diagnostics:{}} as unknown as NflPlayerPropsRuntimeBoard;
-  const populated=applyNflSiteAi(empty,packet,decisions,now),native={...populated,decisions:populated.decisions.map(row=>({...row,aiReview:undefined}))};
+  const populated=applyNflSiteAi(empty,packet,decisions,now),native={...populated,decisions:populated.decisions.map(row=>({...row,modelRelease:"synthetic-native-source",aiReview:undefined}))};
   const applied=applyNflSiteAi(native,packet,decisions,now);assert.equal(applied.decisions.length,2);
   for(const row of applied.decisions){assert.equal(row.grade,blocked?'No Play':row.side===side?'Best Angle':'Watchlist');assert.equal(row.projection,c.projection);assert.equal(row.finalProbability,row.side==='over'?c.over:c.under);assert.deepEqual(row.aiReview!.sourceEligibility,eligibility);assert.equal(row.aiReview!.exception,c.evidence.exception);assert.equal(row.aiReview!.lawHash,c.evidence.lawHash);}
   const locked={...applied,decisions:applied.decisions.map(row=>({...row,state:'locked' as const,aiReview:{...row.aiReview!}}))};for(const row of locked.decisions)delete row.aiReview.sourceEligibility;const bytes=JSON.stringify(locked);

@@ -41,7 +41,7 @@ function issued(market: 'rushing_yards' | 'passing_tds' | 'anytime_td', line: nu
   const review = { ...parsed, release, gameId: game.id, sourceGameId: game.id, start, lock, cutoff: at, stage: 'early', issuedAt: at, inputHash: digest(packet), criticalContextHashes: criticalContextHashes(packet), marketScopes: { [p.id]: p.markets }, partProvenance: [], model: 'synthetic', inputEvidence: { digest: digest(packet) } } as unknown as AcceptedGameReview;
   const choices = siteAiDecisions(packet, review, at); assert.equal(choices.length, 1);
   const seed = applyNflSiteAi({ decisions: [], counts: {} } as never, packet, choices, at);
-  const baseline = { ...seed, decisions: seed.decisions.map(r => ({ ...r, aiReview: undefined, market: 'receptions', line: 4.5, side: 'over' })) };
+  const baseline = { ...seed, decisions: seed.decisions.map(r => ({ ...r, modelRelease: 'synthetic-native-source', aiReview: undefined, market: 'receptions', line: 4.5, side: 'over' })) };
   const published = applyNflSiteAi(baseline as never, packet, choices, at).decisions.find(r => r.market === market && r.side === choices[0].side)!;
   assert.equal(published.grade, 'Best Angle'); assert.equal(published.aiReview!.release, release);
   return { ...published, state: 'locked' };

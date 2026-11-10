@@ -20,6 +20,7 @@ import {reviewedReaderContextCurrent} from './readerClaimFreshness';
 import {siteAiDecisions} from './publication';
 import {PROPS_AI_EXECUTION_EVIDENCE_RELEASE} from './publicationContract';
 import {PROPS_AI_ESTIMATE_RELEASE,PROPS_AI_NFL_DECISION_RELEASE} from './releases';
+import {nflNativePublicationContext} from './nflNativeQualification';
 export type State='qualified'|'declined'|'context_changed'|'unreviewed_actor'|'unreviewed_scope'|'source_unresolved'|'review_lookup_unavailable'|'review_authority_missing';
 type Bound<T> = T&{binding:string};
 export type Authority=Bound<{gameId:string;actorId:string;scheduledStart:string;team:string;opponent:string;lockAt:string;observedAt:string;currentContextHash:string;participationBlocked:boolean;participationReason:string|null;review:null|{release:string;inputHash:string;stage:string;issuedAt:string;contextHash:string|null;lawHash:string|null;playerDigest:string|null};scopes:{market:string;status:State}[]}>;
@@ -61,7 +62,7 @@ function proveRow(row:Row,kind:'ai'|'native',contextHash:string,readyAt:string,q
 /** The trusted writer calls this only after the immutable row and source packet
  * actually exist. Current provider quote identity/price supplies confirmation;
  * neither board.evaluatedAt nor a review time can stand in for actual readiness. */
-function captureRowProofs(rows:Row[],packet:GamePacket,kind:'ai'|'native',readyAt:string,review?:AcceptedGameReview|null):Proof[]{
+function captureRowProofs(rows:Row[],packet:GamePacket,kind:'ai'|'native',readyAt:string,review?:AcceptedGameReview|null,nativeRows?:readonly Row[]):Proof[]{
  assert(instant(packet.cutoff)<=instant(readyAt),'Packet not available at row observation');
  if(!Object.hasOwn(packet,'executionQuotes')||!Array.isArray(packet.executionQuotes))return[];
  const contexts=criticalContextHashes(packet),sourcePacketHash=digest(packet),quotes=executionQuotes(packet,readyAt),proofs:Proof[]=[];
@@ -89,9 +90,13 @@ function captureRowProofs(rows:Row[],packet:GamePacket,kind:'ai'|'native',readyA
    // the valid No Play or accepting an arbitrary replacement exception.
    const choice=choices.find(c=>c.playerId===id&&c.market===row.market&&c.line===row.line&&c.provider===row.provider&&book(c.book)===book(row.sportsbook)&&quoteContract(c.quote)===(row.side==='yes'?'milestone':'two_way'));
    const selected=quotes.find(q=>q.playerId===id&&q.market===row.market&&q.line===row.line&&q.side===row.side&&q.provider===row.provider&&book(q.book)===book(row.sportsbook)&&q.american===row.americanPrice&&quoteContract(q)===(row.side==='yes'?'milestone':'two_way'));
-   if(!choice||!selected||row.grade!==(choice.evidence.exception?'No Play':row.side!==choice.side?'Watchlist':choice.grade))continue;
+   // Only the writer's actual original baseline can establish the separate
+   // missing-context hold. A row-supplied marker or a broad native head cannot.
+   const qualification=nativeRows?nflNativePublicationContext(packet,id!,nativeRows).qualification:null;
+   if(e.nativeQualification&&!nativeRows||digest(e.nativeQualification??null)!==digest(qualification))continue;
+   if(!choice||!selected||row.grade!==(qualification||choice.evidence.exception?'No Play':row.side!==choice.side?'Watchlist':choice.grade))continue;
    const {executionEvidence:storedExecution,...storedEvidence}=e,{executionEvidence:ignoredExecution,...expectedEvidence}=choice.evidence;void ignoredExecution;
-   if(digest(storedEvidence)!==digest({...expectedEvidence,quoteConfirmedAt:selected.receivedAt}))continue;
+   if(digest(storedEvidence)!==digest({...expectedEvidence,...(qualification?{nativeQualification:qualification}:{}),quoteConfirmedAt:selected.receivedAt}))continue;
    const group=quotes.filter(q=>q.playerId===id&&q.market===row.market&&q.line===row.line&&q.provider===row.provider&&book(q.book)===book(row.sportsbook)&&quoteContract(q)===quoteContract(selected));
    if(!storedExecution||storedExecution.release!==PROPS_AI_EXECUTION_EVIDENCE_RELEASE||storedExecution.operation!=='member_row'||digest(storedExecution.selectedQuote)!==digest(selected)||digest(storedExecution.pricingQuotes)!==digest(group)||instant(storedExecution.pricedAt)<instant(selected.receivedAt)||instant(storedExecution.pricedAt)<instant(e.reviewedAt)||instant(storedExecution.pricedAt)>instant(readyAt)||instant(storedExecution.pricedAt)>=instant(packet.lock))continue;
   }
@@ -158,7 +163,7 @@ export type NflLockHandoff={authorities:Authority[];nativeRows:Row[];nativeProof
 /** Freeze source + constructed rows together, then sample the real observation
  * clock. Production callers never supply a hash or reuse board.evaluatedAt.
  * Clock injection exists solely for deterministic offline boundary controls. */
-function captureBundle(rows:Row[],packet:GamePacket,review:AcceptedGameReview|null,kind:'ai'|'native',clock:()=>string):NflLockHandoff{
+function captureBundle(rows:Row[],packet:GamePacket,review:AcceptedGameReview|null,kind:'ai'|'native',clock:()=>string,nativeRows?:readonly Row[]):NflLockHandoff{
  const source:GamePacket=freeze(JSON.parse(JSON.stringify(packet)));
  const gameId=source.sourceGameId??source.gameId;
  const readyAt=clock();validatePacket(source);
@@ -166,7 +171,8 @@ function captureBundle(rows:Row[],packet:GamePacket,review:AcceptedGameReview|nu
  // Native fallback owns its separate qualification. An AI proof must validate
  // the already materialized publication exactly, never repair its grade here.
  const frozen:Row[]=freeze(JSON.parse(JSON.stringify(kind==='native'?qualifyNflSourceParticipation(gameRows,source,readyAt):gameRows)));
- const proofs=captureRowProofs(frozen,source,kind,readyAt,review);
+ const originalNative=nativeRows?freeze(JSON.parse(JSON.stringify(nativeRows))) as Row[]:undefined;
+ const proofs=captureRowProofs(frozen,source,kind,readyAt,review,originalNative);
  return{authorities:[],nativeRows:kind==='native'?frozen:[],nativeProofs:kind==='native'?proofs:[],candidateProofs:kind==='ai'?proofs:[],sourceFrames:[{gameId,kind,sourcePacketHash:digest(source),cutoff:source.cutoff,readyAt,lockAt:source.lock}]};
 }
 function observeAuthority(packet:GamePacket,review:AcceptedGameReview|null,lookupAvailable:boolean,clock:()=>string):NflLockHandoff{
@@ -183,9 +189,9 @@ export function testNflSourceAuthority(clock:()=>string){assert.equal(process.en
 export function testNflAuthority(packet:GamePacket,review:AcceptedGameReview|null,at:string,lookupAvailable=true){assert.equal(process.env.NODE_ENV,'test');return buildAuthorities(packet,review,at,lookupAvailable);}
 export function testNflHandoffProof(...args:Parameters<typeof proveRow>){assert.equal(process.env.NODE_ENV,'test');return proveRow(...args);}
 /** Production takes no caller clock, hash or availability label. */
-export function captureNflHandoffBundle(rows:Row[],packet:GamePacket,review:AcceptedGameReview|null,kind:'ai'|'native'):NflLockHandoff{assert.equal(arguments.length,4,'Production capture rejects supplied clocks/hashes');return captureBundle(rows,packet,review,kind,()=>new Date().toISOString());}
+export function captureNflHandoffBundle(rows:Row[],packet:GamePacket,review:AcceptedGameReview|null,kind:'ai'|'native',nativeRows?:readonly Row[]):NflLockHandoff{assert(arguments.length===4||arguments.length===5&&Array.isArray(nativeRows),'Production capture rejects supplied clocks/hashes');return captureBundle(rows,packet,review,kind,()=>new Date().toISOString(),nativeRows);}
 /** Exact same constructor under an explicit offline test clock. */
-export function testNflHandoffCapture(clock:()=>string){assert.equal(process.env.NODE_ENV,'test','Injected capture clocks are offline-test only');return(rows:Row[],packet:GamePacket,review:AcceptedGameReview|null,kind:'ai'|'native')=>captureBundle(rows,packet,review,kind,clock);}
+export function testNflHandoffCapture(clock:()=>string){assert.equal(process.env.NODE_ENV,'test','Injected capture clocks are offline-test only');return(rows:Row[],packet:GamePacket,review:AcceptedGameReview|null,kind:'ai'|'native',nativeRows?:readonly Row[])=>captureBundle(rows,packet,review,kind,clock,nativeRows);}
 export function mergeNflHandoffs(frames:NflLockHandoff[]):NflLockHandoff{return{authorities:frames.flatMap(f=>f.authorities),nativeRows:frames.flatMap(f=>f.nativeRows),nativeProofs:frames.flatMap(f=>f.nativeProofs),candidateProofs:frames.flatMap(f=>f.candidateProofs),sourceFrames:frames.flatMap(f=>f.sourceFrames??[]),executionAuthorities:frames.flatMap(f=>f.executionAuthorities??[])}};
 /** Prepare only future locks; the authoritative existing reconciler still owns
  * lock construction, evidence merging, member selection and every stored lock. */

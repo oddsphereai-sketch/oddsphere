@@ -194,3 +194,35 @@ because a current participation exception differed from the accepted conditional
 exception. Their distinct meanings must be validated without modifying the
 accepted review or accepting a forged grade. These prospective fixes again
 require fresh full independent rounds; existing locks remain exact.
+
+## Round 8 quote-only NFL first-lock qualification repair
+
+An actual empty-feature native builder and current `liveNflPacket` can correctly
+cover a verified quote-only actor without a native prediction row. The adapter
+already held that actor's supported conditional AI law at No Play, but the proof
+expected the unrestricted selected/opposing grade and dropped those genuine rows
+at first lock. This was distinct from the repaired medical-exception mismatch.
+
+Future native-qualificationR1 is an explicit operational reason separate from
+the accepted conditional-law exception and current participation facts. The sole
+writer passes its already-owned original native baseline to both adapter and
+capture. One helper checks exact actor/fixture/team, native release and available
+context clocks. The adapter freezes a source/baseline-bound absence reason; capture
+independently recomputes it and refuses missing, copied or forged metadata. Source
+heads alone cannot create a template. Ordinary available native qualification
+keeps existing grades; later real native-context recovery uses those same rules.
+Existing locks are preserved before new qualification, and accepted source/law
+payloads are never rewritten. Both familiar readers show only the explicit new
+operational reason when a stored medical/forecast exception is absent.
+
+`test-player-props-ai-nfl-native-qualification.ts` crosses actual native builder,
+live source, R31 parser, adapter, proof and first lock for two/four quoted rows,
+healthy/unknown/Out/clearance, source-head-only contexts, repeated overlays,
+original-baseline obligation, positive native recovery, forged marker/grade/law/
+quote/context refusal and exact existing locks. The companion reader SSR test
+proves both familiar displays, medical precedence and exact legacy rendering.
+Three earlier positive adapter fixtures now declare genuine native releases
+instead of stripping AI metadata from an AI release; positive assertions remain.
+Persisted JSON semantics normalize legitimate optional undefined baseline fields.
+Both new tests run in the existing PostgreSQL-proof workflow. R31 remains future,
+V70/live/paid proof remains separately gated, and the clean-round streak resets.
