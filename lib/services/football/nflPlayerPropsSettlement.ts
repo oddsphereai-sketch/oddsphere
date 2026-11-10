@@ -1,8 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { nflPlayerPropsSettlementNameKey, nflPlayerPropsSettlementTeamKey } from "./nflPlayerPropsSettlementIdentity";
+import { nflPropsSettlementEvent, settleNflPropsExactEvent } from "./nflPlayerPropsLockedEvent";
 
 export const NFL_PLAYER_PROPS_SETTLEMENT_RELEASE =
-  "nfl_player_props_settlement_2026_11_09_r7_confirmed_dnp" as const;
+  "nfl_player_props_settlement_2026_11_10_r8_exact_locked_event" as const;
 export const NFL_PLAYER_PROPS_SETTLEMENT_MINIMUM_HOURS_AFTER_LOCK = 5 as const;
 export const NFL_PLAYER_PROPS_SETTLEMENT_MAX_RECORDS_PER_CYCLE = 1_000 as const;
 export const NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE = 18 as const;
@@ -10,7 +11,7 @@ export const NFL_PLAYER_PROPS_SETTLEMENT_MAX_SNAP_PAGES = 2 as const;
 export const NFL_PLAYER_PROPS_SETTLEMENT_MAX_DESIGNATION_PAGES = 2 as const;
 const ZERO_ELIGIBLE_MARKETS = new Set(["passing_attempts", "passing_completions", "passing_yards", "rushing_attempts", "rushing_yards", "receptions", "receiving_yards", "anytime_td"]);
 
-type Pending = { id: number; provider_game_id: string; provider_player_id: string | null; player_name?: string; team?: string | null; market: string; line: number; side: "over" | "under" | "yes"; locked_at: string };
+type Pending = { id: number; provider_game_id: string; provider_player_id: string | null; player_name?: string; team?: string | null; market: string; line: number; side: "over" | "under" | "yes"; locked_at: string; sportsbook?: string; locked_price?: number; decision_release?: string; model_release?: string; locked_event?: unknown };
 export type NflPropsSettlementProposal = { id: number; gameId: string; resolvedPlayerId: string; actual: number | null; result: "win" | "loss" | "push" | "void" };
 
 export async function countNflPlayerPropsUnresolvedSettlementIdentities(client: SupabaseClient, now: string): Promise<number> {
@@ -47,7 +48,7 @@ export async function settleNflPlayerPropsRecords(args: {
   if (recoveryIds && (recoveryIds.length === 0 || recoveryIds.length > 1_000
     || recoveryIds.some(id => !Number.isSafeInteger(id) || id <= 0))) throw new Error("Invalid owner-approved settlement recovery cohort.");
   let query = args.client.from("nfl_player_prop_records")
-    .select("id,provider_game_id,provider_player_id,player_name,team,market,line,side,locked_at")
+    .select("id,provider_game_id,provider_player_id,player_name,team,market,line,side,locked_at,sportsbook,locked_price,decision_release,model_release,locked_event:snapshot_json->lockedEvent")
     .eq("result", "pending");
   query = recoveryIds ? query.in("id", [...recoveryIds]) : query
     // Unresolvable legacy identities must not consume the bounded page or
@@ -161,6 +162,8 @@ export async function settleNflPlayerPropsRecords(args: {
       }
     }
     for (const row of rows) {
+      const event = nflPropsSettlementEvent(row);
+      if (event.status === "invalid") continue;
       const recovered = !row.provider_player_id && recoveryIds
         ? exactFinalGamePlayer(stats, row) ?? (snaps && exactFinalGamePlayer(snaps, row)) : null;
       const dnp = confirmedDnpPlayer(designations, row, finalGame, Boolean(recoveryIds));
@@ -173,7 +176,8 @@ export async function settleNflPlayerPropsRecords(args: {
       if (!identity || row.team && nflPlayerPropsSettlementTeamKey(String((identity.team as Record<string, unknown> | undefined)?.abbreviation ?? "")) !== nflPlayerPropsSettlementTeamKey(row.team)) continue;
       const actual = stat ? actualValue(row.market, stat) : snap && ZERO_ELIGIBLE_MARKETS.has(row.market) ? 0 : null;
       if (actual === null && !confirmedDnp) continue;
-      const result = confirmedDnp ? "void" : row.side === "yes" ? (actual! >= 1 ? "win" : "loss") : actual === Number(row.line) ? "push" : row.side === "over" ? (actual! > Number(row.line) ? "win" : "loss") : (actual! < Number(row.line) ? "win" : "loss");
+      const result = confirmedDnp ? "void" : event.status === "exact" ? settleNflPropsExactEvent(event.event, actual!)
+        : row.side === "yes" ? (actual! >= 1 ? "win" : "loss") : actual === Number(row.line) ? "push" : row.side === "over" ? (actual! > Number(row.line) ? "win" : "loss") : (actual! < Number(row.line) ? "win" : "loss");
       args.onProposal?.({ id: row.id, gameId, resolvedPlayerId: playerId, actual, result });
       if (args.apply === false) continue;
       const { error: updateError } = await args.client.from("nfl_player_prop_records").update({ result, actual_value: actual, settled_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id).eq("result", "pending");

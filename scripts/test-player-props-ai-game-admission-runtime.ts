@@ -15,7 +15,7 @@ import {PROPS_AI_MAX_OUTPUT_PER_REQUEST,PROPS_AI_MAX_PARTS,PROPS_AI_PART_CONCURR
 globalThis.fetch=async()=>{throw Error('Whole-game virtual proof forbids network');};
 const originalNow=Date.now,epoch=Date.parse('2030-11-17T17:36:00Z'),v=(n:number)=>Array<number>(16).fill(n);
 const iso=(t:number)=>new Date(epoch+t).toISOString();
-type Mode={games:number;parts:number;sourceMs:number;latencyMs:number;deadlineMs:number;gate?:boolean;knownRetry?:boolean;unknownGame?:number;receiptErrorGame?:number;claimErrorGame?:number;finishErrorGame?:number;strongCounts?:boolean};
+type Mode={games:number;parts:number;sourceMs:number;latencyMs:number;deadlineMs:number;lockMs?:number;sendDelayMs?:number;gate?:boolean;knownRetry?:boolean;unknownGame?:number;receiptErrorGame?:number;claimErrorGame?:number;finishErrorGame?:number;strongCounts?:boolean};
 type Event={type:string;game:number;at:number;part?:number;phase?:number;cutoff?:string};
 function capturedPacket(game:number,parts:number,cutoff:number):GamePacket{
  const players:Player[]=Array.from({length:parts*5},(_,i)=>({id:`g${game}-p${i}`,name:`Synthetic Player ${i}`,team:'BUF',opponent:'MIN',markets:['receptions'],missing:[],evidence:[
@@ -28,7 +28,7 @@ function draft(p:GamePacket){
  return{wireRelease:GENERATIVE_WIRE_RELEASE,players:Object.fromEntries(p.players.map(player=>[player.id,{assessment:'The supplied evidence supports a conditional forecast.',priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[player.id][area].status,factIds:facts[player.id][area].facts.slice(0,1).map(f=>f.id),effect:'uncertain',observation:'The supplied context requires appropriate caution.'}])),evidenceIds:[[...aliases].find(([,id])=>id===player.evidence[0].id)![0]],gaps:[],confidence:[2],exceptions:[null],law:encodeCanonicalScenarioLaw('nfl',player,{weights:v(1),outcomes:{receptions:[4,8,...v(6).slice(2)]}})}]))};
 }
 async function simulation(mode:Mode,secondOrdinaryPass=false){
- let now=mode.sourceMs,active=0,peak=0,claims=0,sends=0,receipts=0,unknownReceipts=0,fallbacks=0,strongCounts=0;const inputCounts=0;
+ let now=mode.sourceMs,active=0,peak=0,claims=0,sends=0,receipts=0,unknownReceipts=0,unbilledReceipts=0,fallbacks=0,strongCounts=0;const inputCounts=0;
  const perGame=new Map<number,number>(),peakPerGame=new Map<number,number>(),events:Event[]=[],timers:{at:number;resolve:()=>void}[]=[];
  const jobs=new Map<number,PropsAiJob>();
  for(let i=0;i<mode.games;i++)jobs.set(i,{job_key:`props-ai|nfl|synthetic-${i}|2030-11-17|final`,sport:'nfl',game_id:`synthetic-${i}`,game_day:'2030-11-17',stage:'final',scheduled_start:iso(84*60000),lock_at:iso(24*60000),state:'pending',requested_tier:'default',model:'gpt-6-luna',parts:mode.parts} as PropsAiJob);
@@ -41,13 +41,13 @@ async function simulation(mode:Mode,secondOrdinaryPass=false){
   const deadline=epoch+routeAt+mode.deadlineMs,globalSlot=propsAiGenerationPool(16),gameAdmission=propsAiGameAdmission(16);
   // Canonical site runtime pre-prepares all funded sources/counts before any
   // claim. Here exact valid prepared bounds are injected, never counted twice.
-  const prepared=ids.map(i=>{assert.equal(jobs.get(i)!.state,'pending');const packet=capturedPacket(i,mode.parts,now),parts=Array.from({length:mode.parts},(_,n)=>({packet:playerSubset(packet,packet.players.slice(n*5,n*5+5).map(x=>x.id)),inputTokens:1000})),drafts=parts.map(part=>draft(part.packet));for(let n=0;n<parts.length;n++)parseJointReview(parts[n].packet,drafts[n]);events.push({type:'source',game:i,at:now,cutoff:packet.cutoff});return{i,packet,parts,drafts};});
+  const prepared=ids.map(i=>{assert.equal(jobs.get(i)!.state,'pending');const packet=capturedPacket(i,mode.parts,now);if(mode.lockMs){packet.lock=iso(mode.lockMs);packet.start=iso(mode.lockMs+3600000);Object.assign(jobs.get(i)!,{lock_at:packet.lock,scheduled_start:packet.start});}const parts=Array.from({length:mode.parts},(_,n)=>({packet:playerSubset(packet,packet.players.slice(n*5,n*5+5).map(x=>x.id)),inputTokens:1000})),drafts=parts.map(part=>draft(part.packet));for(let n=0;n<parts.length;n++)parseJointReview(parts[n].packet,drafts[n]);events.push({type:'source',game:i,at:now,cutoff:packet.cutoff});return{i,packet,parts,drafts};});
   const work=prepared.map(({i,packet,parts,drafts})=>{
    const job=jobs.get(i)!,attempts=new Map<string,{phase:number;part:number}>();
    const store:PropsAiReviewStore={
     claim:async()=>{claims++;events.push({type:'claim',game:i,at:now});if(mode.claimErrorGame===i)throw Error('Synthetic claim storage failure');job.state='running';return{claimed:true,token:'synthetic',job};},
-    send:async(_key,_token,phase,part)=>{assert(phase===1||phase===2);assert(part>=1&&part<=PROPS_AI_MAX_PARTS);const id=`${i}:${routeAt}:${phase}:${part}`;sends++;attempts.set(id,{phase,part});events.push({type:'send',game:i,part,phase,at:now});return{id,reserved_micro:100000,model:'gpt-6-luna',requested_tier:'default'};},
-    receipt:async(_id,_token,actual)=>{receipts++;if(actual===null)unknownReceipts++;events.push({type:'receipt',game:i,at:now});if(mode.receiptErrorGame===i)throw Error('Synthetic immutable receipt failure');},
+    send:async(_key,_token,phase,part)=>{assert(phase===1||phase===2);assert(part>=1&&part<=PROPS_AI_MAX_PARTS);assert(now<(mode.lockMs??24*60000));const id=`${i}:${routeAt}:${phase}:${part}`;sends++;attempts.set(id,{phase,part});events.push({type:'send',game:i,part,phase,at:now});if(mode.sendDelayMs)await sleep(mode.sendDelayMs);return{id,reserved_micro:100000,model:'gpt-6-luna',requested_tier:'default'};},
+    receipt:async(_id,_token,actual)=>{receipts++;if(actual===null)unknownReceipts++;if(actual===0)unbilledReceipts++;events.push({type:'receipt',game:i,at:now});if(mode.receiptErrorGame===i)throw Error('Synthetic immutable receipt failure');},
     fallback:async()=>{fallbacks++;events.push({type:'fallback',game:i,at:now});return true;},
     finish:async(_key,_token,result,error)=>{if(mode.finishErrorGame===i)throw Error('Synthetic terminal storage failure');Object.assign(job,{state:result?'completed':'failed',result,error_code:error});events.push({type:'finish',game:i,at:now});return{...job};},
    };
@@ -73,7 +73,7 @@ async function simulation(mode:Mode,secondOrdinaryPass=false){
   const first=await runBatch([...jobs.keys()]),pending=[...jobs].filter(([,job])=>job.state==='pending').map(([id])=>id),closedBefore=JSON.stringify([...jobs].filter(([,job])=>job.state!=='pending'));
   const next=secondOrdinaryPass?await runBatch(pending,15*60000):null;
   if(secondOrdinaryPass)assert.equal(JSON.stringify([...jobs].filter(([id])=>!pending.includes(id))),closedBefore,'The next normal poll never resets/replays or rewrites any closed review');
-  const summary={first,next,pendingBeforeNext:pending,pendingAfter:[...jobs].filter(([,job])=>job.state==='pending').map(([id])=>id),claims,sends,receipts,unknownReceipts,fallbacks,strongCounts,inputCounts,peak,peakPerGame:Math.max(...peakPerGame.values()),finishedAt:now,events};
+  const summary={first,next,pendingBeforeNext:pending,pendingAfter:[...jobs].filter(([,job])=>job.state==='pending').map(([id])=>id),claims,sends,receipts,unknownReceipts,unbilledReceipts,fallbacks,strongCounts,inputCounts,peak,peakPerGame:Math.max(...peakPerGame.values()),finishedAt:now,events};
   return summary;
  }finally{Date.now=originalNow;}
 }
@@ -91,6 +91,11 @@ async function main(){
  const finishError=await simulation({games:3,parts:8,sourceMs:0,latencyMs:1000,deadlineMs:390000,finishErrorGame:0});assert.deepEqual(finishError.first,{completed:2,failed:0,skipped:0,rejected:1});assert.equal(finishError.sends,24);assert.equal(finishError.fallbacks,0);
  const counted=await simulation({games:3,parts:16,sourceMs:0,latencyMs:1,deadlineMs:390000,strongCounts:true});assert.deepEqual(counted.first,{completed:3,failed:0,skipped:0,rejected:0});assert.equal(counted.strongCounts,48);assert.equal(counted.inputCounts,0);assert(counted.peak<=16);assert(counted.peakPerGame<=8);
  const primaryReserve=await simulation({games:1,parts:8,sourceMs:0,latencyMs:1000,deadlineMs:125000,strongCounts:true});assert.deepEqual(primaryReserve.first,{completed:1,failed:0,skipped:0,rejected:0});assert.equal(primaryReserve.strongCounts,0,'Optional stronger counting cannot consume the remaining primary completion reserve');assert.equal(primaryReserve.claims,1);assert.equal(primaryReserve.sends,8);
+ for(const window of [{lockMs:130000,deadlineMs:390000},{deadlineMs:130000}]){
+  const late=await simulation({games:1,parts:1,sourceMs:0,latencyMs:1000,sendDelayMs:140000,...window});
+  assert.equal(late.claims,1);assert.equal(late.sends,1);assert.equal(late.peak,0,'A successful prelock SQL send with late acknowledgement must never start HTTP after lock/deadline');assert.equal(late.receipts,1);assert.equal(late.unbilledReceipts,1);assert.equal(late.unknownReceipts,0);assert.equal(late.fallbacks,0);assert.equal(late.first.failed,1);
+ }
+ const slowAck=await simulation({games:1,parts:1,sourceMs:0,latencyMs:1000,sendDelayMs:30000,deadlineMs:130000});assert.equal(slowAck.first.completed,1,'A delayed acknowledgement with a full actual90s window still runs');assert.equal(slowAck.peak,1);assert.equal(slowAck.unbilledReceipts,0);
  for(const run of [fixed,fast,three,retry,unknown,receiptError,claimError,finishError,counted]){assert(run.peak<=16);assert(run.peakPerGame<=8);assert.equal(run.inputCounts,0);}
  console.log('Whole-game actual reviewer proof passed: original queue failure reproduced; six complete/two unclaimed then next normal pending-only fresh-source poll completes all eight before lock; five3-part parallel games/deferred sixth; fast recovery, bounded known retry, unknown/receipt/claim failures release permits, strong counts per-game8/global16, unchanged output/two phases. Virtual time; zero real HTTP/DB/token counts/paid calls. Not a general vendor completion guarantee.');
 }

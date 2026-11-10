@@ -12,7 +12,7 @@ import type { GamePacket } from "./evidenceContract";
 import { digest, invariant, instant, etDate } from "./evidence";
 import { usageMicroUsd, type PropsAiJob, type PropsAiReviewStore } from "./budget";
 import { jointReviewRequest, parseJointReview } from "./request";
-import { countAiInput, generateAiReview,serializeAiRequest, structuredAiText, AiGenerationError } from "./openai";
+import { countAiInput, generateAiReview,serializeAiRequest, structuredAiText, AiGenerationError, AiRequestNotStartedError } from "./openai";
 import { prepareReviewParts } from "./partitions";
 import {criticalContextHashes} from "./criticalContext";
 import {PROPS_AI_WIRE_RELEASE} from "./scenarioCoordinates";
@@ -69,10 +69,10 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
           const attempt=await args.store.send(job.job_key,token,phase,index+1);
           const request=jointReviewRequest(part.packet,attempt.model,PROPS_AI_MAX_OUTPUT_PER_REQUEST,phase===2?feedback.get(index):undefined,phase===2?feedbackTexts.get(index):undefined),requestBody=serializeAiRequest(request,{serviceTier:attempt.requested_tier});
           let response;
-          try{response=await generateAiReview(request,{key:args.key,timeoutMs,fetchImpl:args.fetchImpl,serviceTier:attempt.requested_tier});}
+          try{response=await generateAiReview(request,{key:args.key,timeoutMs,remainingWindowMs:()=>Math.min(deadline-Date.now()-10000,instant(args.packet.lock)-instant(clock())-10000),minimumTimeoutMs:90000,fetchImpl:args.fetchImpl,serviceTier:attempt.requested_tier});}
           catch(error){
-            const unbilled=error instanceof AiGenerationError&&error.knownUnbilled;
-            await args.store.receipt(attempt.id,token,unbilled?0:null,null,{kind:unbilled?"known_unbilled":"unknown_transport_outcome",...(error instanceof AiGenerationError?{http_status:error.status,code:error.code,transport:error.diagnostics??null}:{}),requested_tier:attempt.requested_tier,failureEvidence:failureEvidence({packet:part.packet,requestBody,draftText:null,reason:(error as Error).message,physical:[]})});
+            const notStarted=error instanceof AiRequestNotStartedError,unbilled=notStarted||error instanceof AiGenerationError&&error.knownUnbilled;
+            await args.store.receipt(attempt.id,token,unbilled?0:null,null,{kind:notStarted?"known_unbilled_before_http":unbilled?"known_unbilled":"unknown_transport_outcome",...(error instanceof AiGenerationError?{http_status:error.status,code:error.code,transport:error.diagnostics??null}:{}),requested_tier:attempt.requested_tier,failureEvidence:failureEvidence({packet:part.packet,requestBody,draftText:null,reason:(error as Error).message,physical:[]})});
             return {index,reason:(error as Error).message,known:unbilled};
           }
           const texts=response.output?.flatMap(o=>o.content??[]).filter(c=>c.type==="output_text").map(c=>c.text??"")??[];

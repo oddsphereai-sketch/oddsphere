@@ -51,13 +51,25 @@ Preparation starts with the actual one-wave completion reserve; partition-stage
 discovery can shorten the common count deadline to preserve a second wave.
 Already running and queued counts share its abort boundary and drain before any
 claim. OperationsR4 `player_props_ai_operations_2026_11_10_r4_preparation_deadlines`
-retains exact safe deadline diagnostics without printing arbitrary error text. Completion callbacks are awaited within the existing sport writer.
+retains exact safe deadline diagnostics without printing arbitrary error text.
+The HTTP adapter resamples lock/absolute-deadline eligibility after send
+acknowledgement and serialization. Only a request proven never dispatched can
+record zero usage; existing unknown charges remain held. Completion callbacks are awaited within the existing sport writer.
 Database installation and live permissions/source checks remain separate gates.
 
 No numerical law/calibration artifact, arbitrary grade cutoff, side quota,
 closed-job replay, historical locked correction or paid proof is introduced.
 Native MLB championR44, lawR1/wireR4, readerR14, memberR59/lifecycleR41 for NFL,
-trackingR43 and NFL settlementR7 remain. MLB handoffR1 is
+trackingR43 remains, with additive future-only exact-event metadata. NFL
+settlementR8 is `nfl_player_props_settlement_2026_11_10_r8_exact_locked_event`;
+`nfl_props_locked_event_2026_11_10_r1_exact_contract` pins genuinely new R12
+AI decisions to their exact declared/implicit execution event and stored
+threshold. New R12 locks with missing/invalid metadata hold. A newly published
+R12 may retain an older accepted law; older locked decisions are not opted in.
+The settlement query reads only the compact event JSON and scalar identity,
+not the full AI coverage payload. DNP logic and old absent-metadata settlement
+remain exact; historical result corrections require a separate owner decision.
+MLB handoffR1 is
 `mlb_props_ai_handoff_2026_11_10_r1_ready_publication`; awaited same-writer
 callbacks durably publish actual pre-lock readiness through ordinary canonical
 validation and retention. Late writes cannot be backdated. MLB settlementR3 is

@@ -22,6 +22,7 @@ const known:Readonly<Record<string,string>>={
  "invalid_input_token_count":"invalid_input_token_count",
  "input_count_deadline_exhausted":"input_count_deadline_exhausted",
  "input_count_completed_after_deadline":"input_count_completed_after_deadline",
+ "generation_window_closed_before_http":"generation_window_closed_before_http",
  "fetch failed":"transport_failure",
 };
 export function propsAiFailureCode(error:unknown):string{

@@ -121,3 +121,16 @@ control reviews all three actors and publishes four conditional No Plays; the
 missing-healthy-features control still refuses the unsafe native board. These
 are synthetic process counts, not a claim about actual daily board distribution
 or a justification for a direction/grade quota.
+
+The third full round found two additional boundary defects and reset the clean
+streak again. A successful SQL send whose acknowledgement arrived late could
+launch inference after the actual lock. Future send eligibility must be sampled
+after awaited acknowledgement and again at the real HTTP boundary, including
+request construction time. An attempt proven never dispatched can be recorded
+as known unbilled; previously unknown charges stay reserved.
+
+NFL one-way non-touchdown milestones also used a binary one-or-more settlement
+rule. Future exact contracts must retain their own threshold through the
+existing immutable tracking identity and settle inclusively, while the genuine
+binary touchdown event retains its one-touchdown definition. Historical locks
+and recorded outcomes are not reinterpreted by this prospective cutover.

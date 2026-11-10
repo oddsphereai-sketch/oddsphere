@@ -43,7 +43,7 @@ async function main(){
  const canonical=loadModule('lib/mlb/props/boardSnapshotStore.ts',{'node:crypto':crypto,'node:zlib':zlib,'supabase-js':{createClient:()=>client},marketEvidenceCapture:marketEvidence,releaseOrdering:ordering});
  const tracking=loadModule('lib/mlb/props/internalTracking.ts',{'node:crypto':crypto,'supabase-js':{createClient:()=>client},_mlbStatsApiClient:{},boardSnapshotStore:canonical,paperTrading:{isPaperTradingMarketAllowed:()=>true},pricePolicy,marketModelVersions:versions,lockPolicy,providerClients:{},settlement});
  const games:any[]=[{id:packet.gameId,scheduledStart:start,awayTeamId:'147',homeTeamId:'111'}];
- const nativeRows=[{...native,confidence:.6,marketFamily:'batter',reasonCodes:[],modelInputWarnings:[]}];
+ const nativeRows=[{...native,confidence:.6,marketFamily:'batter' as const,reasonCodes:[],modelInputWarnings:[]}];
  const data=live.buildDashboardData({slateDate:'2030-06-01',asOfTimestamp:at,games,probablePitchers:[],props:nativeRows,sourceOdds:[],environmentErrors:[]});
  const snapshot:any={...fixture,schemaVersion:1,snapshotId:'initial-native',refreshMode:'fast',data,validation:{publishable:true,errors:[],warnings:[],actionableRows:0,sourceRows:1,mappedRows:1,staleOddsRows:0,researchRows:1},movement:{comparedWith:null,changedPrices:0,changedLines:0,addedRows:1,removedRows:0},modelContext:{modelReleaseId:versions.MLB_PROPS_MODEL_RELEASE_ID,trackingEventRelease:settlement.MLB_PROPS_LOCKED_EVENT_RELEASE,probablePitcherSeasonStats:[]}};
  type ReviewArgs=Parameters<typeof reviewPropsForSite>[0];
