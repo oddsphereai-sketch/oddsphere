@@ -187,7 +187,7 @@ assert.ok(writer.includes("NFL_PLAYER_PROPS_PRIVATE_TRACKING_CAPTURE_FAILED"));
 const mlbWriter = readFileSync("lib/mlb/props/liveBoard.ts", "utf8");
 assert.ok(mlbWriter.lastIndexOf("publishMlbPropsBoardSnapshot") < mlbWriter.lastIndexOf("captureMlbPropsPrivateTracking"));
 assert.ok(mlbWriter.lastIndexOf("syncInternalMlbPropsTracking") < mlbWriter.lastIndexOf("captureMlbPropsPrivateTracking"));
-assert.ok(mlbWriter.includes("sourceOdds,\n    publishedRows: props"),
+assert.ok(mlbWriter.includes("sourceOdds,\n    publishedRows: snapshot.data.props"),
   "MLB private capture receives the complete provider ladder rather than the compact member rows alone");
 
 const mlbStart = "2026-10-12T23:00:00.000Z";
