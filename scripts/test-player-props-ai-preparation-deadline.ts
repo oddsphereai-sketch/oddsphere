@@ -20,7 +20,7 @@ async function exercise(mode:'unpackable'|'orphan'|'full_parts'){
  let now=0,activeCounts=0,countCalls=0,aborted=0,generation=0,sent=0,receipts=0,firstGenerationAt:number|null=null,badCountCalls=0;
  const timers:Timer[]=[],claimEvents:{game:string;at:number}[]=[],countEvents:{at:number;game:string}[]=[],purposes:{game:string;purpose:PropsAiSourceLoadContext['purpose']|undefined;jobKey?:string}[]=[],completed=new Map<string,AcceptedGameReview>();
  Date.now=()=>epoch+now;
- const schedule=(ms:number,run:()=>void)=>{const timer={at:now+ms,run};timers.push(timer);return timer;};
+ const schedule=(ms:number,run:()=>void)=>{const timer:Timer={at:now+ms,run};timers.push(timer);return timer;};
  AbortSignal.timeout=(ms:number)=>{assert(ms>0&&ms<=180000);const controller=new AbortController();schedule(ms,()=>controller.abort(new DOMException('Synthetic actual count timeout','TimeoutError')));return controller.signal;};
  async function wait(ms:number,signal?:AbortSignal){
   return new Promise<void>((resolve,reject)=>{

@@ -72,6 +72,14 @@ async function main(){
     const result=await runNbaPropsReviewRescue(f.args,f.deps);assert.equal(result.partial,true);assert.equal(result.records_updated,0);assert(!JSON.stringify(result).includes(secret));assert(!JSON.stringify(result).includes("last-known-good preserved"));assert.equal(f.calls.writers.length,phase==="writer"?1:0,"No alternate writer, retry or fake recovery is invoked after failure");
   }
   for(const status of ["bootstrap_required","last_known_good_preserved","no_games"]as const){const f=fixture();f.deps.writeCandidate=async value=>{f.calls.writers.push(value);return writerResult(status);};const result=await runNbaPropsReviewRescue(f.args,f.deps);assert.equal(result.partial,true);assert.equal(result.records_updated,0);assert.equal(result.details?.writer_status,status);assert.equal(f.calls.writers.length,1);}
+  // Exercise the actual existing slate helper and shared provider-season helper,
+  // with only due/schedule/writer services mocked. Keep the original UTC October
+  // provider-year convention even while the Eastern slate is still September.
+  for(const[iso,slate,season]of [["2026-09-30T23:58:00Z","2026-09-30",2025],["2026-10-01T00:02:00Z","2026-09-30",2026],["2027-01-01T03:58:00Z","2026-12-31",2026]]as const){
+    const f=fixture(),at=Date.parse(iso);f.setTime(at);f.args.requestStartedAt=at-120000;
+    const result=await runNbaPropsReviewRescue(f.args,{hasDue:f.deps.hasDue,loadSchedule:async day=>({...schedule,anchorDate:day,games:schedule.games.map(game=>({...game,slateDate:day}))}),writeCandidate:f.deps.writeCandidate});
+    assert.equal(result.records_updated,1);assert.equal(f.calls.writers[0].slateDate,slate);assert.equal(f.calls.writers[0].season,season);assert.equal(f.calls.writers[0].aiDeadline,at+360000);
+  }
   console.log("NBA due-review rescue controls passed: disabled/no-key/no-due/expired gates, post-lease due recheck, unchanged absolute request deadline, exact canonical writer/run ID/fullRefresh=false, fresh writer clock, optional provider contracts, switch/slate changes and sanitized failure/no alternate recovery. All dependencies mocked; actual writer preservation/admission remain separately verified. No HTTP or paid calls.");
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
