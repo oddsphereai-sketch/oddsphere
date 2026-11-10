@@ -8,6 +8,7 @@ import {executionQuotes,quoteBook,quoteContract} from './executionQuotes';
 import {instant} from './evidence';
 import {PROPS_AI_READER_CLAIMS_RELEASE} from './releases';
 import {evidenceAliases} from './input';
+import {propsTeam} from './teamIdentity';
 import {NBA_READER_PACE_UNIT,NBA_READER_UNIT_CONTRACT} from './readerUnitContract';
 export {NBA_READER_PACE_UNIT,NBA_READER_UNIT_CONTRACT} from './readerUnitContract';
 
@@ -23,6 +24,39 @@ const unique=<T>(values:T[])=>[...new Set(values)];
 const direction=(over:number,under:number)=>over>under?'over':under>over?'under':'tie';
 const areaName=(area:ReaderArea)=>area.replaceAll('_',' ');
 const statusName=(value:unknown)=>typeof value==='string'?({out:'Out',inactive:'Inactive',suspended:'Suspended',suspension:'Suspended',dnp:'DNP','did not play':'Did not play',questionable:'Questionable',doubtful:'Doubtful',probable:'Probable',unknown:'Unknown',available:'Available',active:'Active',cleared:'Cleared','explicit clearance':'Explicit clearance','day to day':'Day to day','game time decision':'Game time decision','injured reserve':'Injured reserve','reserve injured':'Injured reserve',ir:'Injured reserve','out for season':'Out for season','physically unable to perform':'Physically unable to perform',pup:'Physically unable to perform','reserve pup':'Physically unable to perform',retired:'Retired','reserve retired':'Retired'} as Record<string,string>)[value.trim().toLowerCase().replace(/[_-]+/g,' ') ]??null:null;
+
+/** Native lineup records are attached to the actor by the existing MLB adapter.
+ * Honor any explicit identity and source clocks too; a later fetch of an old
+ * record cannot supersede a newer lineup. This is not a medical clearance. */
+function currentBatterLineup(packet:GamePacket,player:Player,facts:ReaderFact[]){
+ if(packet.sport!=='mlb'||!player.markets.some(m=>m.startsWith('batter_')))return null;
+ const time=(value:unknown)=>typeof value==='string'&&/(?:Z|[+-]\d\d:\d\d)$/.test(value)?Date.parse(value):NaN;
+ const normalize=(value:string)=>value.trim().toLowerCase().replace(/[_-]+/g,' ').replace(/\s+/g,' ');
+ const name=(value:string)=>value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/\b(jr|sr|ii|iii|iv)\b/g,'').replace(/[^a-z0-9]/g,'');
+ const candidates=player.evidence.filter(e=>e.kind==='availability'&&Object.hasOwn(obj(e.value),'battingOrder'));
+ if(!candidates.length)return null;
+ const records=candidates.flatMap(e=>{
+  const value=obj(e.value),available=time(e.availableAt),cutoff=instant(packet.cutoff),gameIds=[packet.gameId,packet.sourceGameId].filter(Boolean);
+  if(!Number.isFinite(available)||available>cutoff)return[];
+  for(const key of ['canonicalGameId','gameId'])if(value[key]!==undefined&&(typeof value[key]!=='string'||!gameIds.includes(value[key] as string)))return[];
+  for(const key of ['scheduledStart','start'])if(value[key]!==undefined&&time(value[key])!==instant(packet.start))return[];
+  for(const key of ['canonicalPlayerId','playerId'])if(value[key]!==undefined&&String(value[key])!==player.id)return[];
+  for(const key of ['playerName','name'])if(value[key]!==undefined&&(typeof value[key]!=='string'||name(value[key] as string)!==name(player.name)))return[];
+  for(const [key,team]of [['team',player.team],['opponent',player.opponent]])if(value[key]!==undefined&&(typeof value[key]!=='string'||propsTeam(value[key] as string)!==propsTeam(team)))return[];
+  const clocks=['reportedAt','reported_at','asOfTimestamp','capturedAt','availableAt'].filter(key=>value[key]!==undefined&&value[key]!==null);
+  if(clocks.some(key=>!Number.isFinite(time(value[key]))||time(value[key])>available||time(value[key])>cutoff))return[];
+  const clockKey=clocks[0],effective=clockKey?time(value[clockKey]):available;
+  const rawStatus=typeof value.status==='string'?normalize(value.status):'',position=number(value.battingOrder);
+  const status=rawStatus==='not in lineup'?'absent':['posted','confirmed'].includes(rawStatus)&&position!==null&&Number.isInteger(position)&&position>=1&&position<=9?'posted':'unknown';
+  const bound=facts.filter(f=>f.sourceIds.includes(e.id));
+  return[{evidenceId:e.id,status,battingOrder:status==='posted'?position:null,effectiveAt:new Date(effective).toISOString(),availableAt:e.availableAt,timeBasis:clockKey??'evidence_availability',facts:bound}];
+ });
+ const latestAt=records.length?Math.max(...records.map(r=>Date.parse(r.effectiveAt))):null,latest=records.filter(r=>Date.parse(r.effectiveAt)===latestAt);
+ const states=unique(latest.map(r=>JSON.stringify([r.status,r.battingOrder]))),status=states.length>1?'conflicting':latest[0]?.status??'unknown';
+ const bound=unique(facts.filter(f=>candidates.some(e=>f.sourceIds.includes(e.id))));
+ return{status,battingOrder:status==='posted'?latest[0].battingOrder:null,effectiveAt:latest[0]?.effectiveAt??null,
+  facts:bound,records:records.map(({facts:ignored,...record})=>{void ignored;return record;}).sort((a,b)=>a.effectiveAt.localeCompare(b.effectiveAt)||a.evidenceId.localeCompare(b.evidenceId))};
+}
 
 type Pair={book:string;provider:string;over:Quote;under:Quote;fairOver:number;direction:'over'|'under'|'tie';clock:number;nativeClock:number};
 function currentPairs(packet:GamePacket,playerId:string,market:string,line:number){
@@ -75,6 +109,15 @@ export function compileReaderClaims(packet:GamePacket):Record<string,ReaderClaim
   const area=(key:ReaderArea):ReaderClaimCatalog['areas'][ReaderArea]=>({status:evidence[player.id][key].status,claims:[],requiredClaimIds:[]});
   const catalog:ReaderClaimCatalog={release:PROPS_AI_READER_CLAIM_RELEASE,areas:{recent_form:area('recent_form'),opportunity_role:area('opportunity_role'),matchup:area('matchup'),head_to_head:area('head_to_head'),availability:area('availability'),game_environment:area('game_environment'),market:area('market'),independent_model:area('independent_model')},claims:[]};
   const add=(area:ReaderArea,kind:string,text:string,shortText:string,facts:ReaderFact[],details?:unknown,supportingFacts:ReaderFact[]=[])=>{
+   // The dated-history contract applies to every native source format, not
+   // only reconciled box-score windows. Keep a complete bounded sentence even
+   // when a detailed numeric rendering leaves no room for the source caution.
+   if(evidence[player.id][area].limitations.some(s=>s.startsWith('old_game_history:'))){
+    if(!/\bold\b|\bdated\b|\bstale\b|long gap|not recent/i.test(text))text+=' This history is dated and cannot establish current form or workload.';
+    if(text.length>240)text='The supplied recent history is dated and cannot establish current form or workload. Exact recorded values and source limitations remain in the cited facts.';
+    if(!/\bold\b|\bdated\b|\bstale\b|long gap|not recent/i.test(shortText))shortText+=' This history is dated.';
+    if(shortText.length>120)shortText='Dated recent history cannot establish current form or workload.';
+   }
    if(text.length>240||shortText.length>120)throw Error('Typed reader claim exceeds complete-text bound');
    const sources=unique([...facts,...supportingFacts]);
    const claim:ReaderClaim={id:`c${catalog.claims.length}`,area,kind,text,shortText,factIds:facts.map(f=>f.id),factHashes:sources.map(f=>f.hash),sourceIds:unique(sources.flatMap(f=>f.sourceIds)),availableAt:sources.length?new Date(Math.max(...sources.map(f=>instant(f.availableAt)))).toISOString():null,...(details===undefined?{}:{details:json(details)})};
@@ -84,20 +127,20 @@ export function compileReaderClaims(packet:GamePacket):Record<string,ReaderClaim
    const source=evidence[player.id][area],facts=source.facts;
    if(!facts.length){add(area,'source_missing',`No usable ${areaName(area)} source was supplied.`,`No usable ${areaName(area)} source was supplied.`,[]);continue;}
    if(area==='availability'){
-    const lineup=packet.sport==='mlb'&&player.markets.some(m=>m.startsWith('batter_'))?facts.find(f=>{const v=obj(f.value);return (v.status==='posted'||v.status==='confirmed')&&Number.isInteger(v.battingOrder)&&Number(v.battingOrder)>=1&&Number(v.battingOrder)<=9||v.status==='not in lineup';}):undefined;
+    const lineup=currentBatterLineup(packet,player,facts);
     const eligibility=playerParticipationEligibility(packet,player),ownFacts=facts.filter(f=>Object.hasOwn(obj(f.value),'ownStatus'));
     const reports=ownFacts.map(f=>({fact:f,value:obj(f.value),own:obj(obj(f.value).ownReport),clearance:obj(obj(f.value).ownExplicitClearance)}));
     const admissible=(value:Record<string,unknown>,fact:ReaderFact)=>Object.keys(value).length>0&&['reportedAt','reported_at','availableAt'].every(key=>value[key]===undefined||value[key]===null||typeof value[key]==='string'&&Number.isFinite(Date.parse(value[key] as string))&&Date.parse(value[key] as string)<=instant(fact.availableAt)&&Date.parse(value[key] as string)<=instant(packet.cutoff));
     const rawStatuses=unique([...reports.flatMap(r=>[...(admissible(r.clearance,r.fact)?['Explicit clearance']:[]),...(admissible(r.own,r.fact)?[statusName(r.own.status)]:[])]),...eligibility.facts.filter(f=>f.ownIdentityBasis!=='exact_team_report_omission'&&f.ownIdentityBasis!=='attached_batter_lineup').map(f=>statusName(f.rawStatus))].filter((s):s is string=>s!==null));
-    const labels=eligibility.conflict?'conflicting':rawStatuses.length>1?'multiple':rawStatuses[0]??null;
+    // A lineup conflict must never fabricate a medical-report designation.
+    const labels=rawStatuses.length>1?'multiple':rawStatuses[0]??null;
     const listed=`Own-player reports list ${rawStatuses.join(' and ')}; read their source clocks in order.`;
-    const text=labels==='conflicting'||labels==='multiple'?listed.length<=180?listed:'Own-player reports contain multiple designations; source clocks and explicit clearances must be read in order.':labels?`The supplied own-player report lists ${labels}; this is separate from other players and a confirmed starting role.`:'No explicit own-player designation or clearance is supplied; other players\' injury rows do not establish this player\'s status.';
-    const short=labels==='conflicting'||labels==='multiple'?'Own-player availability has multiple supplied designations.':labels?`The own-player report lists ${labels}; starting status is separate.`:'Own-player availability is unverified; other players\' injuries are separate.';
-    const lineupValue=obj(lineup?.value),posted=lineupValue.status!=='not in lineup';
-    const lineupText=lineup?posted?`The lineup posts batting position ${lineupValue.battingOrder}. `:'The supplied lineup omits this batter. ':'';
-    const lineupShort=lineup?posted?'Posted batting position; ':'Absent from lineup; ':'';
-    const boundFacts=unique([...(ownFacts.length?ownFacts:facts),...(lineup?[lineup]:[])]);
-    add(area,labels==='Explicit clearance'?'own_availability_clearance':labels?'own_availability_status':lineup?'own_lineup_status':'own_availability_unknown',lineupText+text,lineupShort+short,boundFacts,{status:eligibility.status,blocked:eligibility.blocked,conflict:eligibility.conflict,ownDesignations:rawStatuses,...(lineup?{lineup:{factId:lineup.id,status:lineupValue.status,battingOrder:lineupValue.battingOrder??null,meaning:'Lineup opportunity is separate from the own-player medical designation; it does not establish medical clearance.'}}:{}),ownReports:reports.map(r=>({factId:r.fact.id,ownStatus:statusName(r.own.status),ownReportPresent:Object.keys(r.own).length>0,ownClearancePresent:Object.keys(r.clearance).length>0,ownTeamKnown:r.value.ownTeamKnown??false})),otherPlayersAreSeparate:true,meaning:'No own injury detail is copied from a team report. Unknown/unlisted is neither Out nor healthy; a clearance is not a confirmed starter.'});continue;
+    const text=labels==='multiple'?listed.length<=160?listed:'Own-player reports contain multiple designations; source clocks and explicit clearances must be read in order.':labels?`The supplied own-player report lists ${labels}; this is separate from other players and a confirmed starting role.`:'No explicit own-player designation or clearance is supplied; other players\' injury rows do not establish this player\'s status.';
+    const short=labels==='multiple'?'Own-player availability has multiple supplied designations.':labels?`The own-player report lists ${labels}; starting status is separate.`:'Own-player availability is unverified; other players\' injuries are separate.';
+    const lineupText=!lineup?'':lineup.status==='posted'?`The lineup posts batting position ${lineup.battingOrder}. `:lineup.status==='absent'?'The supplied lineup omits this batter. ':lineup.status==='conflicting'?'Latest valid lineup records conflict; no batting position is established. ':'No valid current lineup position is established by the supplied records. ';
+    const lineupShort=!lineup?'':lineup.status==='posted'?'Posted batting position; ':lineup.status==='absent'?'Absent from lineup; ':lineup.status==='conflicting'?'Conflicting lineup; ':'Unverified lineup; ';
+    const boundFacts=unique([...(ownFacts.length?ownFacts:facts),...(lineup?.facts??[])]);
+    add(area,labels==='Explicit clearance'?'own_availability_clearance':labels?'own_availability_status':lineup&&lineup.status!=='unknown'?'own_lineup_status':'own_availability_unknown',lineupText+text,lineupShort+short,boundFacts,{status:eligibility.status,blocked:eligibility.blocked,conflict:eligibility.conflict,ownDesignations:rawStatuses,...(lineup?{lineup:{factIds:lineup.facts.map(f=>f.id),status:lineup.status,battingOrder:lineup.battingOrder,effectiveAt:lineup.effectiveAt,records:lineup.records,meaning:'Latest valid own-player lineup clocks; equal-clock disagreements remain conflicting. Lineup opportunity is separate from the own-player medical designation and does not establish medical clearance.'}}:{}),ownReports:reports.map(r=>({factId:r.fact.id,ownStatus:statusName(r.own.status),ownReportPresent:Object.keys(r.own).length>0,ownClearancePresent:Object.keys(r.clearance).length>0,ownTeamKnown:r.value.ownTeamKnown??false})),otherPlayersAreSeparate:true,meaning:'No own injury detail is copied from a team report. Unknown/unlisted is neither Out nor healthy; a clearance is not a confirmed starter.'});continue;
    }
    if(area==='game_environment'&&packet.sport==='nba'){
     const gameFacts=facts.filter(f=>f.label==='Game pace/scoring environment inputs'),benchFacts=facts.filter(f=>f.label==='Observed league pace reference using matching units');
@@ -143,7 +186,7 @@ export function readerClaimModelInput(packet:GamePacket){
  const catalogs=compileReaderClaims(packet);
  const relationship=(claim:ReaderClaim):Json|undefined=>{
   const detail=obj(claim.details);
-  if(claim.area==='availability')return json({ownDesignations:detail.ownDesignations??[],lineup:detail.lineup?{factId:obj(detail.lineup).factId,status:obj(detail.lineup).status,battingOrder:obj(detail.lineup).battingOrder}:null,otherPlayersAreSeparate:true,lineupIsNotMedicalClearance:true});
+  if(claim.area==='availability')return json({ownDesignations:detail.ownDesignations??[],lineup:detail.lineup?{factIds:obj(detail.lineup).factIds,status:obj(detail.lineup).status,battingOrder:obj(detail.lineup).battingOrder,effectiveAt:obj(detail.lineup).effectiveAt}:null,otherPlayersAreSeparate:true,lineupIsNotMedicalClearance:true});
   if(claim.kind==='same_unit_pace_comparison'){const ref=obj(detail.reference);return json({metric:detail.metric,unit:detail.unit,game:detail.game,currentReference:[ref.current,ref.n],priorReference:[ref.prior,ref.priorN],relation:detail.relation,delta:detail.delta});}
   if(claim.kind==='pace_comparison_unavailable')return json({status:detail.status});
   if(claim.kind!=='exact_event_market_comparison')return undefined;

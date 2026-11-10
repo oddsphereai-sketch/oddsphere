@@ -227,7 +227,7 @@ for(const source of [removed,explicitEmpty,otherActor,oneBook]){
 assert.equal(priorReady.memberDecisions.filter(r=>r.aiReview&&r.grade==='Best Angle').length,2);
 console.log('NFL current-execution first-lock guard passed: same-final scoped/book/actor withdrawal, explicit empty versus absent metadata, independent review GET failure, prelock suppression and same-law return promotion, postlock refusal and exact stored locks. Synthetic source/parser/binding/reconciler only.');
 }
-{
+for(const crossDuringLookup of [true,false]){
 Object.assign(process.env,{NODE_ENV:'test'});
 Object.assign(process.env,{PLAYER_PROPS_AI_SITE_ENABLED:'true',PLAYER_PROPS_AI_PAID_RUNS_ENABLED:'true',PLAYER_PROPS_AI_OPENAI_API_KEY:'synthetic-never-real'});
 
@@ -245,7 +245,7 @@ const initialPacket=packet(paidSourceAt,true),nativeBefore=native(initialPacket)
 const job={job_key:'synthetic-final',sport:'nfl',game_id:funded,game_day:'2026-11-09',stage:'final',scheduled_start:start,lock_at:lock,due_at:'2026-11-09T21:35:00Z',billing_month:'2026-11',state:'pending'};
 const calendar={release:PROPS_AI_CALENDAR_RELEASE,month:'2026-11',capturedAt:paidSourceAt,games:[{sport:'nfl',id:funded,start,lock,home:'MIN',away:'BUF',confirmed:true}],sources:Object.fromEntries(['nba','nfl','mlb'].map(s=>[s,{complete:true,source:'synthetic complete calendar'}]))};
 const client:any={from:(table:string)=>{
- let selection='';const query:any={select:(s:string)=>{selection=s;return query;},eq:()=>query,gte:()=>query,in:()=>query,lte:()=>query,gt:()=>query,order:()=>query,single:async()=>({data:{release:'player_props_ai_control_2026_11_07_r1_explicit_off',paid_enabled:true},error:null}),maybeSingle:async()=>({data:{release:PROPS_AI_CALENDAR_RELEASE,captured_at:paidSourceAt,payload:calendar},error:null}),limit:async()=>{assert.equal(table,'player_props_ai_reviews');reviewGets++;if(reviewGets===1)return{data:[{result:early}],error:null};assert(finished,'Reviewer returned locally before final GET');completedObservedLocallyAt=tick;tick='2026-11-09T22:00:00.100Z';return{data:[{result:finished},{result:early}],error:null};},then:(resolve:any)=>{assert.equal(selection,'*');return Promise.resolve({data:[job],error:null}).then(resolve);}};return query;
+ let selection='';const query:any={select:(s:string)=>{selection=s;return query;},eq:()=>query,gte:()=>query,in:()=>query,lte:()=>query,gt:()=>query,order:()=>query,single:async()=>({data:{release:'player_props_ai_control_2026_11_07_r1_explicit_off',paid_enabled:true},error:null}),maybeSingle:async()=>({data:{release:PROPS_AI_CALENDAR_RELEASE,captured_at:paidSourceAt,payload:calendar},error:null}),limit:async()=>{assert.equal(table,'player_props_ai_reviews');reviewGets++;if(reviewGets===1)return{data:[{result:early}],error:null};assert(finished,'Reviewer returned locally before final GET');completedObservedLocallyAt=tick;tick=crossDuringLookup?'2026-11-09T22:00:00.100Z':'2026-11-09T21:59:59.950Z';return{data:[{result:finished},{result:early}],error:null};},then:(resolve:any)=>{assert.equal(selection,'*');return Promise.resolve({data:[job],error:null}).then(resolve);}};return query;
 },rpc:async(name:string,args:any)=>{
  if(name==='player_props_ai_plan_v4')return{data:{funded:true,budget:{}},error:null};
  if(name==='player_props_ai_reap')return{data:0,error:null};
@@ -276,14 +276,24 @@ assert.equal(generationCalls,1,'Exactly the one scheduled model generation is mo
 assert(finished&&Date.parse(finished.issuedAt)<Date.parse(lock));assert.equal(completedObservedLocallyAt,finalAt);assert.deepEqual(readyAt,[finalAt]);
 assert(observed.some(e=>e.input===finished.inputHash&&e.at===finalAt),'Local completion authority is observed before the accepted-review GET');
 assert.deepEqual(paidSourceContexts.map(c=>c.purpose),['lock_authority','scheduled_review','member_publication']);assert.equal(paidSourceContexts[1].job.job_key,job.job_key,'Only the actual due slot carries its funded job identity');
-assert.equal(outcome.games.length,1);assert(outcome.findings.some(f=>f.startsWith('current_source_unavailable:')));
-assert.equal(outcome.games[0].packet.cutoff,paidSourceAt,'Fallback preserves the exact generated source cutoff');
+assert.equal(outcome.games.length,1);
+if(crossDuringLookup){assert(outcome.findings.some(f=>f.startsWith('current_source_unavailable:')));assert.equal(outcome.games[0].packet.cutoff,paidSourceAt,'Fallback preserves the exact generated source cutoff');}
+else{assert(!outcome.findings.some(f=>f.startsWith('current_source_unavailable:')));assert(outcome.games[0].decisions.length>0,'The normal returned game is priceable before its second application');}
 for(const game of outcome.games){if(Date.parse(tick)>=Date.parse(game.packet.lock))continue;localCandidate=restoreNflNativeGame(localCandidate!,nativeBefore,game.packet,tick);localCandidate=applyNflSiteAi(localCandidate,game.packet,game.decisions,tick);frames.push(testNflHandoffCapture(()=>tick)(localCandidate!.decisions,game.packet,game.authorityReview,'ai'));}
+// Normal writer publication can cross T-60 only after the returned game's
+// second genuine application/capture, with both proof versions accumulated.
+if(!crossDuringLookup)tick='2026-11-09T22:00:00.100Z';
 const result:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:tick,nextBoard:localCandidate!,previous,lockHandoff:mergeNflHandoffs(frames)});
 assert(result.memberDecisions.some(r=>r.market==='receiving_yards'&&r.aiReview?.lawHash===finished.players[0].law.hash&&r.grade==='Best Angle'),'Real mocked scheduled completion B must publish from its actual prelock readiness');
 assert(result.memberDecisions.filter(r=>r.market==='receptions').every(r=>!r.aiReview),'Prelock final decline authority uses native baseline after the later GET crosses lock');
 assert(result.memberDecisions.filter(r=>r.aiReview).every(r=>r.aiReview!.lawHash===finished.players[0].law.hash),'Postlock GET/fallback must not resurrect early law A or undo preprepared B');
-console.log('Mocked paid-path siteRuntime passed: one count/one generation, local B authority and ready callback prelock, accepted-review GET/source fallback postlock, B qualification/native decline preserved without replay.');
+if(!crossDuringLookup){
+ const aiFrames=frames.filter(f=>f.candidateProofs.length);assert.equal(aiFrames.length,2,'Both normal writer AI capture points are exercised');
+ assert(result.memberDecisions.filter(r=>r.aiReview).every(r=>r.aiReview!.executionEvidence!.pricedAt==='2026-11-09T21:59:59.950Z'),'The later exact captured row survives first lock');
+ const reversed=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:tick,nextBoard:localCandidate!,previous,lockHandoff:mergeNflHandoffs([...frames].reverse())});
+ assert.deepEqual(reversed.memberDecisions,result.memberDecisions,'Normal callback/second-application proof order does not change the locked members');
+}
+console.log(`Mocked paid-path siteRuntime passed: one count/one generation, local B ready callback and ${crossDuringLookup?'postlock GET/source fallback':'second prelock returned-game overlay followed by publication crossing lock'}, qualified B/native decline and exact locks preserved.`);
 }
 console.log('Actual siteRuntime lock-authority controls passed: pre/post GET/source boundaries, source-before-overlay readiness, zero-price all-declined authority, lookup failures, unchanged early retention, exact cached cutoff and immutable public locks. Supabase and every network/model/count path mocked.');
 }

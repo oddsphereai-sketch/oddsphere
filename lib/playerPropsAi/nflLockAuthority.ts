@@ -89,6 +89,15 @@ export function availableBeforeLock(row:Row,proof:Proof|undefined,now:string){
  if(!proof)return false;
  return eligible(row,proof,{actorId:proof.actorId,gameId:row.gameId,currentContextHash:proof.contextHash,lockAt:row.lockAt,scheduledStart:row.scheduledStart,team:propsTeam(row.team),opponent:propsTeam(row.opponent)}as Authority,row.aiReview?'ai':'native',now);
 }
+/** Repeated overlays can share an event while their immutable row differs.
+ * Authenticate every relevant proof before selecting the exact row; another
+ * genuine capture is neither this row's proof nor evidence of tampering. */
+function exactRowProof(row:Row,proofs:readonly Proof[],now:string,authority?:Authority){
+ const key=event(row),hash=rowHash(row),kind=row.aiReview?'ai':'native';
+ return proofs.filter(p=>p.event===key).map(p=>{verify(p);return p;})
+  .filter(p=>p.rowHash===hash&&(authority?eligible(row,p,authority,kind,now):availableBeforeLock(row,p,now)))
+  .sort((a,b)=>instant(b.readyAt)-instant(a.readyAt)||a.binding.localeCompare(b.binding))[0];
+}
 export function supersedes(a:Authority,previous:Row[],now:string){
  verify(a);if(instant(now)<instant(a.lockAt)||instant(a.observedAt)>=instant(a.lockAt))return false;
  const prior=previous.filter(r=>r.state!=='locked'&&actor(r)===a.actorId&&r.gameId===a.gameId&&r.aiReview);
@@ -172,13 +181,15 @@ export function prepareNflLockHandoff(args:NflLockHandoff&{nextRows:Row[];previo
   if(instant(args.now)<instant(row.lockAt)){nextRows.push(row);continue;}
   const a=active.find(a=>a.actorId===actor(row)&&a.gameId===row.gameId);
   if(!a){
-   const proof=(row.aiReview?args.candidateProofs:args.nativeProofs).find(p=>p.event===event(row));
+   const proof=exactRowProof(row,row.aiReview?args.candidateProofs:args.nativeProofs,args.now);
    if(availableBeforeLock(row,proof,args.now)){nextRows.push(row);if(row.aiReview)preferredEvents.add(event(row));}
    else diagnostics.push({actorId:actor(row),market:row.market,kind:'unavailable',status:'candidate_not_available_prelock'});
    continue;
   }
-  const native=args.nativeRows.find(r=>event(r)===event(row));
-  const result=resolveScope({authority:a,market:row.market,candidate:row,candidateProof:args.candidateProofs.find(p=>p.event===event(row)),native,nativeProof:args.nativeProofs.find(p=>p.event===event(row)),now:args.now});
+  const baseline=args.nativeRows.filter(r=>event(r)===event(row)).flatMap(native=>{
+   const proof=exactRowProof(native,args.nativeProofs,args.now,a);return proof?[{row:native,proof}]:[];
+  }).sort((x,y)=>instant(y.proof.readyAt)-instant(x.proof.readyAt)||x.proof.binding.localeCompare(y.proof.binding))[0];
+  const result=resolveScope({authority:a,market:row.market,candidate:row,candidateProof:exactRowProof(row,args.candidateProofs,args.now,a),native:baseline?.row,nativeProof:baseline?.proof,now:args.now});
   const withdrawn=result.row&&executionAllows(result.row)===false;
   if(result.row&&!withdrawn)nextRows.push(result.row);
   diagnostics.push({actorId:a.actorId,market:row.market,kind:withdrawn?'unavailable':result.kind,status:withdrawn?'current_execution_withdrawn':result.status??null});

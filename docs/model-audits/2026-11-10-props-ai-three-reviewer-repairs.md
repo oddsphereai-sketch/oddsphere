@@ -152,3 +152,13 @@ receipts. Tests include the actual observed failure classes, foreign/omitted
 readings, paraphrase/prose bypasses, source missing/comparable cases, actor
 retention and old reader/lock precedence. Independent full-round verification
 must restart after this structural correction.
+
+A fifth independent round reproduced three further prospective boundary defects
+and reset the streak again. Two genuine NFL captures of the same event could
+select an older immutable proof and abort first-lock reconciliation. Native MLB
+dated research could not satisfy the mandatory typed reading, even when the
+forecast abstained. The MLB lineup reading could select an older posted position
+and omit a newer explicit absence. These are process and factual-presentation
+defects, not outcome-based tuning. Their repairs require exact capture binding,
+complete source-limit disclosure and effective lineup chronology, with positive
+recovery and legacy-lock controls before another full independent round.

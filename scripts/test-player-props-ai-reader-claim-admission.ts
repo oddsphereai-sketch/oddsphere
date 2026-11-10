@@ -8,7 +8,9 @@ import {digest} from '../lib/playerPropsAi/evidence';
 import {compileReaderClaims,NBA_READER_UNIT_CONTRACT} from '../lib/playerPropsAi/readerClaims';
 import {PROPS_AI_WIRE_RELEASE} from '../lib/playerPropsAi/scenarioCoordinates';
 import {encodeCanonicalScenarioLaw,GENERATIVE_WIRE_RELEASE} from '../lib/playerPropsAi/generativeCoordinates';
-import {validateLaw} from '../lib/playerPropsAi/law';
+import {validateLaw,primitives} from '../lib/playerPropsAi/law';
+import {readerEvidence} from '../lib/playerPropsAi/readerCoverage';
+import {liveMlbPacket} from '../lib/playerPropsAi/liveSources';
 import {parseJointReview,parseJointPlayerReview,sourceInput,jointReviewSchema} from '../lib/playerPropsAi/request';
 import {evidenceAliases} from '../lib/playerPropsAi/input';
 import {independentPriorEvents} from '../lib/playerPropsAi/priorEvents';
@@ -61,4 +63,52 @@ const noBenchmark=structuredClone(packet);noBenchmark.players[0].evidence=noBenc
 const out=structuredClone(packet);const availability=out.players[0].evidence.find(e=>e.id==='status')!;((availability.value as any).context.home.players as any[]).push({name:'Synthetic Player',status:'out',reportedAt:at});assert(compileReaderClaims(out)[id].areas.availability.claims[0].text.includes('lists Out'));
 const disagree=structuredClone(packet);for(const q of disagree.quotes)if(q.market==='rebounds')q.american=q.side==='over'?140:-190;assert((compileReaderClaims(disagree)[id].areas.market.claims[0].details as unknown as {relation:string}[]).some(e=>e.relation==='opposite_direction'));
 assert(sourceInput(packet).includes('verifiedReaderClaims'));assert.equal(digest({packet,raw}),before,'All negative/positive controls preserve original source and raw response');
+// Native MLB source constructor -> exact typed claims -> actual parser. The
+// dated-history warning must be satisfiable for both a law and an abstention.
+function mlbNative(date:string,samplesOnly=false){
+ const game={id:'dated-native-mlb',start:input.start,home:'BOS',away:'NYY'},recent={statLabel:'Hits',sampleLabel:'games',logs:[0,1,2].map((value,i)=>({gameId:i+1,date,value,plateAppearances:4})),samples:{last5:{count:3,average:1,values:[0,1,2]},last10:{count:3,average:1,values:[0,1,2]}}};
+ const nativeRow={id:'native-over',player:'Synthetic Native Batter',team:'NYY',opponent:'BOS',market:'batter_hits',line:1.5,side:'over',book:'synthetic',odds:-110,lastUpdated:at,projection:1,finalProbability:.5,playGrade:'WATCHLIST',gameStartTime:game.start,providerIds:{gameId:game.id,bdlGameId:'1',bdlPlayerId:9001,mlbStatsPlayerId:'9001'},missingFeatures:[],recentForm:recent,lineupStatus:{status:'posted',battingOrder:4,asOfTimestamp:at}};
+ const snapshot={asOfTimestamp:at,slateDate:'2026-11-10',modelContext:{modelReleaseId:'mlb_props_2026_10_21_r44'},data:{props:[nativeRow]}};
+ const sourceBefore=digest(snapshot),p=liveMlbPacket({game,window:{gameId:game.id,stage:'early',cutoff:at,lock:input.lock},snapshot,currentOdds:[],openingOdds:[]} as never);assert.equal(digest(snapshot),sourceBefore,'The source constructor keeps the original native snapshot exact');
+ if(samplesOnly){const recentEvidence=p.players[0].evidence.find(e=>e.kind==='recent_games')!;(recentEvidence.value as any).logs=[];}
+ return p;
+}
+function admitHistory(p:GamePacket,decline=false){
+ const actor=p.players[0],sourceHash=digest(p),aliases=new Map([...evidenceAliases(p)].map(([alias,id])=>[id,alias]));
+ const outcomes=Object.fromEntries(primitives(p.sport,actor).map(stat=>[stat,p.sport==='mlb'&&stat==='batter_singles'?[...v(0).slice(0,8),...v(2).slice(0,8)]:v(stat==='points'?18:stat==='rebounds'?3:stat==='assists'?3:stat==='threes'?1:stat==='rushing_yards'?10:0)]));
+ const law={weights:v(1),outcomes},raw={wireRelease:PROPS_AI_WIRE_RELEASE,players:{[actor.id]:verifiedReaderFixture(p,actor.id,{priorRead:Object.fromEntries(independentPriorEvents(actor).map(e=>[aliases.get(e.sourceId)!,e.preferredOutcome])),evidenceIds:[aliases.get(actor.evidence[0].id)!],gaps:decline?['forecast_declined']:[],confidence:actor.markets.map(()=>1),exceptions:actor.markets.map(()=>decline?'forecast_declined':null),law:decline?null:encodeCanonicalScenarioLaw(p.sport,actor,law)})}};
+ const rawHash=digest(raw),accepted=parseJointReview(p,raw).players[0];assert.equal(digest(p),sourceHash);assert.equal(digest(raw),rawHash);assert.deepEqual(accepted.law,decline?null:validateLaw(p.sport,actor,law));
+ const claims=compileReaderClaims(p)[actor.id];assert(claims.claims.every(c=>c.text.length<=240&&c.shortText.length<=120));return{accepted,claims};
+}
+for(const date of ['2026-11-09','2026-10-01'])for(const decline of [false,true]){
+ const p=mlbNative(date),result=admitHistory(p,decline),dated=date==='2026-10-01',observation=result.accepted.coverage.recent_form.observation;
+ if(dated){assert.match(observation,/dated/);assert.match(observation,/cannot establish current form or workload/);assert(readerEvidence(p)['9001'].recent_form.limitations.some(s=>s.startsWith('old_game_history:')));}else assert.doesNotMatch(observation,/dated/);
+ const nativeValues=(p.players[0].evidence.find(e=>e.kind==='recent_games')!.value as any);assert.deepEqual(nativeValues.logs.map((r:any)=>r.value),[0,1,2]);assert.equal(nativeValues.samples.last10.average,1,'Compiler adds no invented stat or replacement value');
+ assert.equal(result.accepted.law===null,decline);
+}
+// A samples-only native source has no dated game clock: retain that absence,
+// never invent dates from an average or turn it into a zero observation.
+assert.doesNotMatch(admitHistory(mlbNative('2026-10-01',true)).accepted.coverage.recent_form.observation,/dated/);
+for(const sport of ['nba','nfl'] as const){const p=structuredClone(input);p.sport=sport;p.quotes=[];p.players=[{id:'box-history',name:'Synthetic Box History',team:'PHI',opponent:'BOS',markets:[sport==='nba'?'points':'rushing_yards'],missing:[],evidence:[0,1,2].map((_,i):Evidence=>({id:`box-${i}`,kind:'recent_games',source:'synthetic native box logs',availableAt:at,value:{game:{startTime:`2026-08-0${i+1}T00:00:00Z`,homeTeam:'PHI',awayTeam:'BOS'},box:sport==='nba'?{minutes:30,points:18,oreb:1,dreb:2,ast:3,fg3m:1}:{rushing_yards:10}}}))}];for(const decline of [false,true])assert.match(admitHistory(p,decline).accepted.coverage.recent_form.observation,/dated/);}
+// Mixed native/numeric source uses the numeric branch but still owns the dated
+// native history caution, including when a long metric leaves no text room.
+const mixed=mlbNative('2026-10-01');mixed.players[0].evidence.push({id:'numeric-source',kind:'independent_model',source:'synthetic stored numerical context',availableAt:at,value:{production:[{key:'recorded_batter_contact_input_with_long_explicit_source_name',value:1.2345678912345678}],market:'batter_hits',line:1.5}});assert.match(admitHistory(mixed).accepted.coverage.recent_form.observation,/dated/);
+const lineupSource=mlbNative('2026-11-09'),baseLineup=lineupSource.players[0].evidence.find(e=>e.kind==='availability')!;(baseLineup.value as any).asOfTimestamp='2026-11-10T15:00:00Z';lineupSource.players[0].evidence.push({id:'new-lineup',kind:'availability',source:'stored MLB lineup',availableAt:at,value:{status:'not_in_lineup',battingOrder:null,asOfTimestamp:'2026-11-10T16:00:00Z'}});
+for(const reverse of [false,true]){const p=structuredClone(lineupSource);if(reverse)p.players[0].evidence.reverse();const rendered=admitHistory(p).accepted.coverage.availability.observation;assert.match(rendered,/lineup omits this batter/);assert.doesNotMatch(rendered,/batting position 4/);}
+for(const scenario of ['unknown','conflicting','future','wrong_fixture','old_refetched','returned','missing'] as const)for(const reverse of [false,true]){
+ const p=structuredClone(lineupSource),current=p.players[0].evidence.find(e=>e.id==='new-lineup')!,value=current.value as any;
+ if(scenario==='unknown'){value.status='pending';value.battingOrder=null;}
+ if(scenario==='conflicting')value.asOfTimestamp='2026-11-10T15:00:00Z';
+ if(scenario==='future')value.asOfTimestamp='2026-11-10T18:00:00Z';
+ if(scenario==='wrong_fixture')value.canonicalGameId='other-game';
+ if(scenario==='old_refetched')value.asOfTimestamp='2026-11-10T14:00:00Z';
+ if(scenario==='returned'){(p.players[0].evidence.find(e=>e.kind==='availability'&&e.id!=='new-lineup')!.value as any).status='not_in_lineup';value.status='confirmed';value.battingOrder=2;}
+ if(scenario==='missing')p.players[0].evidence=p.players[0].evidence.filter(e=>e.kind!=='availability');
+ if(reverse)p.players[0].evidence.reverse();const result=admitHistory(p),reading=result.accepted.coverage.availability.observation;
+ if(scenario==='unknown'){assert.match(reading,/No valid current lineup position/);assert.doesNotMatch(reading,/posts batting position/);}
+ if(scenario==='conflicting'){assert.match(reading,/lineup records conflict/);assert.doesNotMatch(reading,/posts batting position|Own-player reports list/);}
+ if(['future','wrong_fixture','old_refetched'].includes(scenario))assert.match(reading,/batting position 4/,'Only a valid newer own source may replace the old valid lineup');
+ if(scenario==='returned'){assert.match(reading,/batting position 2/);assert.match(reading,/No explicit own-player designation or clearance/);}
+ if(scenario==='missing')assert.equal(result.accepted.coverage.availability.status,'missing');
+}
 console.log('Typed factual admission passed: exact saved failure sentences and alternate prose paths reject; mandatory actor/benchmark/event readings, positive source controls, immutable canonical laws and pre-retention rejection pass. No network/paid requests.');

@@ -44,7 +44,10 @@ The R30 draft repairs below remain included. NBA movement uses exact two-way
 same-line/provider/side history and refuses alternate-line or conflicting-clock
 inference. NFL current-execution authority prevents newly locking withdrawn
 actor/scope/book events, with valid prelock returns recoverable and all existing
-locks first. R59 snapshot/reader compatibility remains tested. NFL settlementR8
+locks first. Repeated capture handoffs bind the exact immutable row and proof,
+not the first matching event. Typed readings retain native dated-history cautions
+and valid effective lineup chronology, including explicit absence and conflicts.
+R59 snapshot/reader compatibility remains tested. NFL settlementR8
 and per-row eventR1 now pin new decisionR13; old results require separate owner
 approval and are never repaired by a recurring release. TrackingR43 identities
 and ignore-duplicates behavior remain unchanged; compact event projection
