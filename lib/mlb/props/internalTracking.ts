@@ -27,14 +27,14 @@ import {
   mlbPropsGameLockIsDue,
 } from "./lockPolicy";
 import { MLBStatsAPIClient } from "./providerClients";
-import { settlePropPick, type PropSettlementInput } from "./settlement";
+import { settleTrackedPropPick, MLB_PROPS_LOCKED_EVENT_RELEASE, type MlbPropsLockedEvent, type PropSettlementInput } from "./settlement";
 
 const TRACKABLE_GRADES = new Set(["BEST_ANGLE", "LEAN", "WATCHLIST"]);
 const ACTIONABLE_GRADES = new Set(["BEST_ANGLE", "LEAN"]);
 const DEFAULT_SETTLEMENT_LOOKBACK_DAYS = 4;
 const DEFAULT_MAX_PENDING_SETTLEMENTS = 500;
 export const MLB_PROPS_SETTLEMENT_RELEASE_ID =
-  "mlb_props_settlement_2026_10_27_r2_postseason_game_logs";
+  "mlb_props_settlement_2026_11_10_r3_exact_locked_event";
 
 export type MlbPropsTrackingSyncResult = {
   status: "disabled" | "completed" | "failed";
@@ -517,7 +517,7 @@ export async function settleInternalMlbProps(args: { dates?: string[] } = {}) {
         gamesSettled.add(entry.external_game_id);
         continue;
       }
-      const decision = settlePropPick({
+      const decision = settleTrackedPropPick({
         marketKey: entry.market_key as PropSettlementInput["marketKey"],
         playerId: entry.external_player_id,
         gameId: entry.external_game_id,
@@ -527,7 +527,7 @@ export async function settleInternalMlbProps(args: { dates?: string[] } = {}) {
         playerStarted: true,
         stakeUnits: entry.stake_units,
         americanOdds: entry.locked_american_odds,
-      });
+      }, entry.metadata_json?.lockedEvent);
       if (decision.status === "unresolved") {
         unresolved++;
         await markSettlementAttempt(supabase, entry, decision.reason);
@@ -663,6 +663,10 @@ export function trackingInsert(
 ) {
   const row = candidate.row;
   const actionable = ACTIONABLE_GRADES.has(row.playGrade) && row.units > 0;
+  // A later sync of an immutable old snapshot must not opt it into new rules.
+  const lockedEvent: MlbPropsLockedEvent | null = snapshot.modelContext?.trackingEventRelease === MLB_PROPS_LOCKED_EVENT_RELEASE && row.lockStatus?.status !== "locked"
+    ? { release: MLB_PROPS_LOCKED_EVENT_RELEASE, market: row.market, line: row.line, side: row.side, contract: row.offerContract ?? "two_way" }
+    : null;
   const bdlPlayerId = row.providerIds?.bdlPlayerId ?? null;
   const modelReleaseId = row.aiReview?.release ?? snapshot.modelContext?.modelReleaseId ?? "mlb_props_release_missing";
   const shadowPitcherPrediction = snapshot.modelContext?.shadowPitcherPredictions?.find((shadow) =>
@@ -720,6 +724,7 @@ export function trackingInsert(
     metadata_json: {
       private: true,
       modelReleaseId,
+      ...(lockedEvent ? { lockedEvent } : {}),
       ...(row.aiReview?{aiReview:row.aiReview}:{}),
       trackingPolicyReleaseId: MLB_PROPS_TRACKING_POLICY_RELEASE_ID,
       lockPolicy: `T-${targetLockMinutes}`,

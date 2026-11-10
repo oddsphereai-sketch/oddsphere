@@ -6,7 +6,7 @@ import {readerLogWindows} from './readerLogs';
 import {independentPriorEvents} from './priorEvents';
 import {inspectGenerativeDraft} from './generativeAdmission';
 import {GENERATIVE_WIRE_RELEASE} from './generativeCoordinates';
-import {marketUsesStatistic,validateLaw,lawForecast} from './law';
+import {marketUsesStatistic,validateLaw,lawForecast,type AcceptedPlayerLaw} from './law';
 import type {ForecastSanityIssue} from './forecastSanity';
 
 const STATISTICS = ['points','rebounds','assists','threes'] as const;
@@ -89,7 +89,7 @@ export type NamedSourceCorrection =
   |{status:'unavailable';reason:string;bytes:number;affectedActorIds:string[]};
 const unavailable=(reason:string,affectedActorIds:string[],bytes=0):NamedSourceCorrection=>({status:'unavailable',reason,bytes,affectedActorIds});
 
-function issueCategory(issue:ForecastSanityIssue,means:Partial<Record<Statistic,number>>):string|null{
+function issueCategory(issue:ForecastSanityIssue,means:Partial<Record<Statistic,number>>,law:AcceptedPlayerLaw|null):string|null{
   if(issue.markets.some(m=>!Object.hasOwn(MARKET_NAMES,m)))return null;
   if(issue.code==='forecast_mean_outside_supplied_support'){
     const match=issue.example?.match(MEAN_EXAMPLE);if(!match)return null;
@@ -99,7 +99,16 @@ function issueCategory(issue:ForecastSanityIssue,means:Partial<Record<Statistic,
   }
   if(issue.code==='combo_dependence_erases_source_variation'){
     const pair=issue.example?.split(':')[0].split('/');if(!pair||pair.length!==2||!pair.every(statistic))return null;
-    return `joint ${pair.join('/')}`;
+    const first=law?.outcomes[pair[0]],second=law?.outcomes[pair[1]];
+    if(!law||!first||!second)return null;
+    let concordant=false,opposing=false;
+    for(let i=0;i<law.weights.length;i++)for(let j=i+1;j<law.weights.length;j++){
+      if(!law.weights[i]||!law.weights[j])continue;
+      const product=(first[i]-first[j])*(second[i]-second[j]);
+      if(product>0)concordant=true;if(product<0)opposing=true;
+    }
+    const missing=[...(!concordant?['concordant']:[]),...(!opposing?['opposing']:[])];
+    return missing.length?`joint ${pair.join('/')} missing ${missing.join(' and ')}`:null;
   }
   if(issue.code==='unsupported_zero_probability_tail'||issue.code==='unsupported_priced_event_certainty'){
     const kind=issue.code==='unsupported_zero_probability_tail'?'prior':'priced';
@@ -131,14 +140,14 @@ export function namedSourceCorrection(packet:GamePacket,draft:unknown):NamedSour
     affectedActorIds.push(player.id);
     const rawLaw=inspection.canonical.players[player.id]?.law,accepted=rawLaw?validateLaw('nba',player,rawLaw):null;
     const means:Partial<Record<Statistic,number>>=accepted?Object.fromEntries(STATISTICS.filter(stat=>accepted.outcomes[stat]).map(stat=>[stat,lawForecast(accepted,stat,0).mean])):{};
-    const categories=source.map(issue=>issueCategory(issue,means)),coordinate=coords.map(c=>coordinateCategory(c.code));
+    const categories=source.map(issue=>issueCategory(issue,means,accepted)),coordinate=coords.map(c=>coordinateCategory(c.code));
     const fields=format.map(f=>f.field==='assessment'?'assessment':/^reader[0-7]$/.test(f.field)?READER_AREAS[Number(f.field.slice(6))].replaceAll('_',' '):null);
     if(categories.some(c=>c===null)||coordinate.some(c=>c===null)||fields.some(f=>f===null))return unavailable('not_applicable',packet.players.filter((p,i)=>inspection.source.some(s=>s.playerId===p.id&&s.unhandled.length)||inspection.coordinates.some(c=>c.playerId===p.id)||inspection.format.some(f=>f.playerIndex===i)).map(p=>p.id));
     const clauses=[...unique(categories as string[]),...(coordinate.length?[`coordinates ${unique(coordinate as string[]).join(',')}`]:[]),...(fields.length?[`complete text ${unique(fields as string[]).join(',')}`]:[])];
     rows.push(`P${index}: ${clauses.join('; ')}.`);
   }
   if(!affectedActorIds.length)return unavailable('not_applicable',[]);
-  const prefix='\nP labels are zero-based player order in the named cards. Recheck every listed category against exact sources. Joint pairs need both higher-together and opposing patterns; tails need opposing event mass. Correct the law or explicitly except unsupported scopes; never invent, clip, or waive a check.\n';
+  const prefix='\nP labels are zero-based player order in the named cards. Recheck every listed category against exact sources. Joint x/y pairs need indices i!=j with both weights>0: (x[i]-x[j])*(y[i]-y[j])>0 is concordant (higher-together), <0 is opposing; ties/zero weights do not count. Keep same-index joint scenarios. Tails need opposing event mass. Correct the law or explicitly except unsupported scopes; never invent, clip, or waive a check.\n';
   const text=prefix+rows.join('\n'),bytes=Buffer.byteLength(text,'utf8');
   if(!/^[\x00-\x7f]*$/.test(text))return unavailable('feedback_exceeds_cushion',affectedActorIds,bytes);
   if(bytes>NAMED_SOURCE_CORRECTION_MAX_BYTES)return unavailable('feedback_exceeds_cushion',affectedActorIds,bytes);

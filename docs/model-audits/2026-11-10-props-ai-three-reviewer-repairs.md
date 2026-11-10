@@ -73,3 +73,51 @@ review. Same-law participation qualification leaves numeric projections and
 probabilities exact. Publication recovery intentionally restores qualified AI
 scopes rather than imposing a board-size or direction quota. Changes in actual
 board coverage and spending require ordinary forward observation.
+
+The second independent round found additional source/runtime boundaries, so the
+clean streak reset to zero again. Exact-ID NFL display aliases use the same actor
+identity contract for injury qualification; own-team roster injuryStatus now
+reaches action qualification with its original collector capture clock. An
+explicit same-report clearance is not downgraded by a synthetic omitted-row
+fact. Current unavailable NBA actors remain review scopes but no longer count
+as missing healthy native features. All-unavailable sources can still be
+reviewed; genuine missing healthy native features retain their readiness guard.
+
+The preparation budget starts with a one-wave completion reserve. Before a
+partition count stage expands beyond eight parts, it contracts the shared count
+deadline to retain two waves. Existing and queued counts share the abort boundary
+and drain before claims; this permits feasible small reviews without orphan
+counts consuming a large admitted game's generation window. No output, request,
+retry, provider or monthly cap increases.
+
+MLB ready publication now uses awaited observations within the existing leased
+writer. A priceable review is durably materialized at its real readiness time,
+without waiting for an unrelated slow game. Canonical full-board validation,
+payload/provider bounds and original cutoff selection remain authoritative;
+publication itself completing after cutoff cannot be backdated. Withdrawal and
+changed source observations replace only unlocked materializations. Already-due
+canonical locks are secured before ordinary snapshot retention.
+
+Future MLB tracking stores a versioned exact event contract only from an opted-in
+new snapshot. Milestone threshold equality settles as a win; ordinary integer
+lines retain pushes. Missing legacy event metadata is not reconstructed from
+old AI receipts or a newly published snapshot. Old locked forecasts, evidence,
+identities and outcomes remain exact. Invalid new event metadata holds outcome
+settlement rather than guessing the contract. Tracking remains internal.
+
+A normal R29 review also demonstrated a correctly rejected combined-stat law
+after its existing correction. This is not labeled completed coverage. Future
+bounded correction feedback names whether a positive-weight canonical pair
+is missing higher-together or opposing variation, with its exact product-sign
+criterion. It changes no source constraints, weights, outcome, exception, request
+count or retry cushion, and is not a guarantee the next model response obeys it.
+
+The actual NBA writer regression compares a three-actor prior unlocked native
+board with two exact Out actors. Previously all three old Leans survived and
+zero actors reached AI. The corrected same-source synthetic run reviews all
+three actors, publishes four scopes (three No Plays and one qualified Best
+Angle), and locks all four without changing an existing lock. The all-Out
+control reviews all three actors and publishes four conditional No Plays; the
+missing-healthy-features control still refuses the unsafe native board. These
+are synthetic process counts, not a claim about actual daily board distribution
+or a justification for a direction/grade quota.

@@ -1,5 +1,5 @@
 /** Allowlisted operational codes only: never log raw API bodies, keys or inputs. */
-export const PROPS_AI_DIAGNOSTIC_RELEASE="player_props_ai_operations_2026_11_09_r3_explicit_flex_capacity" as const;
+export const PROPS_AI_DIAGNOSTIC_RELEASE="player_props_ai_operations_2026_11_10_r4_preparation_deadlines" as const;
 const known:Readonly<Record<string,string>>={
  "Conflicting NFL provider player identity":"nfl_provider_identity_conflict",
  "Conflicting NFL player-team identity":"nfl_player_team_conflict",
@@ -20,6 +20,8 @@ const known:Readonly<Record<string,string>>={
  "input_outside_actual_review_window":"input_outside_actual_review_window",
  "job_input_identity_mismatch":"job_input_identity_mismatch",
  "invalid_input_token_count":"invalid_input_token_count",
+ "input_count_deadline_exhausted":"input_count_deadline_exhausted",
+ "input_count_completed_after_deadline":"input_count_completed_after_deadline",
  "fetch failed":"transport_failure",
 };
 export function propsAiFailureCode(error:unknown):string{

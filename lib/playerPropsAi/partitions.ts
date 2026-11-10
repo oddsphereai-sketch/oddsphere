@@ -15,7 +15,7 @@ export function playerSubset(packet: GamePacket, ids: string[]): GamePacket {
   const context: Json = {format:"peer_baseline_table_v1",schema:{row:"[playerId,name,team,opponent,heads]",head:"[marketIndex,independentMeanOrNull,availabilityTimeIndex,sourceIndex]"},markets,times,sources,rows};
   return { ...packet, players: packet.players.filter(p => included.has(p.id)), quotes: packet.quotes.filter(q => included.has(q.playerId)), ...(packet.executionQuotes?{executionQuotes:packet.executionQuotes.filter(q=>included.has(q.playerId))}:{}), sharedGameContext: context };
 }
-export async function prepareReviewParts(packet: GamePacket, args: { key: string; model?: PropsAiModel; fetchImpl?: typeof fetch; count?: (packet: GamePacket, model: PropsAiModel) => Promise<number> }) {
+export async function prepareReviewParts(packet: GamePacket, args: { key: string; model?: PropsAiModel; fetchImpl?: typeof fetch; count?: (packet: GamePacket, model: PropsAiModel) => Promise<number>; onCountStage?: (parts:number)=>void }) {
   validatePacket(packet); const model = args.model ?? PROPS_AI_PRIMARY_MODEL;
   const count = args.count ?? ((p, m) => countAiInput(jointReviewRequest(p, m, PROPS_AI_MAX_OUTPUT_PER_REQUEST), args));
   // Coverage notes plus joint scenarios need a bounded output envelope too.
@@ -23,6 +23,7 @@ export async function prepareReviewParts(packet: GamePacket, args: { key: string
   const structurallySafe = (p: GamePacket) => p.players.length <= actorLimit && p.players.reduce((n,player)=>n+player.evidence.length,0)<=800;
   let parts: {packet:GamePacket;inputTokens:number}[] = [];
   if (structurallySafe(packet)) {
+    args.onCountStage?.(1);
     const tokens=await count(packet,model);
     if(tokens<=PROPS_AI_MAX_INPUT_PER_REQUEST)parts=[{packet,inputTokens:tokens}];
   }
@@ -40,6 +41,10 @@ export async function prepareReviewParts(packet: GamePacket, args: { key: string
         const signature=JSON.stringify(bins);if(seen.has(signature))break;seen.add(signature);
         const packets=bins.map(ids=>playerSubset(packet,ids));
         if(!packets.every(structurallySafe))break;
+        // Announce the whole candidate stage before any of its counts queue.
+        // The runtime can reserve its complete generation window, including
+        // aborting sibling counts when a larger partition stage is discovered.
+        args.onCountStage?.(packets.length);
         const tokens=await Promise.all(packets.map(p=>count(p,model)));
         if(tokens.every(n=>n<=PROPS_AI_MAX_INPUT_PER_REQUEST)){parts=packets.map((p,i)=>({packet:p,inputTokens:tokens[i]}));break;}
         const from=tokens.indexOf(Math.max(...tokens)),available=tokens.map((load,i)=>({load,i})).filter(({i})=>i!==from&&bins[i].length<actorLimit).sort((a,b)=>a.load-b.load);

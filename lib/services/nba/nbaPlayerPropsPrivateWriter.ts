@@ -228,8 +228,14 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   });
   const invalidForecasts = forward.filter((row) => !nbaPlayerPropsForecastIsPublishable(row));
   const publishableForward = forward.filter(nbaPlayerPropsForecastIsPublishable);
-  const minimumCoverage = Math.max(1, Math.floor(candidates.length * 0.80));
-  if (eligibleFeatures.length < minimumCoverage || publishableForward.length === 0) {
+  // Known unavailable actors are intentionally excluded from native features.
+  // They are still part of the AI source/review; counting them as missing
+  // features could block every healthy actor and retain yesterday's Leans.
+  const availableCandidates = candidates.filter(candidate => !availability.out.has(normalize(candidate.playerName ?? "")));
+  const minimumCoverage = availableCandidates.length ? Math.max(1, Math.floor(availableCandidates.length * 0.80)) : 0;
+  const allCandidatesUnavailable = candidates.length > 0 && availableCandidates.length === 0;
+  const noNativeForwardRequired = allCandidatesUnavailable && propsAiSiteConfig().integrated;
+  if (eligibleFeatures.length < minimumCoverage || (publishableForward.length === 0 && !noNativeForwardRequired)) {
     return {
       ...result("last_known_good_preserved"),
       providerRequests: stateRequests + live.providerRequests.balldontlie + live.providerRequests.theOddsApi + live.providerRequests.owls,
@@ -241,7 +247,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       findings: [
         ...live.findings,
         ...(eligibleFeatures.length < minimumCoverage
-          ? [`feature_coverage_below_80_percent:${eligibleFeatures.length}/${candidates.length}`]
+          ? [`feature_coverage_below_80_percent:${eligibleFeatures.length}/${availableCandidates.length}`]
           : []),
         ...(publishableForward.length === 0 ? ["no_publishable_forward_decisions"] : []),
       ],

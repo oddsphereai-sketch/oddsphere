@@ -6,9 +6,10 @@ import type {Evidence,GamePacket,Json,Player} from './evidenceContract';
 import type {EspnNbaGameInjuries} from '../services/nba/espnNbaInjuries';
 import {digest,instant,invariant} from './evidence';
 import {propsTeam} from './teamIdentity';
+import {sameNflPropActorName} from './nflPlayerIdentity';
 
-export const PROPS_AI_PARTICIPATION_ELIGIBILITY_RELEASE='player_props_ai_participation_2026_11_10_r1_exact_own_status' as const;
-export type ParticipationFact={evidenceId:string;source:string;availableAt:string;effectiveAt:string;rawStatus:string;status:'blocked'|'eligible'|'unknown';reason:string;ownIdentityBasis:'exact_team_and_name'|'exact_team_report_omission'|'attached_native_actor'|'attached_batter_lineup';timeBasis:'source_response_availability'|'provider_reported'|'source_report_updated'|'evidence_availability'};
+export const PROPS_AI_PARTICIPATION_ELIGIBILITY_RELEASE='player_props_ai_participation_2026_11_10_r2_verified_nfl_actor_sources' as const;
+export type ParticipationFact={evidenceId:string;source:string;availableAt:string;effectiveAt:string;rawStatus:string;status:'blocked'|'eligible'|'unknown';reason:string;ownIdentityBasis:'exact_team_and_name'|'exact_team_report_omission'|'attached_native_actor'|'attached_batter_lineup'|'exact_team_and_id_bound_alias'|'exact_team_and_provider_id';sourcePlayerName?:string;sourcePlayerId?:string;actorProviderId?:string;sourceTeam?:string;timeBasis:'source_response_availability'|'provider_reported'|'source_report_updated'|'source_capture_clock'|'evidence_availability'};
 export type PlayerParticipationEligibility={release:typeof PROPS_AI_PARTICIPATION_ELIGIBILITY_RELEASE;status:'blocked'|'eligible'|'unknown';blocked:boolean;reason:string|null;availableAt:string|null;effectiveAt:string|null;facts:ParticipationFact[];conflict:boolean};
 const obj=(v:unknown):Record<string,unknown>=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const name=(s:unknown)=>typeof s==='string'?s.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/\b(jr|sr|ii|iii|iv)\b/g,'').replace(/[^a-z0-9]/g,''):'';
@@ -36,37 +37,66 @@ function exactFixture(value:Record<string,unknown>,packet:GamePacket){
  */
 export function playerParticipationEligibility(packet:GamePacket,player:Player):PlayerParticipationEligibility{
  const cutoff=instant(packet.cutoff),facts:ParticipationFact[]=[];
- const push=(e:Evidence,raw:unknown,basis:ParticipationFact['ownIdentityBasis'],clocks:{statusResponseAvailableAt?:unknown;reportedAt?:unknown;reportUpdatedAt?:unknown}={})=>{
+ const providerId=packet.sport==='nfl'?player.id.match(/^nfl-bdl-player:(\d+)$/)?.[1]:undefined;
+ const ownName=(raw:unknown)=>typeof raw==='string'&&Boolean(name(player.name))&&(name(raw)===name(player.name)||Boolean(providerId&&sameNflPropActorName(raw,player.name,providerId)));
+ const reportBasis=(raw:unknown):ParticipationFact['ownIdentityBasis']=>typeof raw==='string'&&name(raw)!==name(player.name)?'exact_team_and_id_bound_alias':'exact_team_and_name';
+ const push=(e:Evidence,raw:unknown,basis:ParticipationFact['ownIdentityBasis'],clocks:{statusResponseAvailableAt?:unknown;reportedAt?:unknown;reportUpdatedAt?:unknown;capturedAt?:unknown}={},identity:Pick<ParticipationFact,'sourcePlayerName'|'sourcePlayerId'|'actorProviderId'|'sourceTeam'>={})=>{
   if(typeof raw!=='string'||!raw.trim())return;
   const available=time(e.availableAt);if(!Number.isFinite(available)||available>cutoff)return;
-  const candidates=[['provider_reported',clocks.reportedAt],['source_report_updated',clocks.reportUpdatedAt],['source_response_availability',clocks.statusResponseAvailableAt]] as const;
+  const candidates=[['provider_reported',clocks.reportedAt],['source_report_updated',clocks.reportUpdatedAt],['source_response_availability',clocks.statusResponseAvailableAt],['source_capture_clock',clocks.capturedAt]] as const;
   const supplied=candidates.find(([,value])=>value!==undefined&&value!==null&&value!=='');
   const effective=supplied?time(supplied[1]):available;
   if(!Number.isFinite(effective)||effective>available||effective>cutoff)return;
-  facts.push({evidenceId:e.id,source:e.source,availableAt:e.availableAt,effectiveAt:new Date(effective).toISOString(),rawStatus:raw,...state(raw,basis),ownIdentityBasis:basis,timeBasis:supplied?.[0]??'evidence_availability'});
+  facts.push({evidenceId:e.id,source:e.source,availableAt:e.availableAt,effectiveAt:new Date(effective).toISOString(),rawStatus:raw,...identity,...state(raw,basis),ownIdentityBasis:basis,timeBasis:supplied?.[0]??'evidence_availability'});
+  return true;
  };
  for(const e of player.evidence){
-  if(e.kind!=='availability'&&e.kind!=='independent_model')continue;
+  if(e.kind!=='availability'&&e.kind!=='independent_model'&&!(packet.sport==='nfl'&&providerId&&e.kind==='matchup'&&/exact-game depth/.test(e.source)))continue;
   const value=obj(e.value);if(!exactFixture(value,packet))continue;
+  if(e.kind==='matchup'){
+   // The existing depth producer preserves BDL identity and a collector capture
+   // clock, not a provider report/update or a response-completion timestamp.
+   const sides=[obj(value.away),obj(value.home)];
+   if(new Set(sides.map(side=>typeof side.team==='string'?propsTeam(side.team):null)).size!==2||![player.team,player.opponent].every(team=>sides.some(side=>typeof side.team==='string'&&propsTeam(side.team)===propsTeam(team))))continue;
+   const own=sides.find(side=>typeof side.team==='string'&&propsTeam(side.team)===propsTeam(player.team))!;
+   const captured=time(own.capturedAt);
+   if(own.provider!=='balldontlie'||!Number.isFinite(captured)||captured>time(e.availableAt)||captured>cutoff)continue;
+   for(const row of (Array.isArray(own.roster)?own.roster:[]).map(obj)){
+    if(row.playerId!==providerId||!ownName(row.name))continue;
+    // Roster membership/"active" and projected starter flags are not a medical
+    // clearance. Explicit injury uncertainty is retained without clearing Out.
+    const raw=row.injuryStatus;
+    if(typeof raw!=='string'||state(raw,'exact_team_and_provider_id').status!=='blocked'&&!['questionable','doubtful','probable','day to day','game time decision','gtd','unknown'].includes(normalize(raw)))continue;
+    push(e,raw,'exact_team_and_provider_id',{capturedAt:own.capturedAt},{sourcePlayerName:String(row.name),sourcePlayerId:providerId,sourceTeam:String(own.team)});
+   }
+   continue;
+  }
   if(e.kind==='independent_model'){
    const a=obj(obj(value.context).availability);
    if(a.listed===true)push(e,a.status,'attached_native_actor',{reportedAt:a.reportedAt,reportUpdatedAt:a.reportUpdatedAt});
    continue;
+  }
+  const report=obj(value.originalReport);
+  const reportTeams=[report.awayTeam,report.homeTeam].filter((v):v is string=>typeof v==='string').map(propsTeam);
+  const reportMatchup=reportTeams.length===0||reportTeams.length===2&&new Set(reportTeams).size===2&&[player.team,player.opponent].every(team=>reportTeams.includes(propsTeam(team)));
+  let ownClearance=false;
+  if(exactFixture(report,packet)&&reportMatchup&&Array.isArray(report.playerClearances))for(const clearance of report.playerClearances.map(obj)){
+   if(typeof clearance.teamAbbreviation==='string'&&propsTeam(clearance.teamAbbreviation)===propsTeam(player.team)&&ownName(clearance.name)){
+    const admitted=push(e,'explicit clearance',reportBasis(clearance.name),{reportedAt:clearance.reportedAt},{sourcePlayerName:String(clearance.name),...(providerId?{actorProviderId:providerId}:{}),sourceTeam:clearance.teamAbbreviation});
+    ownClearance=Boolean(admitted)||ownClearance;
+   }
   }
   const context=obj(value.context),sides=[obj(context.away),obj(context.home)];
   const teams=sides.map(side=>typeof side.team==='string'?propsTeam(side.team):null);
   if(teams.includes(propsTeam(player.team))&&teams.includes(propsTeam(player.opponent))){
    const own=sides.find(side=>typeof side.team==='string'&&propsTeam(side.team)===propsTeam(player.team));
    const rows=Array.isArray(own?.players)?own.players:[];
-   const ownRows=rows.map(obj).filter(row=>Boolean(name(player.name))&&name(row.name)===name(player.name));
-   for(const row of ownRows)push(e,row.status,'exact_team_and_name',{statusResponseAvailableAt:row.availableAt,reportedAt:row.reportedAt??row.reported_at,reportUpdatedAt:context.reportUpdatedAt});
-   if(!ownRows.length)push(e,'not_listed','exact_team_report_omission');
-  }
-  const report=obj(value.originalReport);
-  const reportTeams=[report.awayTeam,report.homeTeam].filter((v):v is string=>typeof v==='string').map(propsTeam);
-  const reportMatchup=reportTeams.length===0||reportTeams.length===2&&new Set(reportTeams).size===2&&[player.team,player.opponent].every(team=>reportTeams.includes(propsTeam(team)));
-  if(exactFixture(report,packet)&&reportMatchup&&Array.isArray(report.playerClearances))for(const clearance of report.playerClearances.map(obj)){
-   if(typeof clearance.teamAbbreviation==='string'&&propsTeam(clearance.teamAbbreviation)===propsTeam(player.team)&&Boolean(name(player.name))&&name(clearance.name)===name(player.name))push(e,'explicit clearance','exact_team_and_name',{reportedAt:clearance.reportedAt});
+   const ownRows=rows.map(obj).filter(row=>ownName(row.name));
+   for(const row of ownRows)push(e,row.status,reportBasis(row.name),{statusResponseAvailableAt:row.availableAt,reportedAt:row.reportedAt??row.reported_at,reportUpdatedAt:context.reportUpdatedAt??report.reportUpdatedAt},{sourcePlayerName:String(row.name),...(providerId?{actorProviderId:providerId}:{}),sourceTeam:String(own!.team)});
+   // Healthy actors are deliberately omitted from the reportable injury rows.
+   // A valid own-player clearance in THIS report owns that omission; it cannot
+   // be turned into a newer synthetic uncertain status at fetch time.
+   if(!ownRows.length&&!ownClearance)push(e,'not_listed','exact_team_report_omission');
   }
   // MLB lineup records are constructed per exact actor by the existing native
   // adapter. A posted batting position is opportunity, not a medical clearance.

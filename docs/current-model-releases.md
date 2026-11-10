@@ -11,13 +11,19 @@ NFL writerR91 is `nfl_player_props_writer_2026_11_10_r91_source_participation`.
 NBA lifecycleR5 and lock-authorityR1 preserve truthful pre-lock AI-only scopes
 and locally completed finals when later reads cross the lock.
 
-Typed participationR1 independently qualifies exact own-player source facts.
+Typed participationR2 `player_props_ai_participation_2026_11_10_r2_verified_nfl_actor_sources`
+independently qualifies exact own-player source facts, including exact-ID-bound NFL
+display aliases and current own-team roster injury status. Same-report omission
+cannot erase an explicit clearance.
 Explicit nonparticipation produces No Play while retaining the conditional law,
 individual review and truthful coverage. Actual later clearances restore the
 existing qualification paths; silence, teammates' injuries and unknown reports
 cannot become a health claim. The NBA writer reuses its already fetched complete
 exact-game injury reports with real completion clocks, rather than discarding
-them after native filtering. Native/provider report clocks remain distinct.
+them after native filtering. Native/provider report clocks remain distinct. Known Out actors remain in AI
+coverage but are excluded from the native readiness denominator. An all-Out
+source still reaches the ordinary AI review without a fabricated native head.
+Actual missing healthy native features retain their existing readiness guard.
 Future native NBA headers cannot supply priors or identities at an earlier
 cutoff; independently available quote-only NBA actors remain reviewable. MLB's
 future native identity mapping remains unavailable until its real header cutoff.
@@ -41,12 +47,28 @@ one free official daily scoreboard request per writer; it does not renew the
 full-month cache's original age. The reaper honors the exact active sport owner
 before lock; unknown-charge reserves remain held. Standard monetary budgetR5,
 prices, caps, quotas, two slots/two phases and paid provider limits stay exact.
+Preparation starts with the actual one-wave completion reserve; partition-stage
+discovery can shorten the common count deadline to preserve a second wave.
+Already running and queued counts share its abort boundary and drain before any
+claim. OperationsR4 `player_props_ai_operations_2026_11_10_r4_preparation_deadlines`
+retains exact safe deadline diagnostics without printing arbitrary error text. Completion callbacks are awaited within the existing sport writer.
 Database installation and live permissions/source checks remain separate gates.
 
 No numerical law/calibration artifact, arbitrary grade cutoff, side quota,
 closed-job replay, historical locked correction or paid proof is introduced.
 Native MLB championR44, lawR1/wireR4, readerR14, memberR59/lifecycleR41 for NFL,
-trackingR43 and settlementR7 remain. Paired active Over/Under promotions,
+trackingR43 and NFL settlementR7 remain. MLB handoffR1 is
+`mlb_props_ai_handoff_2026_11_10_r1_ready_publication`; awaited same-writer
+callbacks durably publish actual pre-lock readiness through ordinary canonical
+validation and retention. Late writes cannot be backdated. MLB settlementR3 is
+`mlb_props_settlement_2026_11_10_r3_exact_locked_event`; new snapshot opt-in
+`mlb_props_locked_event_2026_11_10_r1_exact_contract` preserves the inclusive
+milestone event through internal tracking. Ordinary integer pushes and absent
+legacy metadata keep the old rule; invalid new event metadata holds. Existing
+tracking natural keys stay unchanged, so this does not create duplicate locks.
+Bounded named correction feedback now states the missing positive-weight joint
+pattern and exact canonical product-sign criterion without changing admission
+checks, scenarios, requests or the retry cushion. Paired active Over/Under promotions,
 nonparticipation demotions, original-header recovery, alternate-event recovery,
 real PostgreSQL concurrency/accounting and immutable writer/reader lock tests
 are required. Owner-directed independent reviews require two consecutive clean

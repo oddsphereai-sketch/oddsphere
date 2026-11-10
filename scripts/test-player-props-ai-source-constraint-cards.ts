@@ -41,5 +41,29 @@ assert.equal(namedSourceCorrection(input,{wireRelease:'wrong',players:bad.player
 const multiple=packet([player('x'),player('y')]),mixedRows=Object.fromEntries(multiple.players.map(p=>[p.id,row(multiple,p,invalidLaw)])),second=mixedRows.y;second.law!.outcomes.points_excluding_made_threes[0]=-1;const complete=namedSourceCorrection(multiple,{wireRelease:GENERATIVE_WIRE_RELEASE,players:mixedRows});assert.equal(complete.status,'ready');if(complete.status==='ready'){assert.deepEqual(complete.affectedActorIds,['x','y']);assert(complete.text.includes('P0:'));assert(complete.text.includes('P1: coordinates non-three points integer units'));}
 
 const closeBoundaryLaw:PlayerLaw={weights:[...Array(15).fill(10000),1],outcomes:{points:[...Array(15).fill(30),31],rebounds:v(6),assists:v(3),threes:v(1)}};const closeBoundary=namedSourceCorrection(input,{wireRelease:GENERATIVE_WIRE_RELEASE,players:{a:row(input,input.players[0],closeBoundaryLaw)}});assert.equal(closeBoundary.status,'ready');if(closeBoundary.status==='ready'){assert(!closeBoundary.text.includes('mean points=30 outside'),'Existing rounded diagnostic examples cannot make the mean/range comparison false');assert(closeBoundary.text.includes('mean points=30.00000'));}
+// Prospective feedback names the actual missing sign from positive-weight
+// canonical pairs. It never repairs, reorders or excepts the supplied law.
+const jointPairs=[['points','rebounds'],['points','assists'],['rebounds','assists']] as const;
+const ascending={points:[10,20,30],rebounds:[4,7,10],assists:[2,4,6],threes:[0,1,2]};
+for(const [first,second]of jointPairs)for(const direction of ['concordant','opposing','both'] as const){
+ const outcomes=Object.fromEntries(Object.entries(ascending).map(([stat,values])=>[stat,[...values,...v(values[1]).slice(3)]]));
+ if(direction==='concordant')outcomes[second].splice(0,3,...ascending[second].slice().reverse());
+ if(direction==='both')outcomes[first].splice(0,3,...Array<number>(3).fill(ascending[first][1]));
+ // A zero-weight contradictory scenario cannot supply the missing direction.
+ outcomes[first][15]=ascending[first][0];outcomes[second][15]=direction==='concordant'?ascending[second][0]:ascending[second][2];
+ const deficient:PlayerLaw={weights:[1,2,3,...v(0).slice(3)],outcomes},draft={wireRelease:GENERATIVE_WIRE_RELEASE,players:{a:row(input,input.players[0],deficient)}},unchanged=digest({input,deficient,draft});
+ const accepted=validateLaw('nba',input.players[0],deficient),issuesBefore=sourceForecastIssues(input,input.players[0],accepted),result=namedSourceCorrection(input,draft);
+ assert.equal(result.status,'ready');if(result.status==='ready'){
+  const missing=direction==='both'?'concordant and opposing':direction;
+  assert(result.text.includes(`joint ${first}/${second} missing ${missing}`));
+  assert(result.text.includes('both weights>0'));assert(result.text.includes('(x[i]-x[j])*(y[i]-y[j])>0'));assert(result.text.includes('<0 is opposing'));assert(result.text.includes('ties/zero weights do not count'));assert(result.text.includes('Keep same-index joint scenarios'));
+  assert(/^[\x00-\x7f]*$/.test(result.text));assert.equal(result.bytes,Buffer.byteLength(result.text,'utf8'));assert(result.bytes<=NAMED_SOURCE_CORRECTION_MAX_BYTES);
+ }
+ assert.equal(digest({input,deficient,draft}),unchanged,'Feedback cannot mutate original sources, means, weights, scenarios or exceptions');assert.deepEqual(sourceForecastIssues(input,input.players[0],accepted),issuesBefore,'Feedback cannot alter admission');
+ const permutation=[2,0,1,...Array.from({length:13},(_,i)=>i+3)],permuted:PlayerLaw={weights:permutation.map(i=>deficient.weights[i]),outcomes:Object.fromEntries(Object.entries(deficient.outcomes).map(([stat,values])=>[stat,permutation.map(i=>values[i])]))};
+ const reordered=namedSourceCorrection(input,{wireRelease:GENERATIVE_WIRE_RELEASE,players:{a:row(input,input.players[0],permuted)}});assert.equal(reordered.status,'ready');if(result.status==='ready'&&reordered.status==='ready')assert.equal(reordered.text,result.text,'Joint-index permutations preserve the exact missing-sign diagnosis');
+}
+const four=packet(Array.from({length:4},(_,i)=>player(`failure-${i}`))),fourDraft={wireRelease:GENERATIVE_WIRE_RELEASE,players:Object.fromEntries(four.players.map(p=>{const outcomes={points:[10,20,30,...v(20).slice(3)],rebounds:[4,7,10,...v(7).slice(3)],assists:[2,4,6,...v(4).slice(3)],threes:[0,1,2,...v(1).slice(3)]};return[p.id,row(four,p,{weights:[1,1,1,...v(0).slice(3)],outcomes})];}))},fourFeedback=namedSourceCorrection(four,fourDraft);assert.equal(fourFeedback.status,'ready');if(fourFeedback.status==='ready'){assert.equal(fourFeedback.affectedActorIds.length,4);assert(fourFeedback.bytes<=1984);assert(fourFeedback.text.includes('P3:'));}
+
 assert.equal(NAMED_SOURCE_CORRECTION_MAX_BYTES,1984);assert.equal(PROPS_AI_MAX_INPUT_PER_REQUEST,145000);assert.equal(PROPS_AI_MAX_OUTPUT_PER_REQUEST,7000);assert.equal(PROPS_AI_MONTHLY_CAP_MICRO_USD,60000000);assert.equal(PROPS_AI_PART_CONCURRENCY,8);assert.equal(inspectGenerativeDraft(input,bad).coordinates.length,0);assert.equal(digest(input),before,'No raw source, law, scope or budget input is changed');
 console.log('NBA source constraint cards passed: exact cited stats/prior events/all-area fact references, honest missing and legacy unknown inputs, complete named actor/category feedback, ASCII whole-text byte refusal, injection isolation, unchanged source hashes/budget constants and NFL/MLB no-op. No I/O or paid calls.');
