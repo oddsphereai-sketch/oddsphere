@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import artifact from "../lib/services/ucl/artifacts/ucl-retained-ability-2026-11-04.json";
 import { buildUclCurrentStrengthPrior } from "../lib/services/ucl/uclCurrentStrengthPrior";
 import { loadUclRetainedAbilityPrior, uclRetainedAbilityPrecision, validateUclRetainedAbilityArtifact } from "../lib/services/ucl/uclRetainedAbilityPrior";
@@ -10,6 +11,10 @@ import type { UclCompetitionContext } from "../lib/services/ucl/uclCompetitionCo
 import { deriveSoccerMarketProbabilities } from "../lib/services/soccer/soccerMarketProbabilities";
 
 const source = JSON.parse(readFileSync("docs/model-audits/2026-11-04-ucl-official-strength-source.json", "utf8"));
+const noDatabase = spawnSync(process.execPath, ["--import", "tsx", "-e", "require('./lib/services/ucl/uclModel.ts')"], {
+  encoding: "utf8", env: { ...process.env, NEXT_PUBLIC_SUPABASE_URL: "", SUPABASE_SERVICE_ROLE_KEY: "", NEXT_PUBLIC_SUPABASE_ANON_KEY: "" },
+});
+assert.equal(noDatabase.status, 0, `Pure model import must not initialize the database: ${noDatabase.stderr}`);
 const names = new Map(artifact.clubs.map(club => [club.teamId, club.name]));
 const originalFetch = globalThis.fetch; let requests = 0;
 globalThis.fetch = async () => { requests++; throw Error("No external source allowed"); };

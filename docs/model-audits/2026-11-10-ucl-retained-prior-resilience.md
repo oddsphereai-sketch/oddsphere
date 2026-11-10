@@ -157,6 +157,13 @@ or edited. The same full command runs on the standard clean CI runner; it
 must pass, and that run must not be described as reproducing the unavailable
 external CBB admission dataset. No CBB behavior changes.
 
+The first PostgreSQL CI run exposed an import coupling: the new pure model
+loaded the legacy database-backed foundation just to normalize club names.
+The exact existing identity function now lives in a pure module, with the
+legacy foundation retaining its re-export. No identity or forecast value
+changes. A child-process regression imports the model with database credentials
+explicitly absent; affected NFL recovery and UCL tests must pass before release.
+
 After merge verify actual production commit, R24/R27 canonical completed
 refresh, source evidence, all current card/record/PMF/price/grade tuples,
 historical lock hashes, then the next natural refresh/targeted sweep. A preview
