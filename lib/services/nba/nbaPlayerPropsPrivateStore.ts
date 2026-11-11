@@ -1,3 +1,5 @@
+import {assertNbaWithdrawalAuthority,nbaLockScope,type NbaWithdrawalAuthority} from "../../playerPropsAi/nbaLockAuthority";
+import {digest} from "../../playerPropsAi/evidence";
 import { stringifyPropsAiCoverage, parsePropsAiCoverage } from "../../playerPropsAi/coverageCodec";
 import { createHash } from "node:crypto";
 import { isUtf8 } from "node:buffer";
@@ -59,12 +61,17 @@ export function nbaPlayerPropsMarketHistoryKey(slateDate: string): string {
   return `nba::player-props-private-market::${slateDate}`;
 }
 
+const canonicalSnapshotReceipts=new WeakMap<NbaPlayerPropsMemberSnapshot,{checksum:string;digest:string}>();
+
 export async function readNbaPlayerPropsPrivateSnapshot(args: {
   client: SupabaseClient;
   slateDate: string;
 }): Promise<NbaPlayerPropsMemberSnapshot | null> {
   const payload = await readPayload(args.client, nbaPlayerPropsCandidateSnapshotKey(args.slateDate));
-  return payload === null ? null : decode<NbaPlayerPropsMemberSnapshot>(payload, "candidate_snapshot");
+  if(payload===null)return null;
+  const snapshot=decode<NbaPlayerPropsMemberSnapshot>(payload,"candidate_snapshot");
+  if(snapshot&&isEnvelope(payload))canonicalSnapshotReceipts.set(snapshot,{checksum:payload.checksum,digest:digest(snapshot)});
+  return snapshot;
 }
 
 /**
@@ -76,15 +83,31 @@ export async function writeNbaPlayerPropsPrivateSnapshot(args: {
   client: SupabaseClient;
   snapshot: NbaPlayerPropsMemberSnapshot;
   source: string;
-}): Promise<{ written: true; jsonBytes: number; gzipBytes: number }> {
+  writerRunId?:string;
+  expectedSnapshot?:NbaPlayerPropsMemberSnapshot|null;
+  publicationBefore?:string;
+  sourceCutoff?:string;
+  withdrawalAuthority?:NbaWithdrawalAuthority;
+}): Promise<{ written: true; jsonBytes: number; gzipBytes: number;serverAdmittedAt?:string;serverWriteCompletedAt?:string }> {
   if (args.snapshot.publicEnabled !== false) throw new Error("NBA props private store refuses public snapshots.");
-  if (args.snapshot.games.length > 0 && args.snapshot.decisions.length === 0) {
+  if(args.withdrawalAuthority){
+    if(!args.writerRunId||!args.expectedSnapshot)throw new Error("NBA withdrawal requires the existing leased canonical writer");
+    assertNbaWithdrawalAuthority(args.withdrawalAuthority,args.snapshot,args.expectedSnapshot);
+  }
+  if (args.snapshot.games.length > 0 && args.snapshot.decisions.length === 0&&!args.withdrawalAuthority) {
     throw new Error("NBA props last-known-good snapshot refuses an empty decision set for a populated slate.");
+  }
+  if(args.writerRunId){
+    if(args.expectedSnapshot===undefined)throw new Error("NBA guarded publication requires its canonical prior snapshot");
+    if(args.expectedSnapshot&&!canonicalSnapshotReceipts.has(args.expectedSnapshot))throw new Error("NBA guarded publication prior did not originate in the canonical reader");
+    if(args.expectedSnapshot&&canonicalSnapshotReceipts.get(args.expectedSnapshot)!.digest!==digest(args.expectedSnapshot))throw new Error("NBA canonical prior snapshot changed after its read");
+    const rows=new Map(args.snapshot.decisions.map(row=>[nbaLockScope(row),row]));
+    for(const row of args.expectedSnapshot?.decisions??[])if(row.lockedAt!==null&&digest(row)!==digest(rows.get(nbaLockScope(row))??null))throw new Error("NBA guarded publication refuses a changed or omitted stored lock");
   }
   const envelope = encode(args.snapshot, "candidate_snapshot");
   const starts = args.snapshot.games.map((game) => Date.parse(game.scheduledStart)).filter(Number.isFinite);
   const staleUntil = new Date((starts.length ? Math.max(...starts) : Date.parse(args.snapshot.generatedAt)) + 48 * HOUR_MS).toISOString();
-  const { error } = await args.client.from("lab_response_snapshots").upsert({
+  const record={
     snapshot_key: nbaPlayerPropsCandidateSnapshotKey(args.snapshot.slateDate),
     kind: "daily_edge",
     sport: "nba",
@@ -96,8 +119,22 @@ export async function writeNbaPlayerPropsPrivateSnapshot(args: {
     expires_at: new Date(Date.parse(args.snapshot.generatedAt) + 90 * 60_000).toISOString(),
     stale_until: staleUntil,
     updated_at: args.snapshot.generatedAt,
-  }, { onConflict: "snapshot_key" });
+  };
+  if(args.writerRunId){
+    const {data,error}=await args.client.rpc("publish_nba_player_props_private_snapshot_v1",{
+      p_writer_run:args.writerRunId,p_expected_checksum:args.expectedSnapshot?canonicalSnapshotReceipts.get(args.expectedSnapshot)!.checksum:null,
+      p_record:record,p_admit_before:args.publicationBefore??null,p_source_cutoff:args.sourceCutoff??null});
+    if(error||data?.written!==true||data.checksum!==envelope.checksum)throw new Error(`NBA guarded publication refused: ${error?.message??data?.status??"invalid_receipt"}`);
+    const admitted=Date.parse(data.server_admitted_at),completed=Date.parse(data.server_write_completed_at);
+    if(!Number.isFinite(admitted)||!Number.isFinite(completed)||completed<admitted
+      ||(args.publicationBefore&&(completed>=Date.parse(args.publicationBefore)||admitted<Date.parse(args.sourceCutoff!))))throw new Error("NBA guarded publication returned an invalid temporal receipt");
+    canonicalSnapshotReceipts.set(args.snapshot,{checksum:envelope.checksum,digest:digest(args.snapshot)});
+    return{written:true,jsonBytes:envelope.uncompressedBytes,gzipBytes:envelope.compressedBytes,
+      serverAdmittedAt:data.server_admitted_at,serverWriteCompletedAt:data.server_write_completed_at};
+  }
+  const{error}=await args.client.from("lab_response_snapshots").upsert(record,{onConflict:"snapshot_key"});
   if (error) throw new Error(`NBA props private snapshot write failed: ${error.message}`);
+  canonicalSnapshotReceipts.set(args.snapshot,{checksum:envelope.checksum,digest:digest(args.snapshot)});
   return { written: true, jsonBytes: envelope.uncompressedBytes, gzipBytes: envelope.compressedBytes };
 }
 

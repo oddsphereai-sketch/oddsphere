@@ -9,7 +9,7 @@ import type { GamePacket } from "./evidenceContract";
 import { invariant, validatePacket } from "./evidence";
 import { readableInput, evidenceAliases } from "./input";
 import { type PlayerReview, validatePlayerReview,primitives } from "./law";
-import { verifiedReaderSource } from "./sourceCodec";
+import { verifiedReaderSourceV3 as verifiedReaderSource } from "./sourceCodec";
 import type { Json } from "./evidenceContract";
 import {PROPS_AI_WIRE_RELEASE} from "./scenarioCoordinates";
 import {validateSourceForecast,validateScenarioOpportunities} from "./forecastSanity";

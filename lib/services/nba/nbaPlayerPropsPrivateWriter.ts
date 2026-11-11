@@ -1,8 +1,9 @@
+import {digest} from "../../playerPropsAi/evidence";
 import {reviewPropsForSite} from "../../playerPropsAi/siteRuntime";
 import {liveNbaPacket} from "../../playerPropsAi/liveSources";
 import {applyNbaSiteAi,restoreNbaNativeGame} from "../../playerPropsAi/siteBindings";
 import {siteAiDecisions} from "../../playerPropsAi/publication";
-import {observeNbaSourceAuthority,captureNbaHandoffBundle,mergeNbaHandoffs,type NbaLockHandoff} from "../../playerPropsAi/nbaLockAuthority";
+import {observeNbaSourceAuthority,captureNbaHandoffBundle,mergeNbaHandoffs,captureNbaWithdrawalAuthority,NBA_PROPS_WITHDRAWAL_AUTHORITY_RELEASE,type NbaLockHandoff} from "../../playerPropsAi/nbaLockAuthority";
 import type {GamePacket} from "../../playerPropsAi/evidenceContract";
 import type {AcceptedGameReview} from "../../playerPropsAi/reviewer";
 import type {CapturedNbaParticipationReport} from "../../playerPropsAi/participationEligibility";
@@ -14,7 +15,8 @@ import {
   buildNbaPlayerPropsForwardDecisions,
   type NbaPlayerPropsForwardDecision,
 } from "./nbaPlayerPropsFrozenRuntime";
-import { advanceNbaPlayerPropsCandidateLifecycle } from "./nbaPlayerPropsLifecycle";
+import {PROPS_AI_NBA_CURRENT_SOURCE_RELEASE} from "../../playerPropsAi/nbaSourceIdentity";
+import { advanceNbaPlayerPropsCandidateLifecycle,NBA_PLAYER_PROPS_LOCK_LEAD_MINUTES } from "./nbaPlayerPropsLifecycle";
 import { collectNbaPlayerPropsLiveMarket } from "./nbaPlayerPropsLiveCollector";
 import {
   collectNbaPlayerPropsCurrentState,
@@ -36,7 +38,7 @@ import {
   buildNbaPlayerPropsPointInTimeFeatures,
   type NbaPlayerPropCandidate,
 } from "./nbaPlayerPropsPointInTimeFeatures";
-import { buildNbaPlayerPropsMemberSnapshot, type NbaPlayerPropsMemberDecision } from "./nbaPlayerPropsProductContract";
+import { buildNbaPlayerPropsMemberSnapshot, type NbaPlayerPropsMemberDecision,type NbaPlayerPropsMemberSnapshot } from "./nbaPlayerPropsProductContract";
 import { buildNbaPlayerPropsReaderEvidence } from "./nbaPlayerPropsReaderContract";
 import { captureNbaPlayerPropsPrivateTracking } from "./nbaPlayerPropsPrivateTrackingStore";
 import { settleNbaPlayerPropsTrackedSlates,hasNbaPropsUnsettledTrackedSlates } from "./nbaPlayerPropsSettlementStore";
@@ -44,7 +46,7 @@ import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
 import { buildNbaPlayerPropsMemberPrices } from "./nbaPlayerPropsMemberPrices";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_11_10_r18_verified_reader_claims" as const;
+  "nba_player_props_private_writer_2026_11_11_r19_durable_review_publication" as const;
 
 export function nbaPlayerPropsForecastIsPublishable(
   row: Pick<NbaPlayerPropsForwardDecision, "independentProjection" | "finalProjection">,
@@ -166,6 +168,12 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     };
   }
 
+  const integrated=propsAiSiteConfig().integrated;
+  if(integrated&&!args.writerRunId)throw new Error("NBA integrated publication requires the existing sport lease owner");
+  const initialPrevious=await readNbaPlayerPropsPrivateSnapshot({client:args.client,slateDate:args.slateDate});
+  const emptyCurrentGames=new Set(live.games.filter(game=>!live.observations.some(q=>q.canonicalGameId===game.canonicalGameId&&!q.isOpening&&!q.isLive)).map(game=>game.canonicalGameId));
+  const withdrawalOnly=integrated&&live.games.every(game=>emptyCurrentGames.has(game.canonicalGameId))
+    &&Boolean(initialPrevious?.decisions.length);
   const stateGames = [...priorState.games, ...(currentState?.games ?? [])];
   const stateBoxes = [...priorState.boxes, ...(currentState?.boxes ?? [])];
   const stateAdvanced = [...priorState.advanced, ...(currentState?.advanced ?? [])];
@@ -239,8 +247,8 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   const availableCandidates = candidates.filter(candidate => !isOut(candidate.gameId,candidate.teamId,candidate.playerName));
   const minimumCoverage = availableCandidates.length ? Math.max(1, Math.floor(availableCandidates.length * 0.80)) : 0;
   const allCandidatesUnavailable = candidates.length > 0 && availableCandidates.length === 0;
-  const noNativeForwardRequired = allCandidatesUnavailable && propsAiSiteConfig().integrated;
-  if (eligibleFeatures.length < minimumCoverage || (publishableForward.length === 0 && !noNativeForwardRequired)) {
+  const noNativeForwardRequired = (allCandidatesUnavailable&&integrated)||withdrawalOnly;
+  if ((!withdrawalOnly&&eligibleFeatures.length < minimumCoverage) || (publishableForward.length === 0 && !noNativeForwardRequired)) {
     return {
       ...result("last_known_good_preserved"),
       providerRequests: stateRequests + live.providerRequests.balldontlie + live.providerRequests.theOddsApi + live.providerRequests.owls,
@@ -328,22 +336,125 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     generatedAt: now,
     slateDate: args.slateDate,
     games,
-    decisions: memberDecisions,
+    decisions: [...memberDecisions,...(integrated?initialPrevious?.decisions.filter(row=>emptyCurrentGames.has(row.gameId)&&!memberDecisions.some(current=>current.gameId===row.gameId&&current.playerId===row.playerId&&current.market===row.market))??[]:[])],
     inputRows: mergedMarket.history.observations.length,
   });
   const aiBaseline=candidate;
-  const integrated=propsAiSiteConfig().integrated,lockFrames:NbaLockHandoff[]=[];
+  const lockFrames:NbaLockHandoff[]=[];
+  // This remains the sole sport-leased writer. Ready games commit through one
+  // awaited queue, before unrelated review work can consume the route budget.
+  // A callback never writes a stale copy over a sibling game's publication.
+  let previous=initialPrevious;
+  let publicationQueue:Promise<void>=Promise.resolve();
+  let publicationFailure:unknown;
+  let trackingConflicts=0;
+  const unreadyGames=new Set<string>();
+  type WithdrawalReceipt={release:typeof NBA_PROPS_WITHDRAWAL_AUTHORITY_RELEASE;gameId:string;start:string;cutoff:string;observedAt:string;sourcePacketHash:string};
+  const receipts=(snapshot:NbaPlayerPropsMemberSnapshot|null)=>(snapshot as (NbaPlayerPropsMemberSnapshot&{sourceWithdrawals?:WithdrawalReceipt[]})|null)?.sourceWithdrawals??[];
+  type PublicationSource={packet:GamePacket;frame:NbaLockHandoff};
+  const commit=async(snapshot:NbaPlayerPropsMemberSnapshot,publicationNow:string,source?:PublicationSource,
+    withdrawalAuthority?:Parameters<typeof writeNbaPlayerPropsPrivateSnapshot>[0]['withdrawalAuthority'])=>{
+    await writeNbaPlayerPropsPrivateSnapshot({client:args.client,snapshot,
+      source:NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE,...(integrated?{writerRunId:args.writerRunId,expectedSnapshot:previous}:{}),
+      ...(source?{publicationBefore:source.packet.lock,sourceCutoff:source.packet.cutoff}:{}),
+      ...(withdrawalAuthority?{withdrawalAuthority}:{})});
+    previous=snapshot;
+    const tracking=await captureNbaPlayerPropsPrivateTracking({client:args.client,season:args.season,
+      slateDate:args.slateDate,evaluatedAt:publicationNow,snapshot});
+    trackingConflicts+=tracking.conflicts;
+  };
+  const persist=async(publicationNow:string,source?:PublicationSource)=>{
+    const gameId=source?(source.packet.sourceGameId??source.packet.gameId):null;
+    let canonicalOtherRows=gameId?(previous??aiBaseline).decisions.filter(row=>row.gameId!==gameId):null;
+    // Before a later game advances the shared publication header, latch any
+    // already-due game from the actual canonical publication and existing source
+    // authority. A row's evaluation clock alone never establishes publication.
+    // The checkpoint stays bounded by these existing serial callbacks and uses
+    // the same leased/CAS store and tracking path; it adds no job or refresh.
+    if(gameId&&previous&&previous.decisions.some(row=>row.gameId!==gameId&&row.lockedAt===null
+      &&Date.parse(publicationNow)>=Date.parse(row.scheduledStart)-NBA_PLAYER_PROPS_LOCK_LEAD_MINUTES*60000)){
+      const prepared=candidate;
+      let due=advanceNbaPlayerPropsCandidateLifecycle({now:publicationNow,previous,candidate:previous,
+        ...(integrated?{lockHandoff:mergeNbaHandoffs(lockFrames)}:{})}).snapshot;
+      if(receipts(previous).length)due={...due,sourceWithdrawals:receipts(previous)} as NbaPlayerPropsMemberSnapshot;
+      canonicalOtherRows=due.decisions.filter(row=>row.gameId!==gameId);
+      // If every old unlocked row is ineligible, the ordinary empty-board
+      // guard still applies. Compose those removals with this valid ready game
+      // in the same final write rather than blocking its independent handoff.
+      if(due.decisions.length)await commit(due,publicationNow);
+      candidate=buildNbaPlayerPropsMemberSnapshot({...prepared,generatedAt:publicationNow,
+        decisions:[...due.decisions.filter(row=>row.gameId!==gameId),...prepared.decisions.filter(row=>row.gameId===gameId)],
+        inputRows:aiBaseline.diagnostics.inputRows});
+    }
+    // The current callback then advances its complete game while retaining the
+    // other canonical payloads, including the checkpoint's exact first locks.
+    const scoped=(snapshot:NbaPlayerPropsMemberSnapshot)=>gameId?buildNbaPlayerPropsMemberSnapshot({...snapshot,
+      games:snapshot.games.filter(g=>g.gameId===gameId),decisions:snapshot.decisions.filter(r=>r.gameId===gameId),inputRows:snapshot.diagnostics.inputRows}):snapshot;
+    const lifecycle={...advanceNbaPlayerPropsCandidateLifecycle({now:publicationNow,previous:previous?scoped(previous):null,candidate:scoped(candidate),
+      ...(integrated?{lockHandoff:mergeNbaHandoffs(lockFrames)}:{})})};
+    if(gameId)lifecycle.snapshot=buildNbaPlayerPropsMemberSnapshot({...candidate,generatedAt:publicationNow,
+      decisions:[...canonicalOtherRows!,...lifecycle.snapshot.decisions],inputRows:aiBaseline.diagnostics.inputRows});
+    const priorReceipts=receipts(previous).filter(receipt=>receipt.gameId!==gameId);
+    const withdrawn=source?.packet.sourceOfferSetStatus==='empty';
+    const nextReceipts=[...priorReceipts,...(withdrawn&&source?[{release:NBA_PROPS_WITHDRAWAL_AUTHORITY_RELEASE,gameId:gameId!,start:source.packet.start,cutoff:source.packet.cutoff,observedAt:publicationNow,sourcePacketHash:source.frame.observations[0].sourcePacketHash}]:[])];
+    if(nextReceipts.length)lifecycle.snapshot={...lifecycle.snapshot,sourceWithdrawals:nextReceipts} as NbaPlayerPropsMemberSnapshot;
+    // An already empty board needs no refreshed publication clock. This also
+    // avoids laundering old withdrawal evidence through a later final sweep.
+    if(previous&&previous.decisions.length===0&&lifecycle.snapshot.decisions.length===0){candidate=previous;return{...lifecycle,snapshot:previous};}
+    const withdrawalAuthority=withdrawn&&source&&previous?captureNbaWithdrawalAuthority({packet:source.packet,source:source.frame,
+      currentObservations:live.observations,collectorFindings:live.findings,previous,candidate:lifecycle.snapshot}):undefined;
+    await commit(lifecycle.snapshot,publicationNow,source,withdrawalAuthority);
+    candidate=lifecycle.snapshot;
+    return lifecycle;
+  };
   if(integrated&&priorState&&currentState){
-    // Actual pre-lock observations/captures bind both new AI-only scopes and
-    // freshly constructed native fallback before later I/O can cross the lock.
-    const observe=(packet:GamePacket,review:AcceptedGameReview|null,lookupAvailable:boolean)=>{
-      lockFrames.push(observeNbaSourceAuthority(packet,review,lookupAvailable));
-      const observedAt=new Date().toISOString();
-      if(Date.parse(observedAt)>=Date.parse(packet.lock))return;
-      lockFrames.push(captureNbaHandoffBundle(aiBaseline.decisions,packet,review,"native"));
-      candidate=restoreNbaNativeGame(candidate,aiBaseline,packet,observedAt);
-      if(review)candidate=applyNbaSiteAi(candidate,packet,siteAiDecisions(packet,review,observedAt),observedAt);
-      lockFrames.push(captureNbaHandoffBundle(candidate.decisions,packet,review,"ai"));
+    const lastObservation=new Map<string,{packetHash:string;reviewHash:string|null;lookupAvailable:boolean}>();
+    const observe=(packet:GamePacket,review:AcceptedGameReview|null,lookupAvailable:boolean):Promise<void>=>{
+      const work=publicationQueue.then(async()=>{
+        const gameId=packet.sourceGameId??packet.gameId;
+        if(packet.sourceInputRelease!==PROPS_AI_NBA_CURRENT_SOURCE_RELEASE||!Array.isArray(packet.executionQuotes)
+          ||!games.some(game=>game.gameId===gameId&&Date.parse(game.scheduledStart)===Date.parse(packet.start))
+          ||Date.parse(packet.lock)!==Date.parse(packet.start)-NBA_PLAYER_PROPS_LOCK_LEAD_MINUTES*60000)throw new Error("NBA publication source identity or complete execution authority unavailable");
+        const packetHash=digest(packet),reviewHash=review?digest(review):null,last=lastObservation.get(gameId);
+        if(last?.packetHash===packetHash&&last.reviewHash===reviewHash&&last.lookupAvailable===lookupAvailable)return;
+        const sourceFrame=observeNbaSourceAuthority(packet,review,lookupAvailable);
+        lockFrames.push(sourceFrame);
+        // Sample when this game actually leaves the queue. Callback arrival or
+        // paid-job completion never backdates a new publication across lock.
+        const observedAt=sourceFrame.observations[0].observedAt;
+        if(Date.parse(observedAt)>=Date.parse(packet.lock))return;
+        if(receipts(previous).some(receipt=>receipt.gameId===gameId&&Date.parse(receipt.observedAt)>Date.parse(packet.cutoff)))throw new Error("NBA current source predates its canonical withdrawal");
+        const native=captureNbaHandoffBundle(aiBaseline.decisions,packet,review,"native");
+        lockFrames.push(native);
+        const durableBase=previous??aiBaseline;
+        candidate=restoreNbaNativeGame(durableBase,aiBaseline,packet,observedAt);
+        if(review&&lookupAvailable)candidate=applyNbaSiteAi(candidate,packet,siteAiDecisions(packet,review,observedAt),observedAt);
+        const ai=captureNbaHandoffBundle(candidate.decisions,packet,review,"ai");
+        lockFrames.push(ai);
+        // The complete current game uses only actual source-qualified native
+        // rows or validated reviewed rows. Withdrawn quotes cannot resurrect
+        // yesterday's AI or an unconfirmed native preselection.
+        const readyRows=new Map([...native.proofs,...ai.proofs].map(proof=>[
+          JSON.stringify([proof.row.gameId,proof.row.playerId,proof.row.market]),proof.row]));
+        const protectedRows=durableBase.decisions.filter(row=>row.gameId===gameId&&row.lockedAt!==null);
+        for(const row of protectedRows)readyRows.set(JSON.stringify([row.gameId,row.playerId,row.market]),row);
+        // Unavailable or declined actors may have no source-qualified numeric
+        // rows. Preserve the original LKG clock until a complete representation
+        // is ready; this is neither an empty-source withdrawal nor a fresh review.
+        if(readyRows.size===0&&packet.sourceOfferSetStatus!=="empty"){
+          candidate=durableBase;unreadyGames.add(gameId);return;
+        }
+        candidate=buildNbaPlayerPropsMemberSnapshot({...candidate,generatedAt:observedAt,
+          decisions:[...candidate.decisions.filter(row=>row.gameId!==gameId),...readyRows.values()],
+          inputRows:aiBaseline.diagnostics.inputRows});
+        await persist(observedAt,{packet,frame:sourceFrame});
+        unreadyGames.delete(gameId);
+        lastObservation.set(gameId,{packetHash,reviewHash,lookupAvailable});
+      });
+      // Runtime reports callback errors as operational fallback. Keep a sticky
+      // failure so its later return cannot claim a successful final write.
+      publicationQueue=work.catch(error=>{publicationFailure??=error;});
+      return work;
     };
     const contexts=await args.client.from("lab_response_snapshots").select("payload,generated_at").eq("sport","nba").like("snapshot_key","%current-only::live-copy%").order("generated_at",{ascending:false}).limit(4);
     await reviewPropsForSite({client:args.client,sport:"nba",writerRunId:args.writerRunId,deadline:Math.min(Date.parse(now)+480000,args.aiDeadline??Infinity),
@@ -353,21 +464,11 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       onReviewObserved:(packet,review,lookupAvailable)=>observe(packet,review,lookupAvailable),
       onReviewReady:(packet,review)=>observe(packet,review,true)});
   }
-  const previous = await readNbaPlayerPropsPrivateSnapshot({ client: args.client, slateDate: args.slateDate });
-  const publicationNow=propsAiSiteConfig().integrated?new Date().toISOString():now;
-  const lifecycle = advanceNbaPlayerPropsCandidateLifecycle({ now:publicationNow, previous, candidate,...(integrated?{lockHandoff:mergeNbaHandoffs(lockFrames)}:{}) });
-  await writeNbaPlayerPropsPrivateSnapshot({
-    client: args.client,
-    snapshot: lifecycle.snapshot,
-    source: NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE,
-  });
-  const tracking = await captureNbaPlayerPropsPrivateTracking({
-    client: args.client,
-    season: args.season,
-    slateDate: args.slateDate,
-    evaluatedAt: now,
-    snapshot: lifecycle.snapshot,
-  });
+  await publicationQueue;
+  if(publicationFailure)throw publicationFailure;
+  if(unreadyGames.size)throw new Error(`NBA current source has no ready forecast; last-known-good preserved:${[...unreadyGames].sort().join(",")}`);
+  const publicationNow=integrated?new Date().toISOString():now;
+  const lifecycle=await persist(publicationNow);
   const settlement = args.fullRefresh && currentState
     ? await settleNbaPlayerPropsTrackedSlates({
         client: args.client,
@@ -393,7 +494,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     findings: [
       ...live.findings,
       ...(invalidForecasts.length > 0 ? [`invalid_nonpositive_forecasts_excluded:${invalidForecasts.length}`] : []),
-      ...(tracking.conflicts > 0 ? [`locked_tracking_conflicts_preserved:${tracking.conflicts}`] : []),
+      ...(trackingConflicts > 0 ? [`locked_tracking_conflicts_preserved:${trackingConflicts}`] : []),
       ...(stateCorrections > 0 ? [`official_source_corrections_ingested:${stateCorrections}`] : []),
       ...(settlement?.corrected ? [`official_stat_corrections_recorded:${settlement.corrected}`] : []),
     ],

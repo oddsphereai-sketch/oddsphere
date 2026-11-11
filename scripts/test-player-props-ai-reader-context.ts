@@ -54,6 +54,10 @@ try{
   for(const row of result.locked.decisions){const prior=originalLock.decisions.find(r=>r.playerId===row.playerId&&r.market===row.market)!;const forecast=(r:typeof row)=>{const{sourceEligibility:currentSource,...acceptedEvidence}=r.aiReview!;void currentSource;return{...r,aiReview:acceptedEvidence};};assert.deepEqual(forecast(row),forecast(prior),'Benign medical set/clock refresh retains forecast/price/grade and accepted text/law; current source eligibility keeps its actual provenance');}
  }
  assert.notEqual(criticalContextHashes(positive[1]).a,review.criticalContextHashes.a,'Legacy raw-order hash is unchanged');
+ const priorClaimReview={...review,release:'player_props_ai_2026_11_10_r31_verified_reader_claims' as const};
+ for(const packet of positive){assert(reviewedReaderContextCurrent(packet,priorClaimReview,'a'),'Original R31 canonical medical contract stays eligible under R32');assert.equal(siteAiDecisions(packet,priorClaimReview,laterAt).length,3);}
+ assert.equal(reviewedReaderContextCurrent(positive[1],{...review,release:'player_props_ai_2026_11_10_r30_source_and_slate_authority'},'a'),false,'Pre-claim legacy release retains exact raw-context precedence');
+
  // Every substantive row field remains an input, including other actors whose
  // injuries may alter the reviewed actor's opportunity or matchup.
  const changes:[string,(values:ReturnType<typeof groups>)=>void][]=[

@@ -8,10 +8,9 @@ import {criticalContextHashes} from './criticalContext';
 import {digest} from './evidence';
 import {currentBatterLineup} from './readerClaims';
 import {playerParticipationEligibility} from './participationEligibility';
-import {PROPS_AI_READER_CLAIMS_RELEASE} from './releases';
+import {PROPS_AI_READER_CLAIMS_RELEASE,propsReviewHasVerifiedReaderClaims} from './releases';
 import {readerCanonicalContextHash,PROPS_AI_READER_CONTEXT_RELEASE} from './readerContext';
 
-const CLAIM_REVIEW_RELEASE='player_props_ai_2026_11_10_r31_verified_reader_claims';
 const object=(value:unknown):Record<string,unknown>=>value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};
 const status=(value:string)=>value.trim().toLowerCase().replace(/[_-]+/g,' ').replace(/\s+/g,' ');
 export function readerAvailabilityContextHash(packet:GamePacket,playerId:string){
@@ -32,7 +31,7 @@ export function reviewedReaderContextCurrent(packet:GamePacket,review:AcceptedGa
  const player=packet.players.find(p=>p.id===playerId);if(!player)return false;
  // The established hash is actor-local; avoid rehashing the complete slate
  // for every actor when publication evaluates their scopes independently.
- if(review.release!==CLAIM_REVIEW_RELEASE)return review.criticalContextHashes?.[playerId]===criticalContextHashes({...packet,players:[player]})[playerId];
+ if(!propsReviewHasVerifiedReaderClaims(review.release))return review.criticalContextHashes?.[playerId]===criticalContextHashes({...packet,players:[player]})[playerId];
  const proof=object(review.players.find(p=>p.playerId===playerId)?.sourceReadProofs);
  return proof.release===PROPS_AI_READER_CLAIMS_RELEASE&&proof.contextRelease===PROPS_AI_READER_CONTEXT_RELEASE
   &&typeof proof.originalCriticalContextHash==='string'&&proof.originalCriticalContextHash===review.criticalContextHashes?.[playerId]
