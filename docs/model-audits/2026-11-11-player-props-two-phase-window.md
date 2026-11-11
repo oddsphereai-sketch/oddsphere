@@ -1,4 +1,4 @@
-# Complete-phase time admission and scheduled prop priority
+# Complete-phase execution and source-grounded numerical admission
 
 Starting main: `a4011d8f89ebaf253e0ad3cf0d6e933d3acf3ab9`.
 Task branch: `codex/props-ai-two-phase-window-20261111`.
@@ -34,8 +34,10 @@ unchanged.
 
 ## Scope and release identities
 
-Shared generation R33; operations R5; NBA route R26, rescue R2 and writer R20;
-NFL writer `nfl_player_props_writer_2026_11_11_r94_two_phase_execution_window`.
+Shared generation R34; operations R5; NBA route R26, rescue R2 and writer R21;
+NFL writer `nfl_player_props_writer_2026_11_11_r95_source_mean_admission`.
+The unlaunched R33 timing candidate is retained as an exact test/parser pin.
+NBA named source constraint cards advance to R2 with shared numeric support.
 Named source tablesV3, wireR5, factual claimsR1, source contextR1, selectionR6,
 NFL decisionR13, gradeR3, scheduleR3 and budgetR5 retain their own semantics.
 Native MLB `mlb_props_2026_10_21_r44` is unchanged. R32 and older accepted laws
@@ -43,8 +45,10 @@ retain their original releases and exact reader/lock precedence.
 
 ## Impact and limits
 
-Same input and accepted law produce exactly the same projection, probability,
-price, confidence, grade and stake: zero numerical/policy promotions or demotions.
+The timing and private-transport changes alone preserve same-law numerical and
+policy outputs. R34 additionally changes prospective admission of unsupported
+source means, so affected scopes can decline; this impact is reported separately
+below rather than described as zero board impact.
 Avoiding a doomed purchase can leave a slot unclaimed until its next ordinary
 opportunity. This is explicit incomplete coverage, never a completed evaluation.
 A crowded slate or an unavailable vendor can still exceed the bounded runtime;
@@ -93,3 +97,49 @@ Prove unchanged legacy locks and exact member precedence, original request clock
 TypeScript, lint, webpack build, real disposable PostgreSQL proofs, two fresh
 consecutive rounds of three whole-product reviewers, latest-main integration and
 protected exact-tree PR checks. Deployment alone is not live review proof.
+
+## Sparse numerical support repair
+
+A separate fresh whole-product review reproduced an actual parser/publication
+failure: with two genuine played values and a credible independent mean, an
+extreme mean was accepted because the old guard required three observations.
+Prior-only combined events exposed the same omission. This is a source-unit
+validation defect, independent of whether the old pick won or lost.
+
+The shared support helper now exposes the exact same mean admission boundaries
+to admission and NBA named constraint cards/correction feedback. It reconciles
+actual same-game observations, accepts canonical integer count/net-yard units,
+refuses future played/prior anchors and conflicting component/opportunity
+records, and derives combinations only from complete same-game components.
+Fractional offensive/defensive rebounds cannot manufacture an integer total.
+An exact combination prior never fabricates primitive support. Signed NFL
+components need their own supported range before they can qualify a combined
+forecast; otherwise extreme opposing values could cancel into a plausible total.
+
+At least a real played span, a played value plus a credible differing exact prior,
+or an existing qualified multi-game range establishes a mean boundary. Missing
+support produces an explicit scope-level numeric-support decline. Repeated zero
+rare events can use canonical plate appearances or a positive exact prior rather
+than a false zero ceiling. Anytime-touchdown is a binary event with physical
+mean units [0,1], not a cap on latent touchdown counts. No arbitrary multiplier,
+prior-only copy, scenario-tail cap, probability clipping, grade flattening, new
+source call or prediction calibration is introduced.
+
+Positive controls include supported sparse means and source-head role changes,
+Over and Under Best Angle promotions, an explicitly declined invalid scope
+followed by supported recovery, signed negative yards, rare-event opportunity
+support and integer pushes. Adversarial controls include zero/one/two histories,
+combined-prior allocation, duplicate/conflicting/fractional/future inputs and
+signed-component cancellation. Actual parser/member/lock controls preserve
+original old laws and stored locks. Raw factual-source presence is separate from
+whether those facts establish a credible numerical magnitude.
+
+Frozen prospective board-impact replay is internal, with no historical law,
+pick, grade or outcome mutation. It is an admission audit, not a counterfactual
+win-rate claim. All-player review completion, qualified numerical scopes and
+actual live priced rows remain three distinct coverage measures.
+
+The fixed sparse fixture has two formerly accepted Best Angles; explicit decline
+leaves one, while supported repaired Over and Under drafts each retain two, and
+a genuine quantitative source-head recovery also retains two. These are paired
+correctness controls, not a target board size or observed live-product impact.

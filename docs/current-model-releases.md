@@ -1,4 +1,39 @@
-## November 11 player-prop complete-phase timing and due-review priority R33
+## November 11 player-prop source-grounded sparse-mean admission R34
+
+Future shared NBA/NFL/MLB generation is
+`player_props_ai_2026_11_11_r34_source_mean_admission`; sole NBA writer is
+`nba_player_props_private_writer_2026_11_11_r21_source_mean_admission` and NFL
+writer is `nfl_player_props_writer_2026_11_11_r95_source_mean_admission`.
+This includes the complete-phase timing, same-lease priority and private
+member-transport fixes described in the prelaunch R33 section below.
+
+Numeric source checks now apply to sparse histories and all offered derived
+markets, rather than skipping mean admission below three observations. Played
+canonical integer units, exact same-game component joins, nonconflicting
+opportunities and genuine exact-market priors establish a review range. One
+unsupported scalar is not a range; a combined prior is never allocated to its
+components. Signed components of an offered combination require their own
+credible scale so extreme positive and negative forecasts cannot cancel into an
+apparently sound total. Missing numerical support explicitly declines that scope;
+it does not falsely claim that supplied factual context is absent. All-zero rare
+events may use a real opportunity scale or positive exact prior. Actual binary
+anytime-touchdown event units, integer pushes, supported negative net yards,
+source-grounded role changes and large tails with supported means remain valid.
+
+NBA named constraint cardsR2 and correction feedback use the same support helper
+as admission. Raw source values, source/market evidence, independent forecasts,
+price/grade formulas, two logical slots, bounded phases, models and spending
+limits remain unchanged. Accepted R33/R32 and older laws are never reparsed under
+R34; stored locks retain exact writer and reader precedence. Native MLB champion
+`mlb_props_2026_10_21_r44`, wireR5, selectionR6 and gradeR3 remain unchanged.
+
+Focused controls pair unsupported-law refusal with supported Over and Under
+promotion, explicit decline and recovery, actual parser/member publication and
+legacy lock precedence. This is prospective numerical/process validation, not
+an accuracy guarantee or evidence of full live coverage. Details, board impact
+and required release checks: `model-audits/2026-11-11-player-props-two-phase-window.md`.
+
+## November 11 prelaunch timing repair R33 retained by R34
 
 Future shared NBA/NFL/MLB generation is
 `player_props_ai_2026_11_11_r33_two_phase_review_window`. Before a paid claim,

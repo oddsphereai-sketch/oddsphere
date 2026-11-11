@@ -7,9 +7,10 @@ import {readerLogWindows} from './readerLogs';
 import {independentPriorEvents} from './priorEvents';
 import {inspectGenerativeDraft} from './generativeAdmission';
 import {marketUsesStatistic,validateLaw,lawForecast,type AcceptedPlayerLaw} from './law';
-import type {ForecastSanityIssue} from './forecastSanity';
+import {sourceMeanAdmissionSupport,type ForecastSanityIssue,type SourceMeanAdmissionSupport} from './forecastSanity';
 
 const STATISTICS = ['points','rebounds','assists','threes'] as const;
+export const SOURCE_CONSTRAINT_CARDS_RELEASE='player_props_source_constraint_cards_2026_11_11_r2_sparse_mean_support' as const;
 type Statistic = typeof STATISTICS[number];
 const MARKET_NAMES: Readonly<Record<string,string>> = {
   points:'points', rebounds:'rebounds', assists:'assists', threes:'threes',
@@ -17,7 +18,7 @@ const MARKET_NAMES: Readonly<Record<string,string>> = {
   rebounds_assists:'rebounds+assists', points_rebounds_assists:'points+rebounds+assists',
 };
 const NUMBER_PATTERN = '[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:e[+-]?\\d+)?';
-const MEAN_EXAMPLE = new RegExp(`^(points|rebounds|assists|threes) mean=(${NUMBER_PATTERN}), support=(${NUMBER_PATTERN})\\.\\.(${NUMBER_PATTERN})$`,'i');
+const MEAN_EXAMPLE = new RegExp(`^([a-z_]+) mean=(${NUMBER_PATTERN}), support=(${NUMBER_PATTERN})\\.\\.(${NUMBER_PATTERN})$`,'i');
 export const NAMED_SOURCE_CORRECTION_MAX_BYTES = 1984;
 const object = (value:unknown):Record<string,unknown>|null => value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:null;
 const jsonObject = (value:Json):Record<string,Json>|null => value!==null&&typeof value==='object'&&!Array.isArray(value)?value:null;
@@ -28,8 +29,8 @@ const unique = <T>(values:readonly T[]):T[] => [...new Set(values)];
 // Navigation repeats their IDs only, rather than duplicating provenance/payloads.
 export type ContextConstraint = {status:ReaderAreaEvidence['status'];limitations:string[];factIds:string[];actualContextFactIds?:string[]};
 export type StatisticConstraint = {
-  playedGames:number;mean:number;minimum:number;maximum:number;sourceFact:string|null;
-  meanAdmissionSupport:{active:boolean;minimum:number;maximum:number;meaning:string};
+  playedGames:number;mean:number|null;minimum:number|null;maximum:number|null;sourceFact:string|null;
+  meanAdmissionSupport:SourceMeanAdmissionSupport;
 };
 export type IndependentEventConstraint = {
   market:string|null;line:number|null;mean:number|null;sourceEvidence:string|null;sourceId:string;sourceFact:string|null;
@@ -38,8 +39,10 @@ export type IndependentEventConstraint = {
   originalReferenceSide:string|null;originalRawProbability:number|null;
 };
 export type SourceConstraintCard = {
+  release:typeof SOURCE_CONSTRAINT_CARDS_RELEASE;
   actor:string;actorId:string;name:string;cutoff:string;markets:string[];meaning:string;
   statistics:Partial<Record<Statistic,StatisticConstraint>>;
+  marketMeanAdmissionSupport:Record<string,SourceMeanAdmissionSupport>;
   generativeComponentSupport?:{statistic:'points_excluding_made_threes';playedGames:number;mean:number;minimum:number;maximum:number;sourceFact:string|null;meaning:string};
   marketsByStatistic:Record<Statistic,string[]>;generativeMeaning:string;
   jointPatterns:{first:string;second:string;playedGames:number;higherTogether:number;opposing:number;sourceFact:string|null;markets:string[]}[];
@@ -54,19 +57,18 @@ export function sourceConstraintCards(packet:GamePacket):SourceConstraintCard[]{
     const evidence=reader[player.id],recent=readerLogWindows('nba',player.evidence.filter(e=>e.kind==='recent_games'),packet.cutoff);
     const fact=evidence.recent_form.facts.find(f=>f.label==='Reconciled recent recorded stat windows');
     const priors=independentPriorEvents(player);
+    const envelopes=sourceMeanAdmissionSupport(packet,player);
     const statistics:Partial<Record<Statistic,StatisticConstraint>>={};
-    for(const stat of STATISTICS){const support=recent.observedSupport[stat];if(!support)continue;
-      const means=priors.filter(p=>p.market===stat&&p.independentMean!==null).map(p=>p.independentMean!);
-      const active=support.n>=3&&(support.minimum!==0||support.maximum!==0);
-      statistics[stat]={playedGames:support.n,mean:support.mean,minimum:support.minimum,maximum:support.maximum,sourceFact:fact?.id??null,
-        meanAdmissionSupport:{active,minimum:Math.min(support.minimum,...means),maximum:Math.max(support.maximum,...means),meaning:active?'Existing source-mean review boundary; not a scenario-tail cap or a prescribed forecast.':'Insufficient or all-zero history does not establish a production ceiling.'}};
+    for(const stat of STATISTICS){const envelope=envelopes[stat],support=envelope?.playedSupport;if(!envelope||!support&&!priors.some(p=>p.market===stat&&p.independentMean!==null))continue;
+      statistics[stat]={playedGames:support?.n??0,mean:support?.mean??null,minimum:support?.minimum??null,maximum:support?.maximum??null,sourceFact:fact?.id??null,
+        meanAdmissionSupport:envelope};
     }
     const context=Object.fromEntries(READER_AREAS.map(area=>{
       const source=evidence[area],actual=source.eligibleContextFactIds;
       return[area,{status:source.status,limitations:[...source.limitations],factIds:source.facts.map(f=>f.id),...(actual?{actualContextFactIds:[...actual]}:{})}];
     })) as Record<ReaderArea,ContextConstraint>;
-    return {actor:`P${index}`,actorId:player.id,name:player.name,cutoff:packet.cutoff,markets:[...player.markets],
-      meaning:'Conditional on qualifying participation. These copied source constraints are not extra votes, forecast means, scenario-tail caps, or proof of current health/role. All exact raw evidence remains authoritative.',statistics,
+    return {release:SOURCE_CONSTRAINT_CARDS_RELEASE,actor:`P${index}`,actorId:player.id,name:player.name,cutoff:packet.cutoff,markets:[...player.markets],
+      meaning:'Conditional on qualifying participation. These copied source constraints are not extra votes, forecast means, scenario-tail caps, or proof of current health/role. All exact raw evidence remains authoritative.',statistics,marketMeanAdmissionSupport:Object.fromEntries(player.markets.filter(m=>envelopes[m]).map(m=>[m,envelopes[m]])),
       ...(recent.observedSupport.points_excluding_made_threes?{generativeComponentSupport:{statistic:'points_excluding_made_threes' as const,playedGames:recent.observedSupport.points_excluding_made_threes.n,mean:recent.observedSupport.points_excluding_made_threes.mean,minimum:recent.observedSupport.points_excluding_made_threes.minimum,maximum:recent.observedSupport.points_excluding_made_threes.maximum,sourceFact:fact?.id??null,meaning:'Recorded total points minus three times made threes within each same reconciled played game. This is not a total-points forecast or an inferred independent component prior.'}}:{}),
       marketsByStatistic:Object.fromEntries(STATISTICS.map(stat=>[stat,player.markets.filter(m=>marketUsesStatistic(m,stat))])) as Record<Statistic,string[]>,
       generativeMeaning:'Total points = points_excluding_made_threes + 3*threes. Rebounds = offensive + defensive rebounds. Every named statistic shares the same scenario index.',
@@ -94,9 +96,10 @@ function issueCategory(issue:ForecastSanityIssue,means:Partial<Record<Statistic,
   if(issue.code==='forecast_mean_outside_supplied_support'){
     const match=issue.example?.match(MEAN_EXAMPLE);if(!match)return null;
     const values=match.slice(2).map(Number);if(values.some(n=>!Number.isFinite(n)))return null;
-    const stat=match[1];if(!statistic(stat)||means[stat]===undefined)return null;
-    return `mean ${stat}=${means[stat]} outside [${values[1]},${values[2]}]`;
+    const stat=match[1];if(!Object.hasOwn(MARKET_NAMES,stat)||!law)return null;
+    return `mean ${stat}=${lawForecast(law,stat,0).mean} outside [${values[1]},${values[2]}]`;
   }
+  if(issue.code==='forecast_numeric_support_unavailable')return `mean support unavailable ${unique(issue.markets.map(m=>MARKET_NAMES[m])).join(',')}; supply a source-grounded law or explicitly decline`;
   if(issue.code==='combo_dependence_erases_source_variation'){
     const pair=issue.example?.split(':')[0].split('/');if(!pair||pair.length!==2||!pair.every(statistic))return null;
     const first=law?.outcomes[pair[0]],second=law?.outcomes[pair[1]];

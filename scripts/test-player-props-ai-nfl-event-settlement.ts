@@ -29,7 +29,7 @@ function issued(market: 'rushing_yards' | 'passing_tds' | 'anytime_td', line: nu
   assert.equal(source.rows.length, milestone ? 1 : 2);
   const observations = source.rows.map(q => ({ ...q, canonicalGameId: game.id, providerPlayerId: '7', playerName: 'Synthetic Runner', playerTeam: 'KC', receivedAt: at, homeTeam: 'BUF', awayTeam: 'KC', scheduledStart: start }));
   const packet = liveNflPacket({ game, window: { gameId: game.id, stage: 'early', cutoff: at, lock }, snapshot: { week: 10, generatedAt: at, board: { decisions: [] }, memberDecisions: [] }, observations: { generatedAt: at, observations },
-    history: { updatedAt: at, games: [], stats: [], teamStats: [], playMetrics: [] }, context: { capturedAt: at, games: [{ canonicalGameId: game.id, scheduledStart: start, awayTeam: 'KC', homeTeam: 'BUF',
+    history: { release:'synthetic canonical settled-game inputs',updatedAt:at,games:[0,1].map(i=>({gameId:`played-${i}`,scheduledStart:`2030-11-0${1+i}T18:00:00Z`,homeTeam:'KC',awayTeam:'NYJ'})),stats:[0,1].map(i=>({gameId:`played-${i}`,scheduledStart:`2030-11-0${1+i}T18:00:00Z`,playerId:'7',playerName:'Synthetic Runner',team:'KC',rushing_yards:i?100:0,passing_tds:i?12:0})),teamStats:[],playMetrics:[] }, context: { capturedAt: at, games: [{ canonicalGameId: game.id, scheduledStart: start, awayTeam: 'KC', homeTeam: 'BUF',
       awayDepth: { team: 'KC', capturedAt: at, roster: [] }, homeDepth: { team: 'BUF', capturedAt: at, roster: [] }, injuries: null, weather: null }] } } as never);
   const p = packet.players[0], facts = readerEvidence(packet)[p.id], aliases = evidenceAliases(packet);
   const samples = market === 'anytime_td' ? [0, 1, 2, ...v(0).slice(3)] : [0, line, line + 10, ...v(0).slice(3)];

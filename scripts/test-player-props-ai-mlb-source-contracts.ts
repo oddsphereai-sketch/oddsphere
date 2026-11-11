@@ -107,7 +107,10 @@ assert.equal(lawForecast(hits, "batter_hits", 1, true).over, 2 / 3);
 
 // No fresh or archival quotes: this must exercise the supplied prior's exact
 // inclusive event, without the separate offered-price tail guard masking it.
-const priorOnly = { ...milestonePacket, quotes: [], executionQuotes: [] }, priorOnlyBefore = digest(priorOnly);
+// Tail-only controls need their own canonical numeric scale; keep the actual
+// provider/native source contract fixtures and original captured payloads exact.
+const withHitSupport = (p:GamePacket):GamePacket => ({...p,quotes:[],executionQuotes:[],players:p.players.map(player=>({...player,evidence:[...player.evidence,{id:`${player.id}:batter_hits:recentForm`,kind:'recent_games' as const,source:'synthetic tail-control played hits',availableAt:at,value:{logs:[0,1,2].map((value,i)=>({gameId:i,date:`2030-05-${28+i}`,value,plateAppearances:4}))}}]}))});
+const priorOnly = withHitSupport(milestonePacket), priorOnlyBefore = digest(priorOnly);
 const hitLaw = (singles: number[]) => validateLaw("mlb", { markets: ["batter_hits"] }, {
   weights: [...singles.map(() => 1), ...v(0).slice(singles.length)],
   outcomes: { ...hits.outcomes, batter_singles: [...singles, ...v(0).slice(singles.length)] },
@@ -121,7 +124,8 @@ const supportedMilestone = hitLaw([0, 1]);
 assert.equal(lawForecast(supportedMilestone, "batter_hits", 1).over, 0, "The ordinary event differs at equality");
 assert.equal(lawForecast(supportedMilestone, "batter_hits", 1, true).over, .5);
 assert.deepEqual(sourceForecastIssues(priorOnly, priorOnly.players[0], supportedMilestone), [], "0/1 supports both outcomes of 1+; ordinary >1 semantics must not reject it");
-assert.deepEqual(sourceForecastIssues({ ...ordinary, quotes: [], executionQuotes: [] }, ordinary.players[0], hits), [], "Ordinary Over/Under/push support remains unchanged");
+const ordinaryTail=withHitSupport(ordinary);
+assert.deepEqual(sourceForecastIssues(ordinaryTail, ordinaryTail.players[0], hits), [], "Ordinary Over/Under/push support remains unchanged");
 assert.equal(digest(priorOnly), priorOnlyBefore);
 const binaryPacket: GamePacket = { ...priorOnly, sport: "nfl", players: [{ ...priorOnly.players[0], markets: ["anytime_td"], evidence: [{ id: "binary-prior", kind: "independent_model", source: "synthetic binary event", availableAt: at, value: { market: "anytime_td", line: 1, selectedSide: "yes", independentSelectedSideProbability: .7 } }] }] };
 assert.deepEqual(sourceForecastIssues(binaryPacket, binaryPacket.players[0], law), [], "Genuine binary TD keeps its existing two-outcome event");

@@ -88,7 +88,7 @@ for(const date of ['2026-11-09','2026-10-01'])for(const decline of [false,true])
 }
 // A samples-only native source has no dated game clock: retain that absence,
 // never invent dates from an average or turn it into a zero observation.
-assert.doesNotMatch(admitHistory(mlbNative('2026-10-01',true)).accepted.coverage.recent_form.observation,/dated/);
+assert.doesNotMatch(admitHistory(mlbNative('2026-10-01',true),true).accepted.coverage.recent_form.observation,/dated/);
 for(const sport of ['nba','nfl'] as const){const p=structuredClone(input);p.sport=sport;p.quotes=[];p.players=[{id:'box-history',name:'Synthetic Box History',team:'PHI',opponent:'BOS',markets:[sport==='nba'?'points':'rushing_yards'],missing:[],evidence:[0,1,2].map((_,i):Evidence=>({id:`box-${i}`,kind:'recent_games',source:'synthetic native box logs',availableAt:at,value:{game:{startTime:`2026-08-0${i+1}T00:00:00Z`,homeTeam:'PHI',awayTeam:'BOS'},box:sport==='nba'?{minutes:30,points:18,oreb:1,dreb:2,ast:3,fg3m:1}:{rushing_yards:10}}}))}];for(const decline of [false,true])assert.match(admitHistory(p,decline).accepted.coverage.recent_form.observation,/dated/);}
 // Mixed native/numeric source uses the numeric branch but still owns the dated
 // native history caution, including when a long metric leaves no text room.
