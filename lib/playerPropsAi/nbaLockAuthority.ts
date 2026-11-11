@@ -50,6 +50,9 @@ function capture(rows:readonly Row[],packet:GamePacket,review:AcceptedGameReview
  const source=clone(packet),frozenRows=clone(rows),readyAt=clock();validatePacket(source);assert.equal(source.sport,'nba');assert(instant(source.cutoff)<=instant(readyAt),'NBA source not ready at numeric capture');
  if(!Array.isArray(source.executionQuotes)||instant(readyAt)>=instant(source.lock))return{observations:[],proofs:[]};
  const contexts=criticalContextHashes(source),quotes=executionQuotes(source,readyAt),choices=kind==='ai'&&review?siteAiDecisions(source,review,readyAt):[],proofs:Proof[]=[];
+ // The cloned source is immutable throughout this capture. Hash it once rather
+ // than serializing the full game packet again for every qualified market.
+ const sourcePacketHash=digest(source);
  for(const row of frozenRows){
   if(row.lockedAt!==null||!rowInPacket(row,source)||!numericRow(row)||Boolean(row.aiReview)!==(kind==='ai')||instant(row.evaluatedAt)>instant(readyAt))continue;
   let quote:Quote|undefined;
@@ -74,7 +77,7 @@ function capture(rows:readonly Row[],packet:GamePacket,review:AcceptedGameReview
    // about which feed originally generated the native forecast.
    quote=quotes.filter(q=>publicEvent(row,q)&&row.priceLadder.some(p=>quoteBook(p.sportsbook)===quoteBook(q.book)&&p.line===q.line&&p.side===q.side&&p.americanPrice===q.american&&sameTime(p.observedAt,q.observedAt))).sort((a,b)=>instant(b.receivedAt)-instant(a.receivedAt)||a.id.localeCompare(b.id))[0];
   }
-  if(quote)proofs.push(seal({row,kind,contextHash:contexts[row.playerId],readyAt,sourcePacketHash:digest(source),executionQuote:clone(quote)}));
+  if(quote)proofs.push(seal({row,kind,contextHash:contexts[row.playerId],readyAt,sourcePacketHash,executionQuote:clone(quote)}));
  }
  return{observations:[],proofs};
 }
