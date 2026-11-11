@@ -100,6 +100,7 @@ export type NbaPlayerPropsMemberSnapshot = Readonly<{
   diagnostics: Readonly<{
     /** Future private source provenance only; stored decision/lock payloads stay exact. */
     sourceContextAudits?:ReturnType<typeof buildPropsSourceContextAuditSlate>;
+    sourceContextAuditRetention?:'prior_metadata_unavailable';
     inputRows: number;
     canonicalMarkets: number;
     actionable: number;

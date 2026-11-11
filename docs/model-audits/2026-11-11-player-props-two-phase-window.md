@@ -68,8 +68,10 @@ accepted immutable input hashes, actor/scope inventories, canonical and
 availability hashes, hashed source changes and participation qualification.
 Missing archives, unsupported legacy contracts and capacity overflow are
 explicit. It neither replaces a source nor changes a decision, and no raw
-source values or player names are included in the audit. Existing public locks
-remain exactly authoritative. The audit is private operational provenance, not
+source values or player names are included in the audit. Supported prior audit metadata keeps its exact original clocks and hashes
+through no-callback and post-lock refreshes; a new actual callback replaces only
+its own game. Malformed prior metadata stays explicitly unavailable. Existing
+public locks remain exactly authoritative. The audit is private operational provenance, not
 a results page, independent provider attestation or complete-collector proof.
 This specifically addresses the inability to diagnose a publication withdrawal
 from later incomplete caches; it cannot retrospectively prove an old callback.

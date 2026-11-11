@@ -1,7 +1,7 @@
 /** Prospective source provenance only. No I/O, forecast decision, source repair,
  * legacy wire/law parsing, or mutation of the supplied packet/review/locks. */
 import {gunzipSync} from 'node:zlib';
-import {digest,instant,validatePacket} from './evidence';
+import {digest,instant,etDate,validatePacket} from './evidence';
 import type {Evidence,GamePacket,Player} from './evidenceContract';
 import type {AcceptedGameReview} from './reviewer';
 import {criticalContextHashes} from './criticalContext';
@@ -158,4 +158,56 @@ export function buildPropsSourceContextAuditSlate(audits:readonly PropsSourceCon
  const overflow=audits.length>PROPS_SOURCE_CONTEXT_AUDIT_LIMITS.games||audits.reduce((n,a)=>n+a.counts.actors,0)>PROPS_SOURCE_CONTEXT_AUDIT_LIMITS.actors
   ||Buffer.byteLength(JSON.stringify(audits))>PROPS_SOURCE_CONTEXT_AUDIT_LIMITS.outputBytes;
  return{release:PROPS_SOURCE_CONTEXT_AUDIT_RELEASE,status:overflow?'overflow' as const:'complete' as const,gameCount:audits.length,comparisonComplete:!overflow&&audits.every(a=>a.status==='complete'&&a.comparisonComplete),collectorCoverageAttested:false as const,audits:overflow?[]:[...audits]};
+}
+
+/** Validate already stored prospective metadata without re-dating it or
+ * reconstructing any source. The original canonical receipt stays untouched. */
+export function retainedPropsSourceContextAudits(value:unknown,args:{slateDate:string;generatedAt:string;games:readonly {gameId:string;scheduledStart:string}[]}):{status:'absent'|'retained'|'unavailable';audits:PropsSourceContextAudit[]}{
+ if(value===undefined)return{status:'absent',audits:[]};
+ const unavailable=()=>({status:'unavailable' as const,audits:[]});
+ try{
+  if(!value||typeof value!=='object'||Buffer.byteLength(JSON.stringify(value))>PROPS_SOURCE_CONTEXT_AUDIT_LIMITS.outputBytes)return unavailable();
+  const slate=value as ReturnType<typeof buildPropsSourceContextAuditSlate>;
+  const exact=(v:unknown,keys:string)=>Boolean(v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).sort().join('|')===keys.split(' ').sort().join('|'));
+  if(!exact(slate,'release status gameCount comparisonComplete collectorCoverageAttested audits')||slate.release!==PROPS_SOURCE_CONTEXT_AUDIT_RELEASE||slate.status!=='complete'||slate.collectorCoverageAttested!==false||!Array.isArray(slate.audits)
+   ||slate.gameCount!==slate.audits.length||slate.gameCount>PROPS_SOURCE_CONTEXT_AUDIT_LIMITS.games
+   ||slate.comparisonComplete!==slate.audits.every(a=>a.status==='complete'&&a.comparisonComplete))return unavailable();
+  const hash=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v),count=(v:unknown)=>Number.isSafeInteger(v)&&Number(v)>=0;
+  // All serialized hash fields, including every individual changed source
+  // value and complete-kind inventory, must keep their original hash form.
+  const hashesValid=(v:unknown):boolean=>v===null||typeof v!=='object'||Object.entries(v).every(([k,x])=>k==='hash'||k.endsWith('Hash')||k==='inputHash'||k==='archiveDigest'?x===null||hash(x):hashesValid(x));
+  const ids=new Set<string>();let actors=0;
+  for(const a of slate.audits){
+   const game=args.games.find(g=>g.gameId===a.gameId);
+   if(!exact(a,'release status reason comparisonComplete collectorCoverageAttested forecastDecision gameId packetGameId sport start lock cutoff observedAt currentPacketHash sourceInputRelease sourceOfferSetStatus executionSet review counts actors')
+    ||!exact(a.executionSet,'provided rows hash')||typeof a.executionSet.provided!=='boolean'||!count(a.executionSet.rows)
+    ||!exact(a.review,'status release inputHash archiveDigest issuedAt cutoff')||!exact(a.counts,'originalActors currentActors actors evidenceRecords')
+    ||a.release!==PROPS_SOURCE_CONTEXT_AUDIT_RELEASE||a.status!=='complete'||a.reason!==null||a.sport!=='nba'||a.collectorCoverageAttested!==false||a.forecastDecision!==false
+    ||!game||ids.has(a.gameId)||etDate(a.start)!==args.slateDate||instant(a.start)!==instant(game.scheduledStart)||instant(a.lock)!==instant(a.start)-3600000
+    ||instant(a.cutoff)>=instant(a.lock)||instant(a.cutoff)>instant(a.observedAt)||instant(a.observedAt)>instant(args.generatedAt)||!hash(a.currentPacketHash)
+    ||!['verified','none','lookup_unavailable','unsupported_release','invalid_archive','binding_mismatch'].includes(a.review.status)||a.comparisonComplete!==(a.review.status==='verified')
+    ||!Array.isArray(a.actors)||a.counts.actors!==a.actors.length||!count(a.counts.evidenceRecords)||a.counts.evidenceRecords>PROPS_SOURCE_CONTEXT_AUDIT_LIMITS.evidenceRecords
+    ||a.counts.originalActors!==a.actors.filter(p=>p.originalPresent).length||a.counts.currentActors!==a.actors.filter(p=>p.currentPresent).length||!hashesValid(a))return unavailable();
+   ids.add(a.gameId);actors+=a.actors.length;if(actors>PROPS_SOURCE_CONTEXT_AUDIT_LIMITS.actors)return unavailable();
+   const actorIds=new Set<string>();let evidence=0;
+   for(const p of a.actors){
+    if(!exact(p,'actorId originalPresent currentPresent acceptedActorPresent originalScopes currentScopes acceptedScopes addedScopes removedScopes originalCanonicalHash currentCanonicalHash originalAvailabilityHash currentAvailabilityHash admittedCanonicalHash admittedAvailabilityHash admittedProofMatchesOriginal canonicalChanged availabilityChanged changedEvidenceKinds evidenceInventory detailGranularity evidenceKinds originalQualification currentQualification evidence')
+     ||![p.originalPresent,p.currentPresent,p.acceptedActorPresent].every(v=>typeof v==='boolean')||![p.admittedProofMatchesOriginal,p.canonicalChanged,p.availabilityChanged].every(v=>v===null||typeof v==='boolean')
+     ||!exact(p.evidenceInventory,'originalHash currentHash originalRecords currentRecords unchangedRecords unchangedHash comparisonAvailable')||typeof p.evidenceInventory.comparisonAvailable!=='boolean'
+     ||typeof p.actorId!=='string'||p.actorId.length>256||actorIds.has(p.actorId)||p.detailGranularity!=='non_market_changed_records'
+     ||![p.originalScopes,p.currentScopes,p.acceptedScopes,p.addedScopes,p.removedScopes].every(s=>Array.isArray(s)&&s.length<=256&&s.every(v=>typeof v==='string'&&v.length<=256)&&new Set(s).size===s.length)
+     ||p.originalPresent&&!hash(p.originalCanonicalHash)||p.currentPresent&&!hash(p.currentCanonicalHash)
+     ||p.originalPresent&&!hash(p.originalAvailabilityHash)||p.currentPresent&&!hash(p.currentAvailabilityHash)
+     ||!count(p.evidenceInventory.originalRecords)||!count(p.evidenceInventory.currentRecords)||!count(p.evidenceInventory.unchangedRecords)
+     ||p.originalPresent&&!hash(p.evidenceInventory.originalHash)||p.currentPresent&&!hash(p.evidenceInventory.currentHash)
+     ||!Array.isArray(p.evidence)||!Array.isArray(p.evidenceKinds))return unavailable();
+    actorIds.add(p.actorId);evidence+=p.evidenceInventory.originalRecords+p.evidenceInventory.currentRecords;
+    for(const q of [p.originalQualification,p.currentQualification])if(q!==null&&(!exact(q,'release status blocked reason conflict availableAt effectiveAt factCount factsHash')||!['blocked','eligible','unknown'].includes(q.status)||typeof q.blocked!=='boolean'||typeof q.conflict!=='boolean'||!count(q.factCount)||!hash(q.factsHash)))return unavailable();
+    for(const e of p.evidence){if(!exact(e,'identityHash recordIdHash sourceHash kind change original current')||!['recent_games','matchup_history','availability','matchup','independent_model'].includes(e.kind)||!['added','removed','value_changed','availability_only'].includes(e.change)||!hash(e.identityHash)||!hash(e.recordIdHash)||!hash(e.sourceHash))return unavailable();for(const versions of [e.original,e.current]){if(!Array.isArray(versions))return unavailable();for(const v of versions)if(!exact(v,'valueHash availableAt count')||!hash(v.valueHash)||!count(v.count)||v.count===0||instant(v.availableAt)>instant(a.cutoff))return unavailable();}}
+    for(const k of p.evidenceKinds)if(!exact(k,'kind originalHash currentHash originalRecords currentRecords changes')||!exact(k.changes,'added removed value_changed availability_only unchanged')||!['recent_games','matchup_history','availability','matchup','independent_model','market'].includes(k.kind)||!count(k.originalRecords)||!count(k.currentRecords)||!hash(k.originalHash)||!hash(k.currentHash)||!Object.values(k.changes).every(count))return unavailable();
+   }
+   if(evidence!==a.counts.evidenceRecords)return unavailable();
+  }
+  return{status:'retained',audits:[...slate.audits]};
+ }catch{return unavailable();}
 }

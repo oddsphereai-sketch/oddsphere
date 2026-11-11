@@ -1,5 +1,5 @@
 import {propsAiTwoPhaseCompletionWindowMs} from "../../playerPropsAi/completionWindow";
-import {buildPropsSourceContextAuditSlate,type PropsSourceContextAudit} from "../../playerPropsAi/sourceContextAudit";
+import {buildPropsSourceContextAuditSlate,retainedPropsSourceContextAudits,type PropsSourceContextAudit} from "../../playerPropsAi/sourceContextAudit";
 import {digest} from "../../playerPropsAi/evidence";
 import {reviewPropsForSite} from "../../playerPropsAi/siteRuntime";
 import {liveNbaPacket} from "../../playerPropsAi/liveSources";
@@ -368,9 +368,10 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   });
   const aiBaseline=candidate;
   const lockFrames:NbaLockHandoff[]=[];
-  const sourceAudits=new Map<string,PropsSourceContextAudit>();
-  const withSourceAudits=(snapshot:NbaPlayerPropsMemberSnapshot):NbaPlayerPropsMemberSnapshot=>sourceAudits.size
-    ?{...snapshot,diagnostics:{...snapshot.diagnostics,sourceContextAudits:buildPropsSourceContextAuditSlate([...sourceAudits.values()])}}
+  const retainedAudits=retainedPropsSourceContextAudits(initialPrevious?.diagnostics.sourceContextAudits,{slateDate:args.slateDate,generatedAt:initialPrevious?.generatedAt??now,games:initialPrevious?.games??[]});
+  const sourceAudits=new Map<string,PropsSourceContextAudit>(retainedAudits.audits.map(audit=>[audit.gameId,audit]));
+  const withSourceAudits=(snapshot:NbaPlayerPropsMemberSnapshot):NbaPlayerPropsMemberSnapshot=>sourceAudits.size||retainedAudits.status==='unavailable'
+    ?{...snapshot,diagnostics:{...snapshot.diagnostics,sourceContextAudits:{...buildPropsSourceContextAuditSlate([...sourceAudits.values()]),...(retainedAudits.status==='unavailable'&&!sourceAudits.size?{comparisonComplete:false}:{} )},...(retainedAudits.status==='unavailable'?{sourceContextAuditRetention:'prior_metadata_unavailable' as const}:{} )}}
     :snapshot;
   // This remains the sole sport-leased writer. Ready games commit through one
   // awaited queue, before unrelated review work can consume the route budget.

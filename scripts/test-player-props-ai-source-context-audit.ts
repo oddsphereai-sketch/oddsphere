@@ -1,7 +1,7 @@
 /** Pure actual-source audit controls; no provider, database, model or count I/O. */
 import assert from 'node:assert/strict';
 import {gzipSync} from 'node:zlib';
-import {buildPropsSourceContextAudit,buildPropsSourceContextAuditSlate,PROPS_SOURCE_CONTEXT_AUDIT_LIMITS} from '../lib/playerPropsAi/sourceContextAudit';
+import {buildPropsSourceContextAudit,buildPropsSourceContextAuditSlate,retainedPropsSourceContextAudits,PROPS_SOURCE_CONTEXT_AUDIT_LIMITS} from '../lib/playerPropsAi/sourceContextAudit';
 import {digest} from '../lib/playerPropsAi/evidence';
 import {nbaAuthorityFixture,nbaAuthorityReview} from './test-player-props-ai-nba-lock-authority';
 import type {AcceptedGameReview} from '../lib/playerPropsAi/reviewer';
@@ -51,5 +51,10 @@ const many=structuredClone(base);many.players=Array(PROPS_SOURCE_CONTEXT_AUDIT_L
 const records=structuredClone(base);records.players[0].evidence=Array(PROPS_SOURCE_CONTEXT_AUDIT_LIMITS.evidenceRecords+1).fill(base.players[0].evidence[0]);assert.equal(buildPropsSourceContextAudit({packet:records,review,observedAt:at}).reason,'evidence_limit');
 const huge=structuredClone(base);huge.players[0].evidence[0].value={blob:'x'.repeat(PROPS_SOURCE_CONTEXT_AUDIT_LIMITS.inputBytes)} as Json;assert.equal(buildPropsSourceContextAudit({packet:huge,review,observedAt:at}).reason,'current_packet_bytes');
 const audit=buildPropsSourceContextAudit({packet:base,review,observedAt:at}),slate=buildPropsSourceContextAuditSlate([audit]);assert(slate.comparisonComplete);assert.equal(slate.collectorCoverageAttested,false);const slateOverflow=buildPropsSourceContextAuditSlate(Array(17).fill(audit));assert.equal(slateOverflow.status,'overflow');assert.equal(slateOverflow.audits.length,0);assert(!slateOverflow.comparisonComplete);
+const retention={slateDate:'2026-11-10',generatedAt:at,games:[{gameId:base.gameId,scheduledStart:base.start}]},slateBytes=JSON.stringify(slate);
+assert.deepEqual(retainedPropsSourceContextAudits(slate,retention),{status:'retained',audits:slate.audits});assert.equal(JSON.stringify(slate),slateBytes,'Retention never mutates the canonical prior or re-dates source evidence');
+assert.equal(retainedPropsSourceContextAudits(undefined,retention).status,'absent');
+assert.equal(retainedPropsSourceContextAudits(slate,{...retention,slateDate:'2026-11-11'}).status,'unavailable');
+for(const mutate of [(s:typeof slate)=>{s.release='unknown' as never;},(s:typeof slate)=>{s.audits[0].actors[0].currentCanonicalHash='broken';},(s:typeof slate)=>{s.audits[0].observedAt='2026-11-10T22:25:00Z';},(s:typeof slate)=>{s.audits[0].counts.evidenceRecords++;},(s:typeof slate)=>{s.audits[0].actors[0].evidenceInventory.currentHash='broken';},(s:typeof slate)=>{s.gameCount++;},(s:typeof slate)=>{Object.assign(s.audits[0],{rawSource:{privateName:'private'}});}]){const invalid=structuredClone(slate);mutate(invalid);assert.deepEqual(retainedPropsSourceContextAudits(invalid,retention),{status:'unavailable',audits:[]});}
 assert.equal(JSON.stringify({base,review}),before,'No packet, accepted review, evidence, law or locked data is mutated');
 console.log('Source context audit passed: exact current/R31/R32 immutable archive binding, source/multiplicity/value/clock/scope/qualification differences, no law/wire reparse or raw names/values, unsupported/corrupt/missing originals, explicit bounds and zero-I/O immutability.');
