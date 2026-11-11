@@ -78,7 +78,7 @@ export const maxDuration = 540;
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
 const NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV = "NBA_PLAYER_PROPS_PRIVATE_WRITER_ENABLED";
-const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_11_10_r25_pending_props_opportunity";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_11_11_r26_two_phase_priority";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year
@@ -150,7 +150,6 @@ export async function GET(request: Request): Promise<Response> {
 
       const now = new Date();
       const etDateDashed = currentSlateDate("nba"); // YYYY-MM-DD
-      const playerPropsSlateDate = nbaPlayerPropsSlateDate(now);
       const season = currentNbaRatingsSeason(now);
       const providerSeason = currentNbaProviderSeason(now);
 
@@ -175,6 +174,66 @@ export async function GET(request: Request): Promise<Response> {
         mode: intraday ? "intraday_market" : "daily_full",
       };
 
+      let privatePlayerPropsWrites = 0;
+      let privatePlayerPropsError: string | null = null;
+      const refreshPrivateProps = async (preparedSchedule?: Awaited<ReturnType<typeof loadNbaRollingSchedule>>, dueReview = false) => {
+        if (process.env[NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV] === "true") {
+          try {
+            const propsNow = new Date();
+            const rollingSchedule = preparedSchedule ?? await loadNbaRollingSchedule(currentSlateDate("nba", propsNow));
+            const privatePlayerProps = await refreshNbaPlayerPropsPrivateCandidate({
+              client: supabase,
+              writerRunId:runId,
+              slateDate: nbaPlayerPropsSlateDate(propsNow),
+              season: currentNbaProviderSeason(propsNow),
+              schedule: rollingSchedule.games,
+              ballDontLieApiKey: balldontlieApiKey,
+              theOddsApiKey: process.env.THE_ODDS_API_KEY?.trim() || null,
+              owlsInsightApiKey: owlsApiKey,
+              fullRefresh: !intraday,
+              now: propsNow.toISOString(),
+              aiDeadline: requestStartedAt + 480_000,
+              reserveReviewWindow: dueReview,
+            });
+            stepDetails.player_props_private_candidate = privatePlayerProps;
+            privatePlayerPropsError = nbaPlayerPropsRefreshFailure(privatePlayerProps);
+            if (privatePlayerPropsError) partial = true;
+            privatePlayerPropsWrites = privatePlayerProps.status === "published_private" ? 1 : 0;
+          } catch (error) {
+            partial = true;
+            privatePlayerPropsError = "NBA player props refresh failed; last-known-good preserved";
+            console.error("NBA private player-props candidate refresh failed", error);
+            stepDetails.player_props_private_candidate = {
+              public_enabled: false,
+              status: "last_known_good_preserved",
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
+        } else {
+          stepDetails.player_props_private_candidate = {
+            public_enabled: false,
+            disabled: true,
+            reason: `${NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV}!=true`,
+          };
+        }
+      };
+      let priorityProps: Promise<void> | null = null;
+      if (process.env[NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV] === "true") {
+        try {
+          if (await hasDuePropsAiReview({client:supabase,sport:"nba",now:new Date().toISOString()})) {
+            // The same single props invocation begins before unrelated Daily
+            // Edge collection. Both remain inside this acquired sport lease.
+            // Freeze the existing schedule read before the seed step can
+            // update games/teams. No duplicate schedule or provider fetch.
+            const schedule = await loadNbaRollingSchedule(currentSlateDate("nba", new Date()));
+            priorityProps = refreshPrivateProps(schedule, true);
+          }
+        } catch {
+          // A failed scheduling hint cannot suppress either existing product.
+          stepDetails.props_priority = {status:"due_read_unavailable_use_normal_position"};
+        }
+      }
+      try {
       // ─── Step 1: seedNbaGames ─────────────────────────────────────
       const seedDates = nbaScheduleSeedDates(etDateDashed, intraday);
       console.log(
@@ -476,48 +535,7 @@ export async function GET(request: Request): Promise<Response> {
         futureWindowPartial: partial && snapshotBlockers.length === 0,
       };
 
-      // Private NBA player-props candidate. It deliberately reuses this
-      // route's sport-scoped prediction_pipeline:nba lease and never runs a
-      // second timer or member-request fetch. Failure preserves the previous
-      // private last-known-good snapshot and cannot suppress Daily Edge.
-      let privatePlayerPropsWrites = 0;
-      let privatePlayerPropsError: string | null = null;
-      if (process.env[NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV] === "true") {
-        try {
-          const rollingSchedule = await loadNbaRollingSchedule(etDateDashed);
-          const privatePlayerProps = await refreshNbaPlayerPropsPrivateCandidate({
-            client: supabase,
-            writerRunId:runId,
-            slateDate: playerPropsSlateDate,
-            season: providerSeason,
-            schedule: rollingSchedule.games,
-            ballDontLieApiKey: balldontlieApiKey,
-            theOddsApiKey: process.env.THE_ODDS_API_KEY?.trim() || null,
-            owlsInsightApiKey: owlsApiKey,
-            fullRefresh: !intraday,
-            now: now.toISOString(),
-          });
-          stepDetails.player_props_private_candidate = privatePlayerProps;
-          privatePlayerPropsError = nbaPlayerPropsRefreshFailure(privatePlayerProps);
-          if (privatePlayerPropsError) partial = true;
-          privatePlayerPropsWrites = privatePlayerProps.status === "published_private" ? 1 : 0;
-        } catch (error) {
-          partial = true;
-          privatePlayerPropsError = "NBA player props refresh failed; last-known-good preserved";
-          console.error("NBA private player-props candidate refresh failed", error);
-          stepDetails.player_props_private_candidate = {
-            public_enabled: false,
-            status: "last_known_good_preserved",
-            error: error instanceof Error ? error.message : String(error),
-          };
-        }
-      } else {
-        stepDetails.player_props_private_candidate = {
-          public_enabled: false,
-          disabled: true,
-          reason: `${NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV}!=true`,
-        };
-      }
+      if (!priorityProps) await refreshPrivateProps();
 
       // The date-keyed response snapshot is the readiness boundary for the
       // 3 AM ET member rollover. Current-slate defects remain fail-closed.
@@ -539,6 +557,10 @@ export async function GET(request: Request): Promise<Response> {
       const lineError = lineFailures[0]?.error ??
         lineResults.flatMap(({ result }) => result.errors)[0] ??
         null;
+
+      // Daily Edge can publish its own complete inputs while the independent
+      // props operation closes. The invocation/lease still waits for both.
+      if (priorityProps) await priorityProps;
 
       // ─── records_updated: tally useful writes only ────────────────
       const recordsUpdated =
@@ -564,6 +586,9 @@ export async function GET(request: Request): Promise<Response> {
               : null, privatePlayerPropsError].filter(Boolean).join(" | ") || null,
         details: stepDetails,
       };
+      } finally {
+        await priorityProps;
+      }
     },
     {
       sport: "nba",

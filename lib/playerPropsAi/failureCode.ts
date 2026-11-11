@@ -1,6 +1,9 @@
 /** Allowlisted operational codes only: never log raw API bodies, keys or inputs. */
-export const PROPS_AI_DIAGNOSTIC_RELEASE="player_props_ai_operations_2026_11_10_r4_preparation_deadlines" as const;
+export const PROPS_AI_DIAGNOSTIC_RELEASE="player_props_ai_operations_2026_11_11_r5_two_phase_windows" as const;
 const known:Readonly<Record<string,string>>={
+ "review_completion_window_exhausted":"review_completion_window_exhausted",
+ "nba_props_source_preparation_window_exhausted":"nba_props_source_preparation_window_exhausted",
+ "invalid_props_ai_absolute_deadline":"invalid_props_ai_absolute_deadline",
  "Conflicting NFL provider player identity":"nfl_provider_identity_conflict",
  "Conflicting NFL player-team identity":"nfl_player_team_conflict",
  "Ambiguous NFL captured player":"nfl_captured_player_ambiguous",

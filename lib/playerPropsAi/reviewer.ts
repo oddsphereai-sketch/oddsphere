@@ -5,7 +5,7 @@ import {acceptedResponseEvidence} from "./responseEvidence";
 import {physicalLawFindings} from "./physicalDiagnostics";
 import {failureEvidence} from "./failureEvidence";
 import {isMissedPropsEarlyWindow} from "./schedule";
-import {propsAiCompletionWindowMs,propsAiGenerationPool} from "./completionWindow";
+import {propsAiCompletionWindowMs,propsAiTwoPhaseCompletionWindowMs,propsAiGenerationPool} from "./completionWindow";
 import type {PropsAiGameAdmission} from "./gameAdmission";
 import { gzipSync } from "node:zlib";
 import type { GamePacket } from "./evidenceContract";
@@ -45,13 +45,18 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
   const preferStronger=args.preferStronger&&args.job.stage==="final";
   // Optional stronger-model counting must not consume the primary review's
   // complete generation/publication window while holding whole-game admission.
-  const strongCountDeadline=Date.now()+Math.min(deadline-Date.now(),instant(args.packet.lock)-instant(clock()))-propsAiCompletionWindowMs(parts.length)-10000;
+  const strongCountDeadline=Date.now()+Math.min(deadline-Date.now(),instant(args.packet.lock)-instant(clock()))-propsAiTwoPhaseCompletionWindowMs(parts.length)-10000;
   const requests = await Promise.all(parts.map(async part=>({input_tokens:part.inputTokens,max_output_tokens:PROPS_AI_MAX_OUTPUT_PER_REQUEST,
     strong_input_tokens:preferStronger ? await slot(async()=>{invariant(Date.now()<strongCountDeadline,"optional_strong_count_window_closed");const count=await(args.countStrong?.(part)??countAiInput(jointReviewRequest(part.packet,PROPS_AI_STRONG_MODEL,PROPS_AI_MAX_OUTPUT_PER_REQUEST),{key:args.key,fetchImpl:args.fetchImpl,deadline:strongCountDeadline}));invariant(Date.now()<=strongCountDeadline,"optional_strong_count_window_closed");return count;}).catch(()=>null) : null})));
-  if(Math.min(deadline-Date.now(),instant(args.packet.lock)-instant(clock()))<propsAiCompletionWindowMs(parts.length)) return {status:"skipped",reason:"insufficient_completion_window"};
+  if(Math.min(deadline-Date.now(),instant(args.packet.lock)-instant(clock()))<propsAiTwoPhaseCompletionWindowMs(parts.length)) return {status:"skipped",reason:"insufficient_completion_window"};
   if(isMissedPropsEarlyWindow(args.job.stage,args.packet.lock,clock()))return {status:"skipped",reason:"early_window_closed_final_only"};
   const sourcePacketJson=JSON.stringify(args.packet);
-  const inputHash = digest(args.packet), claimed = await args.store.claim(args.job.job_key, inputHash, requests, preferStronger,args.writerRunId);
+  const inputHash = digest(args.packet);
+  // Large exact source serialization/hash work is part of preparation too.
+  // A deferred job stays pending and may use its same ordinary slot later.
+  if(Math.min(deadline-Date.now(),instant(args.packet.lock)-instant(clock()))<propsAiTwoPhaseCompletionWindowMs(parts.length)) return {status:"skipped",reason:"insufficient_completion_window"};
+  if(earlyWindowClosed())return {status:"skipped",reason:"early_window_closed_final_only"};
+  const claimed = await args.store.claim(args.job.job_key, inputHash, requests, preferStronger,args.writerRunId);
   if (!claimed.claimed) return { status: "skipped", reason: claimed.reason };
   const job = claimed.job!, token = claimed.token!;
   const accepted=new Map<number,ReturnType<typeof parseJointReview>>(),provenance=new Map<number,PartProvenance>();
@@ -71,16 +76,30 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
           // Sample inside the acquired slot: another game/wave may have kept
           // this part queued until the early window closed.
           invariant(!earlyWindowClosed(),"early_window_closed_final_only");
-          const part=parts[index], timeoutMs=Math.floor(Math.min(180000,deadline-Date.now()-10000,instant(args.packet.lock)-instant(clock())-10000));
+          const part=parts[index];
+          // One request may use spare time, but cannot consume another wave or
+          // the already funded correction. Sample again after send/serialization
+          // so delayed acknowledgements never dispatch a doomed paid primary.
+          const futureWaves=Math.ceil(Math.max(0,pending.length-offset-PROPS_AI_PART_CONCURRENCY)/PROPS_AI_PART_CONCURRENCY);
+          const remainingWindow=()=>{
+            const correctionParts=parts.length-accepted.size;
+            const reserved=30_000+futureWaves*90_000+(phase===1?propsAiCompletionWindowMs(correctionParts):0);
+            return Math.min(deadline-Date.now(),instant(args.packet.lock)-instant(clock()))-reserved;
+          };
+          const timeoutMs=Math.floor(Math.min(180000,remainingWindow()));
           invariant(timeoutMs>=90000,"review_completion_window_exhausted");
           const attempt=await args.store.send(job.job_key,token,phase,index+1);
           const request=jointReviewRequest(part.packet,attempt.model,PROPS_AI_MAX_OUTPUT_PER_REQUEST,phase===2?feedback.get(index):undefined,phase===2?feedbackTexts.get(index):undefined),requestBody=serializeAiRequest(request,{serviceTier:attempt.requested_tier});
           let response;
-          try{response=await generateAiReview(request,{key:args.key,timeoutMs,remainingWindowMs:()=>Math.min(deadline-Date.now()-10000,instant(args.packet.lock)-instant(clock())-10000),minimumTimeoutMs:90000,canStart:()=>!earlyWindowClosed(),fetchImpl:args.fetchImpl,serviceTier:attempt.requested_tier});}
+          try{response=await generateAiReview(request,{key:args.key,timeoutMs,remainingWindowMs:remainingWindow,minimumTimeoutMs:90000,canStart:()=>!earlyWindowClosed(),fetchImpl:args.fetchImpl,serviceTier:attempt.requested_tier});}
           catch(error){
             const notStarted=error instanceof AiRequestNotStartedError,unbilled=notStarted||error instanceof AiGenerationError&&error.knownUnbilled;
             await args.store.receipt(attempt.id,token,unbilled?0:null,null,{kind:notStarted?"known_unbilled_before_http":unbilled?"known_unbilled":"unknown_transport_outcome",...(error instanceof AiGenerationError?{http_status:error.status,code:error.code,transport:error.diagnostics??null}:{}),requested_tier:attempt.requested_tier,failureEvidence:failureEvidence({packet:part.packet,requestBody,draftText:null,reason:(error as Error).message,physical:[]})});
-            return {index,reason:(error as Error).message,known:unbilled};
+            // A closed pre-HTTP window is genuinely zero-billed, but buying
+            // phase two as its first paid request would again omit correction.
+            // An actually dispatched known-unbilled capacity rejection retains
+            // its existing bounded Standard recovery semantics.
+            return {index,reason:(error as Error).message,known:unbilled&&!notStarted};
           }
           const texts=response.output?.flatMap(o=>o.content??[]).filter(c=>c.type==="output_text").map(c=>c.text??"")??[];
           if(!response.usage){await args.store.receipt(attempt.id,token,null,response.id,{kind:"missing_usage",transport:response.transportDiagnostics??null,failureEvidence:failureEvidence({packet:part.packet,requestBody,draftText:texts.length===1?texts[0]:null,reason:"missing_billed_usage",physical:[]})});return {index,reason:"missing_billed_usage",known:false};}

@@ -80,7 +80,7 @@ import {
 } from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_11_11_r93_lossless_reader_tables" as const;
+  "nfl_player_props_writer_2026_11_11_r94_two_phase_execution_window" as const;
 export const NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES = 60 as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
@@ -264,6 +264,8 @@ function summarizePredictionSides(
 export async function runNflPlayerPropsProductionWriter(args: {
   client: SupabaseClient;
   writerRunId?:string;
+  /** Absolute invocation budget; source/preparation time cannot reset it. */
+  aiDeadline?:number;
   season: number;
   week: number;
   now: string;
@@ -426,7 +428,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
     const observer=await readNflPlayerPropsMarketObserverHistory({client:args.client,season:args.season,week:args.week}).catch(()=>null);
     const marketHistory={observer,references:effectiveReferenceOffers,availableAt:new Date().toISOString()};
     const aiBaseline=reconcileNflPlayerPropsProductionSnapshot({requireVerifiedInterceptionSource:true,season:args.season,week:args.week,evaluatedAt:args.now,nextBoard,previous});
-    const ai=await reviewPropsForSite({client:args.client,sport:"nfl",writerRunId:args.writerRunId,onSourceReady:(packet,review,_observedAt,lookupAvailable)=>{aiLockFrames.push(observeNflSourceAuthority(packet,review,lookupAvailable));aiLockFrames.push(captureNflHandoffBundle(nextBoard.decisions,packet,review,"native"));},onReviewObserved:(packet,review,lookupAvailable)=>{aiLockFrames.push(observeNflSourceAuthority(packet,review,lookupAvailable));},onReviewReady:(packet,review)=>{const at=new Date().toISOString();nextBoard=restoreNflNativeGame(nextBoard,nativeAiBaseline,packet,at);nextBoard=applyNflSiteAi(nextBoard,packet,siteAiDecisions(packet,review,at),at,nativeAiBaseline.decisions);aiLockFrames.push(captureNflHandoffBundle(nextBoard.decisions,packet,review,"ai",nativeAiBaseline.decisions));},deadline:Date.parse(args.now)+390000,
+    const ai=await reviewPropsForSite({client:args.client,sport:"nfl",writerRunId:args.writerRunId,onSourceReady:(packet,review,_observedAt,lookupAvailable)=>{aiLockFrames.push(observeNflSourceAuthority(packet,review,lookupAvailable));aiLockFrames.push(captureNflHandoffBundle(nextBoard.decisions,packet,review,"native"));},onReviewObserved:(packet,review,lookupAvailable)=>{aiLockFrames.push(observeNflSourceAuthority(packet,review,lookupAvailable));},onReviewReady:(packet,review)=>{const at=new Date().toISOString();nextBoard=restoreNflNativeGame(nextBoard,nativeAiBaseline,packet,at);nextBoard=applyNflSiteAi(nextBoard,packet,siteAiDecisions(packet,review,at),at,nativeAiBaseline.decisions);aiLockFrames.push(captureNflHandoffBundle(nextBoard.decisions,packet,review,"ai",nativeAiBaseline.decisions));},deadline:Math.min(Date.parse(args.now)+480000,args.aiDeadline??Date.parse(args.now)+390000),
       games:context.games.map(g=>({id:g.canonicalGameId,start:g.scheduledStart,away:g.awayTeam,home:g.homeTeam})),
       load:(game,window,loadContext)=>{
         try{return liveNflPacket({game,window,snapshot:aiBaseline,observations:collection.snapshot,history:currentSeason.state,context,marketHistory,emptyCurrentGame:collection.emptyCurrentGames?.find(capture=>capture.gameId===game.id),withdrawalSnapshot:previous??undefined});}

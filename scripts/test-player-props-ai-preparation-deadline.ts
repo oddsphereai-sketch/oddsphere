@@ -20,12 +20,12 @@ type DbResult={data:unknown;error:null};
 type Timer={at:number;run:()=>void;cancelled?:boolean};
 async function exercise(mode:'unpackable'|'orphan'|'full_parts'|'small_window'|'staged_abort'|'small_with_large'){
  let now=0,activeCounts=0,countCalls=0,aborted=0,generation=0,sent=0,receipts=0,firstGenerationAt:number|null=null,badCountCalls=0;
- const fullParts=mode==='full_parts'||mode==='staged_abort',budgetMs=mode==='small_window'||mode==='small_with_large'?210000:300000;
+ const fullParts=mode==='full_parts'||mode==='staged_abort',budgetMs=fullParts?480000:mode==='small_window'||mode==='small_with_large'?330000:300000;
  let healthyCountCalls=0,activeHooks=0,readyHooks=0,observedHooks=0,peakCounts=0;
  const timers:Timer[]=[],claimEvents:{game:string;at:number}[]=[],countEvents:{at:number;game:string}[]=[],purposes:{game:string;purpose:PropsAiSourceLoadContext['purpose']|undefined;jobKey?:string}[]=[],completed=new Map<string,AcceptedGameReview>();
  Date.now=()=>epoch+now;
  const schedule=(ms:number,run:()=>void)=>{const timer:Timer={at:now+ms,run};timers.push(timer);return timer;};
- AbortSignal.timeout=(ms:number)=>{assert(ms>0&&ms<=180000);const controller=new AbortController();schedule(ms,()=>controller.abort(new DOMException('Synthetic actual count timeout','TimeoutError')));return controller.signal;};
+ AbortSignal.timeout=(ms:number)=>{assert(ms>0&&ms<=480000);const controller=new AbortController();schedule(ms,()=>controller.abort(new DOMException('Synthetic actual count timeout','TimeoutError')));return controller.signal;};
  async function wait(ms:number,signal?:AbortSignal){
   return new Promise<void>((resolve,reject)=>{
    const cleanup=()=>signal?.removeEventListener('abort',onAbort);
@@ -52,7 +52,7 @@ async function exercise(mode:'unpackable'|'orphan'|'full_parts'|'small_window'|'
  };return query;},rpc:async(name:string,args:Record<string,unknown>={})=>{
   if(name==='player_props_ai_plan_v4')return{data:{funded:true,budget:{}},error:null};if(name==='player_props_ai_reap')return{data:0,error:null};
   const job=jobs.find(j=>j.job_key===args.p_key);
-  if(name==='player_props_ai_claim'){assert(job);assert.equal(activeCounts,0,'No claim can race orphan/default count HTTP');assert.equal(activeHooks,0,'Source publication hooks must finish before preparation/claim');assert.equal(job.state,'pending');assert(Array.isArray(args.p_requests));assert.equal(args.p_requests.length,fullParts?16:1);assert(budgetMs-now>=(fullParts?210000:120000),'No paid claim before actual whole-game feasibility');claimEvents.push({game:job.game_id,at:now});job.state='running';job.parts=args.p_requests.length;job.input_hash=String(args.p_hash);return{data:{claimed:true,token:'synthetic',job:{...job,model:'gpt-6-luna',requested_tier:'default'}},error:null};}
+  if(name==='player_props_ai_claim'){assert(job);assert.equal(activeCounts,0,'No claim can race orphan/default count HTTP');assert.equal(activeHooks,0,'Source publication hooks must finish before preparation/claim');assert.equal(job.state,'pending');assert(Array.isArray(args.p_requests));assert.equal(args.p_requests.length,fullParts?16:1);assert(budgetMs-now>=(fullParts?420000:240000),'No paid claim before actual whole-game feasibility');claimEvents.push({game:job.game_id,at:now});job.state='running';job.parts=args.p_requests.length;job.input_hash=String(args.p_hash);return{data:{claimed:true,token:'synthetic',job:{...job,model:'gpt-6-luna',requested_tier:'default'}},error:null};}
   if(name==='player_props_ai_send'){assert(job);return{data:{id:`synthetic-attempt-${++sent}`,model:'gpt-6-luna',requested_tier:'default',reserved_micro:100000},error:null};}
   if(name==='player_props_ai_receipt'){receipts++;return{data:null,error:null};}
   if(name==='player_props_ai_fallback')throw Error('The healthy prevalidated draft must not buy a fallback');
@@ -70,7 +70,7 @@ async function exercise(mode:'unpackable'|'orphan'|'full_parts'|'small_window'|'
    const ids=Object.keys(body.text.format.schema.properties.players.properties),bad=ids.some(id=>id.startsWith('native-bad'));
    countCalls++;activeCounts++;peakCounts=Math.max(peakCounts,activeCounts);assert(activeCounts<=16);countEvents.push({at:now,game:bad?'bad':'healthy'});
    try{
-    if(!bad){healthyCountCalls++;const delay=mode==='staged_abort'?(healthyCountCalls===1?40000:healthyCountCalls===5?25000:1):mode==='small_with_large'?40000:1;await wait(delay,signal);return Response.json({input_tokens:fullParts&&ids.length>1?145001:1000});}
+    if(!bad){healthyCountCalls++;const delay=mode==='staged_abort'?(healthyCountCalls===1?40000:healthyCountCalls===5?8000:1):mode==='small_with_large'?40000:1;await wait(delay,signal);return Response.json({input_tokens:fullParts&&ids.length>1?145001:1000});}
     badCountCalls++;
     if(mode==='orphan'&&badCountCalls===1)return Response.json({error:'synthetic first sibling refusal'},{status:500});
     try{await wait(mode==='orphan'?999999:mode==='small_with_large'?1:40000,signal);}catch(error){aborted++;throw error;}
@@ -98,9 +98,9 @@ async function exercise(mode:'unpackable'|'orphan'|'full_parts'|'small_window'|'
   assert.equal(jobs.find(j=>j.game_id==='espn:nfl:bad')!.state,'pending');assert.equal(jobs.find(j=>j.game_id==='espn:nfl:short')!.state,'pending');
   assert.equal(completed.size,1);assert(result.games.some(g=>g.game.id==='native-healthy'&&g.authorityReview));assert(result.findings.some(f=>f==='review_preparation_deferred_lock:espn:nfl:short'));
   if(fullParts){const full=completed.get('espn:nfl:healthy')!;assert.equal(full.players.length,16);assert.equal(full.partProvenance.length,16);assert.equal(new Set(full.partProvenance.map(p=>p.responseId)).size,16);}
-  const countCutoff=budgetMs-(fullParts?220000:130000);
+  const countCutoff=budgetMs-(fullParts?430000:250000);
   assert(countEvents.every(e=>e.at<countCutoff),'No count request begins after the common stage-aware preparation deadline');assert(!countEvents.some(e=>e.game==='short'));
-  assert(firstGenerationAt!==null);assert(budgetMs-firstGenerationAt!>=(fullParts?210000:120000),'The retained healthy prepared game has its actual complete generation opportunity');assert(now<budgetMs);
+  assert(firstGenerationAt!==null);assert(budgetMs-firstGenerationAt!>=(fullParts?420000:240000),'The retained healthy prepared game has its actual complete generation opportunity');assert(now<budgetMs);
   assert(purposes.some(e=>e.purpose==='lock_authority'));assert(purposes.some(e=>e.purpose==='member_publication'));
   for(const g of ['healthy','bad'])assert(purposes.some(e=>e.game===`native-${g}`&&e.purpose==='scheduled_review'&&e.jobKey===jobs.find(j=>j.game_id===`espn:nfl:${g}`)!.job_key));
   assert(!purposes.some(e=>e.game==='native-short'&&e.purpose==='scheduled_review'),'A too-short job does not block or perform a scheduled preparation for healthy later locks');
@@ -108,8 +108,8 @@ async function exercise(mode:'unpackable'|'orphan'|'full_parts'|'small_window'|'
   if(mode==='orphan'){assert.equal(aborted,2);assert(firstGenerationAt!>=45000,'Orphan sibling counts are drained through real timeout abortion before generation');}
   else if(mode==='small_with_large'){assert.equal(aborted,0);assert(firstGenerationAt!>=40000&&firstGenerationAt!<45000,'An infeasible discovered second wave defers only its game; the valid in-flight one-part count completes');assert(result.findings.some(f=>f.startsWith('source_or_review_unavailable:native-bad:')));}
   else{assert(aborted>0);assert.equal(firstGenerationAt,countCutoff,'Slow unpackable rebalances stop exactly at their shared stage-aware timeout deadline');}
-  if(mode==='small_window'){assert.equal(budgetMs,210000);assert.equal(generation,1,'The original one-part210s omission is repaired without shrinking its full120s completion reserve');}
-  if(mode==='staged_abort'){assert(countEvents.some(e=>e.game==='bad'&&e.at>=40000&&e.at<60000),'A bad sibling count is already in flight before the healthy game discovers its second generation wave');assert.equal(firstGenerationAt,80000,'The shortened shared deadline aborts that in-flight sibling before its original45s timeout');}
+  if(mode==='small_window'){assert.equal(budgetMs,330000);assert.equal(generation,1,'The original one-part330s omission is repaired without shrinking its full240s completion reserve');}
+  if(mode==='staged_abort'){assert(countEvents.some(e=>e.game==='bad'&&e.at>=40000&&e.at<60000),'A bad sibling count is already in flight before the healthy game discovers its second generation wave');assert.equal(firstGenerationAt,50000,'The shortened shared deadline aborts that in-flight sibling before its original45s timeout');}
   const before=countCalls;for(const timer of timers.filter(t=>!t.cancelled)){timer.cancelled=true;timer.run();}for(let i=0;i<30;i++)await Promise.resolve();assert.equal(countCalls,before);assert.equal(activeCounts,0,'No count HTTP or count-loop continuation remains after runtime returns');
  }finally{Date.now=originalNow;AbortSignal.timeout=originalTimeout;}
 }
@@ -120,7 +120,7 @@ async function main(){
   let calls=0;const request:AiRequest={model:'gpt-6-luna',instructions:'Synthetic count.',input:'{}',text:{},max_output_tokens:7000,store:false};
   await assert.rejects(countAiInput(request,{key:'synthetic',deadline:Date.now()-1,fetchImpl:async()=>{calls++;throw Error('No expired count may start');}}),/deadline_exhausted/);assert.equal(calls,0);
   await exercise('unpackable');await exercise('orphan');await exercise('full_parts');await exercise('small_window');await exercise('staged_abort');await exercise('small_with_large');
-  console.log('Actual site preparation deadline passed: adaptive one-part210s admission, discovered sixteen-part210s opportunity, in-flight sibling abort on stage contraction, queued/orphan count drain before claims, global16 count/generation bound, awaited publication hooks and short-lock pending refusal. Virtual time; all SQL/HTTP/counts/models mocked. No paid calls or background requests.');
+  console.log('Actual site preparation deadline passed: adaptive one-part330s admission, discovered sixteen-part420s opportunity, in-flight sibling abort on stage contraction, queued/orphan count drain before claims, global16 count/generation bound, awaited publication hooks and short-lock pending refusal. Virtual time; all SQL/HTTP/counts/models mocked. No paid calls or background requests.');
  }finally{Date.now=originalNow;AbortSignal.timeout=originalTimeout;for(const name of names){if(previous[name]===undefined)delete process.env[name];else process.env[name]=previous[name];}}
 }
 void main().catch(error=>{Date.now=originalNow;AbortSignal.timeout=originalTimeout;console.error(error);process.exitCode=1;});

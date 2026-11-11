@@ -20,7 +20,7 @@ function fixture(){
   return{env,args,deps,calls,time:()=>now,setTime:(value:number)=>{now=value;}};
 }
 async function main(){
-  assert.equal(NBA_PROPS_REVIEW_RESCUE_REQUEST_BUDGET_MS,480000);assert.equal(NBA_PROPS_REVIEW_RESCUE_MIN_REMAINING_MS,120000);
+  assert.equal(NBA_PROPS_REVIEW_RESCUE_REQUEST_BUDGET_MS,480000);assert.equal(NBA_PROPS_REVIEW_RESCUE_MIN_REMAINING_MS,240000);
   for(const flag of ["NBA_CRON_ENABLED","NBA_PLAYER_PROPS_PRIVATE_WRITER_ENABLED","PLAYER_PROPS_AI_SITE_ENABLED","PLAYER_PROPS_AI_PAID_RUNS_ENABLED"]){
     const f=fixture();f.env[flag]="false";const result=await runNbaPropsReviewRescue(f.args,f.deps);assert.equal(result.records_updated,0);assert.equal(result.api_calls_made,0);assert.equal(f.calls.due.length,0);assert.equal(f.calls.schedules.length,0);assert.equal(f.calls.writers.length,0);
   }
@@ -31,7 +31,7 @@ async function main(){
     const f=fixture();let providerKeyReads=0;for(const key of ["BALLDONTLIE_API_KEY","THE_ODDS_API_KEY","OWLS_INSIGHT_API_KEY"])Object.defineProperty(f.env,key,{get:()=>{providerKeyReads++;return "must-not-read";}});
     f.deps.hasDue=async value=>{f.calls.due.push(value);return false;};const result=await runNbaPropsReviewRescue(f.args,f.deps);assert.equal(result.details?.reason,"no_due_pending_props_review");assert.equal(providerKeyReads,0);assert.equal(f.calls.schedules.length,0);assert.equal(f.calls.writers.length,0);assert.equal(f.calls.slates.length,0);
   }
-  for(const now of [start+480000,start+360001,start-1]){const f=fixture();f.setTime(now);const result=await runNbaPropsReviewRescue(f.args,f.deps);assert.equal(result.details?.reason,"insufficient_absolute_request_window");assert.equal(f.calls.due.length,0);assert.equal(f.calls.schedules.length,0);assert.equal(f.calls.writers.length,0);}
+  for(const now of [start+480000,start+480000-NBA_PROPS_REVIEW_RESCUE_MIN_REMAINING_MS+1,start-1]){const f=fixture();f.setTime(now);const result=await runNbaPropsReviewRescue(f.args,f.deps);assert.equal(result.details?.reason,"insufficient_absolute_request_window");assert.equal(f.calls.due.length,0);assert.equal(f.calls.schedules.length,0);assert.equal(f.calls.writers.length,0);}
   {
     const f=fixture();f.args.requestStartedAt=Number.NaN;const result=await runNbaPropsReviewRescue(f.args,f.deps);assert.equal(result.records_updated,0);assert.equal(f.calls.due.length,0);assert.equal(f.calls.writers.length,0);
   }
@@ -42,10 +42,10 @@ async function main(){
     const f=fixture();delete f.env.BALLDONTLIE_API_KEY;const result=await runNbaPropsReviewRescue(f.args,f.deps);assert.equal(result.partial,true);assert.equal(result.details?.reason,"required_props_provider_key_missing");assert.equal(f.calls.due.length,1);assert.equal(f.calls.schedules.length,0);assert.equal(f.calls.writers.length,0);
   }
   {
-    const f=fixture();f.deps.hasDue=async value=>{f.calls.due.push(value);f.setTime(start+360001);return true;};const result=await runNbaPropsReviewRescue(f.args,f.deps);assert.equal(result.details?.reason,"insufficient_absolute_request_window");assert.equal(f.calls.schedules.length,0);assert.equal(f.calls.writers.length,0);
+    const f=fixture();f.deps.hasDue=async value=>{f.calls.due.push(value);f.setTime(start+480000-NBA_PROPS_REVIEW_RESCUE_MIN_REMAINING_MS+1);return true;};const result=await runNbaPropsReviewRescue(f.args,f.deps);assert.equal(result.details?.reason,"insufficient_absolute_request_window");assert.equal(f.calls.schedules.length,0);assert.equal(f.calls.writers.length,0);
   }
   {
-    const f=fixture();f.deps.loadSchedule=async slate=>{f.calls.schedules.push(slate);f.setTime(start+360001);return schedule;};const result=await runNbaPropsReviewRescue(f.args,f.deps);assert.equal(result.details?.reason,"insufficient_absolute_request_window");assert.equal(f.calls.writers.length,0,"The helper must not reset the deadline after a slow cache read");
+    const f=fixture();f.deps.loadSchedule=async slate=>{f.calls.schedules.push(slate);f.setTime(start+480000-NBA_PROPS_REVIEW_RESCUE_MIN_REMAINING_MS+1);return schedule;};const result=await runNbaPropsReviewRescue(f.args,f.deps);assert.equal(result.details?.reason,"insufficient_absolute_request_window");assert.equal(f.calls.writers.length,0,"The helper must not reset the deadline after a slow cache read");
   }
   for(const phase of ["due","schedule","last-slate"]){
     const f=fixture();if(phase==="due")f.deps.hasDue=async value=>{f.calls.due.push(value);f.env.PLAYER_PROPS_AI_PAID_RUNS_ENABLED="false";return true;};
@@ -65,7 +65,7 @@ async function main(){
     const f=fixture();delete f.env.OWLS_INSIGHT_API_KEY;delete f.env.THE_ODDS_API_KEY;await runNbaPropsReviewRescue(f.args,f.deps);assert.equal(f.calls.writers.length,1);assert.equal(f.calls.writers[0].owlsInsightApiKey,null);assert.equal(f.calls.writers[0].theOddsApiKey,null,"Optional props sources retain the canonical writer contract");
   }
   {
-    const f=fixture();f.setTime(start+360000);await runNbaPropsReviewRescue(f.args,f.deps);assert.equal(f.calls.writers.length,1,"Exactly the declared minimum window is admitted");assert.equal(f.calls.writers[0].aiDeadline,start+480000);
+    const f=fixture();f.setTime(start+480000-NBA_PROPS_REVIEW_RESCUE_MIN_REMAINING_MS);await runNbaPropsReviewRescue(f.args,f.deps);assert.equal(f.calls.writers.length,1,"Exactly the declared minimum window is admitted");assert.equal(f.calls.writers[0].aiDeadline,start+480000);
   }
   for(const phase of ["due","schedule","writer"]){
     const f=fixture(),secret="sk-synthetic-do-not-log/private-player-export";if(phase==="due")f.deps.hasDue=async()=>{throw Error(secret);};else if(phase==="schedule")f.deps.loadSchedule=async()=>{throw Error(secret);};else f.deps.writeCandidate=async value=>{f.calls.writers.push(value);throw Error(secret);};

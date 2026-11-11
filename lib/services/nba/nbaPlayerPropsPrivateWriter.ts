@@ -1,3 +1,5 @@
+import {propsAiTwoPhaseCompletionWindowMs} from "../../playerPropsAi/completionWindow";
+import {buildPropsSourceContextAuditSlate,type PropsSourceContextAudit} from "../../playerPropsAi/sourceContextAudit";
 import {digest} from "../../playerPropsAi/evidence";
 import {reviewPropsForSite} from "../../playerPropsAi/siteRuntime";
 import {liveNbaPacket} from "../../playerPropsAi/liveSources";
@@ -46,7 +48,7 @@ import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
 import { buildNbaPlayerPropsMemberPrices } from "./nbaPlayerPropsMemberPrices";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_11_11_r19_durable_review_publication" as const;
+  "nba_player_props_private_writer_2026_11_11_r20_two_phase_priority" as const;
 
 export function nbaPlayerPropsForecastIsPublishable(
   row: Pick<NbaPlayerPropsForwardDecision, "independentProjection" | "finalProjection">,
@@ -86,10 +88,30 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   now?: string;
   /** Absolute invocation budget, including time spent waiting for the shared lease. */
   aiDeadline?: number;
+  /** Due-slot priority/rescue only: retain room for both paid phases before collecting. */
+  reserveReviewWindow?: boolean;
   fetchImpl?: typeof fetch;
 }): Promise<NbaPlayerPropsPrivateWriterResult> {
   const now = args.now ?? new Date().toISOString();
   if(args.aiDeadline!==undefined&&!Number.isFinite(args.aiDeadline))throw new Error("invalid_props_ai_absolute_deadline");
+  // Source collection and every existing fetch share the invocation's
+  // original deadline. Leave the minimum complete two-phase window intact;
+  // preparation later discovers actual parts and admits their larger window.
+  // This is derived from the review contract, never a new per-source timeout.
+  const sourceDeadline = args.aiDeadline === undefined ? null
+    : args.aiDeadline - (args.reserveReviewWindow ? propsAiTwoPhaseCompletionWindowMs(1) : 0);
+  const assertSourceWindow = () => {
+    if (sourceDeadline !== null && Date.now() >= sourceDeadline) throw new Error("nba_props_source_preparation_window_exhausted");
+  };
+  const sourceFetch: typeof fetch = sourceDeadline === null ? args.fetchImpl ?? fetch : async (input, init) => {
+    assertSourceWindow();
+    const timeout = AbortSignal.timeout(Math.max(1, Math.floor(sourceDeadline - Date.now())));
+    const response = await (args.fetchImpl ?? fetch)(input, {...init,
+      signal: init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout});
+    assertSourceWindow();
+    return response;
+  };
+  assertSourceWindow();
   const slateSchedule = args.schedule.filter((game) => game.slateDate === args.slateDate);
   if (slateSchedule.length === 0 && (!args.fullRefresh
     ||!await hasNbaPropsUnsettledTrackedSlates(args.client,args.season))) return result("no_games");
@@ -99,6 +121,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   if (slateSchedule.length&&(!priorState || priorState.games.length < 100 || priorState.boxes.length < 500)) {
     return { ...result("bootstrap_required"), findings: ["prior_season_player_state_missing"] };
   }
+  assertSourceWindow();
   let currentState = previousState;
   let stateRequests = 0;
   let stateCorrections = 0;
@@ -108,8 +131,9 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       season: args.season,
       dates: recentDates(now, 7),
       apiKey: args.ballDontLieApiKey,
-      fetchImpl: args.fetchImpl,
+      fetchImpl: sourceFetch,
     });
+    assertSourceWindow();
     currentState = collected.state;
     stateRequests = collected.providerRequests;
     stateCorrections = collected.corrected;
@@ -141,8 +165,9 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       playerName: player.playerName,
       playerTeam: player.latestTeamId === null ? null : String(player.latestTeamId),
     }])),
-    fetchImpl: args.fetchImpl,
+    fetchImpl: sourceFetch,
   });
+  assertSourceWindow();
   const previousMarket = await readNbaPlayerPropsMarketHistory({ client: args.client, slateDate: args.slateDate });
   const mergedMarket = mergeNbaPlayerPropsMarketHistory({
     previous: previousMarket,
@@ -168,6 +193,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     };
   }
 
+  assertSourceWindow();
   const integrated=propsAiSiteConfig().integrated;
   if(integrated&&!args.writerRunId)throw new Error("NBA integrated publication requires the existing sport lease owner");
   const initialPrevious=await readNbaPlayerPropsPrivateSnapshot({client:args.client,slateDate:args.slateDate});
@@ -223,7 +249,8 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     candidates,
     emitGameIds,
   });
-  const availability = await explicitOutPlayers(slateSchedule, args.fetchImpl);
+  const availability = await explicitOutPlayers(slateSchedule, sourceFetch);
+  assertSourceWindow();
   const participationReports:CapturedNbaParticipationReport[]=availability.reports.flatMap(capture=>live.games.filter(game=>nbaPlayerPropsScheduleGameMatches(game,capture.game)&&Date.parse(game.scheduledStart)===Date.parse(capture.game.gameStartAt)).map(game=>({
     gameId:game.canonicalGameId,start:game.scheduledStart,awayTeam:game.awayTeam,homeTeam:game.homeTeam,expectedEventId:String(capture.game.externalId),availableAt:capture.availableAt,report:capture.report,
   })));
@@ -341,6 +368,10 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   });
   const aiBaseline=candidate;
   const lockFrames:NbaLockHandoff[]=[];
+  const sourceAudits=new Map<string,PropsSourceContextAudit>();
+  const withSourceAudits=(snapshot:NbaPlayerPropsMemberSnapshot):NbaPlayerPropsMemberSnapshot=>sourceAudits.size
+    ?{...snapshot,diagnostics:{...snapshot.diagnostics,sourceContextAudits:buildPropsSourceContextAuditSlate([...sourceAudits.values()])}}
+    :snapshot;
   // This remains the sole sport-leased writer. Ready games commit through one
   // awaited queue, before unrelated review work can consume the route budget.
   // A callback never writes a stale copy over a sibling game's publication.
@@ -377,6 +408,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       let due=advanceNbaPlayerPropsCandidateLifecycle({now:publicationNow,previous,candidate:previous,
         ...(integrated?{lockHandoff:mergeNbaHandoffs(lockFrames)}:{})}).snapshot;
       if(receipts(previous).length)due={...due,sourceWithdrawals:receipts(previous)} as NbaPlayerPropsMemberSnapshot;
+      due=withSourceAudits(due);
       canonicalOtherRows=due.decisions.filter(row=>row.gameId!==gameId);
       // If every old unlocked row is ineligible, the ordinary empty-board
       // guard still applies. Compose those removals with this valid ready game
@@ -394,6 +426,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       ...(integrated?{lockHandoff:mergeNbaHandoffs(lockFrames)}:{})})};
     if(gameId)lifecycle.snapshot=buildNbaPlayerPropsMemberSnapshot({...candidate,generatedAt:publicationNow,
       decisions:[...canonicalOtherRows!,...lifecycle.snapshot.decisions],inputRows:aiBaseline.diagnostics.inputRows});
+    lifecycle.snapshot=withSourceAudits(lifecycle.snapshot);
     const priorReceipts=receipts(previous).filter(receipt=>receipt.gameId!==gameId);
     const withdrawn=source?.packet.sourceOfferSetStatus==='empty';
     const nextReceipts=[...priorReceipts,...(withdrawn&&source?[{release:NBA_PROPS_WITHDRAWAL_AUTHORITY_RELEASE,gameId:gameId!,start:source.packet.start,cutoff:source.packet.cutoff,observedAt:publicationNow,sourcePacketHash:source.frame.observations[0].sourcePacketHash}]:[])];
@@ -457,7 +490,9 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       return work;
     };
     const contexts=await args.client.from("lab_response_snapshots").select("payload,generated_at").eq("sport","nba").like("snapshot_key","%current-only::live-copy%").order("generated_at",{ascending:false}).limit(4);
+    assertSourceWindow();
     await reviewPropsForSite({client:args.client,sport:"nba",writerRunId:args.writerRunId,deadline:Math.min(Date.parse(now)+480000,args.aiDeadline??Infinity),
+      onSourceAudit:audit=>{sourceAudits.set(audit.gameId,audit);},
       games:games.map(g=>({id:g.gameId,start:g.scheduledStart,away:g.awayTeam,home:g.homeTeam})),
       load:(game,window)=>liveNbaPacket({game,window,snapshot:aiBaseline,market:mergedMarket.history,currentObservations:live.observations,prior:priorState,current:currentState!,context:contexts.error?[]:contexts.data as EnrichedSource["nbaContext"],participationReports}),
       onSourceReady:(packet,review,_at,lookupAvailable)=>observe(packet,review,lookupAvailable),

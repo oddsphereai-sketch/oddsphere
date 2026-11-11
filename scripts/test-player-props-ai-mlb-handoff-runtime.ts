@@ -26,7 +26,9 @@ async function exercise(){
  const timers:Timer[]=[],claimEvents:{game:string;at:number}[]=[],countEvents:{at:number;game:string}[]=[],purposes:{game:string;purpose:PropsAiSourceLoadContext['purpose']|undefined;jobKey?:string}[]=[],completed=new Map<string,AcceptedGameReview>();
  Date.now=()=>epoch+now;
  const schedule=(ms:number,run:()=>void)=>{const timer:Timer={at:now+ms,run};timers.push(timer);return timer;};
- AbortSignal.timeout=(ms:number)=>{assert(ms>0&&ms<=180000);const controller=new AbortController();schedule(ms,()=>controller.abort(new DOMException('Synthetic actual count timeout','TimeoutError')));return controller.signal;};
+ // Aggregate preparation timers may span the480s route; each vendor request
+ // retains its separate existing generation/count timeout.
+ AbortSignal.timeout=(ms:number)=>{assert(ms>0&&ms<=480000);const controller=new AbortController();schedule(ms,()=>controller.abort(new DOMException('Synthetic actual count timeout','TimeoutError')));return controller.signal;};
  async function wait(ms:number,signal?:AbortSignal){
   return new Promise<void>((resolve,reject)=>{
    const cleanup=()=>signal?.removeEventListener('abort',onAbort);
@@ -35,7 +37,7 @@ async function exercise(){
    if(signal?.aborted)onAbort();else signal?.addEventListener('abort',onAbort,{once:true});
   });
  }
- const definitions=[{native:'native-healthy',funded:'espn:mlb:healthy',away:'BUF',home:'MIN',players:1,lock:230000},
+ const definitions=[{native:'native-healthy',funded:'espn:mlb:healthy',away:'BUF',home:'MIN',players:1,lock:300000},
   {native:'native-bad',funded:'espn:mlb:bad',away:'TB',home:'CHI',players:16,lock:24*60000},
   {native:'native-short',funded:'espn:mlb:short',away:'NE',home:'NYJ',players:1,lock:60000}];
  const jobs=definitions.map(g=>({job_key:`props-ai|mlb|${g.funded}|2030-11-17|final`,sport:'mlb',game_id:g.funded,game_day:'2030-11-17',stage:'final',scheduled_start:iso(g.lock+3600000),lock_at:iso(g.lock),due_at:iso(g.lock-25*60000),billing_month:'2030-11',state:'pending',claim_token:null,model:'gpt-6-luna',requested_tier:'default',parts:null,phase:0,input_hash:null,result:null,error_code:null} as PropsAiJob));
@@ -49,7 +51,15 @@ async function exercise(){
   select(s:string){selection=s;return query;},eq(){return query;},gte(){return query;},in(){return query;},lte(){return query;},gt(){return query;},order(){return query;},limit(){return query;},
   single:async()=>{assert.equal(table,'player_props_ai_control');return{data:{release:PROPS_AI_CONTROL_RELEASE,paid_enabled:true},error:null};},
   maybeSingle:async()=>{assert.equal(table,'player_props_ai_calendars');return{data:{release:PROPS_AI_CALENDAR_RELEASE,captured_at:iso(0),payload:calendar},error:null};},
-  then(resolve:(value:DbResult)=>unknown,reject:(error:unknown)=>unknown){assert.equal(table,'player_props_ai_reviews');return Promise.resolve({data:selection==='*'?jobs.filter(j=>j.state==='pending'):jobs.filter(j=>j.state==='completed').map(j=>({result:j.result})),error:null} as DbResult).then(resolve,reject);},
+  then(resolve:(value:DbResult)=>unknown,reject:(error:unknown)=>unknown){
+   assert.equal(table,'player_props_ai_reviews');
+   const result={data:selection==='*'?jobs.filter(j=>j.state==='pending'):jobs.filter(j=>j.state==='completed').map(j=>({result:j.result})),error:null} as DbResult;
+   // Both phases now fit their declared admission window. A slow final lookup,
+   // independent of paid generation, still returns after the healthy game's
+   // lock: its already awaited canonical handoff must remain authoritative.
+   const pending=selection!=='*'&&completed.size>0&&now<310000?wait(310000-now).then(()=>result):Promise.resolve(result);
+   return pending.then(resolve,reject);
+  },
  };return query;},rpc:async(name:string,args:Record<string,unknown>={})=>{
   if(name==='player_props_ai_plan_v4')return{data:{funded:true,budget:{}},error:null};if(name==='player_props_ai_reap')return{data:0,error:null};
   const job=jobs.find(j=>j.job_key===args.p_key);
@@ -84,7 +94,7 @@ async function exercise(){
   return Response.json({id:`synthetic-response-${responseNumber}`,model:'gpt-6-luna',status:'completed',service_tier:'default',usage:{input_tokens:1000,output_tokens:200},output:[{content:[{type:'output_text',text:JSON.stringify(wire(ids))}]}]});
  };
  try{
-  let done=false;const promise=reviewPropsForSite({client,sport:'mlb',writerRunId:'synthetic-owner',games:definitions.map(g=>({id:g.native,start:iso(g.lock+3600000),away:g.away,home:g.home})),deadline:epoch+260000,clock:()=>iso(now),fetchImpl,onSourceReady:(p,r,_observed,available)=>handoff.observe(p,r,available),onReviewObserved:(p,r,available)=>handoff.observe(p,r,available),onReviewReady:(p,r)=>handoff.observe(p,r,true),
+  let done=false;const promise=reviewPropsForSite({client,sport:'mlb',writerRunId:'synthetic-owner',games:definitions.map(g=>({id:g.native,start:iso(g.lock+3600000),away:g.away,home:g.home})),deadline:epoch+480000,clock:()=>iso(now),fetchImpl,onSourceReady:(p,r,_observed,available)=>handoff.observe(p,r,available),onReviewObserved:(p,r,available)=>handoff.observe(p,r,available),onReviewReady:(p,r)=>handoff.observe(p,r,true),
    load:(game,window,context)=>{purposes.push({game:game.id,purpose:context?.purpose,...(context?.purpose==='scheduled_review'?{jobKey:context.job.job_key}:{})});const base=packets.get(game.id)!;if(Date.parse(window.cutoff)>=Date.parse(base.lock))throw Error('Synthetic source refuses postlock capture');return{...structuredClone(base),cutoff:window.cutoff,stage:window.stage};},
   }).then(result=>{done=true;return result;});
   for(let guard=0;!done&&guard<2000;guard++){
@@ -93,7 +103,8 @@ async function exercise(){
    for(const timer of timers.filter(t=>!t.cancelled&&t.at===now)){timer.cancelled=true;timer.run();}
   }
   assert(done);const result=await promise;
-  const early=completed.get('espn:mlb:healthy')!;assert(early);assert(Date.parse(early.issuedAt!)<Date.parse(healthy.lock));const prelock=siteAiDecisions(healthy,early,early.issuedAt!);assert(prelock.length>0);const delivered=result.games.find(g=>g.game.id==='native-healthy');assert(delivered);assert.equal(delivered.decisions.length,0);assert(now>230000);assert(countCalls>0);assert.equal(receipts,sent);assert(firstGenerationAt!==null);
+  assert(!completed.has('espn:mlb:short'));assert(!claimEvents.some(event=>event.game==='espn:mlb:short'),'The too-short negative cannot claim or buy a primary-only review');
+  const early=completed.get('espn:mlb:healthy')!;assert(early);assert(Date.parse(early.issuedAt!)<Date.parse(healthy.lock));const prelock=siteAiDecisions(healthy,early,early.issuedAt!);assert(prelock.length>0);const delivered=result.games.find(g=>g.game.id==='native-healthy');assert(delivered);assert.equal(delivered.decisions.length,0);assert(now>300000);assert(countCalls>0);assert.equal(receipts,sent);assert(firstGenerationAt!==null);
   const prelockPublications=durable.filter(s=>Date.parse(s.createdAt)<Date.parse(healthy.lock)&&s.rows.some(row=>row.providerIds?.gameId==='native-healthy'&&row.aiReview));
   assert(prelockPublications.length>0,'Actual runtime must await durable publication at the timely completed-review callback');
   const lockedSource=prelockPublications.at(-1)!;

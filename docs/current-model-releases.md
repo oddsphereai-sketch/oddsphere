@@ -1,3 +1,43 @@
+## November 11 player-prop complete-phase timing and due-review priority R33
+
+Future shared NBA/NFL/MLB generation is
+`player_props_ai_2026_11_11_r33_two_phase_review_window`. Before a paid claim,
+source/count preparation and whole-game admission must leave the complete
+existing primary and correction opportunity: 240 seconds for up to eight parts,
+420 for nine to sixteen. Each primary request reserves correction, later waves
+and handoff time. Delayed acknowledgements that prevent any primary HTTP request
+record known zero usage and cannot manufacture a paid correction as their first
+request. Known dispatched failures retain their existing bounded recovery;
+unknown charges remain held. Successful parts and admitted actors are retained.
+
+NBA routeR26, rescueR2 and sole writerR20 run due prop work before long Daily Edge
+work inside the same awaited `prediction_pipeline:nba` lease. The original
+request clock, including lease waits and source preparation, owns the 480-second
+AI deadline. NFL sole writerR94 uses the corresponding existing NFL lease and
+starts alongside Daily Edge only after their shared current-season state is
+persisted. Existing NFL and MLB routes allow 540 seconds under 600-second sport
+leases and pass the same absolute 480-second review budget. No cadence, timer,
+writer, provider-request budget, review slot, model, output cap, retry count,
+price/grade formula or spending limit is added. Native MLB championR44 remains
+exact. Accepted R32/R31 and older laws, text and all stored locks remain exact.
+
+Source auditR1 records bounded hashed comparisons from actual future NBA
+publication callbacks in the existing private canonical write. It distinguishes
+original-source, availability, scope and qualification changes, with explicit
+unsupported/missing/overflow states. It has no forecast authority, adds no
+provider/model request or database write, and does not attest full collector
+coverage. Current cached reconstructions cannot substitute for that proof.
+No new user-facing results or diagnostic surface is added.
+
+This time admission prevents known doomed claims; it cannot guarantee provider,
+database or whole-slate completion under arbitrary delays. A deferred pending
+slot remains pending for the existing normal opportunity; closed slots are never
+replayed. Actual source/part coverage, both slots, member publication and locks
+still require ordinary live verification. Frozen historical misses are not
+repaired by this release. Monthly cost is measured from normal usage and holds,
+not inferred from a clean build. Details and limitations:
+`model-audits/2026-11-11-player-props-two-phase-window.md`.
+
 ## November 11 prospective player-prop lossless source tables and durable NBA publication R32
 
 Future generation is `player_props_ai_2026_11_11_r32_lossless_reader_tables`.
