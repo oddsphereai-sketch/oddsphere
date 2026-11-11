@@ -57,7 +57,7 @@ assert.equal(
 );
 assert.equal(
   NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE,
-  "nba_player_props_private_writer_2026_11_11_r19_durable_review_publication",
+  "nba_player_props_private_writer_2026_11_11_r20_two_phase_priority",
 );
 assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: 18.2, finalProjection: 18.8 }), true);
 assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: 0, finalProjection: 18.8 }), false);
@@ -640,7 +640,8 @@ assert.equal(correctedState.state.games.find((row) => row.gameId === games[0]!.g
 const route = readFileSync(path.join(process.cwd(), "app/api/cron/nba-daily-refresh/route.ts"), "utf8");
 assert.match(route, /refreshNbaPlayerPropsPrivateCandidate/);
 assert.match(route, /NBA_PLAYER_PROPS_PRIVATE_WRITER_ENABLED/);
-assert.match(route, /nbaPlayerPropsSlateDate\(now\)/);
+assert.match(route, /const propsNow = new Date\(\)/);
+assert.match(route, /nbaPlayerPropsSlateDate\(propsNow\)/);
 assert.match(route, /leaseGroup: "prediction_pipeline"/);
 assert(!route.includes("setInterval("));
 

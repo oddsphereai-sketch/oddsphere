@@ -11,6 +11,7 @@ import { resolveNflForwardWeek } from "@/lib/services/football/nflForwardWeekSel
 import { nbaPlayerPropsSlateDate } from "@/lib/services/nba/nbaPlayerPropsLifecycle";
 import { readNbaPlayerPropsPrivateSnapshot } from "@/lib/services/nba/nbaPlayerPropsPrivateStore";
 import { buildNbaPlayerPropsMemberSnapshot } from "@/lib/services/nba/nbaPlayerPropsProductContract";
+import { buildNbaPlayerPropsMemberClientSnapshot } from "@/lib/services/nba/nbaPlayerPropsMemberTransport.server";
 import { readPlayerPropsLeagueActivity } from "@/lib/services/playerProps/playerPropsLeagueActivity.server";
 import { preferredPlayerPropsHref } from "./lib/playerPropsLeagues";
 
@@ -45,7 +46,7 @@ export default async function PlayerPropsPage({ searchParams }: { searchParams: 
     const initialSelectedKey = snapshot.decisions.some((row) => row.decisionKey === requestedReader) ? requestedReader : null;
     return <ProductAppFrame>
       <PlayerPropsLeaguePills league="nba" nflEnabled={nflEnabled} nbaEnabled currentGameCount={snapshot.games.length} currentPropCount={snapshot.decisions.length} />
-      <NbaPlayerPropsProductDashboard snapshot={snapshot} initialSelectedKey={initialSelectedKey} />
+      <NbaPlayerPropsProductDashboard snapshot={buildNbaPlayerPropsMemberClientSnapshot(snapshot)} initialSelectedKey={initialSelectedKey} />
     </ProductAppFrame>;
   }
   if (!nflEnabled || query.league !== "nfl") redirect("/player-props");

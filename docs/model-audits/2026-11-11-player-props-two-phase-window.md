@@ -76,6 +76,12 @@ a results page, independent provider attestation or complete-collector proof.
 This specifically addresses the inability to diagnose a publication withdrawal
 from later incomplete caches; it cannot retrospectively prove an old callback.
 
+The server member transportR1 allowlists the existing public top-level fields
+and diagnostic counts on both the member and preview pages. Private audit
+metadata is excluded before the client component/RSC boundary, not merely hidden
+from rendered HTML. The actual-page tests exercise current and fallback sources,
+retain exact games/decisions/legacy locks, and prove the sanitizer adds no I/O.
+
 ## Required verification
 
 Use virtual delays with actual reviewer/route code for both phases, all sixteen

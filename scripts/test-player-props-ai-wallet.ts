@@ -82,7 +82,7 @@ async function run(id:string,stage:"early"|"final",failure:"none"|"capacity"|"ti
     }
     return Response.json(response(parts.find(part=>part.packet.players[0].id===player)!.packet,request.model,request.service_tier,`r-${id}-${player}-${seen.get(player)}`));
   }) as typeof fetch;
-  const result=await runPropsReview({packet:p,job:await job(keys(id)[stage==="early"?0:1]),store:wallet,key:"synthetic-never-real",writerRunId:"synthetic-owner",preferStronger:strong,clock:()=>reviewNow,prepare:async()=>parts,countStrong:async()=>7000,fetchImpl});
+  const result=await runPropsReview({packet:p,job:await job(keys(id)[stage==="early"?0:1]),store:wallet,key:"synthetic-never-real",writerRunId:"synthetic-owner",preferStronger:strong,clock:()=>reviewNow,deadline:Date.now()+480000,prepare:async()=>parts,countStrong:async()=>7000,fetchImpl});
   return {result,calls,bodies};
 }
 // Real-wallet integration with several actors in ONE original part. All HTTP mocked.
@@ -90,7 +90,7 @@ async function runRetained(id:string,mode:"correct"|"unknown"|"invalid"="correct
   const stage=strong?"final":"early",now=strong?clock():"2026-11-07T21:00:00Z";
   await db.query("UPDATE test_clock SET at=$1",[now]);
   const p={...packet(id,stage),cutoff:now},bodies:string[]=[];
-  const result=await runPropsReview({packet:p,job:await job(keys(id)[stage==="early"?0:1]),store:wallet,key:"synthetic-never-network",writerRunId:"synthetic-owner",clock:()=>now,preferStronger:strong,countStrong:async()=>1000,prepare:async()=>[{packet:p,inputTokens:1000}],fetchImpl:(async(url,options)=>{
+  const result=await runPropsReview({packet:p,job:await job(keys(id)[stage==="early"?0:1]),store:wallet,key:"synthetic-never-network",writerRunId:"synthetic-owner",clock:()=>now,preferStronger:strong,deadline:Date.now()+480000,countStrong:async()=>1000,prepare:async()=>[{packet:p,inputTokens:1000}],fetchImpl:(async(url,options)=>{
     assert.equal(String(url),"https://api.openai.com/v1/responses");bodies.push(String(options?.body));
     const request=JSON.parse(bodies.at(-1)!),value=response(p,request.model,request.service_tier,`${id}-retained-${bodies.length}`),draft=JSON.parse(value.output[0].content[0].text);
     draft.players.b.law.outcomes.points_excluding_made_threes=Array(16).fill(bodies.length===1||mode==="invalid"?40:14);
@@ -261,7 +261,7 @@ try{
   const bigPlan=makePropsWalletPlan({month:"2027-05",now:bigNow,games:[bigGame],bounds:{"nba|all-players":bigParts.map(()=>({input_tokens:1000,max_output_tokens:7000}))},sources});
   await db.query("UPDATE test_clock SET at='2027-05-06T21:00:00Z';UPDATE cron_job_leases SET lease_expires_at='2027-06-01T00:00:00Z'");assert.equal((await wallet.plan(bigPlan)).funded,true);
   let bigCalls=0;
-  const bigResult=await runPropsReview({packet:bigPacket,job:await job(reviewSlots(bigGame)[0].key),store:wallet,key:"synthetic",writerRunId:"synthetic-owner",preferStronger:false,clock:()=>bigNow,prepare:async()=>bigParts,fetchImpl:(async(_url,options)=>{
+  const bigResult=await runPropsReview({packet:bigPacket,job:await job(reviewSlots(bigGame)[0].key),store:wallet,key:"synthetic",writerRunId:"synthetic-owner",preferStronger:false,clock:()=>bigNow,deadline:Date.now()+480000,prepare:async()=>bigParts,fetchImpl:(async(_url,options)=>{
     bigCalls++;const request=JSON.parse(String(options?.body)),input=JSON.parse(request.input);const part=bigParts.find(p=>p.packet.players[0].id===input.document.players[0].id)!;
     return Response.json(response(part.packet,request.model,request.service_tier,`big-${bigCalls}`));
   }) as typeof fetch});
@@ -278,7 +278,7 @@ try{
     return Response.json(response(playerSubset(finalPacket,ids),request.model,request.service_tier,`dispatch-${dispatchCalls}`));
   }) as typeof fetch};
   const deferred=await dispatchFundedPropsReviews({...dispatchArgs,deadline:Date.now()+1000});assert.equal(deferred[0].status,"deferred");assert.equal(dispatchCalls,0);
-  const dispatched=await dispatchFundedPropsReviews(dispatchArgs);assert.equal(dispatched.length,1);assert.equal(dispatched[0].status,"completed",JSON.stringify(dispatched));assert.equal(dispatched[0].review!.players.length,40);assert.equal(dispatchCalls,5);assert.ok(countCalls>=5);
+  const dispatched=await dispatchFundedPropsReviews({...dispatchArgs,deadline:Date.now()+480000});assert.equal(dispatched.length,1);assert.equal(dispatched[0].status,"completed",JSON.stringify(dispatched));assert.equal(dispatched[0].review!.players.length,40);assert.equal(dispatchCalls,5);assert.ok(countCalls>=5);
   assert.equal((await dispatchFundedPropsReviews(dispatchArgs)).length,0);assert.equal(dispatchCalls,5);
   // Coverage may use the approved emergency band; optional stronger work may not.
   const emergencyBounds=Array.from({length:3},()=>({input_tokens:145000,max_output_tokens:7000}));
@@ -318,7 +318,7 @@ try{
   for(const [index,mode] of ["lock","deadline","reaper"].entries()){
     const month=`2031-${String(index+1).padStart(2,"0")}`,epoch=Date.parse(`${month}-06T21:40:00Z`),originalNow=Date.now;
     let elapsed=0,httpCalls=0,sends=0;const at=()=>new Date(epoch+elapsed).toISOString();
-    const lateGame={sport:"nba" as const,id:`late-send-${mode}`,start:new Date(epoch+(mode==="deadline"?1200000:130000)+3600000).toISOString(),lock:new Date(epoch+(mode==="deadline"?1200000:130000)).toISOString()};
+    const lateGame={sport:"nba" as const,id:`late-send-${mode}`,start:new Date(epoch+(mode==="deadline"?1200000:260000)+3600000).toISOString(),lock:new Date(epoch+(mode==="deadline"?1200000:260000)).toISOString()};
     const heldGame={sport:"nba" as const,id:`unknown-held-${mode}`,start:new Date(epoch+4800000).toISOString(),lock:new Date(epoch+1200000).toISOString()};
     const envelope=[{input_tokens:1000,max_output_tokens:7000}],latePlan=makePropsWalletPlan({month,now:at(),games:[lateGame,heldGame],bounds:{[`nba|${lateGame.id}`]:envelope,[`nba|${heldGame.id}`]:envelope},sources});
     await db.query("UPDATE test_clock SET at=$1",[at()]);await db.query("UPDATE cron_job_leases SET lease_expires_at=$1",[new Date(epoch+86400000).toISOString()]);
@@ -329,7 +329,7 @@ try{
     const lateKey=reviewSlots(lateGame)[1].key,p={...packet(lateGame.id,"final"),start:lateGame.start,lock:lateGame.lock,cutoff:at()},prepared=[{packet:p,inputTokens:1000}];
     const delayedStore={claim:wallet.claim.bind(wallet),receipt:wallet.receipt.bind(wallet),fallback:wallet.fallback.bind(wallet),finish:wallet.finish.bind(wallet),send:async(...args:Parameters<typeof wallet.send>)=>{
       const attempt=await wallet.send(...args);sends++;const committed=(await db.query("SELECT started_at< $2::timestamptz prelock FROM player_props_ai_attempts WHERE id=$1",[attempt.id,p.lock])).rows[0];assert.equal(committed.prelock,true);
-      elapsed=140000;await db.query("UPDATE test_clock SET at=$1",[at()]);
+      elapsed=270000;await db.query("UPDATE test_clock SET at=$1",[at()]);
       if(mode==="reaper"){
         await wallet.reap();const reaped=(await db.query("SELECT state,actual_micro FROM player_props_ai_attempts WHERE id=$1",[attempt.id])).rows[0];assert.equal(reaped.state,"unknown");assert.equal(reaped.actual_micro,null);assert.equal((await job(lateKey)).state,"expired");
       }
@@ -338,7 +338,7 @@ try{
     const fetchImpl:typeof fetch=async()=>{httpCalls++;throw Error("Late send must never start HTTP");};
     try{
       Date.now=()=>epoch+elapsed;
-      const args={packet:p,job:await job(lateKey),store:delayedStore,key:"synthetic",writerRunId:"synthetic-owner",preferStronger:false,clock:at,deadline:epoch+(mode==="deadline"?130000:390000),prepare:async()=>prepared,fetchImpl};
+      const args={packet:p,job:await job(lateKey),store:delayedStore,key:"synthetic",writerRunId:"synthetic-owner",preferStronger:false,clock:at,deadline:epoch+(mode==="deadline"?260000:390000),prepare:async()=>prepared,fetchImpl};
       const result=await runPropsReview(args);assert.equal(result.status,mode==="deadline"?"failed":"expired");assert.equal(httpCalls,0);assert.equal(sends,1);
       const attempt=(await db.query("SELECT state,actual_micro,response_id,usage FROM player_props_ai_attempts WHERE job_key=$1",[lateKey])).rows[0];assert.equal(attempt.state,"completed");assert.equal(Number(attempt.actual_micro),0);assert.equal(attempt.response_id,null);assert.equal(attempt.usage.kind,"known_unbilled_before_http");
       assert.equal(JSON.stringify((await db.query("SELECT to_jsonb(a) v FROM player_props_ai_attempts a WHERE id=$1",[heldAttempt.id])).rows[0].v),heldBefore,"A proven unsent new attempt cannot release or rewrite an existing unknown hold");

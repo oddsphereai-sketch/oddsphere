@@ -27,7 +27,11 @@ original-source, availability, scope and qualification changes, with explicit
 unsupported/missing/overflow states. It has no forecast authority, adds no
 provider/model request or database write, and does not attest full collector
 coverage. Current cached reconstructions cannot substitute for that proof.
-No new user-facing results or diagnostic surface is added.
+Server member transportR1 allowlists existing public snapshot fields and
+diagnostics before both NBA client entry points. The private source-audit and
+future internal metadata never enter the browser payload; stored decisions and
+locked fields retain exact precedence. No new user-facing results or diagnostic
+surface is added.
 
 This time admission prevents known doomed claims; it cannot guarantee provider,
 database or whole-slate completion under arbitrary delays. A deferred pending
