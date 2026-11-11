@@ -2,7 +2,9 @@
  * reconstruction. The trusted existing writer supplies materialized source rows;
  * these digest bindings are not independent signatures or provider attestations. */
 import assert from 'node:assert/strict';
-import type {NbaPlayerPropsMemberDecision as Row} from '../services/nba/nbaPlayerPropsProductContract';
+import type {NbaPlayerPropsMemberDecision as Row,NbaPlayerPropsMemberSnapshot} from '../services/nba/nbaPlayerPropsProductContract';
+import {PROPS_AI_NBA_CURRENT_SOURCE_RELEASE} from './nbaSourceIdentity';
+import type {NbaPlayerPropPriceObservation} from '../services/nba/nbaPlayerPropsContract';
 import type {GamePacket,Quote} from './evidenceContract';
 import type {AcceptedGameReview} from './reviewer';
 import {digest,instant,validatePacket} from './evidence';
@@ -115,4 +117,29 @@ export function prepareNbaLockHandoff(args:NbaLockHandoff&{nextRows:readonly Row
   else if(row.aiReview){overrides.set(scope,null);diagnostics.push({scope,kind:'unavailable',status:'candidate_not_observed_prelock'});}
  }
  return{overrides,diagnostics};
+}
+
+/** Only the actual complete current collector and owned source observation may
+ * authorize withdrawing an entire game's unlocked execution rows. */
+export const NBA_PROPS_WITHDRAWAL_AUTHORITY_RELEASE='nba_props_withdrawal_authority_2026_11_11_r1_complete_current_source' as const;
+export type NbaWithdrawalAuthority=Bound<{release:typeof NBA_PROPS_WITHDRAWAL_AUTHORITY_RELEASE;gameId:string;start:string;cutoff:string;observedAt:string;sourcePacketHash:string;previousDigest:string;snapshotDigest:string}>;
+export function captureNbaWithdrawalAuthority(args:{packet:GamePacket;source:NbaLockHandoff;currentObservations:readonly NbaPlayerPropPriceObservation[];collectorFindings:readonly string[];previous:NbaPlayerPropsMemberSnapshot;candidate:NbaPlayerPropsMemberSnapshot}):NbaWithdrawalAuthority{
+ const {packet,previous,candidate}=args,id=gameId(packet),observation=args.source.observations[0];
+ assert(observation&&args.source.observations.length===1);verify(observation);
+ assert.equal(observation.sourcePacketHash,digest(packet));assert.equal(packet.sourceInputRelease,PROPS_AI_NBA_CURRENT_SOURCE_RELEASE);
+ assert.equal(packet.sourceOfferSetStatus,'empty');assert(Array.isArray(packet.executionQuotes)&&packet.executionQuotes.length===0);
+ assert(args.collectorFindings.every(finding=>finding==='owls_player_props_empty_for_slate'),'Withdrawal requires complete successful configured collectors; missing, optional failures, rejected or ambiguous sources cannot mean empty');
+ assert(Array.isArray(args.currentObservations)&&!args.currentObservations.some(q=>q.canonicalGameId===id&&!q.isOpening&&!q.isLive),'Withdrawal requires successful zero current collector rows, not filtered, failed or partial offers');
+ assert(instant(packet.cutoff)<=instant(observation.observedAt)&&instant(observation.observedAt)<instant(packet.lock));
+ assert(sameTime(candidate.generatedAt,observation.observedAt));assert(instant(previous.generatedAt)<=instant(observation.observedAt));
+ const game=previous.games.find(g=>g.gameId===id);assert(game&&sameTime(game.scheduledStart,packet.start));
+ const candidateGame=candidate.games.find(g=>g.gameId===id);assert(candidateGame&&digest(game)===digest(candidateGame));
+ assert(previous.decisions.some(r=>r.gameId===id),'Withdrawal requires prior canonical execution identity');
+ for(const row of previous.decisions.filter(r=>r.gameId===id&&r.lockedAt===null)){assert(rowInPacket(row,packet),'Withdrawal source must identify each removed canonical scope');assert(instant(row.evaluatedAt)<=instant(packet.cutoff),'Withdrawal source predates the canonical game publication');}
+ const expected=previous.decisions.filter(r=>r.gameId!==id||r.lockedAt!==null),sorted=(rows:readonly Row[])=>[...rows].sort((a,b)=>nbaLockScope(a).localeCompare(nbaLockScope(b)));
+ assert.equal(digest(sorted(candidate.decisions)),digest(sorted(expected)),'Withdrawal may remove only this game unlocked rows; every other game and stored lock stays exact');
+ return seal({release:NBA_PROPS_WITHDRAWAL_AUTHORITY_RELEASE,gameId:id,start:packet.start,cutoff:packet.cutoff,observedAt:observation.observedAt,sourcePacketHash:observation.sourcePacketHash,previousDigest:digest(previous),snapshotDigest:digest(candidate)});
+}
+export function assertNbaWithdrawalAuthority(authority:NbaWithdrawalAuthority,snapshot:NbaPlayerPropsMemberSnapshot,previous:NbaPlayerPropsMemberSnapshot){
+ verify(authority);assert.equal(authority.release,NBA_PROPS_WITHDRAWAL_AUTHORITY_RELEASE);assert.equal(authority.snapshotDigest,digest(snapshot));assert.equal(authority.previousDigest,digest(previous));
 }

@@ -1,3 +1,36 @@
+## November 11 prospective player-prop lossless source tables and durable NBA publication R32
+
+Future generation is `player_props_ai_2026_11_11_r32_lossless_reader_tables`.
+The shared NBA/NFL/MLB reader now receives additive `props_source_tables_v3`:
+named field tables, dictionaries and exact repeated values replace redundant
+source encodings without removing source players, markets, logs, precision or
+context. Source fact catalogs, claim contractR1, wireR5, canonical lawR1,
+selectionR6, NFL decisionR13, gradeR3 and both day-of slots stay unchanged.
+R31 explicitly remains accepted with its original canonical medical-context
+semantics; older accepted laws retain their own context contracts. Native MLB
+champion `mlb_props_2026_10_21_r44` is unchanged. Sole NFL writerR93 is
+`nfl_player_props_writer_2026_11_11_r93_lossless_reader_tables`.
+
+Sole NBA writerR19 is
+`nba_player_props_private_writer_2026_11_11_r19_durable_review_publication`.
+Each complete ready game is awaited through a serialized canonical publication
+queue, before unrelated reviews can exhaust the route duration. Other games and
+stored locks remain exact. V71 adds service-only checksum compare-and-swap,
+existing sport-lease ownership and server clock checks before and after writes.
+Its receipt proves server write completion, never a claimed transaction commit
+time. Withdrawal authorityR1 requires successful complete current empty-source
+proof; failed or partial collection cannot erase a board. The original lease,
+writer, cron cadence, review phases and spending controls are retained.
+
+This is a prospective correctness and efficiency repair. It cannot retrospectively
+publish missed reviews or alter stored locks. Offline round-trip equality and
+mocked publication tests are required alongside real disposable PostgreSQL proof,
+two consecutive three-reviewer clear rounds, the full model gate, protected
+latest-main integration and actual normal production proof. Local token estimates
+are not provider billing measurements or a monthly spending guarantee. No paid
+test, review replay, output-cap increase or additional provider request is part
+of this release. See `model-audits/2026-11-11-player-props-durable-publication-source-tables.md`.
+
 ## November 10 future player-prop verified factual readings R31
 
 The owner requested full product correctness and two consecutive clean full

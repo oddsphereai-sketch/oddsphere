@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
+import * as nbaSourceIdentity from '../lib/playerPropsAi/nbaSourceIdentity';
+import * as evidence from '../lib/playerPropsAi/evidence';
 import * as bindings from '../lib/playerPropsAi/siteBindings';
 import * as publication from '../lib/playerPropsAi/publication';
 import * as authority from '../lib/playerPropsAi/nbaLockAuthority';
@@ -20,7 +22,7 @@ async function main(){
  try{
  const initial='2026-11-10T22:24:00Z',completed='2026-11-10T22:26:00Z',after='2026-11-10T22:30:01Z';let tick=initial,loads=0,writes=0,tracked=0;
  const f=nbaAuthorityFixture(initial),gameId='nba-bdl:1',ids=new Map([['a','nba-bdl-player:1'],['b','nba-bdl-player:2']]);
- const packet:GamePacket={...f.packet,gameId,players:f.packet.players.map(p=>({...p,id:ids.get(p.id)!})),quotes:f.packet.quotes.map(q=>({...q,playerId:ids.get(q.playerId)!})),executionQuotes:f.packet.executionQuotes!.map(q=>({...q,playerId:ids.get(q.playerId)!}))};
+ const packet:GamePacket={...f.packet,sourceInputRelease:nbaSourceIdentity.PROPS_AI_NBA_CURRENT_SOURCE_RELEASE,gameId,players:f.packet.players.map(p=>({...p,id:ids.get(p.id)!})),quotes:f.packet.quotes.map(q=>({...q,playerId:ids.get(q.playerId)!})),executionQuotes:f.packet.executionQuotes!.map(q=>({...q,playerId:ids.get(q.playerId)!}))};
  const nativeRows=[f.row('a'),f.row('a','rebounds')].map(r=>({...r,gameId,playerId:ids.get(r.playerId)!}));
  const games=[{gameId,scheduledStart:packet.start,homeTeam:'NYK',awayTeam:'BOS'}];
  const previous=product.buildNbaPlayerPropsMemberSnapshot({mode:'private_forward_candidate',generatedAt:initial,slateDate:'2026-11-10',games,decisions:nativeRows,inputRows:6});
@@ -30,7 +32,7 @@ async function main(){
  type ReviewArgs=Parameters<typeof reviewPropsForSite>[0];
  let published:product.NbaPlayerPropsMemberSnapshot|null=null;
  const modules:Record<string,Record<string,unknown>>={
-  siteBindings:bindings,publication,nbaPlayerPropsLifecycle:lifecycle,nbaPlayerPropsProductContract:product,
+  nbaSourceIdentity,evidence,siteBindings:bindings,publication,nbaPlayerPropsLifecycle:lifecycle,nbaPlayerPropsProductContract:product,
   nbaLockAuthority:{...authority,observeNbaSourceAuthority:authority.testNbaSourceAuthority(()=>tick),captureNbaHandoffBundle:authority.testNbaHandoffCapture(()=>tick)},
   siteConfig:{propsAiSiteConfig:()=>({integrated:true})},
   espnNbaInjuries:{canonicalNbaAbbreviation:(value:string)=>value,fetchEspnNbaGameInjuries:async(id:string|number)=>{assert.equal(String(id),report.eventId);return report;}},
@@ -46,12 +48,12 @@ async function main(){
   nbaPlayerPropsPrivateTrackingStore:{captureNbaPlayerPropsPrivateTracking:async(args:{snapshot:product.NbaPlayerPropsMemberSnapshot})=>{tracked++;assert.equal(args.snapshot,published);return{conflicts:0};}},
   siteRuntime:{reviewPropsForSite:async(args:ReviewArgs)=>{
    const loaded=await args.load({id:gameId,start:packet.start,away:'BOS',home:'NYK'},{cutoff:initial,stage:'final'} as Parameters<ReviewArgs['load']>[1]);assert(loaded);
-   args.onSourceReady?.(loaded,null,initial,true);
+   await args.onSourceReady?.(loaded,null,initial,true);
    tick=completed;const review=nbaAuthorityReview(loaded,[1,4,5,...Array(13).fill(0)],completed);
-   args.onReviewObserved?.(loaded,review,true);args.onReviewReady?.(loaded,review);
+   await args.onReviewObserved?.(loaded,review,true);await args.onReviewReady?.(loaded,review);
    // A later publication lookup crosses lock; the writer must retain the
    // immediately materialized full final rather than dropping AI-only actors.
-   tick=after;args.onReviewObserved?.(loaded,review,true);
+   tick=after;await args.onReviewObserved?.(loaded,review,true);
    return{status:'active',games:[],findings:[]};
   }},
   liveSources:{liveNbaPacket:(args:{participationReports:CapturedNbaParticipationReport[]})=>{loads++;assert.equal(args.participationReports.length,1);const captured=args.participationReports[0];assert.equal(captured.gameId,gameId);assert.equal(captured.start,packet.start);assert.equal(captured.expectedEventId,report.eventId);assert.equal(Date.parse(captured.availableAt),Date.parse(initial));const result=attachCapturedNbaParticipationReports(structuredClone(packet),args.participationReports);assert(result.players.every(p=>p.evidence.some(e=>e.kind==='availability')),'Actual writer must forward the fresh exact-game injury report for every source actor');return result;}},
@@ -64,7 +66,7 @@ async function main(){
  const query={select(){return query;},eq(){return query;},like(){return query;},order(){return query;},limit:async()=>({data:[],error:null})};
  const schedule=[{id:'synthetic-schedule',externalId:Number(report.eventId),gameStartAt:packet.start,slateDate:'2026-11-10',status:'STATUS_SCHEDULED',homeTeam:'NYK',homeTeamDisplayName:'New York',homeTeamLogo:'',awayTeam:'BOS',awayTeamDisplayName:'Boston',awayTeamLogo:'',venue:null}] satisfies Parameters<typeof writer>[0]['schedule'];
  const result=await writer({client:{from:()=>query} as unknown as Parameters<typeof writer>[0]['client'],writerRunId:'synthetic-lease-owner',slateDate:'2026-11-10',season:2026,schedule,ballDontLieApiKey:'synthetic-not-real',fullRefresh:false,now:initial,fetchImpl:globalThis.fetch});
- assert.equal(result.status,'published_private');assert.equal(loads,1);assert.equal(writes,1);assert.equal(tracked,1);assert.equal(result.decisions,3);assert.equal(result.locked,3);
+ assert.equal(result.status,'published_private');assert.equal(loads,1);assert.equal(writes,3);assert.equal(tracked,3);assert.equal(result.decisions,3);assert.equal(result.locked,3);
  assert(published);const rows=(published as product.NbaPlayerPropsMemberSnapshot).decisions;assert.deepEqual([...new Set(rows.map(r=>r.playerId))].sort(),[...ids.values()].sort());assert(rows.every(r=>r.aiReview?.sourceEligibility?.facts.some(f=>f.source.includes('same-cycle'))&&r.lockedAt===new Date(packet.lock).toISOString()));assert(rows.find(r=>r.playerId==='nba-bdl-player:2'&&r.market==='points'));
  console.log('Actual NBA writer wiring passed: fresh exact-game injury reports reach all source actors; immediate prelock completed-review callbacks publish and track all three scopes/two actors, including an AI-only actor, after later I/O crosses lock. All I/O mocked; zero HTTP/DB/paid calls.');
  }finally{if(original===undefined)Reflect.deleteProperty(process.env,'NODE_ENV');else Object.assign(process.env,{NODE_ENV:original});}
