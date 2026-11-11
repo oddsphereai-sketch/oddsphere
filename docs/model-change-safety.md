@@ -1,3 +1,24 @@
+## November 11 NBA player-prop bounded source-hash work R23
+
+The sole NBA writer is now
+`nba_player_props_private_writer_2026_11_11_r23_bounded_source_hash`.
+Each handoff capture computes its exact cloned source packet digest once and
+reuses that value for its qualified rows. Previously the same complete source
+was serialized and hashed again for every row. This removes repeated local CPU
+work before normal review admission; it does not discard evidence or weaken
+validation. A subsequent call always hashes its own exact source clone.
+
+Shared AI generation R35, all original request/law formats, source/selection/grade
+contracts, NBA lock authority R1, NFL writer R96 and native MLB R44 remain exact.
+No extra review, provider/model request, cache across calls, larger deadline,
+spending-limit change or schema migration is introduced. Same-input handoff
+proofs and rows are byte-identical, with zero promotions or demotions. Existing
+locked payloads retain exact writer/reader precedence. An offline differential
+control verifies exact output against the previous capture algorithm, while
+source mutation, unrelated calls and invalid rows remain isolated. Actual normal
+production review/publication/lock proof is still required after deployment.
+See `model-audits/2026-11-11-player-props-bounded-source-hash.md`.
+
 # Model change safety protocol
 
 ## November 6 CBB verified-school pipeline handoff R55
