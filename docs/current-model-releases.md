@@ -1,3 +1,40 @@
+## November 11 player-prop urgent review cohorts R36
+
+Future shared NBA/NFL/MLB generation is
+`player_props_ai_2026_11_11_r36_urgent_slot_cohorts`; sole NBA writer is
+`nba_player_props_private_writer_2026_11_11_r24_urgent_slot_cohorts` and NFL
+writer is `nfl_player_props_writer_2026_11_11_r97_urgent_slot_cohorts`.
+Operations diagnostics R6 distinguish newly completed logical reviews from
+retained historical review authority. Native MLB champion R44, source/wire,
+selection R6, NFL decision R13 and grade R3 remain unchanged.
+
+Review preparation proceeds by earliest lock cohorts rather than waiting for
+all later games' source publications and input counts before any urgent claim.
+Every same-or-earlier-lock source authority is attempted first, and a due game
+requires its own successful source handoff before its paid preparation/claim.
+Unrelated source failure does not suppress healthy games; missing authority and
+first-lock precedence remain explicit. Pending early/final slots are checked
+against the actual time as the cohort runs. Complete existing primary/correction
+reserves, bounded count drainage, the common sport lease and serialized member
+CAS remain mandatory. No hard game quota, omitted player/market, new source,
+extra logical review, larger deadline, model/output cap or spending increase.
+
+Request construction may reuse internally compiled factual claims within one
+call only. Exact source and schema bytes, actor ordering and numerical admission
+must remain identical; later changed source packets compile independently.
+Original R35/R34 and older laws/wires/locks keep their own exact release and
+reader precedence. No result is regraded and no missed closed slot is replayed.
+NBA private process findings are retained internally and surfaced in cron health
+instead of treating native continuity as completed AI coverage. They never enter
+member transport or a public results surface.
+
+This follows a real normal R23 publication with preparation timeouts and no new
+AI claim, despite a completed writer. It is a process repair, not an accuracy or
+arbitrary-latency guarantee. Two fresh all-three whole-product clean rounds,
+focused/full verification, latest-main protected release and normal actual
+review/member/lock proof are required. See
+`model-audits/2026-11-11-player-props-urgent-review-cohorts.md`.
+
 ## November 11 NBA player-prop bounded source-hash work R23
 
 The sole NBA writer is now
