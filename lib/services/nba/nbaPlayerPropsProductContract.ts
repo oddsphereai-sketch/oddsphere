@@ -1,6 +1,7 @@
 import type { NbaPlayerPropMarket, NbaPlayerPropSide } from "./nbaPlayerPropsContract";
 import type { NbaPlayerPropsReaderMetric } from "./nbaPlayerPropsReaderContract";
 import type {PropsAiMemberEvidence} from "../../playerPropsAi/publicationContract";
+import type {buildPropsSourceContextAuditSlate} from "../../playerPropsAi/sourceContextAudit";
 
 export const NBA_PLAYER_PROPS_PRODUCT_CANDIDATE_RELEASE =
   "nba_player_props_product_candidate_2026_10_23_r8_canonical_coverage" as const;
@@ -97,6 +98,9 @@ export type NbaPlayerPropsMemberSnapshot = Readonly<{
   games: readonly NbaPlayerPropsMemberGame[];
   decisions: readonly NbaPlayerPropsMemberDecision[];
   diagnostics: Readonly<{
+    /** Future private source provenance only; stored decision/lock payloads stay exact. */
+    sourceContextAudits?:ReturnType<typeof buildPropsSourceContextAuditSlate>;
+    sourceContextAuditRetention?:'prior_metadata_unavailable';
     inputRows: number;
     canonicalMarkets: number;
     actionable: number;

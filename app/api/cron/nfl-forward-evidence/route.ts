@@ -16,9 +16,10 @@ import { resolveNflForwardWeek, resolveNflOperationalWeek } from "@/lib/services
 import { resolveNflMarketBrainCaptureConfiguration } from
   "@/lib/services/football/nflMarketBrainCaptureConfig";
 
-export const maxDuration = 450;
+export const maxDuration = 540;
 
 export async function GET(request: Request): Promise<Response> {
+  const requestStartedAt = Date.now();
   return cronHandler(request, "nfl_forward_evidence", async ({ runId }) => {
     if (process.env.NFL_FORWARD_EVIDENCE_ENABLED !== "true") {
       return {
@@ -79,138 +80,153 @@ export async function GET(request: Request): Promise<Response> {
     const marketBrainCaptureMaxGames = marketBrainConfiguration.maximumGames;
     const marketBrainCaptureAttemptSchedule = marketBrainConfiguration.attemptSchedule;
     const marketBrainConfigurationError = marketBrainConfiguration.error;
-    const result = await runNflForwardEvidenceWriter({
-      client: supabase,
-      season,
-      week,
-      runId,
-      now: cycleNow,
-      apply: true,
-      balldontlieApiKey,
-      playbookApiKey,
-      owlsApiKey,
-      weatherProvider,
-      exactProviderCandidate: true,
-      marketBrainCaptureEnabled,
-      marketBrainCaptureMaxGames,
-      marketBrainCaptureAttemptSchedule,
-    });
-    let playerProps: Awaited<ReturnType<typeof runNflPlayerPropsProductionWriter>> | null = null;
-    let playerPropsError: string | null = null;
     const playerPropsEnabled = process.env.NFL_PLAYER_PROPS_ENABLED === "true";
-    let playerPropsCadence: ReturnType<typeof planNflPlayerPropsRefresh> | null = null;
-    let playerPropsCadenceError: string | null = null;
-    if (playerPropsEnabled) {
-      try {
-        playerPropsCadence = planNflPlayerPropsRefresh({
-          now: cycleNow,
-          propsAiReviewDue: await hasDuePropsAiReview({client:supabase,sport:"nfl",now:new Date().toISOString()}),
-          previous: await readNflPlayerPropsSnapshot({ client: supabase, season, week }),
-        });
-      } catch (error) {
-        // A cadence lookup failure must not suppress either the NFL Daily Edge
-        // publication or the props recovery attempt. The writer retains its
-        // own complete-snapshot/LKG contract and remains inside this route's
-        // shared NFL lease.
-        playerPropsCadenceError = error instanceof Error ? error.message : String(error);
-        playerPropsCadence = planNflPlayerPropsRefresh({ now: cycleNow, previous: null });
-      }
-    }
-    if (playerPropsEnabled && playerPropsCadence?.run) {
-      try {
-        playerProps = await runNflPlayerPropsProductionWriter({
-          client: supabase,
-          writerRunId:runId,
-          season,
-          week,
-          now: cycleNow,
-          apply: true,
-          ballDontLieApiKey: balldontlieApiKey,
-          owlsInsightApiKey: owlsApiKey,
-        });
-      } catch (error) {
-        // Props retains its last complete snapshot. A provider failure must not
-        // roll back or suppress the authoritative NFL Daily Edge publication.
-        playerPropsError = error instanceof Error ? error.message : String(error);
-      }
-    }
-    const playerPropsCriticalHealth = playerProps?.healthFindings.filter((finding) =>
-      finding === "NFL_PLAYER_PROPS_SOURCE_AWARE_REFERENCE_OFFERS_UNAVAILABLE"
-      || finding === "NFL_PLAYER_PROPS_REFERENCE_OFFER_CACHE_FAILED"
-      || finding === "NFL_PLAYER_PROPS_PRIVATE_TRACKING_CAPTURE_FAILED"
-      || finding.startsWith("NFL_PLAYER_PROPS_SETTLEMENT_IDENTITY_UNRESOLVED:")) ?? [];
-    const marketBrainDetails = marketBrainCaptureRequested || marketBrainConfigurationError !== null
-      ? {
-          market_brain_capture_requested: marketBrainCaptureRequested,
-          market_brain_capture_enabled: marketBrainCaptureEnabled,
-          market_brain_configuration_error: marketBrainConfigurationError,
-          market_brain_capture_canary_limit: marketBrainCaptureMaxGames,
-          market_brain_shadows_proposed: result.marketBrainShadowsProposed,
-          market_brain_shadows_inserted: result.marketBrainShadowsInserted,
-          market_brain_shadows_existing: result.marketBrainShadowsExisting,
-          market_brain_capture_failures: result.marketBrainCaptureFailures,
-          market_brain_capture_failure_reasons: result.marketBrainCaptureFailureReasons,
-          market_brain_persistence_attempted: result.marketBrainPersistenceAttempted,
-          market_brain_persistence_error: result.marketBrainPersistenceError,
+    const playerPropsWork = (async () => {
+      let playerProps: Awaited<ReturnType<typeof runNflPlayerPropsProductionWriter>> | null = null;
+      let playerPropsError: string | null = null;
+      let playerPropsCadence: ReturnType<typeof planNflPlayerPropsRefresh> | null = null;
+      let playerPropsCadenceError: string | null = null;
+      if (playerPropsEnabled) {
+        try {
+          playerPropsCadence = planNflPlayerPropsRefresh({
+            now: cycleNow,
+            propsAiReviewDue: await hasDuePropsAiReview({client:supabase,sport:"nfl",now:new Date().toISOString()}),
+            previous: await readNflPlayerPropsSnapshot({ client: supabase, season, week }),
+          });
+        } catch (error) {
+          // A cadence lookup failure must not suppress either the NFL Daily Edge
+          // publication or the props recovery attempt. The writer retains its
+          // own complete-snapshot/LKG contract and remains inside this route's
+          // shared NFL lease.
+          playerPropsCadenceError = error instanceof Error ? error.message : String(error);
+          playerPropsCadence = planNflPlayerPropsRefresh({ now: cycleNow, previous: null });
         }
-      : {};
-    return {
-      records_updated: result.inserted + (playerProps?.memberRows ?? 0),
-      api_calls_made: currentSeasonState.apiCalls + result.apiCallsMaximum + (playerProps?.apiCallsMaximum ?? 0),
-      partial: result.healthHolds.length > 0 || result.memberSnapshotError !== null
-        || result.marketBrainPersistenceError !== null
-        || result.marketBrainCaptureFailures > 0
-        || marketBrainConfigurationError !== null
-        || playerPropsError !== null || playerPropsCriticalHealth.length > 0,
-      error_message: [result.healthHolds.join(","), result.memberSnapshotError,
-        result.marketBrainPersistenceError, ...result.marketBrainCaptureFailureReasons,
-        marketBrainConfigurationError,
-        playerPropsError, playerPropsCriticalHealth.join(",")]
-        .filter(Boolean).join(",") || null,
-      details: {
-        writer_release: result.writerRelease,
-        calendar_week: calendarWeek,
-        operational_week: week,
-        current_season_state_api_calls: currentSeasonState.apiCalls,
-        current_season_state_complete_through_week: currentSeasonState.state.completeThroughWeek,
-        collected: result.collected,
-        collection_reason: result.collectionReason,
-        proposed: result.proposed,
-        games: result.games,
-        stages: result.stages,
-        quarterback_health_reasons: result.quarterbackHealthReasons,
-        published_evaluations: result.publishedEvaluations,
-        published_best_angles: result.publishedBestAngles,
-        published_leans: result.publishedLeans,
-        published_watchlists: result.publishedWatchlists,
-        published_no_plays: result.publishedNoPlays,
-        published_held_games: result.publishedHeldGames,
-        health_holds: result.healthHolds,
-        publication_attempted: result.publicationAttempted,
-        member_snapshot_attempted: result.memberSnapshotAttempted,
-        member_snapshot_updated: result.memberSnapshotUpdated,
-        member_snapshot_key: result.memberSnapshotKey,
-        member_snapshot_error: result.memberSnapshotError,
-        tracking_attempted: result.trackingAttempted,
-        tracking_records_proposed: result.trackingRecordsProposed,
-        tracking_records_inserted: result.trackingRecordsInserted,
-        tracking_records_existing: result.trackingRecordsExisting,
-        owls_capture: result.owlsCapture,
-        named_price_capture: result.namedPriceCapture,
-        ...marketBrainDetails,
-        player_props_enabled: playerPropsEnabled,
-        player_props_cadence: playerPropsCadence,
-        player_props_cadence_error: playerPropsCadenceError,
-        player_props: playerProps,
-        player_props_error: playerPropsError,
-        player_props_critical_health: playerPropsCriticalHealth,
-      },
-    };
+      }
+      if (playerPropsEnabled && playerPropsCadence?.run) {
+        try {
+          playerProps = await runNflPlayerPropsProductionWriter({
+            client: supabase,
+            writerRunId:runId,
+            season,
+            week,
+            now: cycleNow,
+            aiDeadline: requestStartedAt + 480_000,
+            apply: true,
+            ballDontLieApiKey: balldontlieApiKey,
+            owlsInsightApiKey: owlsApiKey,
+          });
+        } catch (error) {
+          // Props retains its last complete snapshot. A provider failure must not
+          // roll back or suppress the authoritative NFL Daily Edge publication.
+          playerPropsError = error instanceof Error ? error.message : String(error);
+        }
+      }
+      return {playerProps, playerPropsError, playerPropsCadence, playerPropsCadenceError};
+    })().catch(error => ({
+      playerProps: null,
+      playerPropsError: error instanceof Error ? error.message : String(error),
+      playerPropsCadence: null,
+      playerPropsCadenceError: "NFL props cadence/recovery failed",
+    }));
+    try {
+      const result = await runNflForwardEvidenceWriter({
+        client: supabase,
+        season,
+        week,
+        runId,
+        now: cycleNow,
+        apply: true,
+        balldontlieApiKey,
+        playbookApiKey,
+        owlsApiKey,
+        weatherProvider,
+        exactProviderCandidate: true,
+        marketBrainCaptureEnabled,
+        marketBrainCaptureMaxGames,
+        marketBrainCaptureAttemptSchedule,
+      });
+      const {playerProps, playerPropsError, playerPropsCadence, playerPropsCadenceError} = await playerPropsWork;
+      const playerPropsCriticalHealth = playerProps?.healthFindings.filter((finding) =>
+        finding === "NFL_PLAYER_PROPS_SOURCE_AWARE_REFERENCE_OFFERS_UNAVAILABLE"
+        || finding === "NFL_PLAYER_PROPS_REFERENCE_OFFER_CACHE_FAILED"
+        || finding === "NFL_PLAYER_PROPS_PRIVATE_TRACKING_CAPTURE_FAILED"
+        || finding.startsWith("NFL_PLAYER_PROPS_SETTLEMENT_IDENTITY_UNRESOLVED:")) ?? [];
+      const marketBrainDetails = marketBrainCaptureRequested || marketBrainConfigurationError !== null
+        ? {
+            market_brain_capture_requested: marketBrainCaptureRequested,
+            market_brain_capture_enabled: marketBrainCaptureEnabled,
+            market_brain_configuration_error: marketBrainConfigurationError,
+            market_brain_capture_canary_limit: marketBrainCaptureMaxGames,
+            market_brain_shadows_proposed: result.marketBrainShadowsProposed,
+            market_brain_shadows_inserted: result.marketBrainShadowsInserted,
+            market_brain_shadows_existing: result.marketBrainShadowsExisting,
+            market_brain_capture_failures: result.marketBrainCaptureFailures,
+            market_brain_capture_failure_reasons: result.marketBrainCaptureFailureReasons,
+            market_brain_persistence_attempted: result.marketBrainPersistenceAttempted,
+            market_brain_persistence_error: result.marketBrainPersistenceError,
+          }
+        : {};
+      return {
+        records_updated: result.inserted + (playerProps?.memberRows ?? 0),
+        api_calls_made: currentSeasonState.apiCalls + result.apiCallsMaximum + (playerProps?.apiCallsMaximum ?? 0),
+        partial: result.healthHolds.length > 0 || result.memberSnapshotError !== null
+          || result.marketBrainPersistenceError !== null
+          || result.marketBrainCaptureFailures > 0
+          || marketBrainConfigurationError !== null
+          || playerPropsError !== null || playerPropsCriticalHealth.length > 0,
+        error_message: [result.healthHolds.join(","), result.memberSnapshotError,
+          result.marketBrainPersistenceError, ...result.marketBrainCaptureFailureReasons,
+          marketBrainConfigurationError,
+          playerPropsError, playerPropsCriticalHealth.join(",")]
+          .filter(Boolean).join(",") || null,
+        details: {
+          writer_release: result.writerRelease,
+          calendar_week: calendarWeek,
+          operational_week: week,
+          current_season_state_api_calls: currentSeasonState.apiCalls,
+          current_season_state_complete_through_week: currentSeasonState.state.completeThroughWeek,
+          collected: result.collected,
+          collection_reason: result.collectionReason,
+          proposed: result.proposed,
+          games: result.games,
+          stages: result.stages,
+          quarterback_health_reasons: result.quarterbackHealthReasons,
+          published_evaluations: result.publishedEvaluations,
+          published_best_angles: result.publishedBestAngles,
+          published_leans: result.publishedLeans,
+          published_watchlists: result.publishedWatchlists,
+          published_no_plays: result.publishedNoPlays,
+          published_held_games: result.publishedHeldGames,
+          health_holds: result.healthHolds,
+          publication_attempted: result.publicationAttempted,
+          member_snapshot_attempted: result.memberSnapshotAttempted,
+          member_snapshot_updated: result.memberSnapshotUpdated,
+          member_snapshot_key: result.memberSnapshotKey,
+          member_snapshot_error: result.memberSnapshotError,
+          tracking_attempted: result.trackingAttempted,
+          tracking_records_proposed: result.trackingRecordsProposed,
+          tracking_records_inserted: result.trackingRecordsInserted,
+          tracking_records_existing: result.trackingRecordsExisting,
+          owls_capture: result.owlsCapture,
+          named_price_capture: result.namedPriceCapture,
+          ...marketBrainDetails,
+          player_props_enabled: playerPropsEnabled,
+          player_props_cadence: playerPropsCadence,
+          player_props_cadence_error: playerPropsCadenceError,
+          player_props: playerProps,
+          player_props_error: playerPropsError,
+          player_props_critical_health: playerPropsCriticalHealth,
+        },
+      };
+    } finally {
+      // No product continues writing after the existing sport lease releases.
+      await playerPropsWork;
+    }
   }, {
     sport: "nfl",
     leaseGroup: "prediction_pipeline",
     requireLease: true,
-    lockMinutes: 8,
+    lockMinutes: 10,
     leaseRetryMaxWaitMs: 10_000,
     leaseRetryIntervalMs: 1_000,
   });

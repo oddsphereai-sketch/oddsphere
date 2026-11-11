@@ -197,7 +197,7 @@ const lockedAliasWriter = reconcileNflPlayerPropsProductionSnapshot({ season: 20
   previous: { ...legacyAliasSnapshot, board: { ...boardRows([resolvedAliasDecision, lockedAlias]), publicationEnabled: true, trackingEnabled: true } }, nextBoard: boardRows([resolvedAliasDecision]) });
 assert.deepEqual(lockedAliasWriter.board.decisions.find(row => row.playerName === "Chigoziem Okonkwo"), lockedAlias, "the writer preserves the complete prior locked alias record even when the current feed omits it");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_11_10_r60_current_execution_authority");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_11_11_r93_lossless_reader_tables");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_11_11_r96_terminal_wave_guard");
 assert.equal(NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES, 60);
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_11_08_r43_exact_quote_evidence");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_11_10_r8_exact_locked_event");
@@ -767,7 +767,7 @@ assert.ok(cronRoute.includes("player_props_critical_health"),
 assert.ok(cronRoute.includes('finding === "NFL_PLAYER_PROPS_PRIVATE_TRACKING_CAPTURE_FAILED"'),
   "a private full-board tracking failure makes the sole NFL cron partial instead of silently passing");
 assert.ok(cronRoute.includes('process.env.NFL_PLAYER_PROPS_ENABLED === "true"'), "props writer is exact-string opt-in");
-assert.equal((cronRoute.match(/playerProps = await runNflPlayerPropsProductionWriter/g) ?? []).length, 1, "one NFL cron invokes props exactly once and sequentially");
+assert.equal((cronRoute.match(/playerProps = await runNflPlayerPropsProductionWriter/g) ?? []).length, 1, "one NFL cron invokes its sole props writer exactly once");
 assert.ok(cronRoute.includes('sport: "nfl"') && cronRoute.includes('leaseGroup: "prediction_pipeline"') && cronRoute.includes("requireLease: true"));
 const vercel = JSON.parse(readFileSync("vercel.json", "utf8")) as { crons: Array<{ path: string }> };
 assert.equal(vercel.crons.filter((cron) => cron.path === "/api/cron/nfl-forward-evidence").length, 1, "no second NFL props timer exists");

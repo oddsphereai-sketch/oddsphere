@@ -1,5 +1,6 @@
 /** Actual NBA source -> parser -> member reader/tracking; synthetic I/O only. */
 import assert from 'node:assert/strict';
+import {nbaPlayedStateFixture} from './lib/player-props-ai-nba-played-fixture';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {NbaPlayerPropsProductDashboard} from '../app/player-props/components/NbaPlayerPropsProductDashboard';
@@ -30,7 +31,7 @@ function quote(line:number,price:number,clock:string,opening:boolean|undefined=t
 }
 const native:NbaPlayerPropsMemberDecision={decisionKey:'synthetic-native',gameId:game.id,scheduledStart:start,homeTeam:'BOS',awayTeam:'NYK',playerId:id,playerName:'Synthetic Player',team:'BOS',opponent:'NYK',market:'rebounds',line:6.5,side:'over',independentSide:'over',independentProbability:.65,independentProjection:7.25,projection:7.25,probability:.65,grade:'No Play',sportsbook:'synthetic',americanPrice:-110,expectedValue:.24,modelRelease:'synthetic-native',calibrationRelease:'synthetic-calibration',decisionRelease:'synthetic-decision',targetExcludedProbability:null,targetExcludedBooks:0,targetExcludedReferenceBooks:0,marketEvidenceMode:'independent_projection',gradePolicySource:'forecast_only',role:[],production:[],matchup:[],priceLadder:[],movement:null,evaluatedAt:past,lockedAt:null};
 const baseline=buildNbaPlayerPropsMemberSnapshot({mode:'private_forward_candidate',generatedAt:past,slateDate:'2026-11-10',games:[{gameId:game.id,scheduledStart:start,homeTeam:'BOS',awayTeam:'NYK'}],decisions:[native],inputRows:1});
-const state={updatedAt:past,games:[{gameId:1,homeTeamId:1,awayTeamId:2,homeTeam:'BOS',awayTeam:'NYK',startTime:'2026-11-01T00:00:00Z'}],boxes:[],advanced:[],players:[]};
+const state=nbaPlayedStateFixture(past,[9001],[20,20],[4,8]);
 function packet(history:Observation[],price=-110,side:'over'|'under'='over'){
  const current=[quote(6.5,side==='over'?price:-110,past,false),{...quote(6.5,side==='under'?price:-110,past,false),side:'under' as const,providerObservationId:'current-under'}];
  return liveNbaPacket({game,window,snapshot:baseline,market:{updatedAt:at,observations:[...history,...current]},prior:state,current:state,currentObservations:current} as unknown as Parameters<typeof liveNbaPacket>[0]);

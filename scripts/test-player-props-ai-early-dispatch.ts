@@ -1,5 +1,6 @@
 /** Actual live source and reviewer/transport boundary; all SQL/HTTP is mocked. */
 import assert from "node:assert/strict";
+import {nbaPlayedStateFixture} from "./lib/player-props-ai-nba-played-fixture";
 import {liveNbaPacket} from "../lib/playerPropsAi/liveSources";
 import {runPropsReview,type AcceptedGameReview} from "../lib/playerPropsAi/reviewer";
 import type {PropsAiJob,PropsAiReviewStore} from "../lib/playerPropsAi/budget";
@@ -19,7 +20,7 @@ const start="2030-11-17T21:00:00Z",lock="2030-11-17T20:00:00Z",sourceAt="2030-11
 const v=(n:number)=>Array<number>(16).fill(n);
 function source(stage:"early"|"final",cutoff:string):GamePacket{
  const game={id:"synthetic-current-game",start,away:"BOS",home:"NYK"};
- const state={updatedAt:sourceAt,games:[{gameId:1,homeTeamId:1,awayTeamId:2,homeTeam:"BOS",awayTeam:"NYK",startTime:"2030-11-01T20:00:00Z"}],boxes:[],advanced:[],players:[]};
+ const state=nbaPlayedStateFixture(sourceAt,[9001,9002],[16,24],[4,4]);
  const native=[9001,9002].map(id=>({gameId:game.id,scheduledStart:start,playerId:`nba-bdl-player:${id}`,playerName:`Synthetic ${id}`,team:"BOS",opponent:"NYK",market:"points",line:20.5,side:"over",independentSide:"over",independentProbability:.6,independentProjection:21,evaluatedAt:sourceAt,modelRelease:"synthetic-native",role:[],production:[],matchup:[],lockedAt:null}));
  const offers=native.flatMap(row=>["over","under"].map((side,i)=>({canonicalPlayerId:row.playerId,canonicalGameId:game.id,playerName:row.playerName,playerTeam:"1",market:"points",sportsbook:"synthetic",line:20.5,side,americanPrice:-110,provider:"balldontlie",providerObservationId:`${row.playerId}:${i}`,isOpening:false,isLive:false,observedAt:sourceAt,receivedAt:sourceAt,fetchedAt:sourceAt})));
  const packet=liveNbaPacket({game,window:{gameId:game.id,stage,cutoff,lock},snapshot:{generatedAt:sourceAt,slateDate:"2030-11-17",games:[{gameId:game.id,scheduledStart:start,awayTeam:"BOS",homeTeam:"NYK"}],decisions:native},market:{updatedAt:sourceAt,observations:offers},prior:state,current:state,currentObservations:offers} as never);

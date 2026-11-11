@@ -7,6 +7,7 @@ import { nbaPlayerPropsSlateDate } from "@/lib/services/nba/nbaPlayerPropsLifecy
 import { readNbaPlayerPropsPrivateSnapshot } from "@/lib/services/nba/nbaPlayerPropsPrivateStore";
 import fixture from "@/lib/services/nba/fixtures/nbaPlayerPropsProductPreview.json";
 import type { NbaPlayerPropsMemberSnapshot } from "@/lib/services/nba/nbaPlayerPropsProductContract";
+import { buildNbaPlayerPropsMemberClientSnapshot } from "@/lib/services/nba/nbaPlayerPropsMemberTransport.server";
 
 export const metadata = {
   title: "NBA Player Props Preview",
@@ -29,6 +30,6 @@ export default async function NbaPropsPreviewPage({ searchParams }: { searchPara
   const initialSelectedKey = snapshot.decisions.some((row) => row.decisionKey === requested) ? requested : null;
   return <ProductAppFrame>
     <PlayerPropsLeaguePills league="nba" nflEnabled nbaEnabled reviewMode />
-    <NbaPlayerPropsProductDashboard snapshot={snapshot} initialSelectedKey={initialSelectedKey} reviewSource={currentCandidate ? "live" : "historical"} reviewMode />
+    <NbaPlayerPropsProductDashboard snapshot={buildNbaPlayerPropsMemberClientSnapshot(snapshot)} initialSelectedKey={initialSelectedKey} reviewSource={currentCandidate ? "live" : "historical"} reviewMode />
   </ProductAppFrame>;
 }

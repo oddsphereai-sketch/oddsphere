@@ -19,7 +19,7 @@ const at="2026-11-09T16:00:00Z",start="2026-11-09T23:00:00Z",lock="2026-11-09T22
 const log=(i:number,box:Record<string,number>):Evidence=>({id:`log:${i}`,kind:"recent_games",source:"synthetic played game",availableAt:at,value:{game:{startTime:`2026-11-0${i+1}T23:00:00Z`,homeTeam:"A",awayTeam:"B"},box}});
 const prior=(market:string,mean:number,line:number,p=.4):Evidence=>({id:`prior:${market}`,kind:"independent_model",source:"synthetic independent source",availableAt:at,value:{market,line,selectedSide:"under",independentProjection:mean,independentSelectedSideProbability:p}});
 const packet=(sport:GamePacket["sport"],markets:string[],evidence:Evidence[]):GamePacket=>({release:PRODUCT_RELEASE,sport,gameId:"synthetic",stage:"final",cutoff:at,start,lock,sourceLimitations:[],quotes:[],players:[{id:"p",name:"Synthetic player",team:"A",opponent:"B",markets,evidence,missing:[]}]});
-const center=packet("nba",["rebounds","rebounds_assists"],[log(0,{minutes:30,oreb:3,dreb:8}),log(1,{minutes:30,oreb:3,dreb:10}),log(2,{minutes:25,oreb:1,dreb:3}),prior("rebounds",10.5,11.5)]);
+const center=packet("nba",["rebounds","rebounds_assists"],[log(0,{minutes:30,oreb:3,dreb:8,ast:2}),log(1,{minutes:30,oreb:3,dreb:10,ast:2}),log(2,{minutes:25,oreb:1,dreb:3,ast:2}),prior("rebounds",10.5,11.5)]);
 const badCenter={weights:vector(1),outcomes:{points:vector(12),rebounds:vector(2),assists:vector(1),threes:vector(0)}};
 const acceptedBad=validateLaw("nba",center.players[0],badCenter); // Pure historical math stays unchanged.
 assert.equal(lawForecast(acceptedBad,"rebounds",11.5).under,1);
@@ -54,7 +54,7 @@ assert.equal(event.referenceContractSide,"under");assert.equal(event.preferredOu
 assert.equal(unqualifiedEventTail({over:.6,under:0,push:.4}),false,"integer pushes retain uncertainty without an impossible negative count");
 assert.equal(unqualifiedEventTail({over:.9999999999999999,under:0,push:0}),true,"rounded weight sums cannot disguise a missing tail");
 const integer=independentPriorEvent(prior("passing_yards",262,245,.35));assert.equal(integer.overProbability,null);assert.equal(integer.preferredOutcome,"unavailable");
-const pushSource=packet("nba",["points"],[{id:"integer",kind:"independent_model",source:"synthetic known push event",availableAt:at,value:{market:"points",line:0,independentOver:.6,independentUnder:0}}]);
+const pushSource=packet("nba",["points"],[{id:"integer",kind:"independent_model",source:"synthetic known push event",availableAt:at,value:{market:"points",line:0,independentOver:.6,independentUnder:0}},log(0,{minutes:1,points:0}),log(1,{minutes:1,points:1})]);
 const pushLaw=validateLaw("nba",pushSource.players[0],{weights:[6,4,...Array(14).fill(0)],outcomes:{points:[1,0,...Array(14).fill(0)],rebounds:vector(0),assists:vector(0),threes:vector(0)}});
 assert.doesNotThrow(()=>validateSourceForecast(pushSource,pushSource.players[0],pushLaw,[null]),"explicit push mass must not be fabricated into an impossible negative-count event");
 const active=readerLogWindows("nba",[...center.players[0].evidence.filter(e=>e.kind==="recent_games"),log(3,{minutes:0,oreb:0,dreb:0})],at);

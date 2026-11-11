@@ -9,9 +9,10 @@ import {
 import { easternSlateDate, refreshMlbPropsBoard } from "@/lib/mlb/props/liveBoard";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 540;
 
 export async function GET(request: Request) {
+  const requestStartedAt = Date.now();
   return cronHandler(request, "mlb_player_props_refresh", async ({runId}) => {
     if (process.env.MLB_PLAYER_PROPS_CRON_ENABLED !== "true") {
       return {
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
     const refreshMode = url.searchParams.get("full") === "true" ? "full" : "fast";
     let result: Awaited<ReturnType<typeof refreshMlbPropsBoard>>;
     try {
-      result = await refreshMlbPropsBoard({ slateDate, refreshMode, persist: true,writerRunId:runId });
+      result = await refreshMlbPropsBoard({ slateDate, refreshMode, persist: true,writerRunId:runId,aiDeadline:requestStartedAt+480_000 });
     } catch (error) {
       // Locking must not depend on a completely successful provider refresh.
       // If BDL expands unexpectedly or a nonessential enrichment call fails,
@@ -114,6 +115,6 @@ export async function GET(request: Request) {
     sport: "mlb",
     leaseGroup: "prediction_pipeline",
     requireLease: true,
-    lockMinutes: 8,
+    lockMinutes: 10,
   });
 }

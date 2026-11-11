@@ -1,3 +1,102 @@
+## November 11 player-prop terminal-wave spending guard R35
+
+Shared generation `player_props_ai_2026_11_11_r35_terminal_wave_guard`, sole NBA
+writer `nba_player_props_private_writer_2026_11_11_r22_terminal_wave_guard` and
+NFL writer `nfl_player_props_writer_2026_11_11_r96_terminal_wave_guard` retain
+all R34 source-mean, timing, private audit and member-transport repairs below.
+After a delayed claim acknowledgement, the complete two-phase game reserve is
+checked again before any send. After each settled wave, an unrecoverable failure
+or failure in the last correction phase stops later paid waves. Already launched
+siblings retain their exact known/unknown receipts; successful parts remain
+retained and no closed job is replayed. A partial game never becomes complete.
+
+No slot, model, phase, provider budget, timeout ceiling, grade formula, numerical
+support rule or spending limit is increased. Same-law board/grade impact is zero;
+this corrects avoidable charges on incomplete reviews, not forecasts or results.
+R34 and older request/law semantics and every stored lock keep exact precedence.
+Delayed-claim, queue, unknown-response and failed-correction controls cover
+1/8/9/16 parts alongside timely completion and retained-success recovery. See
+`model-audits/2026-11-11-player-props-two-phase-window.md`.
+
+## November 11 player-prop source-grounded sparse-mean admission R34
+
+Future shared NBA/NFL/MLB generation is
+`player_props_ai_2026_11_11_r34_source_mean_admission`; sole NBA writer is
+`nba_player_props_private_writer_2026_11_11_r21_source_mean_admission` and NFL
+writer is `nfl_player_props_writer_2026_11_11_r95_source_mean_admission`.
+This includes the complete-phase timing, same-lease priority and private
+member-transport fixes described in the prelaunch R33 section below.
+
+Numeric source checks now apply to sparse histories and all offered derived
+markets, rather than skipping mean admission below three observations. Played
+canonical integer units, exact same-game component joins, nonconflicting
+opportunities and genuine exact-market priors establish a review range. One
+unsupported scalar is not a range; a combined prior is never allocated to its
+components. Signed components of an offered combination require their own
+credible scale so extreme positive and negative forecasts cannot cancel into an
+apparently sound total. Missing numerical support explicitly declines that scope;
+it does not falsely claim that supplied factual context is absent. All-zero rare
+events may use a real opportunity scale or positive exact prior. Actual binary
+anytime-touchdown event units, integer pushes, supported negative net yards,
+source-grounded role changes and large tails with supported means remain valid.
+
+NBA named constraint cardsR2 and correction feedback use the same support helper
+as admission. Raw source values, source/market evidence, independent forecasts,
+price/grade formulas, two logical slots, bounded phases, models and spending
+limits remain unchanged. Accepted R33/R32 and older laws are never reparsed under
+R34; stored locks retain exact writer and reader precedence. Native MLB champion
+`mlb_props_2026_10_21_r44`, wireR5, selectionR6 and gradeR3 remain unchanged.
+
+Focused controls pair unsupported-law refusal with supported Over and Under
+promotion, explicit decline and recovery, actual parser/member publication and
+legacy lock precedence. This is prospective numerical/process validation, not
+an accuracy guarantee or evidence of full live coverage. Details, board impact
+and required release checks: `model-audits/2026-11-11-player-props-two-phase-window.md`.
+
+## November 11 prelaunch timing repair R33 retained by R34
+
+Future shared NBA/NFL/MLB generation is
+`player_props_ai_2026_11_11_r33_two_phase_review_window`. Before a paid claim,
+source/count preparation and whole-game admission must leave the complete
+existing primary and correction opportunity: 240 seconds for up to eight parts,
+420 for nine to sixteen. Each primary request reserves correction, later waves
+and handoff time. Delayed acknowledgements that prevent any primary HTTP request
+record known zero usage and cannot manufacture a paid correction as their first
+request. Known dispatched failures retain their existing bounded recovery;
+unknown charges remain held. Successful parts and admitted actors are retained.
+
+NBA routeR26, rescueR2 and sole writerR20 run due prop work before long Daily Edge
+work inside the same awaited `prediction_pipeline:nba` lease. The original
+request clock, including lease waits and source preparation, owns the 480-second
+AI deadline. NFL sole writerR94 uses the corresponding existing NFL lease and
+starts alongside Daily Edge only after their shared current-season state is
+persisted. Existing NFL and MLB routes allow 540 seconds under 600-second sport
+leases and pass the same absolute 480-second review budget. No cadence, timer,
+writer, provider-request budget, review slot, model, output cap, retry count,
+price/grade formula or spending limit is added. Native MLB championR44 remains
+exact. Accepted R32/R31 and older laws, text and all stored locks remain exact.
+
+Source auditR1 records bounded hashed comparisons from actual future NBA
+publication callbacks in the existing private canonical write. It distinguishes
+original-source, availability, scope and qualification changes, with explicit
+unsupported/missing/overflow states. It has no forecast authority, adds no
+provider/model request or database write, and does not attest full collector
+coverage. Current cached reconstructions cannot substitute for that proof.
+Server member transportR1 allowlists existing public snapshot fields and
+diagnostics before both NBA client entry points. The private source-audit and
+future internal metadata never enter the browser payload; stored decisions and
+locked fields retain exact precedence. No new user-facing results or diagnostic
+surface is added.
+
+This time admission prevents known doomed claims; it cannot guarantee provider,
+database or whole-slate completion under arbitrary delays. A deferred pending
+slot remains pending for the existing normal opportunity; closed slots are never
+replayed. Actual source/part coverage, both slots, member publication and locks
+still require ordinary live verification. Frozen historical misses are not
+repaired by this release. Monthly cost is measured from normal usage and holds,
+not inferred from a clean build. Details and limitations:
+`model-audits/2026-11-11-player-props-two-phase-window.md`.
+
 ## November 11 prospective player-prop lossless source tables and durable NBA publication R32
 
 Future generation is `player_props_ai_2026_11_11_r32_lossless_reader_tables`.

@@ -1,3 +1,4 @@
+import * as completionWindow from '../lib/playerPropsAi/completionWindow';
 /** Actual shipped NBA writer + canonical codec/reader + lock/tracking, mocked I/O.
  * No environment files, provider HTTP, real SQL or paid calls are permitted. */
 import assert from 'node:assert/strict';
@@ -8,6 +9,7 @@ import * as nbaSourceIdentity from '../lib/playerPropsAi/nbaSourceIdentity';
 import * as evidence from '../lib/playerPropsAi/evidence';
 import * as bindings from '../lib/playerPropsAi/siteBindings';
 import * as publication from '../lib/playerPropsAi/publication';
+import * as sourceContextAudit from '../lib/playerPropsAi/sourceContextAudit';
 import * as authority from '../lib/playerPropsAi/nbaLockAuthority';
 import * as lifecycle from '../lib/services/nba/nbaPlayerPropsLifecycle';
 import * as product from '../lib/services/nba/nbaPlayerPropsProductContract';
@@ -61,7 +63,7 @@ function harness(options:{games?:number;staggered?:boolean;emptyLive?:boolean;em
    return{data:{written:true,status:'written',checksum:(args.p_record.payload as {checksum:string}).checksum,server_admitted_at:admitted,server_write_completed_at:tick},error:null};
   }finally{activeWrites--;}
  }};
- const modules:Record<string,unknown>={
+ const modules:Record<string,unknown>={completionWindow,sourceContextAudit,
   nbaSourceIdentity,evidence,siteBindings:bindings,publication,nbaPlayerPropsLifecycle:lifecycle,nbaPlayerPropsProductContract:product,
   nbaLockAuthority:{...authority,observeNbaSourceAuthority:authority.testNbaSourceAuthority(()=>tick),captureNbaHandoffBundle:authority.testNbaHandoffCapture(()=>tick)},
   siteConfig:{propsAiSiteConfig:()=>({integrated:true})},espnNbaInjuries:{canonicalNbaAbbreviation:(s:string)=>s,fetchEspnNbaGameInjuries:async(id:string|number)=>options.allOut?{eventId:String(id),teams:new Map([['BOS',[{name:'Synthetic a',status:'out',reported_at:null},{name:'Synthetic b',status:'out',reported_at:null}]],['NYK',[]]])}:null},nbaPlayerPropsSettlementStore:{},

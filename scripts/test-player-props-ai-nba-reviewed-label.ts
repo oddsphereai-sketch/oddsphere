@@ -11,7 +11,7 @@ import {testNbaSourceAuthority,testNbaHandoffCapture,mergeNbaHandoffs} from '../
 import {advanceNbaPlayerPropsCandidateLifecycle} from '../lib/services/nba/nbaPlayerPropsLifecycle';
 import {parseJointReview} from '../lib/playerPropsAi/request';
 import {digest} from '../lib/playerPropsAi/evidence';
-import {NBA_PLAYER_PROPS_CURRENT_STATE_RELEASE,type NbaPlayerPropsCurrentState} from '../lib/services/nba/nbaPlayerPropsCurrentState';
+import {nbaPlayedStateFixture} from './lib/player-props-ai-nba-played-fixture';
 
 globalThis.fetch=async()=>{throw Error('Reviewed NBA label controls forbid network');};
 const previousEnv=process.env.NODE_ENV;Object.assign(process.env,{NODE_ENV:'test'});
@@ -23,7 +23,7 @@ try{
  const priorHistory=mergeNbaPlayerPropsMarketHistory({previous:null,current:old,slateDate:'2026-11-10',capturedAt:past}).history;
  const market=mergeNbaPlayerPropsMarketHistory({previous:priorHistory,current,slateDate:'2026-11-10',capturedAt:at}).history;
  const native={...f.row(),playerId:id,playerName:old[0].playerName!},baseline=f.snapshot([native]);
- const state={release:NBA_PLAYER_PROPS_CURRENT_STATE_RELEASE,publicEnabled:false,season:2026,createdAt:past,games:[],boxes:[],advanced:[],players:[],updatedAt:past} satisfies NbaPlayerPropsCurrentState;
+ const state=nbaPlayedStateFixture(past,[1],[14,18,20],[4,6,8]);
  const args={game,window:{gameId:'g',stage:'final' as const,cutoff:at,lock:f.packet.lock},snapshot:baseline,market,prior:state,current:state,currentObservations:current};
  const source=(observations=current,clock=at)=>liveNbaPacket({...args,window:{...args.window,cutoff:clock},currentObservations:observations});
  const packet=source(),review=nbaAuthorityReview(packet),choices=siteAiDecisions(packet,review,at),original=digest({args,packet,review});

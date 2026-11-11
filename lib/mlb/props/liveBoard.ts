@@ -150,6 +150,8 @@ import {
 
 type RefreshArgs = {
   writerRunId?:string;
+  /** Absolute sole-writer invocation budget, including source collection. */
+  aiDeadline?:number;
   slateDate: string;
   refreshMode?: "fast" | "full";
   asOfTimestamp?: string;
@@ -578,7 +580,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
       await publishMlbPropsBoardSnapshot(ready);
       Object.assign(snapshot,ready);
     });
-    await reviewPropsForSite({client,sport:"mlb",writerRunId:args.writerRunId,deadline:Date.parse(asOfTimestamp)+260000,
+    await reviewPropsForSite({client,sport:"mlb",writerRunId:args.writerRunId,deadline:Math.min(Date.parse(asOfTimestamp)+480000,args.aiDeadline??Date.parse(asOfTimestamp)+260000),
       onSourceReady:(packet,review,_observedAt,lookupAvailable)=>handoff.observe(packet,review,lookupAvailable),
       onReviewObserved:(packet,review,lookupAvailable)=>handoff.observe(packet,review,lookupAvailable),
       onReviewReady:(packet,review)=>handoff.observe(packet,review,true),

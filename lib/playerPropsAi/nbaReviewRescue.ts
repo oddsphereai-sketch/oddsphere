@@ -6,11 +6,12 @@ import type {SupabaseClient} from "@supabase/supabase-js";
 import type {CronHandlerResult} from "../cron/runCron";
 import type {NbaRollingSchedule} from "../services/nba/nbaRollingSchedule";
 import type {refreshNbaPlayerPropsPrivateCandidate,NbaPlayerPropsPrivateWriterResult} from "../services/nba/nbaPlayerPropsPrivateWriter";
+import {propsAiTwoPhaseCompletionWindowMs} from "./completionWindow";
 import {propsAiSiteConfig} from "./siteConfig";
 
-export const NBA_PROPS_REVIEW_RESCUE_RELEASE="nba_props_review_rescue_2026_11_10_r1_due_pending_only" as const;
+export const NBA_PROPS_REVIEW_RESCUE_RELEASE="nba_props_review_rescue_2026_11_11_r2_absolute_two_phase" as const;
 export const NBA_PROPS_REVIEW_RESCUE_REQUEST_BUDGET_MS=480_000;
-export const NBA_PROPS_REVIEW_RESCUE_MIN_REMAINING_MS=120_000;
+export const NBA_PROPS_REVIEW_RESCUE_MIN_REMAINING_MS=propsAiTwoPhaseCompletionWindowMs(1);
 export type NbaPropsReviewRescueWriterArgs=Parameters<typeof refreshNbaPlayerPropsPrivateCandidate>[0]&{aiDeadline:number};
 export type NbaPropsReviewRescueArgs={client:SupabaseClient;writerRunId:string;requestStartedAt:number;clock?:()=>number;env?:Record<string,string|undefined>};
 export type NbaPropsReviewRescueDependencies={
@@ -62,7 +63,7 @@ export async function runNbaPropsReviewRescue(args:NbaPropsReviewRescueArgs,deps
     const writerNow=new Date(clock());
     phase="canonical_props_writer";
     const result=await services.writeCandidate({client:args.client,writerRunId:args.writerRunId,slateDate,season,schedule:schedule.games,
-      ballDontLieApiKey,theOddsApiKey,owlsInsightApiKey,fullRefresh:false,now:writerNow.toISOString(),aiDeadline:deadline});
+      ballDontLieApiKey,theOddsApiKey,owlsInsightApiKey,fullRefresh:false,now:writerNow.toISOString(),aiDeadline:deadline,reserveReviewWindow:true});
     const published=result.status==="published_private",providerRequests=safeCount(result.providerRequests);
     return {records_updated:published?1:0,api_calls_made:providerRequests,...(!published?{partial:true,error_message:"NBA props rescue did not publish a fresh candidate"}:{}),details:{rescue_release:NBA_PROPS_REVIEW_RESCUE_RELEASE,status:"canonical_writer_returned",normal_pending_slots_only:true,slate_date:slateDate,provider_season:season,writer_release:result.release,writer_status:result.status,
       provider_requests:providerRequests,decisions:safeCount(result.decisions),locked:safeCount(result.locked),observations_added:safeCount(result.observationsAdded),observations_refreshed:safeCount(result.observationsRefreshed),finding_count:safeCount(result.findings.length),absolute_ai_deadline:deadline,
