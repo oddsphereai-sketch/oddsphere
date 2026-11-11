@@ -19,7 +19,13 @@ NBA writer R19 awaits serialized per-game canonical writes in the existing
 sport-leased writer. It advances only that game's lifecycle and preserves other
 games and every stored lock. A later callback failure does not discard an
 already durable game or block a separate valid game, but the overall cycle still
-reports failure. Actual current execution authority is required for publication.
+reports failure. A later-starting game cannot advance the slate publication
+header until due existing canonical games have passed through their original
+first-lock authority. Their exact published values survive a later route failure
+and the next invocation. If due rows are ineligible and removal leaves an empty
+intermediate board, their removal is composed with the valid ready game rather
+than authorizing a generic empty write or blocking that game. Actual current
+execution authority is required for publication.
 Explicit complete-empty withdrawal has sealed process-owned authority; optional
 feed failure and partial observations cannot authorize an empty board.
 

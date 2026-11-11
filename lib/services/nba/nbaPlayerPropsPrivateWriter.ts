@@ -351,16 +351,49 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   const unreadyGames=new Set<string>();
   type WithdrawalReceipt={release:typeof NBA_PROPS_WITHDRAWAL_AUTHORITY_RELEASE;gameId:string;start:string;cutoff:string;observedAt:string;sourcePacketHash:string};
   const receipts=(snapshot:NbaPlayerPropsMemberSnapshot|null)=>(snapshot as (NbaPlayerPropsMemberSnapshot&{sourceWithdrawals?:WithdrawalReceipt[]})|null)?.sourceWithdrawals??[];
-  const persist=async(publicationNow:string,source?:{packet:GamePacket;frame:NbaLockHandoff})=>{
+  type PublicationSource={packet:GamePacket;frame:NbaLockHandoff};
+  const commit=async(snapshot:NbaPlayerPropsMemberSnapshot,publicationNow:string,source?:PublicationSource,
+    withdrawalAuthority?:Parameters<typeof writeNbaPlayerPropsPrivateSnapshot>[0]['withdrawalAuthority'])=>{
+    await writeNbaPlayerPropsPrivateSnapshot({client:args.client,snapshot,
+      source:NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE,...(integrated?{writerRunId:args.writerRunId,expectedSnapshot:previous}:{}),
+      ...(source?{publicationBefore:source.packet.lock,sourceCutoff:source.packet.cutoff}:{}),
+      ...(withdrawalAuthority?{withdrawalAuthority}:{})});
+    previous=snapshot;
+    const tracking=await captureNbaPlayerPropsPrivateTracking({client:args.client,season:args.season,
+      slateDate:args.slateDate,evaluatedAt:publicationNow,snapshot});
+    trackingConflicts+=tracking.conflicts;
+  };
+  const persist=async(publicationNow:string,source?:PublicationSource)=>{
     const gameId=source?(source.packet.sourceGameId??source.packet.gameId):null;
-    // Callback publication advances exactly one complete game. Other games,
-    // including their existing locks, keep their canonical payload unchanged.
+    let canonicalOtherRows=gameId?(previous??aiBaseline).decisions.filter(row=>row.gameId!==gameId):null;
+    // Before a later game advances the shared publication header, latch any
+    // already-due game from the actual canonical publication and existing source
+    // authority. A row's evaluation clock alone never establishes publication.
+    // The checkpoint stays bounded by these existing serial callbacks and uses
+    // the same leased/CAS store and tracking path; it adds no job or refresh.
+    if(gameId&&previous&&previous.decisions.some(row=>row.gameId!==gameId&&row.lockedAt===null
+      &&Date.parse(publicationNow)>=Date.parse(row.scheduledStart)-NBA_PLAYER_PROPS_LOCK_LEAD_MINUTES*60000)){
+      const prepared=candidate;
+      let due=advanceNbaPlayerPropsCandidateLifecycle({now:publicationNow,previous,candidate:previous,
+        ...(integrated?{lockHandoff:mergeNbaHandoffs(lockFrames)}:{})}).snapshot;
+      if(receipts(previous).length)due={...due,sourceWithdrawals:receipts(previous)} as NbaPlayerPropsMemberSnapshot;
+      canonicalOtherRows=due.decisions.filter(row=>row.gameId!==gameId);
+      // If every old unlocked row is ineligible, the ordinary empty-board
+      // guard still applies. Compose those removals with this valid ready game
+      // in the same final write rather than blocking its independent handoff.
+      if(due.decisions.length)await commit(due,publicationNow);
+      candidate=buildNbaPlayerPropsMemberSnapshot({...prepared,generatedAt:publicationNow,
+        decisions:[...due.decisions.filter(row=>row.gameId!==gameId),...prepared.decisions.filter(row=>row.gameId===gameId)],
+        inputRows:aiBaseline.diagnostics.inputRows});
+    }
+    // The current callback then advances its complete game while retaining the
+    // other canonical payloads, including the checkpoint's exact first locks.
     const scoped=(snapshot:NbaPlayerPropsMemberSnapshot)=>gameId?buildNbaPlayerPropsMemberSnapshot({...snapshot,
       games:snapshot.games.filter(g=>g.gameId===gameId),decisions:snapshot.decisions.filter(r=>r.gameId===gameId),inputRows:snapshot.diagnostics.inputRows}):snapshot;
     const lifecycle={...advanceNbaPlayerPropsCandidateLifecycle({now:publicationNow,previous:previous?scoped(previous):null,candidate:scoped(candidate),
       ...(integrated?{lockHandoff:mergeNbaHandoffs(lockFrames)}:{})})};
     if(gameId)lifecycle.snapshot=buildNbaPlayerPropsMemberSnapshot({...candidate,generatedAt:publicationNow,
-      decisions:[...(previous??aiBaseline).decisions.filter(row=>row.gameId!==gameId),...lifecycle.snapshot.decisions],inputRows:aiBaseline.diagnostics.inputRows});
+      decisions:[...canonicalOtherRows!,...lifecycle.snapshot.decisions],inputRows:aiBaseline.diagnostics.inputRows});
     const priorReceipts=receipts(previous).filter(receipt=>receipt.gameId!==gameId);
     const withdrawn=source?.packet.sourceOfferSetStatus==='empty';
     const nextReceipts=[...priorReceipts,...(withdrawn&&source?[{release:NBA_PROPS_WITHDRAWAL_AUTHORITY_RELEASE,gameId:gameId!,start:source.packet.start,cutoff:source.packet.cutoff,observedAt:publicationNow,sourcePacketHash:source.frame.observations[0].sourcePacketHash}]:[])];
@@ -370,15 +403,8 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     if(previous&&previous.decisions.length===0&&lifecycle.snapshot.decisions.length===0){candidate=previous;return{...lifecycle,snapshot:previous};}
     const withdrawalAuthority=withdrawn&&source&&previous?captureNbaWithdrawalAuthority({packet:source.packet,source:source.frame,
       currentObservations:live.observations,collectorFindings:live.findings,previous,candidate:lifecycle.snapshot}):undefined;
-    await writeNbaPlayerPropsPrivateSnapshot({client:args.client,snapshot:lifecycle.snapshot,
-      source:NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE,...(integrated?{writerRunId:args.writerRunId,expectedSnapshot:previous}:{}),
-      ...(source?{publicationBefore:source.packet.lock,sourceCutoff:source.packet.cutoff}:{}),
-      ...(withdrawalAuthority?{withdrawalAuthority}:{})});
-    previous=lifecycle.snapshot;
+    await commit(lifecycle.snapshot,publicationNow,source,withdrawalAuthority);
     candidate=lifecycle.snapshot;
-    const tracking=await captureNbaPlayerPropsPrivateTracking({client:args.client,season:args.season,
-      slateDate:args.slateDate,evaluatedAt:publicationNow,snapshot:lifecycle.snapshot});
-    trackingConflicts+=tracking.conflicts;
     return lifecycle;
   };
   if(integrated&&priorState&&currentState){

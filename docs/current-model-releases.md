@@ -15,7 +15,10 @@ Sole NBA writerR19 is
 `nba_player_props_private_writer_2026_11_11_r19_durable_review_publication`.
 Each complete ready game is awaited through a serialized canonical publication
 queue, before unrelated reviews can exhaust the route duration. Other games and
-stored locks remain exact. V71 adds service-only checksum compare-and-swap,
+stored locks remain exact. Before a later game advances the slate header, due
+canonical games pass through the existing first-lock lifecycle and same leased
+store, retaining their exact prelock payload across a later process failure.
+V71 adds service-only checksum compare-and-swap,
 existing sport-lease ownership and server clock checks before and after writes.
 Its receipt proves server write completion, never a claimed transaction commit
 time. Withdrawal authorityR1 requires successful complete current empty-source
