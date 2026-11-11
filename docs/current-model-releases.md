@@ -1,3 +1,23 @@
+## November 11 player-prop terminal-wave spending guard R35
+
+Shared generation `player_props_ai_2026_11_11_r35_terminal_wave_guard`, sole NBA
+writer `nba_player_props_private_writer_2026_11_11_r22_terminal_wave_guard` and
+NFL writer `nfl_player_props_writer_2026_11_11_r96_terminal_wave_guard` retain
+all R34 source-mean, timing, private audit and member-transport repairs below.
+After a delayed claim acknowledgement, the complete two-phase game reserve is
+checked again before any send. After each settled wave, an unrecoverable failure
+or failure in the last correction phase stops later paid waves. Already launched
+siblings retain their exact known/unknown receipts; successful parts remain
+retained and no closed job is replayed. A partial game never becomes complete.
+
+No slot, model, phase, provider budget, timeout ceiling, grade formula, numerical
+support rule or spending limit is increased. Same-law board/grade impact is zero;
+this corrects avoidable charges on incomplete reviews, not forecasts or results.
+R34 and older request/law semantics and every stored lock keep exact precedence.
+Delayed-claim, queue, unknown-response and failed-correction controls cover
+1/8/9/16 parts alongside timely completion and retained-success recovery. See
+`model-audits/2026-11-11-player-props-two-phase-window.md`.
+
 ## November 11 player-prop source-grounded sparse-mean admission R34
 
 Future shared NBA/NFL/MLB generation is

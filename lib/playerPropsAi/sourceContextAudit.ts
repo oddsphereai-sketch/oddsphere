@@ -12,7 +12,7 @@ import {PROPS_AI_READER_CLAIMS_RELEASE,PROPS_AI_RELEASE} from './releases';
 
 export const PROPS_SOURCE_CONTEXT_AUDIT_RELEASE='player_props_source_context_audit_2026_11_11_r1_actual_callback' as const;
 export const PROPS_SOURCE_CONTEXT_AUDIT_LIMITS={games:16,actors:256,evidenceRecords:4096,inputBytes:16_000_000,compressedBytes:2_000_000,outputBytes:1_000_000} as const;
-const supported=new Set<string>([PROPS_AI_RELEASE,'player_props_ai_2026_11_11_r33_two_phase_review_window','player_props_ai_2026_11_11_r32_lossless_reader_tables','player_props_ai_2026_11_10_r31_verified_reader_claims']);
+const supported=new Set<string>([PROPS_AI_RELEASE,"player_props_ai_2026_11_11_r34_source_mean_admission",'player_props_ai_2026_11_11_r33_two_phase_review_window','player_props_ai_2026_11_11_r32_lossless_reader_tables','player_props_ai_2026_11_10_r31_verified_reader_claims']);
 type ReviewStatus='verified'|'none'|'lookup_unavailable'|'unsupported_release'|'invalid_archive'|'binding_mismatch';
 type Change='added'|'removed'|'value_changed'|'availability_only'|'unchanged';
 type EvidenceVersion={valueHash:string;availableAt:string;count:number};

@@ -68,6 +68,9 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
     // A claim acknowledgement can arrive after the final-only boundary. Close
     // its unused escrow rather than purchasing a late early request.
     invariant(!earlyWindowClosed(),"early_window_closed_final_only");
+    // The claim RPC can consume the last admission cushion. Recheck the whole
+    // game before any send; a later wave cannot rescue an unsent earlier wave.
+    invariant(Math.min(deadline-Date.now(),instant(args.packet.lock)-instant(clock()))>=propsAiTwoPhaseCompletionWindowMs(parts.length),"review_completion_window_exhausted");
     while(phase<=2){
       const failures:{index:number;reason:string;known:boolean}[]=[];
       // Whole-player parts retain every market. Successful parts are never regenerated.
@@ -172,6 +175,10 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
           if(result.status==="fulfilled"){if(result.value)failures.push(result.value);}
           else failures.push({index:pending[offset+i],reason:(result.reason as Error).message,known:false});
         }
+        // All launched siblings have recorded their own receipts. Once this
+        // game cannot recover, don't purchase later waves for a partial result
+        // that can never pass whole-game coverage. Unknown charges stay held.
+        if(failures.some(f=>!f.known)||phase===2&&failures.length)break;
       }
       if(!failures.length){
         const parsed=[...accepted].sort(([a],[b])=>a-b).flatMap(([,r])=>r.players);

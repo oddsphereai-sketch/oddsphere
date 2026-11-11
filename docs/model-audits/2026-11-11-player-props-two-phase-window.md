@@ -34,9 +34,10 @@ unchanged.
 
 ## Scope and release identities
 
-Shared generation R34; operations R5; NBA route R26, rescue R2 and writer R21;
-NFL writer `nfl_player_props_writer_2026_11_11_r95_source_mean_admission`.
-The unlaunched R33 timing candidate is retained as an exact test/parser pin.
+Shared generation R35; operations R5; NBA route R26, rescue R2 and writer R22;
+NFL writer `nfl_player_props_writer_2026_11_11_r96_terminal_wave_guard`.
+The unlaunched R33 timing and R34 sparse-mean candidates are retained as exact
+test/parser pins.
 NBA named source constraint cards advance to R2 with shared numeric support.
 Named source tablesV3, wireR5, factual claimsR1, source contextR1, selectionR6,
 NFL decisionR13, gradeR3, scheduleR3 and budgetR5 retain their own semantics.
@@ -143,3 +144,26 @@ The fixed sparse fixture has two formerly accepted Best Angles; explicit decline
 leaves one, while supported repaired Over and Under drafts each retain two, and
 a genuine quantitative source-head recovery also retains two. These are paired
 correctness controls, not a target board size or observed live-product impact.
+
+## Terminal-wave spending guard
+
+Fresh independent whole-product review reproduced a delayed claim-ACK boundary:
+at the exact 420-second nine/sixteen-part admission limit, one millisecond of
+claim delay prevented the first eight requests, but later waves still dispatched
+before the whole review failed. This spent money on a now-unrecoverable partial
+game. Root independently reproduced the actual-code virtual-time probe.
+
+R35 rechecks the complete game reserve immediately after claim acknowledgement.
+Each settled wave stops later dispatch when any mandatory part is unrecoverable,
+or when a correction fails and no further phase exists. All already launched
+siblings are awaited and their original receipts retained. Known zero unsent
+requests remain distinct from genuinely unknown billed outcomes; no existing
+hold is released. Successful parts and actors keep their existing retained path.
+One normal logical slot finishes once; no paid proof or closed-job replay occurs.
+
+Actual-reviewer tests cover 1/8/9/16-part delayed claims and queue boundaries,
+exact timely acknowledgements, nine/sixteen-part unknown first-wave responses,
+failed final correction waves, all sixteen timely primary/correction parts and
+successful-part retention. Same accepted law/quote yields identical board values
+and grades. This bounds avoidable spending; it cannot guarantee vendor response,
+whole-slate completion, outcome accuracy or a future monthly total.

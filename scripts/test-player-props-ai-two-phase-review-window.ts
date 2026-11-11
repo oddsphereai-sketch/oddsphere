@@ -18,7 +18,7 @@ import {digest} from '../lib/playerPropsAi/evidence';
 globalThis.fetch=async()=>{throw Error('Two-phase proof forbids real HTTP/provider/model/count calls');};
 const epoch=Date.parse('2030-11-17T17:00:00Z'),iso=(ms:number)=>new Date(epoch+ms).toISOString(),v=(n:number)=>Array<number>(16).fill(n);
 const originalNow=Date.now,originalTimeout=AbortSignal.timeout;
-type Mode={parts?:number;actorsPerPart?:number;deadlineMs:number;lockMs?:number;prepareMs?:number;admissionMs?:number;sendMs?:number;receiptMs?:number;primaryMs?:number;correctionMs?:number;invalidPrimary?:boolean;retainedActor?:boolean;preferStronger?:boolean;queueMs?:number;capacityRejection?:boolean};
+type Mode={claimMs?:number;invalidCorrection?:boolean;parts?:number;actorsPerPart?:number;deadlineMs:number;lockMs?:number;prepareMs?:number;admissionMs?:number;sendMs?:number;receiptMs?:number;primaryMs?:number;correctionMs?:number;invalidPrimary?:boolean;retainedActor?:boolean;preferStronger?:boolean;queueMs?:number;capacityRejection?:boolean};
 type Event={kind:string;at:number;part?:number;phase?:number;timeout?:number;ids?:string[]};
 
 function packet(game:number,parts:number,actorsPerPart:number,cutoff:number,lockMs:number):GamePacket{
@@ -28,7 +28,7 @@ function packet(game:number,parts:number,actorsPerPart:number,cutoff:number,lock
 function draft(source:GamePacket,phase:number,mode:Mode){
   const aliases=evidenceAliases(source);
   return{wireRelease:PROPS_AI_WIRE_RELEASE,players:Object.fromEntries(source.players.map((player,index)=>{
-    const bad=phase===1&&mode.invalidPrimary&&(!mode.retainedActor||index===1)||phase===2&&mode.retainedActor&&index===0;
+    const bad=phase===2&&mode.invalidCorrection||phase===1&&mode.invalidPrimary&&(!mode.retainedActor||index===1)||phase===2&&mode.retainedActor&&index===0;
     return[player.id,verifiedReaderFixture(source,player.id,{priorRead:{},evidenceIds:[[...aliases].find(([,id])=>id===player.evidence[0].id)![0]],gaps:[],confidence:[2],exceptions:[null],law:encodeCanonicalScenarioLaw('nba',player,{weights:v(1),outcomes:{points:bad?v(50):[18,22,...v(20).slice(2)],rebounds:v(4),assists:v(2),threes:v(1)}})})];
   }))};
 }
@@ -44,7 +44,7 @@ async function simulation(modes:Mode[],options:{sharedPool?:boolean;wholeGameAdm
   async function run(game:number,routeAt=0,prepareOverride?:number){
     const mode=modes[game],lockMs=mode.lockMs??1000000,source=packet(game,mode.parts??1,mode.actorsPerPart??1,now,lockMs),sourceDigest=digest(source),parts=Array.from({length:mode.parts??1},(_,i)=>({packet:playerSubset(source,source.players.slice(i*(mode.actorsPerPart??1),(i+1)*(mode.actorsPerPart??1)).map(p=>p.id)),inputTokens:1000}));
     const store:PropsAiReviewStore={
-      claim:async(key,_hash,requests)=>{assert.equal(key,jobs[game].job_key);assert.equal(jobs[game].state,'pending');assert.equal(requests.length,parts.length);assert(requests.every(r=>r.max_output_tokens===7000));claims[game]++;events.push({kind:`claim-${game}`,at:now});jobs[game]={...jobs[game],state:'running'};return{claimed:true,token:'synthetic',job:jobs[game]};},
+      claim:async(key,_hash,requests)=>{assert.equal(key,jobs[game].job_key);assert.equal(jobs[game].state,'pending');assert.equal(requests.length,parts.length);assert(requests.every(r=>r.max_output_tokens===7000));claims[game]++;events.push({kind:`claim-${game}`,at:now});await sleep(mode.claimMs??0);jobs[game]={...jobs[game],state:'running'};return{claimed:true,token:'synthetic',job:jobs[game]};},
       send:async(_key,_token,phase,part)=>{events.push({kind:`send-${game}`,at:now,phase,part});const id=`attempt-${game}-${phase}-${part}`,requestedTier=mode.capacityRejection&&phase===1?'flex' as const:'default' as const;assert(!attempts.some(a=>a.id===id));attempts.push({id,job_key:jobs[game].job_key,part,phase,state:'sending',model:PROPS_AI_PRIMARY_MODEL,requested_tier:requestedTier,response_id:null,actual_micro:null,usage:null} as PersistedActorAttempt);await sleep(mode.sendMs??0);return{id,reserved_micro:10000,model:PROPS_AI_PRIMARY_MODEL,requested_tier:requestedTier};},
       receipt:async(id,_token,actual,responseId,usage)=>{const record=attempts.find(a=>a.id===id)!;assert.equal(record.usage,null,'Receipt is immutable');Object.assign(record,{actual_micro:actual,response_id:responseId,usage:structuredClone(usage),state:actual===null?'unknown':'completed'});await sleep(mode.receiptMs??0);},
       fallback:async(_key,_token,partNumbers)=>{fallbacks[game]++;assert.equal(fallbacks[game],1);events.push({kind:`fallback-${game}`,at:now,ids:partNumbers.map(String)});return true;},
@@ -82,6 +82,23 @@ async function simulation(modes:Mode[],options:{sharedPool?:boolean;wholeGameAdm
 async function main(){
   assert.equal(propsAiCompletionWindowMs(1),120000);assert.equal(propsAiTwoPhaseCompletionWindowMs(1),240000);assert.equal(propsAiTwoPhaseCompletionWindowMs(8),240000);assert.equal(propsAiTwoPhaseCompletionWindowMs(16),420000);assert.throws(()=>propsAiTwoPhaseCompletionWindowMs(17));
   for(const remaining of [141000,104513,111391]){const deferred=await simulation([{deadlineMs:remaining}]);assert.equal(deferred.results[0].status,'skipped');assert.equal(deferred.claims[0],0);assert.equal(deferred.attempts.length,0);assert.equal(deferred.jobs[0].state,'pending');}
+  // A claim ACK, generation queue or unknown response must never make a
+  // later wave buy work after an earlier mandatory wave cannot be recovered.
+  for(const parts of [1,8,9,16]){
+    const minimum=propsAiTwoPhaseCompletionWindowMs(parts);
+    const lateClaim=await simulation([{parts,deadlineMs:minimum,claimMs:1}]);
+    assert.equal(lateClaim.claims[0],1);assert.equal(lateClaim.attempts.length,0);assert.equal(lateClaim.bodies.length,0);assert.equal(lateClaim.finishes[0],1);assert.equal(lateClaim.fallbacks[0],0);assert.equal(lateClaim.results[0].status,'failed');
+    const exactClaim=await simulation([{parts,deadlineMs:minimum+1,claimMs:1}]);
+    assert.equal(exactClaim.results[0].status,'completed');assert.equal(exactClaim.bodies.length,parts);
+    const queuedWave=await simulation([{parts,deadlineMs:minimum,queueMs:1}]);
+    assert.equal(queuedWave.attempts.length,0);assert.equal(queuedWave.bodies.length,0);assert.equal(queuedWave.finishes[0],1);assert.equal(queuedWave.results[0].status,'failed');
+  }
+  for(const parts of [9,16]){
+    const unknownWave=await simulation([{parts,deadlineMs:480000,primaryMs:180001}]);
+    assert.equal(unknownWave.attempts.length,8);assert.equal(unknownWave.bodies.length,8);assert(unknownWave.attempts.every(a=>a.actual_micro===null&&a.state==='unknown'));assert.equal(unknownWave.fallbacks[0],0);assert.equal(unknownWave.finishes[0],1);assert.equal(unknownWave.results[0].status,'failed');
+    const finalWave=await simulation([{parts,deadlineMs:480000,invalidPrimary:true,invalidCorrection:true}]);
+    assert.equal(finalWave.bodies.filter(b=>b.phase===1).length,parts);assert.equal(finalWave.bodies.filter(b=>b.phase===2).length,8);assert.equal(finalWave.fallbacks[0],1);assert.equal(finalWave.finishes[0],1);assert.equal(finalWave.results[0].status,'failed');assert(finalWave.attempts.every(a=>a.actual_micro!==null),'Known receipts stay exact; no unknown hold is fabricated or released');
+  }
   const prepared=await simulation([{deadlineMs:300000,prepareMs:159000,invalidPrimary:true}],{pendingRescue:true});assert.equal(prepared.results[1].status,'completed');assert.equal(prepared.claims[0],1);assert.equal(prepared.fallbacks[0],1);assert.equal(prepared.jobs[0].job_key,'props-ai|nba|synthetic-window-0|2030-11-17|final');assert(prepared.events.find(e=>e.kind==='claim-0')!.at>=200000);
   const delayedAdmission=await simulation([{deadlineMs:300000,admissionMs:100000}]);assert.equal(delayedAdmission.results[0].status,'skipped');assert.equal(delayedAdmission.claims[0],0);assert(delayedAdmission.events.some(e=>e.kind==='permit-released-0'));
   const bounded=await simulation([{parts:2,actorsPerPart:2,deadlineMs:240000,primaryMs:90000,correctionMs:90000,receiptMs:20000,invalidPrimary:true,retainedActor:true}]);assert.equal(bounded.results[0].status,'completed');assert.equal(bounded.fallbacks[0],1);assert(bounded.events.filter(e=>e.kind==='http-0'&&e.phase===2).every(e=>e.timeout!>=90000));assert(bounded.now<240000);
