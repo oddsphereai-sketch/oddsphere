@@ -2,7 +2,7 @@ import {qualifiedForecastMarkets} from "./sourceEvents";
 import type { GamePacket, Player, Sport } from "./evidenceContract";
 import { COMBOS } from "./evidenceContract";
 import { invariant, digest } from "./evidence";
-import { PROPS_AI_LAW_RELEASE, PROPS_AI_SCENARIOS } from "./releases";
+import { PROPS_AI_LAW_RELEASE, LEGACY_PROPS_AI_LAW_RELEASE, PROPS_AI_SCENARIOS } from "./releases";
 import { readerEvidence, validatePlayerCoverage, type ReaderCoverage } from "./readerCoverage";
 
 const NBA = ["points", "rebounds", "assists", "threes"] as const;
@@ -21,7 +21,12 @@ export function primitives(sport: Sport, player: Pick<Player, "markets"|"sourceE
 export type PlayerLaw = { weights: number[]; outcomes: Record<string, number[]> };
 export type PlayerReview = { assessment: string; coverage: ReaderCoverage; evidenceIds: string[]; gaps: string[]; law: PlayerLaw | null; confidence: number[]; exceptions: (string | null)[]; priorRead?:Record<string,string>;sourceReadProofs?:Record<string,unknown> };
 export type GameReview = { players: Record<string, PlayerReview> };
-export type AcceptedPlayerLaw = { release: typeof PROPS_AI_LAW_RELEASE; hash: string; weights: number[]; outcomes: Record<string, number[]> };
+type AcceptedLawFields = { hash: string; weights: number[]; outcomes: Record<string, number[]> };
+export type AcceptedPlayerLaw = AcceptedLawFields & (
+  | {release:typeof LEGACY_PROPS_AI_LAW_RELEASE;integerWeights?:never}
+  | {release:typeof PROPS_AI_LAW_RELEASE;integerWeights:number[]}
+);
+export type ExactLawEventMass={over:number;under:number;push:number;total:number;weightedValue:number};
 /** Dependencies of the canonical mathematical contract, including nested combos. */
 export function marketUsesStatistic(market:string,statistic:string):boolean{
   if(market===statistic)return true;
@@ -50,7 +55,7 @@ export function validateLaw(sport: Sport, player: Pick<Player, "markets"|"source
       if (v("batter_home_runs") !== undefined) invariant(v("batter_runs_scored") >= v("batter_home_runs") && v("batter_rbis") >= v("batter_home_runs"), "MLB home runs contradict runs/RBIs");
     }
   }
-  const result = { release: PROPS_AI_LAW_RELEASE, weights: law.weights.map(w => w / total), outcomes: structuredClone(law.outcomes) };
+  const result = { release: PROPS_AI_LAW_RELEASE, weights: law.weights.map(w => w / total), integerWeights:[...law.weights], outcomes: structuredClone(law.outcomes) };
   return { ...result, hash: digest(result) };
 }
 export function scenarioStat(law: AcceptedPlayerLaw, market: string, i: number): number {
@@ -60,7 +65,7 @@ export function scenarioStat(law: AcceptedPlayerLaw, market: string, i: number):
   if (COMBOS[market]) return COMBOS[market].reduce((n, key) => n + scenarioStat(law, key, i), 0);
   invariant(law.outcomes[market], `Unsupported scenario market: ${market}`); return law.outcomes[market][i];
 }
-export function lawForecast(law: AcceptedPlayerLaw, market: string, line: number, milestone = false) {
+function legacyLawForecast(law: AcceptedPlayerLaw, market: string, line: number, milestone = false) {
   invariant(Number.isFinite(line), "Missing exact line");
   let mean = 0, over = 0, under = 0, push = 0;
   for (let i = 0; i < law.weights.length; i++) {
@@ -70,6 +75,35 @@ export function lawForecast(law: AcceptedPlayerLaw, market: string, line: number
   }
   return { mean, over, under, push, preferredSide: over >= under ? "over" as const : "under" as const };
 }
+
+/** R2 retains its original bounded integer weights. Never reconstruct these from
+ * an R1 normalized law or change any archived normalized weight/hash. */
+export function lawEventMass(law:AcceptedPlayerLaw,market:string,line:number,milestone=false):ExactLawEventMass{
+  invariant(law.release===PROPS_AI_LAW_RELEASE,"Exact event mass requires original R2 integer weights");
+  invariant(Number.isFinite(line),"Missing exact line");
+  const weights=law.integerWeights;
+  invariant(Array.isArray(weights)&&weights.length===PROPS_AI_SCENARIOS&&weights.every(w=>Number.isSafeInteger(w)&&w>=0&&w<=10000),"Invalid original integer scenario weights");
+  const total=weights.reduce((a,b)=>a+b,0);
+  invariant(total>0&&total<=PROPS_AI_SCENARIOS*10000,"Invalid exact scenario total");
+  invariant(law.weights.length===weights.length&&law.weights.every((w,i)=>w===weights[i]/total),"Integer and normalized scenario weights disagree");
+  invariant(Object.entries(law.outcomes).every(([key,values])=>Array.isArray(values)&&values.length===weights.length&&values.every(v=>Number.isSafeInteger(v)&&Math.abs(v)<=10000&&(key.endsWith("yards")||v>=0))),"Invalid exact scenario outcome units");
+  let over=0,under=0,push=0,weightedValue=0;
+  for(let i=0;i<weights.length;i++){
+    const value=scenarioStat(law,market,i),w=weights[i];
+    invariant(Number.isSafeInteger(value),"Invalid derived exact scenario units");
+    weightedValue+=w*value;
+    if(milestone||market==="anytime_td"){if(value>=line)over+=w;else under+=w;}
+    else if(value>line)over+=w;else if(value<line)under+=w;else push+=w;
+  }
+  invariant(Number.isSafeInteger(weightedValue)&&over+under+push===total,"Exact scenario arithmetic overflow");
+  return{over,under,push,total,weightedValue};
+}
+export function lawForecast(law:AcceptedPlayerLaw,market:string,line:number,milestone=false){
+  if(law.release===LEGACY_PROPS_AI_LAW_RELEASE)return legacyLawForecast(law,market,line,milestone);
+  const mass=lawEventMass(law,market,line,milestone);
+  return{mean:mass.weightedValue/mass.total,over:mass.over/mass.total,under:mass.under/mass.total,push:mass.push/mass.total,preferredSide:mass.over>=mass.under?"over" as const:"under" as const};
+}
+
 /** Validate one actor under the ORIGINAL packet/fact universe, never a reindexed subset. */
 export function validatePlayerReview(packet: GamePacket, playerId:string, row:PlayerReview,verifiedClaimRendering=false) {
   const player=packet.players.find(p=>p.id===playerId);invariant(player,"Unexpected player in forecast");

@@ -180,10 +180,9 @@ export function compileReaderClaims(packet:GamePacket):Record<string,ReaderClaim
 
 /** Model navigation only. Full raw facts and the full canonical catalog remain
  * unchanged; repeat only the new derived relationships, not logs/prior payloads. */
-export function readerClaimModelInput(packet:GamePacket){
+function readerClaimModelInputFromCatalogs(packet:GamePacket,catalogs:Record<string,ReaderClaimCatalog>){
  const aliases=new Map([...evidenceAliases(packet)].map(([alias,id])=>[id,alias]));
  const quoteCollection=packet.executionQuotes??packet.quotes,quoteIndices=new Map(quoteCollection.map((q,i)=>[q.id,i]));
- const catalogs=compileReaderClaims(packet);
  const relationship=(claim:ReaderClaim):Json|undefined=>{
   const detail=obj(claim.details);
   if(claim.area==='availability')return json({ownDesignations:detail.ownDesignations??[],lineup:detail.lineup?{factIds:obj(detail.lineup).factIds,status:obj(detail.lineup).status,battingOrder:obj(detail.lineup).battingOrder,effectiveAt:obj(detail.lineup).effectiveAt}:null,otherPlayersAreSeparate:true,lineupIsNotMedicalClearance:true});
@@ -208,4 +207,14 @@ export function readerClaimModelInput(packet:GamePacket){
   const derived=relationship(claim);
   return{id:claim.id,kind:claim.kind,text:claim.text,shortText:claim.shortText,factIds:[...claim.factIds],sourceEvidence:claim.sourceIds.map(source=>aliases.get(source)??source),...(derived===undefined?{}:{relationship:derived})};
  })}]))}]));
+}
+
+/** One synchronous request owns this compilation. No cache survives the call,
+ * and both model navigation and the response schema use the same exact facts. */
+export function compileReaderClaimRequest(packet:GamePacket){
+ const catalogs=compileReaderClaims(packet);
+ return{catalogs,modelInput:readerClaimModelInputFromCatalogs(packet,catalogs)};
+}
+export function readerClaimModelInput(packet:GamePacket){
+ return compileReaderClaimRequest(packet).modelInput;
 }

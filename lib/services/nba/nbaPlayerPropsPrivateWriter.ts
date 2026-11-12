@@ -1,7 +1,7 @@
 import {propsAiTwoPhaseCompletionWindowMs} from "../../playerPropsAi/completionWindow";
 import {buildPropsSourceContextAuditSlate,retainedPropsSourceContextAudits,type PropsSourceContextAudit} from "../../playerPropsAi/sourceContextAudit";
 import {digest} from "../../playerPropsAi/evidence";
-import {reviewPropsForSite} from "../../playerPropsAi/siteRuntime";
+import {reviewPropsForSite,type SiteReviewOutcome} from "../../playerPropsAi/siteRuntime";
 import {liveNbaPacket} from "../../playerPropsAi/liveSources";
 import {applyNbaSiteAi,restoreNbaNativeGame} from "../../playerPropsAi/siteBindings";
 import {siteAiDecisions} from "../../playerPropsAi/publication";
@@ -48,7 +48,7 @@ import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
 import { buildNbaPlayerPropsMemberPrices } from "./nbaPlayerPropsMemberPrices";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_11_11_r23_bounded_source_hash" as const;
+  "nba_player_props_private_writer_2026_11_11_r24_urgent_slot_cohorts" as const;
 
 export function nbaPlayerPropsForecastIsPublishable(
   row: Pick<NbaPlayerPropsForwardDecision, "independentProjection" | "finalProjection">,
@@ -72,6 +72,7 @@ export type NbaPlayerPropsPrivateWriterResult = Readonly<{
   decisions: number;
   locked: number;
   findings: readonly string[];
+  aiReviewRuntime?: NbaPlayerPropsMemberSnapshot['diagnostics']['aiReviewRuntime'];
   settlement?:Awaited<ReturnType<typeof settleNbaPlayerPropsTrackedSlates>>|null;
 }>;
 
@@ -370,9 +371,16 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   const lockFrames:NbaLockHandoff[]=[];
   const retainedAudits=retainedPropsSourceContextAudits(initialPrevious?.diagnostics.sourceContextAudits,{slateDate:args.slateDate,generatedAt:initialPrevious?.generatedAt??now,games:initialPrevious?.games??[]});
   const sourceAudits=new Map<string,PropsSourceContextAudit>(retainedAudits.audits.map(audit=>[audit.gameId,audit]));
+  let aiReviewOutcome:SiteReviewOutcome|null=null;
+  const runtimeTelemetry=():NbaPlayerPropsMemberSnapshot['diagnostics']['aiReviewRuntime']=>aiReviewOutcome?{
+    status:['active','disabled','paid_disabled','unavailable'].includes(aiReviewOutcome.status)?aiReviewOutcome.status:'unavailable',
+    newlyCompletedReviews:aiReviewOutcome.newlyCompletedReviews??0,
+    findings:aiReviewOutcome.findings.slice(0,64).map(f=>/^[A-Za-z0-9_:|.\-]{1,320}$/.test(f)&&!/sk-|bearer/i.test(f)?f:'ai_process_finding_redacted'),
+    observedAt:new Date().toISOString(),
+  }:undefined;
   const withSourceAudits=(snapshot:NbaPlayerPropsMemberSnapshot):NbaPlayerPropsMemberSnapshot=>sourceAudits.size||retainedAudits.status==='unavailable'
-    ?{...snapshot,diagnostics:{...snapshot.diagnostics,sourceContextAudits:{...buildPropsSourceContextAuditSlate([...sourceAudits.values()]),...(retainedAudits.status==='unavailable'&&!sourceAudits.size?{comparisonComplete:false}:{} )},...(retainedAudits.status==='unavailable'?{sourceContextAuditRetention:'prior_metadata_unavailable' as const}:{} )}}
-    :snapshot;
+    ?{...snapshot,diagnostics:{...snapshot.diagnostics,sourceContextAudits:{...buildPropsSourceContextAuditSlate([...sourceAudits.values()]),...(retainedAudits.status==='unavailable'&&!sourceAudits.size?{comparisonComplete:false}:{} )},...(retainedAudits.status==='unavailable'?{sourceContextAuditRetention:'prior_metadata_unavailable' as const}:{} ),...(aiReviewOutcome?{aiReviewRuntime:runtimeTelemetry()}:{} )}}
+    :aiReviewOutcome?{...snapshot,diagnostics:{...snapshot.diagnostics,aiReviewRuntime:runtimeTelemetry()}}:snapshot;
   // This remains the sole sport-leased writer. Ready games commit through one
   // awaited queue, before unrelated review work can consume the route budget.
   // A callback never writes a stale copy over a sibling game's publication.
@@ -492,7 +500,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     };
     const contexts=await args.client.from("lab_response_snapshots").select("payload,generated_at").eq("sport","nba").like("snapshot_key","%current-only::live-copy%").order("generated_at",{ascending:false}).limit(4);
     assertSourceWindow();
-    await reviewPropsForSite({client:args.client,sport:"nba",writerRunId:args.writerRunId,deadline:Math.min(Date.parse(now)+480000,args.aiDeadline??Infinity),
+    aiReviewOutcome=await reviewPropsForSite({client:args.client,sport:"nba",writerRunId:args.writerRunId,deadline:Math.min(Date.parse(now)+480000,args.aiDeadline??Infinity),
       onSourceAudit:audit=>{sourceAudits.set(audit.gameId,audit);},
       games:games.map(g=>({id:g.gameId,start:g.scheduledStart,away:g.awayTeam,home:g.homeTeam})),
       load:(game,window)=>liveNbaPacket({game,window,snapshot:aiBaseline,market:mergedMarket.history,currentObservations:live.observations,prior:priorState,current:currentState!,context:contexts.error?[]:contexts.data as EnrichedSource["nbaContext"],participationReports}),
@@ -527,6 +535,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     decisions: lifecycle.snapshot.decisions.length,
     locked: lifecycle.snapshot.decisions.filter((row) => row.lockedAt !== null).length,
     settlement,
+    ...(aiReviewOutcome?{aiReviewRuntime:runtimeTelemetry()}:{}),
     findings: [
       ...live.findings,
       ...(invalidForecasts.length > 0 ? [`invalid_nonpositive_forecasts_excluded:${invalidForecasts.length}`] : []),

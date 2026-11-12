@@ -1,5 +1,5 @@
 /** Allowlisted operational codes only: never log raw API bodies, keys or inputs. */
-export const PROPS_AI_DIAGNOSTIC_RELEASE="player_props_ai_operations_2026_11_11_r5_two_phase_windows" as const;
+export const PROPS_AI_DIAGNOSTIC_RELEASE="player_props_ai_operations_2026_11_11_r6_urgent_slot_cohorts" as const;
 const known:Readonly<Record<string,string>>={
  "review_completion_window_exhausted":"review_completion_window_exhausted",
  "nba_props_source_preparation_window_exhausted":"nba_props_source_preparation_window_exhausted",

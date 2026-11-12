@@ -101,6 +101,8 @@ export type NbaPlayerPropsMemberSnapshot = Readonly<{
     /** Future private source provenance only; stored decision/lock payloads stay exact. */
     sourceContextAudits?:ReturnType<typeof buildPropsSourceContextAuditSlate>;
     sourceContextAuditRetention?:'prior_metadata_unavailable';
+    /** Internal process health only; excluded from member transport. */
+    aiReviewRuntime?: Readonly<{status:string;newlyCompletedReviews:number;findings:readonly string[];observedAt:string}>;
     inputRows: number;
     canonicalMarkets: number;
     actionable: number;

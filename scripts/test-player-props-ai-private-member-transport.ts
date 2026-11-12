@@ -37,6 +37,7 @@ const privateSnapshot = {
     ...fixture.diagnostics,
     sourceContextAudits: { release: "synthetic-private", text: "PRIVATE_SOURCE_SENTINEL", padding: "x".repeat(1000000) },
     sourceContextAuditRetention: "PRIVATE_RETENTION_SENTINEL",
+    aiReviewRuntime: {status:'active',newlyCompletedReviews:0,findings:['PRIVATE_AI_RUNTIME_SENTINEL'],observedAt:'2026-11-11T22:47:38Z'},
     futureInternalField: "PRIVATE_FUTURE_SENTINEL",
   },
 } as NbaPlayerPropsMemberSnapshot;

@@ -1,3 +1,72 @@
+## November 11 player-prop urgent review cohorts R36
+
+Future shared NBA/NFL/MLB generation is
+`player_props_ai_2026_11_11_r36_urgent_slot_cohorts`; sole NBA writer is
+`nba_player_props_private_writer_2026_11_11_r24_urgent_slot_cohorts` and NFL
+writer is `nfl_player_props_writer_2026_11_11_r97_urgent_slot_cohorts`.
+Operations diagnostics R6 distinguish newly completed logical reviews from
+retained historical review authority. Native MLB champion R44, source/wire and NFL decision R13 remain unchanged.
+Future law R2 (`player_props_ai_law_2026_11_11_r2_exact_integer_mass`) retains
+the submitted integer weights for exact event masses; selection R7 and grade R4
+identify order-invariant sides and exact expected-value signs. Grade thresholds
+and the paired-margin rule do not change. Existing law R1 keeps its exact
+normalized weights/hash, original arithmetic, selection R6 and grade R3; every
+stored locked field remains first authority.
+
+Review preparation proceeds by earliest lock cohorts rather than waiting for
+all later games' source publications and input counts before any urgent claim.
+Every same-or-earlier-lock source authority is attempted first, and a due game
+requires its own successful source handoff before its paid preparation/claim.
+Unrelated source failure does not suppress healthy games; missing authority and
+first-lock precedence remain explicit. Pending early/final slots are checked
+against the actual time as the cohort runs. Complete existing primary/correction
+reserves, bounded count drainage, the common sport lease and serialized member
+CAS remain mandatory. No hard game quota, omitted player/market, new source,
+extra logical review, larger deadline, model/output cap or spending increase.
+
+Request construction may reuse internally compiled factual claims within one
+call only. Exact source and schema bytes, actor ordering and numerical admission
+must remain identical; later changed source packets compile independently.
+Original R35/R34 and older laws/wires/locks keep their own exact release and
+reader precedence. No result is regraded and no missed closed slot is replayed.
+NBA private process findings are retained internally and surfaced in cron health
+instead of treating native continuity as completed AI coverage. They never enter
+member transport or a public results surface.
+
+This follows a real normal R23 publication with preparation timeouts and no new
+AI claim, despite a completed writer. It is a process repair, not an accuracy or
+arbitrary-latency guarantee. Two fresh all-three whole-product clean rounds,
+focused/full verification, latest-main protected release and normal actual
+review/member/lock proof are required. See
+`model-audits/2026-11-11-player-props-urgent-review-cohorts.md`.
+
+Fresh round29 independently reproduced a pre-existing NFL before-lock visibility
+gap: `onReviewReady` retained the completed forecast in memory until later
+runtime work returned. R97 also requires awaited serialized per-game publication
+through the same existing writer/store and sport lease, with prior first locks
+and failed-write authority preserved. NFL keeps its existing lease-protected
+store; no server CAS or commit-before-lock guarantee is invented. No new writer, schedule or schema is added.
+This is prospective repair work until the final candidate passes fresh reviews
+and protected deployment.
+
+An unknown write acknowledgement fences later in-cycle NFL writes until the
+next authoritative snapshot read; a remote-committed final cannot be replaced
+from an older local acknowledged draft. Canonical publication flags/locks stay
+exact while new runtime drafts use their existing unpublished type contract.
+
+Round32 rejected two pre-existing numerical defects: scenario-order roundoff
+could flip an exact50/50 side and its selected quote/grade, while a break-even
+price could appear positive. Only future R2 laws use retained integer event
+masses and rational EV arithmetic. Actual member repricing uses the same exact
+event mass at the actual execution quote. No epsilon, probability clamp, old-law
+reconstruction or retrospective lock/result change is permitted. Genuine
+positive Over/Under recovery, negative-value demotion and break-even paired
+confidence Leans require focused promotion/demotion/board-impact controls.
+
+The source-only audit explicitly retains the original R35 immutable archive
+contract alongside R31–R34. Its supported-release list never reparses or reads
+accepted law values, and cannot turn diagnostic metadata into provider proof.
+
 ## November 11 NBA player-prop bounded source-hash work R23
 
 The sole NBA writer is now
@@ -5587,3 +5656,5 @@ This owner-directed promotion accepts the opened 32-game cohort and the balanced
 competitor percentages into a same-cohort superiority claim. Publication still requires focused and
 full model-change tests, latest-main integration safety, protected PR checks, and live proof of the
 r32 releases, complete state, one sport lease, one writer, lock precedence, and reader coherence.
+
+Prospective R36/R2 NBA member fallback compares original integer event EV fractions through final quote selection; rounded display EV cannot decide the winner. R1 member order, true-tie book ordering, original law hashes and all existing locks remain exact. Regression coverage passes actual provider normalization, complete current-wire admission and both native-fallback/new-member paths at ordinary and extreme admitted safe-integer prices.
