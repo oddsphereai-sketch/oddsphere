@@ -4,7 +4,7 @@ import type {AcceptedGameReview} from "./reviewer";
 import type {PropsAiMemberEvidence} from "./publicationContract";
 import {PROPS_AI_EXECUTION_EVIDENCE_RELEASE} from "./publicationContract";
 import {reviewedReaderContextCurrent} from './readerClaimFreshness';
-import {PROPS_AI_ACCEPTED_RELEASES,PROPS_AI_GRADE_RELEASE,PROPS_AI_SELECTION_RELEASE,propsReviewHasSemanticChecks} from "./releases";
+import {PROPS_AI_ACCEPTED_RELEASES,PROPS_AI_LAW_RELEASE,PROPS_AI_SELECTION_RELEASE,LEGACY_PROPS_AI_SELECTION_RELEASE,propsReviewHasSemanticChecks} from "./releases";
 import {PROPS_AI_SITE_RELEASE} from "./siteConfig";
 import {priceAiLaw,type PropsAiGrade} from "./pricing";
 import {lawForecast} from "./law";
@@ -13,7 +13,7 @@ import {executionQuotes,latestExecutionQuotes,quoteContract,executionContractKey
 import {unqualifiedEventTail} from "./forecastSanity";
 import {playerParticipationEligibility,qualifiedParticipationException} from "./participationEligibility";
 
-export type SiteAiDecision={playerId:string;market:string;line:number;side:Quote["side"];book:string;provider:string;american:number;projection:number;probability:number;over:number;under:number;push:number;expectedValue:number;fairAmerican:number|null;grade:PropsAiGrade;quote:Quote;evidence:PropsAiMemberEvidence};
+export type SiteAiDecision={playerId:string;market:string;line:number;side:Quote["side"];book:string;provider:string;american:number;projection:number;probability:number;over:number;under:number;push:number;expectedValue:number;fairAmerican:number|null;grade:PropsAiGrade;quote:Quote;evidence:PropsAiMemberEvidence;exactEventMass?:{over:number;under:number;push:number;total:number}};
 function sameReviewGame(packet:GamePacket,review:AcceptedGameReview,now:string){
   assertSourceEventQualifications(packet);
   const at=instant(now);
@@ -92,8 +92,8 @@ export function siteAiDecisions(packet:GamePacket,review:AcceptedGameReview,now:
         const quote=selected.find(q=>q.id===priced.quote.id)!;
         const law=lawForecast(reviewed.law,market,line,contract==="milestone"||quote.side==="yes"||market==="anytime_td");
         if(propsReviewHasSemanticChecks(review.release)&&unqualifiedEventTail(law,quote.side==="yes"))continue;
-        result.push({playerId:player.id,market,line,side:priced.side as Quote["side"],book,provider,american:quote.american,projection:law.mean,probability:priced.probability,over:law.over,under:law.under,push:law.push,expectedValue:priced.expectedValue,fairAmerican:priced.fairAmerican,grade:priced.grade,quote:structuredClone(quote),
-          evidence:{sourceEligibility:structuredClone(sourceEligibility),executionEvidence:{release:PROPS_AI_EXECUTION_EVIDENCE_RELEASE,pricedAt:now,operation:"decision",selectedQuote:structuredClone(quote),pricingQuotes:structuredClone(selected)},...(quote.sourceEvent?.status==="verified"?{sourceEventRelease:PROPS_AI_SOURCE_EVENT_RELEASE,sourceEventStatistic:quote.sourceEvent.statistic!}:{}),release:review.release,selectionRelease:PROPS_AI_SELECTION_RELEASE,lawRelease:reviewed.law.release,gradeRelease:PROPS_AI_GRADE_RELEASE,publicationRelease:PROPS_AI_SITE_RELEASE,reviewId:`${review.gameId}|${review.stage}|${review.issuedAt}`,lawHash:reviewed.law.hash,inputHash:review.inputHash??review.inputEvidence.digest,reviewedAt:review.issuedAt!,stage:review.stage,model:review.partProvenance.find(p=>p.playerIds.includes(player.id))?.model??review.model,confidence:reviewed.confidence[index] as 0|1|2,confidenceMeaning:"AI-estimated evidence strength; not empirical calibration",quoteConfirmedAt:quote.receivedAt,selectedSide:priced.side as Quote["side"],assessment:reviewed.assessment,coverage:Object.fromEntries(Object.entries(reviewed.coverage).map(([area,value])=>[area,{...value,facts:value.facts.map(f=>({id:f.id,hash:f.hash,label:f.label,availableAt:f.availableAt,sourceIds:[...f.sourceIds]}))}])),exception}});
+        result.push({playerId:player.id,market,line,side:priced.side as Quote["side"],book,provider,american:quote.american,projection:law.mean,probability:priced.probability,over:law.over,under:law.under,push:law.push,expectedValue:priced.expectedValue,fairAmerican:priced.fairAmerican,grade:priced.grade,quote:structuredClone(quote),...(priced.exactEventMass?{exactEventMass:structuredClone(priced.exactEventMass)}:{}),
+          evidence:{sourceEligibility:structuredClone(sourceEligibility),executionEvidence:{release:PROPS_AI_EXECUTION_EVIDENCE_RELEASE,pricedAt:now,operation:"decision",selectedQuote:structuredClone(quote),pricingQuotes:structuredClone(selected)},...(quote.sourceEvent?.status==="verified"?{sourceEventRelease:PROPS_AI_SOURCE_EVENT_RELEASE,sourceEventStatistic:quote.sourceEvent.statistic!}:{}),release:review.release,selectionRelease:reviewed.law.release===PROPS_AI_LAW_RELEASE?PROPS_AI_SELECTION_RELEASE:LEGACY_PROPS_AI_SELECTION_RELEASE,lawRelease:reviewed.law.release,gradeRelease:priced.gradeRelease,publicationRelease:PROPS_AI_SITE_RELEASE,reviewId:`${review.gameId}|${review.stage}|${review.issuedAt}`,lawHash:reviewed.law.hash,inputHash:review.inputHash??review.inputEvidence.digest,reviewedAt:review.issuedAt!,stage:review.stage,model:review.partProvenance.find(p=>p.playerIds.includes(player.id))?.model??review.model,confidence:reviewed.confidence[index] as 0|1|2,confidenceMeaning:"AI-estimated evidence strength; not empirical calibration",quoteConfirmedAt:quote.receivedAt,selectedSide:priced.side as Quote["side"],assessment:reviewed.assessment,coverage:Object.fromEntries(Object.entries(reviewed.coverage).map(([area,value])=>[area,{...value,facts:value.facts.map(f=>({id:f.id,hash:f.hash,label:f.label,availableAt:f.availableAt,sourceIds:[...f.sourceIds]}))}])),exception}});
       }
     }
   }

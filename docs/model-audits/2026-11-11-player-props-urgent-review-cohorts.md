@@ -48,7 +48,7 @@ The member transport allowlist excludes all internal process metadata.
 
 Shared generation R36, NBAwriterR24, NFLwriterR97 and operationsR6 identify the
 prospective scheduling/CPU/health behavior. MLB native R44, wire/source contracts,
-selectionR6, decisionR13, gradeR3, the existing shared sport lease, request models,
+NFL decisionR13, the existing shared sport lease, request models,
 primary/correction phases, output limits, provider budgets and target50/emergency60
 remain unchanged. Same-law numerical/grade/actionable impact is zero; successful
 coverage recovery may make previously unavailable valid AI forecasts publish.
@@ -97,3 +97,28 @@ server-commit/lost-ACK regression preserve the newer final law exactly. Runtime
 draft boards copy the canonical board with unpublished draft flags before
 reconciliation; persisted publication flags and locked row payloads remain exact.
 Neither round29 nor round30 earns clean credit.
+
+## Exact prospective event arithmetic
+
+Round32 failed the unchanged initial candidate because sequential floating
+accumulation made an exact equal integer-weight event prefer a different side
+after a permutation, changing the selected quote and actionable grade. Another
+exact break-even example (`5/7` win at `-250`) produced a positive floating
+residual and Best Angle. These flaws also existed in the production baseline.
+
+New law R2 retains the actual submitted integer weights in its own hashed law,
+without changing normalized weights or outcomes. Integer event counts determine
+ties and one rational division determines probabilities and projections. Exact
+integer EV numerators determine zero and sign, including member repricing at
+the actual current execution quote. Selection R7/grade R4 identify this future
+path; thresholds and confidence-margin policy remain unchanged. Existing R1
+laws retain their original hash, weights, arithmetic and R6/R3 publication
+semantics, and stored locks always win. No historic fields are reconstructed.
+The private internal event-mass handoff is not public player-source evidence.
+
+Required controls include both counterexamples, all scenario permutations and
+weight scaling, minimum genuine non-ties, direct/derived/signed/milestone/push
+events, genuine positive Over and Under promotion, negative/break-even demotion,
+legitimate zero-EV paired confidence Lean, exact actual-member quote/grade/EV
+coherence and legacy writer/reader lock precedence. Round32 earns no clean
+credit; two later all-three fresh rounds are required after the final repair.

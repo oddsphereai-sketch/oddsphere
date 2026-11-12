@@ -7,10 +7,10 @@ import {isSignalOptionalMemberFeature} from "../mlb/props/researchEnrichment";
 import {assessPropPrice} from "../mlb/props/pricePolicy";
 import type {SiteAiDecision} from "./publication";
 import {executionQuotes,quoteContract} from "./executionQuotes";
-import {gradeAiEvent} from "./pricing";
+import {gradeAiEvent,gradeAiEventFromMass} from "./pricing";
 import {MLB_PROPS_STANDARD_STAKE_UNITS} from "../mlb/props/actionabilityPolicy";
 import {nflAiSourceBinding} from "./nflSourceBinding";
-import {PROPS_AI_ESTIMATE_RELEASE,PROPS_AI_NFL_DECISION_RELEASE} from "./releases";
+import {PROPS_AI_ESTIMATE_RELEASE,PROPS_AI_NFL_DECISION_RELEASE,PROPS_AI_LAW_RELEASE} from "./releases";
 import type {GamePacket} from "./evidenceContract";
 import {digest,instant} from "./evidence";
 import {PROPS_AI_EXECUTION_EVIDENCE_RELEASE,type PropsAiMemberEvidence} from "./publicationContract";
@@ -40,11 +40,19 @@ function memberExecutionEvidence(packet:GamePacket,c:SiteAiDecision,q:GamePacket
  const group=executionQuotes(packet,now).filter(o=>o.playerId===q.playerId&&o.market===q.market&&o.line===q.line&&book(o.book)===book(q.book)&&o.provider===q.provider&&quoteContract(o)===quoteContract(q));
  return {...c.evidence,...(nativeQualification?{nativeQualification:structuredClone(nativeQualification)}:{}),quoteConfirmedAt:q.receivedAt,executionEvidence:{release:PROPS_AI_EXECUTION_EVIDENCE_RELEASE,operation:'member_row',pricedAt:now,selectedQuote:structuredClone(q),pricingQuotes:structuredClone(group)}};
 }
+function currentEventPrice(packet:GamePacket,c:SiteAiDecision,q:GamePacket["quotes"][number],now:string){
+  const opposite=executionQuotes(packet,now).find(o=>o.playerId===q.playerId&&o.market===q.market&&o.line===q.line&&book(o.book)===book(q.book)&&o.provider===q.provider&&quoteContract(o)===quoteContract(q)&&o.side!==q.side&&o.side!=="yes"&&Math.abs(instant(o.receivedAt)-instant(q.receivedAt))<=5*60000);
+  const price={american:q.american,opposingAmerican:opposite?.american??null,confidence:c.evidence.confidence,exception:c.evidence.exception};
+  const mass=c.exactEventMass;
+  if(c.evidence.lawRelease===PROPS_AI_LAW_RELEASE&&!mass)throw new Error("Exact-law member pricing requires its original integer event mass");
+  if(c.evidence.lawRelease!==PROPS_AI_LAW_RELEASE&&mass)throw new Error("Legacy law pricing cannot acquire prospective integer mass");
+  return mass?gradeAiEventFromMass({...price,win:q.side==="under"?mass.under:mass.over,loss:q.side==="under"?mass.over:mass.under,push:mass.push,total:mass.total})
+    :gradeAiEvent({...price,win:q.side==="under"?c.under:c.over,loss:q.side==="under"?c.over:c.under});
+}
 function currentGrade(packet:GamePacket,c:SiteAiDecision,q:GamePacket["quotes"][number],now:string){
   if(c.evidence.exception)return "No Play" as const;
   if(q.side!==c.side)return "Watchlist" as const;
-  const opposite=executionQuotes(packet,now).find(o=>o.playerId===q.playerId&&o.market===q.market&&o.line===q.line&&book(o.book)===book(q.book)&&o.provider===q.provider&&quoteContract(o)===quoteContract(q)&&o.side!==q.side&&o.side!=="yes"&&Math.abs(instant(o.receivedAt)-instant(q.receivedAt))<=5*60000);
-  return gradeAiEvent({win:q.side==="under"?c.under:c.over,loss:q.side==="under"?c.over:c.under,american:q.american,opposingAmerican:opposite?.american??null,confidence:c.evidence.confidence,exception:c.evidence.exception}).grade;
+  return currentEventPrice(packet,c,q,now).grade;
 }
 function nbaMovement(packet:GamePacket,c:SiteAiDecision):NbaPlayerPropsMemberDecision["movement"]{
   // The captured Quote contract has no verified main-line designation. A
@@ -139,8 +147,8 @@ export function applyNflSiteAi(board:NflPlayerPropsRuntimeBoard,packet:GamePacke
   const decisions=board.decisions.map((row):NflPlayerPropsRuntimeDecision=>{
     if(row.state==="locked"||row.gameId!==packet.gameId||instant(now)>=instant(row.lockAt))return row;
     const bound=source.binding(row);if(!bound)return row;const {choice:c,quote:q}=bound;
-    const probability=row.side==="under"?c.under:c.over,loss=row.side==="under"?c.over:c.under;
-    const ev=probability*(q.american>0?q.american/100:100/-q.american)-loss;
+    const probability=row.side==="under"?c.under:c.over;
+    const ev=currentEventPrice(packet,c,q,now).ev;
     const marketProbability=q.american>0?100/(100+q.american):-q.american/(100-q.american);
     const qualification=nativeContext.get(bound.id)!.qualification;changed=true;
     const next={...row,providerPlayerId:bound.id.replace(/^nfl-bdl-player:/,""),americanPrice:q.american,observedAt:q.observedAt,projection:c.projection,projectionRange:null,rawModelProbability:probability,finalProbability:probability,expectedValue:ev,marketProbability,probabilityEdge:probability-marketProbability,bookEvidence:row.bookEvidence.map(b=>book(b.sportsbook)===book(q.book)&&b.provider===q.provider?{...b,americanPrice:q.american,observedAt:q.observedAt}:b),grade:qualification?'No Play' as const:currentGrade(packet,c,q,now),
@@ -159,11 +167,11 @@ export function applyNflSiteAi(board:NflPlayerPropsRuntimeBoard,packet:GamePacke
     const context: NflPlayerPropsRuntimeDecision["forecastContext"]=template?{...template.forecastContext,recentProduction:null,opponentAllowance:null,modelInputTrends:[]}:{featureAsOf:packet.cutoff,position:null,expectedQuarterback:null,availability:{listed:false,status:null,detail:"No independent player availability estimate supplied",reportedAt:null,reportUpdatedAt:null,source:"unavailable"},teamImpliedPoints:null,teamImpliedTouchdowns:null,recentProduction:null,roleOpportunity:[],opponentAllowance:null};
     for(const q of executionQuotes(packet,now).filter(q=>q.playerId===c.playerId&&q.market===c.market&&q.line===c.line&&book(q.book)===book(c.book)&&q.provider===c.provider&&(q.side==="yes"||q.offerContract==="milestone")===(c.quote.side==="yes"||c.quote.offerContract==="milestone")&&quoteContract(q)===quoteContract(c.quote)&&!q.opening&&!q.live&&q.receivedAtProvenance==="provider_response"&&instant(q.observedAt)<=instant(q.receivedAt)&&instant(q.receivedAt)<=instant(now)&&instant(now)-instant(q.receivedAt)<=15*60000)){
       if(decisions.some(r=>r.gameId===packet.gameId&&(r.providerPlayerId===providerPlayerId||source.binding(r)?.id===c.playerId)&&r.market===q.market&&r.line===q.line&&r.side===q.side&&book(r.sportsbook)===book(q.book)&&r.provider===q.provider))continue;
-      const probability=q.side==="under"?c.under:c.over,loss=q.side==="under"?c.over:c.under;
+      const probability=q.side==="under"?c.under:c.over;
       const marketProbability=q.american>0?100/(100+q.american):-q.american/(100-q.american);
       const next:NflPlayerPropsRuntimeDecision={...template,gameId:packet.gameId,providerPlayerId,scheduledStart:packet.start,lockAt:packet.lock,state:"unlocked",roleFingerprint:template?.roleFingerprint??digest({player:c.playerId,context:packet.cutoff}),participationProbability:template?.participationProbability??null,provisional:false,market:q.market as NflPlayerPropsRuntimeDecision["market"],line:q.line,side:q.side,sportsbook:q.book,provider:q.provider,americanPrice:q.american,observedAt:q.observedAt,
         playerName:player.name,team:player.team,opponent:player.opponent,projection:c.projection,projectionRange:null,rawModelProbability:probability,finalProbability:probability,marketProbability,probabilityEdge:probability-marketProbability,
-        expectedValue:probability*(q.american>0?q.american/100:100/-q.american)-loss,grade:qualification?"No Play":currentGrade(packet,c,q,now),marketMovement:"neutral",healthHolds:[],
+        expectedValue:currentEventPrice(packet,c,q,now).ev,grade:qualification?"No Play":currentGrade(packet,c,q,now),marketMovement:"neutral",healthHolds:[],
         bookEvidence:[{sportsbook:q.book,provider:q.provider,americanPrice:q.american,observedAt:q.observedAt,openingObservedAt:null,openingLine:null,openingAmericanPrice:null}],
         forecastContext:context,modelRelease:c.evidence.release,calibrationRelease:PROPS_AI_ESTIMATE_RELEASE,decisionRelease:PROPS_AI_NFL_DECISION_RELEASE,aiReview:memberExecutionEvidence(packet,c,q,now,qualification)};
       delete next.projectionEvidence;delete next.decisionSupport;delete next.passingMarketEvidence;delete next.qualifiedReferenceEvidence;delete next.marketEvidenceId;
@@ -196,7 +204,7 @@ export function applyMlbSiteAi(rows:PlayerPropPreviewRow[],packet:GamePacket,cho
     if((grade==="BEST_ANGLE"||grade==="LEAN")&&(row.oddsSanity.length||!assessPropPrice(q.american).signalEligible))grade="WATCHLIST";
     changed=true;
     return {...row,id:digest({preceding:row.id,release:c.evidence.release,market:row.market,line:c.line,book:c.book,side:row.side}),projection:c.projection,projectionSource:"model" as const,
-      modelProbability:probability,finalProbability:probability,overProbability:c.over,underProbability:c.under,expectedValue:probability*(q.american>0?q.american/100:100/-q.american)-loss,
+      modelProbability:probability,finalProbability:probability,overProbability:c.over,underProbability:c.under,expectedValue:currentEventPrice(packet,c,q,now).ev,
       fairOdds:probability>0&&loss>0?probability>=loss?-100*probability/loss:100*loss/probability:null,marketProbability,shrinkageWeight:0,modelEdge:marketProbability===null?null:probability-marketProbability,
       odds:q.american,book:q.book,playGrade:grade,units:grade==="BEST_ANGLE"||grade==="LEAN"?MLB_PROPS_STANDARD_STAKE_UNITS:0,
       confidence:probability,confidenceBucket:c.evidence.confidence===2?"high" as const:c.evidence.confidence===1?"medium" as const:"low" as const,

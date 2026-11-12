@@ -5,8 +5,13 @@ Future shared NBA/NFL/MLB generation is
 `nba_player_props_private_writer_2026_11_11_r24_urgent_slot_cohorts` and NFL
 writer is `nfl_player_props_writer_2026_11_11_r97_urgent_slot_cohorts`.
 Operations diagnostics R6 distinguish newly completed logical reviews from
-retained historical review authority. Native MLB champion R44, source/wire,
-selection R6, NFL decision R13 and grade R3 remain unchanged.
+retained historical review authority. Native MLB champion R44, source/wire and NFL decision R13 remain unchanged.
+Future law R2 (`player_props_ai_law_2026_11_11_r2_exact_integer_mass`) retains
+the submitted integer weights for exact event masses; selection R7 and grade R4
+identify order-invariant sides and exact expected-value signs. Grade thresholds
+and the paired-margin rule do not change. Existing law R1 keeps its exact
+normalized weights/hash, original arithmetic, selection R6 and grade R3; every
+stored locked field remains first authority.
 
 Review preparation proceeds by earliest lock cohorts rather than waiting for
 all later games' source publications and input counts before any urgent claim.
@@ -48,6 +53,15 @@ An unknown write acknowledgement fences later in-cycle NFL writes until the
 next authoritative snapshot read; a remote-committed final cannot be replaced
 from an older local acknowledged draft. Canonical publication flags/locks stay
 exact while new runtime drafts use their existing unpublished type contract.
+
+Round32 rejected two pre-existing numerical defects: scenario-order roundoff
+could flip an exact50/50 side and its selected quote/grade, while a break-even
+price could appear positive. Only future R2 laws use retained integer event
+masses and rational EV arithmetic. Actual member repricing uses the same exact
+event mass at the actual execution quote. No epsilon, probability clamp, old-law
+reconstruction or retrospective lock/result change is permitted. Genuine
+positive Over/Under recovery, negative-value demotion and break-even paired
+confidence Leans require focused promotion/demotion/board-impact controls.
 
 ## November 11 NBA player-prop bounded source-hash work R23
 
