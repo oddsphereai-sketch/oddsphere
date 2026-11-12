@@ -122,3 +122,10 @@ events, genuine positive Over and Under promotion, negative/break-even demotion,
 legitimate zero-EV paired confidence Lean, exact actual-member quote/grade/EV
 coherence and legacy writer/reader lock precedence. Round32 earns no clean
 credit; two later all-three fresh rounds are required after the final repair.
+
+Round33 rejected a source-audit compatibility omission: accepted R35 archives
+were not in the explicit audit support list after the current generation moved.
+The repair retains that exact original source archive contract, with unchanged
+law values, hashes and callback provenance. Regressions verify original/current
+comparison, a genuine own-player Out change, and a throwing stored-law getter
+that the source-only audit must never read. Round33 earns no clean credit.

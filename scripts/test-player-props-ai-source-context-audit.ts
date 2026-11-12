@@ -13,7 +13,7 @@ function accepted(packet:GamePacket=base){
  return{...review,gameId:packet.gameId,inputEvidence:{encoding:'gzip-base64' as const,digest:digest(packet),bytes:Buffer.byteLength(raw),data:gzipSync(raw).toString('base64')}};
 }
 const review=accepted(),before=JSON.stringify({base,review});
-for(const release of [review.release,'player_props_ai_2026_11_11_r32_lossless_reader_tables','player_props_ai_2026_11_10_r31_verified_reader_claims'] as const){
+for(const release of [review.release,'player_props_ai_2026_11_11_r35_terminal_wave_guard','player_props_ai_2026_11_11_r34_source_mean_admission','player_props_ai_2026_11_11_r33_two_phase_review_window','player_props_ai_2026_11_11_r32_lossless_reader_tables','player_props_ai_2026_11_10_r31_verified_reader_claims'] as const){
  const result=buildPropsSourceContextAudit({packet:base,review:{...review,release},observedAt:at});
  assert.equal(result.status,'complete');assert.equal(result.review.status,'verified');assert(result.comparisonComplete);
  assert(result.actors.every(a=>a.canonicalChanged===false&&a.availabilityChanged===false&&a.admittedProofMatchesOriginal));
@@ -27,6 +27,8 @@ current.players[0].evidence[0].availableAt='2026-11-10T20:00:01Z';
 current.players[0].evidence.push({id:'new-private-report',kind:'availability',source:'private source name',availableAt:at,value:{canonicalGameId:base.gameId,scheduledStart:base.start,context:{away:{team:'BOS',known:true,players:[{name:base.players[0].name,status:'out',reportedAt:at}]},home:{team:'NYK',known:true,players:[]}}}});
 current.players[0].markets.push('assists');current.players[1].evidence.shift();
 const changed=buildPropsSourceContextAudit({packet:current,review,observedAt:at});assert.equal(changed.status,'complete');
+const retainedR35={...review,release:'player_props_ai_2026_11_11_r35_terminal_wave_guard' as const},r35Before=JSON.stringify(retainedR35);
+const retainedChange=buildPropsSourceContextAudit({packet:current,review:retainedR35,observedAt:at});assert.equal(retainedChange.review.status,'verified');assert(retainedChange.comparisonComplete);assert(retainedChange.actors[0].canonicalChanged&&retainedChange.actors[0].currentQualification?.blocked);assert.equal(JSON.stringify(retainedR35),r35Before,'R35 law and archive remain opaque and exact');
 const a=changed.actors.find(a=>a.actorId==='a')!;assert(a.canonicalChanged&&a.availabilityChanged);assert.equal(a.currentQualification?.blocked,true);assert.equal(a.originalQualification?.blocked,false);assert.deepEqual(a.addedScopes,['assists']);assert(a.evidence.some(e=>e.change==='availability_only'));assert(a.evidence.some(e=>e.change==='added'&&e.kind==='availability'));
 assert(changed.actors.find(a=>a.actorId==='b')!.evidence.some(e=>e.change==='removed'));
 const value=structuredClone(base);(value.players[0].evidence[0].value as {box:{points:number}}).box.points++;
@@ -38,7 +40,7 @@ assert.equal(buildPropsSourceContextAudit({packet:deleted,review,observedAt:at})
 const added=structuredClone(base);added.players.push({...structuredClone(added.players[0]),id:'new_actor',evidence:[]});
 assert.equal(buildPropsSourceContextAudit({packet:added,review,observedAt:at}).actors.find(a=>a.actorId==='new_actor')!.originalPresent,false);
 // No accepted-law/wire reparse: even a law getter which throws is never read.
-const opaque=accepted();for(const player of opaque.players)Object.defineProperty(player,'law',{get(){throw Error('Do not reparse a stored law');}});
+const opaque={...accepted(),release:'player_props_ai_2026_11_11_r35_terminal_wave_guard' as const};for(const player of opaque.players)Object.defineProperty(player,'law',{get(){throw Error('Do not reparse a stored law');}});
 assert.equal(buildPropsSourceContextAudit({packet:base,review:opaque,observedAt:at}).review.status,'verified');
 for(const release of ['player_props_ai_2026_11_10_r29_identity_and_execution_evidence','unrecognized'] as const){const legacy={...review,release,inputEvidence:{...review.inputEvidence,data:'bad'}} as unknown as AcceptedGameReview;assert.equal(buildPropsSourceContextAudit({packet:base,review:legacy,observedAt:at}).review.status,'unsupported_release');}
 for(const mutate of [(r:AcceptedGameReview)=>{r.inputHash='f'.repeat(64);},(r:AcceptedGameReview)=>{r.inputEvidence.bytes++;},(r:AcceptedGameReview)=>{r.inputEvidence.data='bad';},(r:AcceptedGameReview)=>{r.inputEvidence.digest='f'.repeat(64);}]){const broken=structuredClone(review);mutate(broken);const result=buildPropsSourceContextAudit({packet:base,review:broken,observedAt:at});assert.equal(result.review.status,'invalid_archive');assert(!result.comparisonComplete);assert(result.actors.every(a=>a.originalCanonicalHash===null));}

@@ -63,6 +63,10 @@ reconstruction or retrospective lock/result change is permitted. Genuine
 positive Over/Under recovery, negative-value demotion and break-even paired
 confidence Leans require focused promotion/demotion/board-impact controls.
 
+The source-only audit explicitly retains the original R35 immutable archive
+contract alongside R31–R34. Its supported-release list never reparses or reads
+accepted law values, and cannot turn diagnostic metadata into provider proof.
+
 ## November 11 NBA player-prop bounded source-hash work R23
 
 The sole NBA writer is now
