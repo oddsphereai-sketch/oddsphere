@@ -44,6 +44,11 @@ store; no server CAS or commit-before-lock guarantee is invented. No new writer,
 This is prospective repair work until the final candidate passes fresh reviews
 and protected deployment.
 
+An unknown write acknowledgement fences later in-cycle NFL writes until the
+next authoritative snapshot read; a remote-committed final cannot be replaced
+from an older local acknowledged draft. Canonical publication flags/locks stay
+exact while new runtime drafts use their existing unpublished type contract.
+
 ## November 11 NBA player-prop bounded source-hash work R23
 
 The sole NBA writer is now

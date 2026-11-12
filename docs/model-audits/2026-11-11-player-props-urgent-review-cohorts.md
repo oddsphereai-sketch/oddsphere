@@ -87,3 +87,13 @@ or transaction-commit-before-lock proof. Required controls include early and fin
 source/offer withdrawals, zero qualified prices, write failure, restart and
 staggered/midnight games. No new schema, provider or inference call is added.
 Round29 earns no clean credit; two later fresh all-three rounds are required.
+
+Round30 also rejected an indeterminate-acknowledgement rollback: a snapshot
+may be committed even when its client promise rejects. The publication queue
+now fences every later write after any rejected outcome until the next ordinary
+authoritative snapshot read. It never treats missing acknowledgement as proof
+of no remote write. The independent counterexample and a corresponding
+server-commit/lost-ACK regression preserve the newer final law exactly. Runtime
+draft boards copy the canonical board with unpublished draft flags before
+reconciliation; persisted publication flags and locked row payloads remain exact.
+Neither round29 nor round30 earns clean credit.
