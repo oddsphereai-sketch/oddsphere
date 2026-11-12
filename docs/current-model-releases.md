@@ -10857,3 +10857,5 @@ show both actual source traces across all six future market cases/two layouts,
 plus equal numerical tuples, unchanged legacy bytes, T60-crossing route timing
 and the existing leased cadence. See
 `docs/model-audits/2026-11-04-ucl-sportsbook-graph-clock.md`.
+
+Prospective R36/R2 NBA member fallback compares original integer event EV fractions through final quote selection; rounded display EV cannot decide the winner. R1 member order, true-tie book ordering, original law hashes and all existing locks remain exact. Regression coverage passes actual provider normalization, complete current-wire admission and both native-fallback/new-member paths at ordinary and extreme admitted safe-integer prices.

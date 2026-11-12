@@ -129,3 +129,16 @@ The repair retains that exact original source archive contract, with unchanged
 law values, hashes and callback provenance. Regressions verify original/current
 comparison, a genuine own-player Out change, and a throwing stored-law getter
 that the source-only audit must never read. Round33 earns no clean credit.
+
+## Round 35 exact member-order boundary
+
+Independent source-admissible synthetic safe-integer prices near the integer
+limit have distinct rational EVs but the same displayed double. R2 pricing
+ranked them exactly; NBA member fallback then sorted rounded EV and could pick
+the lower value by book name. This is a supported-input numerical contract
+finding, not a claim that such extreme odds occurred in production. Carry exact
+integer event EV comparison through both NBA fallback paths. Actual provider,
+current source and full-wire controls cover ordinary positive/negative prices,
+extreme accepted prices, genuine ties, permutation, exact legacy R1 ordering,
+member quote/evidence equality and immutable writer/reader locks. No price bound,
+source contract, grade threshold, budget or historical record is changed.

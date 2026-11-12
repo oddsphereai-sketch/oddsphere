@@ -31,6 +31,13 @@ function exactEventEconomics(args:ExactEventGradeArgs){
   // bit-identical when valid large American prices exceed floating products.
   return{numerator,denominator,ev:Number(numerator/a)/Number(denominator/a)};
 }
+/** Ascending exact EV comparison for prospective admitted event masses. The
+ * decimal display value cannot break an exact ordering at member selection. */
+export function compareAiEventValuesFromMass(a:Pick<ExactEventGradeArgs,"win"|"loss"|"push"|"total"|"american">,b:Pick<ExactEventGradeArgs,"win"|"loss"|"push"|"total"|"american">){
+  const fraction=(value:typeof a)=>exactEventEconomics({...value,opposingAmerican:null,confidence:0,exception:null});
+  const left=fraction(a),right=fraction(b),difference=left.numerator*right.denominator-right.numerator*left.denominator;
+  return difference===BigInt(0)?0:difference>BigInt(0)?1:-1;
+}
 /** Only source-derived bounded integer masses enter the prospective grade path;
  * this API never accepts an untrusted precomputed EV or a scalar value override. */
 export function gradeAiEventFromMass(args:ExactEventGradeArgs){

@@ -7,7 +7,7 @@ import {isSignalOptionalMemberFeature} from "../mlb/props/researchEnrichment";
 import {assessPropPrice} from "../mlb/props/pricePolicy";
 import type {SiteAiDecision} from "./publication";
 import {executionQuotes,quoteContract} from "./executionQuotes";
-import {gradeAiEvent,gradeAiEventFromMass} from "./pricing";
+import {gradeAiEvent,gradeAiEventFromMass,compareAiEventValuesFromMass} from "./pricing";
 import {MLB_PROPS_STANDARD_STAKE_UNITS} from "../mlb/props/actionabilityPolicy";
 import {nflAiSourceBinding} from "./nflSourceBinding";
 import {PROPS_AI_ESTIMATE_RELEASE,PROPS_AI_NFL_DECISION_RELEASE,PROPS_AI_LAW_RELEASE} from "./releases";
@@ -98,7 +98,16 @@ export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:Game
   // an unqualified native event suppress another genuinely priceable AI scope.
   const current=executionQuotes(packet,now);
   const available=choices.filter(c=>c.side!=="yes"&&quoteContract(c.quote)==="two_way"&&current.some(q=>q.id===c.quote.id&&digest(q)===digest(c.quote)));
-  const preferred=(id:string,market:string)=>available.filter(c=>c.playerId===id&&c.market===market).sort((a,b)=>b.expectedValue-a.expectedValue||book(a.book).localeCompare(book(b.book))||a.provider.localeCompare(b.provider)||a.line-b.line||a.side.localeCompare(b.side)||a.quote.id.localeCompare(b.quote.id))[0];
+  const eventValue=(a:SiteAiDecision,b:SiteAiDecision)=>{
+    if(a.evidence.lawRelease!==PROPS_AI_LAW_RELEASE||b.evidence.lawRelease!==PROPS_AI_LAW_RELEASE)return b.expectedValue-a.expectedValue;
+    const mass=(c:SiteAiDecision)=>{
+      if(!c.exactEventMass)throw new Error("Exact-law member selection requires its original integer event mass");
+      const m=c.exactEventMass;
+      return{win:c.side==="under"?m.under:m.over,loss:c.side==="under"?m.over:m.under,push:m.push,total:m.total,american:c.american};
+    };
+    return compareAiEventValuesFromMass(mass(b),mass(a));
+  };
+  const preferred=(id:string,market:string)=>available.filter(c=>c.playerId===id&&c.market===market).sort((a,b)=>eventValue(a,b)||book(a.book).localeCompare(book(b.book))||a.provider.localeCompare(b.provider)||a.line-b.line||a.side.localeCompare(b.side)||a.quote.id.localeCompare(b.quote.id))[0];
   const decisions=snapshot.decisions.map((row):NbaPlayerPropsMemberDecision=>{
     if(row.lockedAt!==null||row.gameId!==packet.gameId||instant(now)>=instant(packet.lock))return row;
     const c=choice(available,row.playerId,row.market,row.line,row.sportsbook)??preferred(row.playerId,row.market);if(!c||c.side==="yes")return row;

@@ -5656,3 +5656,5 @@ This owner-directed promotion accepts the opened 32-game cohort and the balanced
 competitor percentages into a same-cohort superiority claim. Publication still requires focused and
 full model-change tests, latest-main integration safety, protected PR checks, and live proof of the
 r32 releases, complete state, one sport lease, one writer, lock precedence, and reader coherence.
+
+Prospective R36/R2 NBA member fallback compares original integer event EV fractions through final quote selection; rounded display EV cannot decide the winner. R1 member order, true-tie book ordering, original law hashes and all existing locks remain exact. Regression coverage passes actual provider normalization, complete current-wire admission and both native-fallback/new-member paths at ordinary and extreme admitted safe-integer prices.

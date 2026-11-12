@@ -79,3 +79,43 @@ for(const sport of ['nba','nfl','mlb'] as const){
  }
 }
 console.log(JSON.stringify({actualMemberBindings:true,crossSportLegacyAndExactCases:cases,zeroEVCoherent:true,currentPriceRecomputed:true,lockedWriterReaderPrecedence:true,noPublicIntegerMass:true,networkCalls:0}));
+
+// Actual source normalization + full current wire admission must carry the exact
+// event ordering through both NBA member fallback paths. Extreme admitted safe
+// prices exercise rounding boundaries; they are not alleged real market offers.
+import {normalizeBallDontLieNbaPlayerProps} from '../lib/services/nba/nbaPlayerPropsProviders';
+import {mergeNbaPlayerPropsMarketHistory} from '../lib/services/nba/nbaPlayerPropsPrivateStore';
+import {liveNbaPacket} from '../lib/playerPropsAi/liveSources';
+import {nbaAuthorityFixture,nbaAuthorityReview} from './test-player-props-ai-nba-lock-authority';
+import {nbaPlayedStateFixture} from './lib/player-props-ai-nba-played-fixture';
+import {validatePacket} from '../lib/playerPropsAi/evidence';
+import {priceAiLaw} from '../lib/playerPropsAi/pricing';
+let sourceOrderCases=0;
+for(const [lower,higher] of [[200,201],[-111,-110],[9007199254740893,9007199254740894],[-9007199254740894,-9007199254740893],[200,200]]){
+ const f=nbaAuthorityFixture(),clock=f.packet.cutoff,id='nba-bdl-player:1',game={id:'g',start:f.packet.start,home:'NYK',away:'BOS'};
+ const normalized=normalizeBallDontLieNbaPlayerProps({values:[{vendor:'a-lower',price:lower},{vendor:'z-higher',price:higher}].map((q,i)=>({id:123+i,game_id:7,player_id:1,player:{first_name:'Current',last_name:'Name',team_id:1},prop_type:'points',vendor:q.vendor,line_value:15.5,updated_at:clock,market:{type:'over_under',over_odds:q.price,under_odds:-110}})),fetchedAt:clock,events:{'7':{canonicalGameId:'g',homeTeam:'NYK',awayTeam:'BOS',scheduledStart:game.start}},canonicalPlayers:{'1':id}});
+ assert.equal(normalized.rejectedRows,0);assert.equal(normalized.rows.length,4);
+ const current=normalized.rows.map(q=>({...q,receivedAt:clock})),market=mergeNbaPlayerPropsMarketHistory({previous:null,current,slateDate:'2026-11-10',capturedAt:clock}).history;
+ const native={...f.row(),playerId:id,playerName:'Current Name',sportsbook:'native-unavailable'},baseline=f.snapshot([native]),state=nbaPlayedStateFixture('2026-11-10T22:20:00Z',[1],[14,18,20],[4,6,8]);
+ const packet=liveNbaPacket({game,window:{gameId:'g',stage:'final',cutoff:clock,lock:f.packet.lock},snapshot:baseline,market,prior:state,current:state,currentObservations:current});
+ validatePacket(packet);assert.equal(packet.executionQuotes?.length,4);
+ for(const legacy of [false,true]){
+  const review=nbaAuthorityReview(packet,[1,1,...Array<number>(14).fill(0)]);
+  if(legacy){const law=review.players[0].law!;const body={release:LEGACY_PROPS_AI_LAW_RELEASE,weights:[...law.weights],outcomes:structuredClone(law.outcomes)};review.players[0].law={...body,hash:digest(body)};review.release='player_props_ai_2026_11_11_r35_terminal_wave_guard';}
+  const before=JSON.stringify(review),choices=siteAiDecisions(packet,review,clock);assert.equal(choices.length,2);assert(choices.every(c=>c.probability===.5));
+  const law=review.players[0].law!;
+  const direct:NonNullable<ReturnType<typeof priceAiLaw>>=priceAiLaw({law,market:'points',quotes:packet.executionQuotes!.map(q=>({id:q.id,book:q.book,provider:q.provider,line:q.line,side:q.side,american:q.american,availableAt:q.receivedAt,confirmedAt:q.receivedAt,current:true,actionRule:'qualifying_participation'})),now:clock,maxAgeMs:900000,confidence:2,exception:null})!;
+  const sameDisplay=choices[0].expectedValue===choices[1].expectedValue;
+  const expected=legacy&&sameDisplay||lower===higher?'a-lower':'z-higher';
+  assert.equal(direct.quote.book,expected);
+  for(const ordered of [choices,[...choices].reverse()])for(const candidate of [baseline,f.snapshot([])]){
+   const applied=applyNbaSiteAi(candidate,packet,ordered,clock),row=applied.decisions[0];
+   assert.equal(row.sportsbook,expected);assert.equal(row.americanPrice,expected==='a-lower'?lower:higher);assert.equal(row.aiReview?.executionEvidence?.selectedQuote.american,row.americanPrice);
+   assert(!('exactEventMass' in row));assert(!('exactEventMass' in row.aiReview!));
+   const locked=advanceNbaPlayerPropsCandidateLifecycle({now:packet.lock,previous:applied,candidate:applied}).snapshot,bytes=JSON.stringify(locked);
+   assert.strictEqual(applyNbaSiteAi(locked,packet,ordered,clock),locked);assert.equal(JSON.stringify(locked),bytes);sourceOrderCases++;
+  }
+  assert.equal(JSON.stringify(review),before);
+ }
+}
+console.log(JSON.stringify({actualSourceAndFullWireAdmission:true,sourceOrderMemberCases:sourceOrderCases,exactOrderAndTrueTie:true,legacyOrderExact:true,allStoredLocksOpaque:true,networkCalls:0}));
