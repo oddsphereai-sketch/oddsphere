@@ -10,7 +10,8 @@ across ten games. Its reviewedGames=1 referred to the older R32 early review;
 none was a newly completed review or current priced AI board. All ten current
 fixtures matched the cached funded calendar. The first three finals still had
 state pending after their23:00 lock; historical misses and values remain exact.
-The ordinary22:51 rescue also returned without new claims. No manual replay,
+The ordinary22:51 rescue also returned without new claims. The three finals
+subsequently became expired through normal scheduling. No manual replay,
 provider/model request or paid test was used to establish these facts.
 
 ## Diagnosis and scope
@@ -66,3 +67,23 @@ three-reviewer whole-product all-clear rounds, strict latest-main protected PR,
 and actual ordinary production reviews/publication/locks. Never buy proof or
 replay a miss. Deployment, a green suite and local timings alone do not prove
 complete forward operation or improved accuracy.
+
+## Independent whole-product finding
+
+Round29 reproduced a separate pre-existing NFL publication gap against both
+production347c and the first R36 candidate. The actual writer's ready callback
+only updated memory. In the independent synthetic clock control, it returned
+at +1 second while the first lock was +270 seconds; unrelated later work
+returned at +281 seconds, still inside the existing480-second route budget.
+The first snapshot write occurred after lock. This establishes a before-lock
+visibility failure, without proving corruption of eventual lock-handoff numbers.
+
+The NFL repair must await serialized per-game canonical publication through the
+existing store and shared sport lease. Successful write acknowledgement alone
+advances local publication authority. Prior locked values and existing first-lock
+precedence remain exact. The NFL store remains its existing lease-protected
+upsert; serialization and observed client acknowledgements are not a server CAS
+or transaction-commit-before-lock proof. Required controls include early and final publication,
+source/offer withdrawals, zero qualified prices, write failure, restart and
+staggered/midnight games. No new schema, provider or inference call is added.
+Round29 earns no clean credit; two later fresh all-three rounds are required.

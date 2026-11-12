@@ -35,6 +35,15 @@ focused/full verification, latest-main protected release and normal actual
 review/member/lock proof are required. See
 `model-audits/2026-11-11-player-props-urgent-review-cohorts.md`.
 
+Fresh round29 independently reproduced a pre-existing NFL before-lock visibility
+gap: `onReviewReady` retained the completed forecast in memory until later
+runtime work returned. R97 also requires awaited serialized per-game publication
+through the same existing writer/store and sport lease, with prior first locks
+and failed-write authority preserved. NFL keeps its existing lease-protected
+store; no server CAS or commit-before-lock guarantee is invented. No new writer, schedule or schema is added.
+This is prospective repair work until the final candidate passes fresh reviews
+and protected deployment.
+
 ## November 11 NBA player-prop bounded source-hash work R23
 
 The sole NBA writer is now

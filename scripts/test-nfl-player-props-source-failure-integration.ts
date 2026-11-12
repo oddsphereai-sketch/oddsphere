@@ -30,6 +30,7 @@ async function run(mode:Mode){
   return{abortSignal:async(signal:AbortSignal)=>{assert(signal instanceof AbortSignal);return{data:{status:mode==='append_refused'?'unavailable':'stored'},error:null};}};
  }};
  const modules:Record<string,Record<string,unknown>>={
+  evidence:{digest},
   nflIdentityFailureEvidence:{...evidence,buildNflIdentityFailureEvidence:(args:Parameters<typeof evidence.buildNflIdentityFailureEvidence>[0])=>{builds++;if(mode==='construction')throw Error('synthetic archive construction failure');return evidence.buildNflIdentityFailureEvidence(args);}},
   publication:{siteAiDecisions:()=>[]},
   nflLockAuthority:{captureNflHandoffBundle:()=>({}),observeNflSourceAuthority:()=>({}),mergeNflHandoffs:()=>({frames:[]})},
