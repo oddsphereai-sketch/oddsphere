@@ -18,7 +18,7 @@ import {CbbRecoveredMarketContext} from "../app/lab/components/daily-edge/CbbRec
 import {QuickRead as MemberQuickRead} from "../app/dev/experience-preview/ActualDailyEdgePreview";
 import type {CbbGame,CbbQuote} from "../lib/cbb/types";
 
-async function main(){
+export async function testCbbLineCoverage(){
   const raw=structuredClone(prairie),p=raw.game as CbbGame;
   const found=normalizeCbbOwlsCurrent(p,{success:true,data:raw.events},raw.at,raw.at).quotes;
   assert.deepEqual([...new Set(found.map(q=>q.market))].sort(),["moneyline","spread","total"]);
@@ -94,4 +94,5 @@ async function main(){
   assert.equal(writes,0);assert.equal(JSON.stringify(record),exact);
   console.log("PASS CBB all-market alias recovery, forecast-only paired display/history, invalid-source refusal, source-hashed pre-lock recovery and immutable writer/reader precedence; zero real IO");
 }
-main().catch(error=>{console.error(error);process.exitCode=1;});
+if(process.argv[1]?.endsWith("test-cbb-line-coverage.tsx"))
+  testCbbLineCoverage().catch(error=>{console.error(error);process.exitCode=1;});

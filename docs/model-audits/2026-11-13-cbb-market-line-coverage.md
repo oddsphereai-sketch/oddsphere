@@ -54,6 +54,12 @@ Release requires focused/full model verification, TypeScript/lint/build,
 fresh-main integration and overlap reconciliation, protected PR checks,
 production commit verification and actual member-reader/source coverage.
 
+The new coverage proof is awaited by the existing CBB member-pipeline test,
+so the normal full model gate runs it automatically. A package-script-only
+registration was replaced by this equivalent existing-test entry point after
+the guard found concurrent packet-reuse work in package.json. That shared file
+is unchanged by the final candidate; neither task's runtime work is discarded.
+
 The frozen-input source-admission replay found16 valid Prairie View offers.
 The existing evaluator moved its three Held markets to No Play ML (−100000,
 existing owner price limit), Watchlist Spread (−40.5 at−114) and Lean Under
