@@ -1,0 +1,476 @@
+{
+  "at": "2026-11-13T19:38:49.303Z",
+  "game": {
+    "id": 10883103,
+    "date": "2026-11-14T00:00:00.000Z",
+    "season": 2026,
+    "status": "pre",
+    "status_state": "scheduled",
+    "period_detail": "Fri, November 13th at 7:00 PM EST",
+    "period": 0,
+    "home_team": {
+      "id": 289,
+      "conference_id": 24,
+      "name": "Commodores",
+      "full_name": "Vanderbilt Commodores",
+      "college": "Vanderbilt",
+      "abbreviation": "VAN"
+    },
+    "visitor_team": {
+      "id": 299,
+      "conference_id": 25,
+      "name": "Panthers",
+      "full_name": "Prairie View A&M Panthers",
+      "college": "Prairie View A&M",
+      "abbreviation": "PV"
+    },
+    "home_score": 0,
+    "away_score": 0,
+    "home_score_h1": null,
+    "away_score_h1": null,
+    "home_score_h2": null,
+    "away_score_h2": null,
+    "home_score_ot": null,
+    "away_score_ot": null,
+    "home_ot_scores": null,
+    "away_ot_scores": null
+  },
+  "events": [
+    {
+      "commence_time": "2026-11-14T00:00:00Z",
+      "home_team": "Vanderbilt",
+      "away_team": "Prairie View",
+      "bookmakers": [
+        {
+          "key": "pinnacle",
+          "title": "Pinnacle",
+          "last_update": "2026-11-13T19:37:52.957Z",
+          "markets": [
+            {
+              "key": "spreads",
+              "last_update": "2026-11-13T19:37:52.957Z",
+              "outcomes": [
+                {
+                  "name": "Vanderbilt",
+                  "price": -110,
+                  "point": -41
+                },
+                {
+                  "name": "Prairie View",
+                  "price": -106,
+                  "point": 41
+                }
+              ],
+              "limits": [
+                {
+                  "amount": 1000,
+                  "type": "maxRiskStake"
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-13T19:37:52.957Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -115,
+                  "point": 154
+                },
+                {
+                  "name": "Under",
+                  "price": -105,
+                  "point": 154
+                }
+              ],
+              "limits": [
+                {
+                  "amount": 500,
+                  "type": "maxRiskStake"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "sport": "ncaab",
+      "eventId": "ncaab:Prairie View@Vanderbilt-20261114",
+      "home_team_id": "vanderbilt-commodores",
+      "away_team_id": "prairie-view-am-panthers"
+    },
+    {
+      "commence_time": "2026-11-14T00:00:00Z",
+      "home_team": "Vanderbilt",
+      "away_team": "Prairie View",
+      "bookmakers": [
+        {
+          "key": "fanduel",
+          "title": "FanDuel",
+          "last_update": "2026-11-13T19:38:13.122Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-11-13T19:38:13.122Z",
+              "outcomes": [
+                {
+                  "name": "Prairie View",
+                  "price": 8000
+                },
+                {
+                  "name": "Vanderbilt",
+                  "price": -100000
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "last_update": "2026-11-13T19:38:13.122Z",
+              "outcomes": [
+                {
+                  "name": "Prairie View",
+                  "price": -106,
+                  "point": 40.5
+                },
+                {
+                  "name": "Vanderbilt",
+                  "price": -114,
+                  "point": -40.5
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-13T19:38:13.122Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -110,
+                  "point": 154.5
+                },
+                {
+                  "name": "Under",
+                  "price": -110,
+                  "point": 154.5
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "sport": "ncaab",
+      "eventId": "ncaab:Prairie View@Vanderbilt-20261114",
+      "home_team_id": "vanderbilt-commodores",
+      "away_team_id": "prairie-view-am-panthers"
+    },
+    {
+      "commence_time": "2026-11-14T00:00:00Z",
+      "home_team": "Vanderbilt",
+      "away_team": "Prairie View",
+      "bookmakers": [
+        {
+          "key": "draftkings",
+          "title": "DraftKings",
+          "last_update": "2026-11-13T19:38:19.925Z",
+          "markets": [
+            {
+              "key": "spreads",
+              "last_update": "2026-11-13T19:38:19.925Z",
+              "outcomes": [
+                {
+                  "name": "Prairie View",
+                  "price": -105,
+                  "point": 40.5
+                },
+                {
+                  "name": "Vanderbilt",
+                  "price": -115,
+                  "point": -40.5
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-13T19:38:19.925Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -110,
+                  "point": 154.5
+                },
+                {
+                  "name": "Under",
+                  "price": -110,
+                  "point": 154.5
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "sport": "ncaab",
+      "eventId": "ncaab:Prairie View@Vanderbilt-20261114",
+      "home_team_id": "vanderbilt-commodores",
+      "away_team_id": "prairie-view-am-panthers"
+    },
+    {
+      "commence_time": "2026-11-14T00:00:00Z",
+      "home_team": "Vanderbilt",
+      "away_team": "Prairie View",
+      "bookmakers": [
+        {
+          "key": "novig",
+          "title": "Novig",
+          "last_update": "2026-11-13T19:38:36.879Z",
+          "markets": [
+            {
+              "key": "spreads",
+              "last_update": "2026-11-13T19:38:36.879Z",
+              "outcomes": [
+                {
+                  "name": "Vanderbilt",
+                  "price": -108,
+                  "point": -40.5
+                },
+                {
+                  "name": "Prairie View",
+                  "price": 106,
+                  "point": 40.5
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-13T19:38:36.879Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -108,
+                  "point": 155.5
+                },
+                {
+                  "name": "Under",
+                  "price": -102,
+                  "point": 155.5
+                }
+              ]
+            }
+          ],
+          "exchange": true
+        }
+      ],
+      "sport": "ncaab",
+      "eventId": "ncaab:Prairie View@Vanderbilt-20261114",
+      "home_team_id": "vanderbilt-commodores",
+      "away_team_id": "prairie-view-am-panthers"
+    },
+    {
+      "commence_time": "2026-11-14T00:00:00Z",
+      "home_team": "Vanderbilt",
+      "away_team": "Prairie View",
+      "bookmakers": [
+        {
+          "key": "betmgm",
+          "title": "BetMGM",
+          "markets": [
+            {
+              "key": "h2h",
+              "outcomes": [
+                {
+                  "name": "Prairie View",
+                  "price": 3300
+                },
+                {
+                  "name": "Vanderbilt",
+                  "price": -10000
+                }
+              ]
+            },
+            {
+              "key": "spreads",
+              "outcomes": [
+                {
+                  "name": "Prairie View",
+                  "price": -115,
+                  "point": 41.5
+                },
+                {
+                  "name": "Vanderbilt",
+                  "price": -105,
+                  "point": -41.5
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -110,
+                  "point": 154.5
+                },
+                {
+                  "name": "Under",
+                  "price": -110,
+                  "point": 154.5
+                }
+              ]
+            }
+          ],
+          "last_update": "2026-11-13T19:37:58.782Z"
+        }
+      ],
+      "sport": "ncaab",
+      "eventId": "ncaab:Prairie View@Vanderbilt-20261114",
+      "home_team_id": "vanderbilt-commodores",
+      "away_team_id": "prairie-view-am-panthers"
+    },
+    {
+      "commence_time": "2026-11-14T00:00:00Z",
+      "home_team": "Vanderbilt",
+      "away_team": "Prairie View",
+      "bookmakers": [
+        {
+          "key": "hardrock",
+          "title": "Hard Rock",
+          "last_update": "2026-11-13T19:38:06.125Z",
+          "markets": [
+            {
+              "key": "spreads",
+              "outcomes": [
+                {
+                  "name": "Prairie View",
+                  "price": -115,
+                  "point": 41.5
+                },
+                {
+                  "name": "Vanderbilt",
+                  "price": -105,
+                  "point": -41.5
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "outcomes": [
+                {
+                  "name": "Under",
+                  "price": -110,
+                  "point": 154.5
+                },
+                {
+                  "name": "Over",
+                  "price": -110,
+                  "point": 154.5
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "sport": "ncaab",
+      "eventId": "ncaab:Prairie View@Vanderbilt-20261114",
+      "home_team_id": "vanderbilt-commodores",
+      "away_team_id": "prairie-view-am-panthers"
+    },
+    {
+      "commence_time": "2026-11-14T00:00:00Z",
+      "home_team": "Vanderbilt",
+      "away_team": "Prairie View",
+      "bookmakers": [
+        {
+          "key": "betr",
+          "title": "Betr",
+          "last_update": "2026-11-13T19:38:20.215Z",
+          "markets": [
+            {
+              "key": "spreads",
+              "last_update": "2026-11-13T19:38:20.215Z",
+              "outcomes": [
+                {
+                  "name": "Prairie View",
+                  "price": -105,
+                  "point": 40.5
+                },
+                {
+                  "name": "Vanderbilt",
+                  "price": -125,
+                  "point": -40.5
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-13T19:38:20.215Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -112,
+                  "point": 154
+                },
+                {
+                  "name": "Under",
+                  "price": -118,
+                  "point": 154
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "sport": "ncaab",
+      "eventId": "ncaab:Prairie View@Vanderbilt-20261114",
+      "home_team_id": "vanderbilt-commodores",
+      "away_team_id": "prairie-view-am-panthers"
+    },
+    {
+      "commence_time": "2026-11-14T00:00:00Z",
+      "home_team": "Vanderbilt",
+      "away_team": "Prairie View",
+      "bookmakers": [
+        {
+          "key": "bovada",
+          "title": "Bovada",
+          "last_update": "2026-11-13T19:37:54.041Z",
+          "markets": [
+            {
+              "key": "spreads",
+              "last_update": "2026-11-13T19:37:54.041Z",
+              "outcomes": [
+                {
+                  "name": "Prairie View",
+                  "price": -110,
+                  "point": 41
+                },
+                {
+                  "name": "Vanderbilt",
+                  "price": -110,
+                  "point": -41
+                }
+              ]
+            },
+            {
+              "key": "totals",
+              "last_update": "2026-11-13T19:37:54.041Z",
+              "outcomes": [
+                {
+                  "name": "Over",
+                  "price": -110,
+                  "point": 154.5
+                },
+                {
+                  "name": "Under",
+                  "price": -110,
+                  "point": 154.5
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "sport": "ncaab",
+      "eventId": "ncaab:Prairie View@Vanderbilt-20261114",
+      "home_team_id": "vanderbilt-commodores",
+      "away_team_id": "prairie-view-am-panthers"
+    }
+  ]
+}

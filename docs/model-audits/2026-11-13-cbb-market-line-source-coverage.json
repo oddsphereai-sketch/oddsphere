@@ -1,0 +1,64 @@
+{
+  "at": "2026-11-13T19:55:42.885Z",
+  "productionWrites": 0,
+  "bdlCalls": 8,
+  "theOddsApi": null,
+  "counts": {
+    "2026-11-13": {
+      "games": 60,
+      "quotedGames": 55,
+      "markets": 165
+    },
+    "2026-11-14": {
+      "games": 73,
+      "quotedGames": 0,
+      "markets": 0
+    },
+    "2026-11-15": {
+      "games": 43,
+      "quotedGames": 0,
+      "markets": 0
+    },
+    "2026-11-16": {
+      "games": 33,
+      "quotedGames": 0,
+      "markets": 0
+    },
+    "2026-11-17": {
+      "games": 66,
+      "quotedGames": 1,
+      "markets": 3
+    },
+    "2026-11-18": {
+      "games": 71,
+      "quotedGames": 0,
+      "markets": 0
+    },
+    "2026-11-19": {
+      "games": 36,
+      "quotedGames": 0,
+      "markets": 0
+    }
+  },
+  "changed": [
+    {
+      "id": 10883103,
+      "date": "2026-11-13",
+      "away": "Prairie View A&M Panthers",
+      "home": "Vanderbilt Commodores",
+      "start": "2026-11-14T00:00:00.000Z",
+      "oldOwlsMarkets": [],
+      "newOwlsMarkets": [
+        "spread",
+        "total",
+        "moneyline"
+      ],
+      "changed": true,
+      "available": [
+        "spread",
+        "total",
+        "moneyline"
+      ]
+    }
+  ]
+}

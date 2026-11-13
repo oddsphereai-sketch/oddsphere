@@ -5,7 +5,7 @@ import type { DailyEdgeResponse } from "@/app/lab/lib/labTypes";
 import { cbbOfficialGameResultFromScores } from "./adaptCbbProvisionalToDailyEdge";
 import { readCbbMemberGames,CBB_COMPATIBLE_MEMBER_STORE_RELEASES } from "./cbbMemberGameStore";
 
-export const CBB_MEMBER_READER_RELEASE="cbb_member_reader_2026_11_06_r3_verified_school_identity" as const;
+export const CBB_MEMBER_READER_RELEASE="cbb_member_reader_2026_11_13_r4_hash_pinned_market_context" as const;
 
 type OfficialSchool={external_id:number|string;display_name:string};
 type OfficialResult={status:string|null;home_score:number|null;away_score:number|null;game_date:string;

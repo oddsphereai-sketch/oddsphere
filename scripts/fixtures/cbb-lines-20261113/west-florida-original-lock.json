@@ -1,0 +1,533 @@
+{
+  "release": "cbb_member_game_store_2026_11_02_r2_preserved_market_evidence",
+  "snapshot": {
+    "board": {
+      "asOf": "2026-11-13T18:47:47.176Z",
+      "rows": [
+        {
+          "line": null,
+          "grade": "Held",
+          "price": null,
+          "market": "moneyline",
+          "reason": "game_forecast_without_qualified_wager",
+          "selection": null,
+          "targetBook": null,
+          "probability": null,
+          "expectedValue": null,
+          "observedQuote": null,
+          "quoteProvider": null,
+          "referenceState": "unavailable",
+          "pushProbability": null,
+          "quoteObservedAt": null,
+          "marketFairProbability": null,
+          "professionalReferences": 0,
+          "professionalReferenceQuotes": []
+        },
+        {
+          "line": null,
+          "grade": "Held",
+          "price": null,
+          "market": "spread",
+          "reason": "game_forecast_without_qualified_wager",
+          "selection": null,
+          "targetBook": null,
+          "probability": null,
+          "expectedValue": null,
+          "observedQuote": null,
+          "quoteProvider": null,
+          "referenceState": "unavailable",
+          "pushProbability": null,
+          "quoteObservedAt": null,
+          "marketFairProbability": null,
+          "professionalReferences": 0,
+          "professionalReferenceQuotes": []
+        },
+        {
+          "line": null,
+          "grade": "Held",
+          "price": null,
+          "market": "total",
+          "reason": "game_forecast_without_qualified_wager",
+          "selection": null,
+          "targetBook": null,
+          "probability": null,
+          "expectedValue": null,
+          "observedQuote": null,
+          "quoteProvider": null,
+          "referenceState": "unavailable",
+          "pushProbability": null,
+          "quoteObservedAt": null,
+          "marketFairProbability": null,
+          "professionalReferences": 0,
+          "professionalReferenceQuotes": []
+        }
+      ],
+      "score": {
+        "away": 79.99633552770129,
+        "home": 74.57849957090187,
+        "total": 154.57483509860316,
+        "margin": -5.417835956799408,
+        "homeWinProbability": 0.32333864673430085
+      },
+      "gameId": 10883106,
+      "release": "cbb_game_forecast_board_2026_11_05_r1_unpriced_outcomes",
+      "targetBook": null,
+      "gameForecast": {
+        "awayId": 732,
+        "homeId": 167,
+        "inputs": {
+          "kind": "d1_newcomer",
+          "inputs": {
+            "ncaaId": 11740,
+            "source": "https://barttorvik.com/2027_team_results.json",
+            "program": "West Florida",
+            "release": "cbb_newcomer_strength_source_2026_11_05_r1_exact_published_efficiencies",
+            "schoolId": 732,
+            "capturedAt": "2026-11-05T04:03:53.666Z",
+            "sourceHash": "3fe3f8a8e996cb0c3349ce01d0156535e03b9e5e7a50b639638efa16e26aad3c",
+            "sourceDomain": "early_season_published_program_efficiencies",
+            "adjustedTempo": 73.39466309658627,
+            "qualifiedWager": false,
+            "adjustedDefense": 113.7157359676744,
+            "adjustedOffense": 90.24449106134846,
+            "uncertaintyBasis": "incumbent_source_translation_residual_not_entrant_calibration",
+            "parameterVariance": [
+              11.195115885230582,
+              4.915726393238528,
+              5.574592969331275
+            ],
+            "bridgeInstitutions": 364
+          },
+          "release": "cbb_full_d1_forecast_2026_11_05_r1_official_opponent_coverage",
+          "identity": null
+        },
+        "release": "cbb_game_outcome_2026_11_05_r1_frozen_winner",
+        "selection": "second",
+        "probability": 0.6766613532656991,
+        "uncertainty": {
+          "games": 11383,
+          "totalSd": 17.45215931058766,
+          "marginSd": 12.19603031334818,
+          "totalCorrection": 0.822132324525501,
+          "fitThroughSeason": 2024,
+          "marginCorrection": -0.13713535132332144,
+          "marginTotalCorrelation": 0.00876848986899227
+        },
+        "homeWinProbability": 0.32333864673430085
+      },
+      "gradeRelease": "cbb_game_forecast_grade_2026_11_05_r1_no_unquoted_wagers",
+      "modelRelease": "cbb_candidate_2026_11_05_r5_complete_d1_program_priors",
+      "marketContext": {
+        "missing": [
+          "qualified_movement_history",
+          "qualified_splits",
+          "observed_book_leadership"
+        ],
+        "predictionReader": "unqualified",
+        "retainedLevelInput": null,
+        "verifiedMarketRead": null,
+        "professionalPriceReferences": 0
+      }
+    },
+    "gameId": 10883106,
+    "release": "cbb_candidate_2026_10_29_r1_locked_board_contract",
+    "lockedAt": "2026-11-13T19:02:34.089Z",
+    "startsAt": "2026-11-13T20:00:00.000Z",
+    "capturedAt": "2026-11-13T18:54:32.400Z"
+  },
+  "memberGame": {
+    "id": "cbb-10883106",
+    "sport": "cbb",
+    "result": null,
+    "status": {
+      "linesLocked": false,
+      "lineupConfirmed": null,
+      "marketDataLimited": true,
+      "sharpSignalPending": true
+    },
+    "markets": {
+      "total": {
+        "held": true,
+        "line": null,
+        "pick": null,
+        "grade": null,
+        "betsPct": null,
+        "verdict": {
+          "key": "no_play",
+          "label": "No Play"
+        },
+        "whyLine": "game forecast without qualified wager",
+        "keyStats": [],
+        "moneyPct": null,
+        "riskLine": "This is an early-season provisional grade; the quoted line may change.",
+        "lineTrail": [],
+        "modelProb": null,
+        "oddsTrail": [],
+        "confidence": null,
+        "modelTotal": 154.57483509860316,
+        "signalType": "model_only",
+        "guidedGuide": "Model has not published an exact-line pick.",
+        "marketTotal": null,
+        "reviewFlags": [],
+        "sharpStatus": "mixed",
+        "lockedLineAt": "2026-11-13T19:02:34.089Z",
+        "marketSignal": "market_neutral",
+        "marketSource": null,
+        "publicSplits": [
+          {
+            "side": "over",
+            "label": "Over",
+            "betsPct": 65,
+            "isStale": false,
+            "moneyPct": 46,
+            "observedAt": "2026-11-13T18:45:25.166+00:00",
+            "staleAfterMinutes": 30,
+            "freshnessCheckedAt": "2026-11-13T18:45:25.166+00:00"
+          },
+          {
+            "side": "under",
+            "label": "Under",
+            "betsPct": 35,
+            "isStale": false,
+            "moneyPct": 54,
+            "observedAt": "2026-11-13T18:45:25.166+00:00",
+            "staleAfterMinutes": 30,
+            "freshnessCheckedAt": "2026-11-13T18:45:25.166+00:00"
+          }
+        ],
+        "modelTrustPct": null,
+        "pinnacleEvPct": null,
+        "priceAmerican": null,
+        "guidedWatchOut": "Professional reference is not yet available.",
+        "marketFairProb": null,
+        "lineOpenAmerican": null,
+        "marketImpliedPct": null,
+        "marketPrediction": {
+          "line": null,
+          "label": "Projected total 154.6",
+          "reason": null,
+          "source": "model_outcome",
+          "status": "available",
+          "observedAt": "2026-11-13T18:54:32.400Z",
+          "sportsbook": null,
+          "probability": null,
+          "freshnessCheckedAt": null
+        },
+        "sportsbookSplits": {
+          "rows": [
+            {
+              "side": "over",
+              "label": "Over",
+              "betsPct": 74,
+              "moneyPct": 99,
+              "observedAt": "2026-11-13T18:46:41.806Z"
+            },
+            {
+              "side": "under",
+              "label": "Under",
+              "betsPct": 26,
+              "moneyPct": 1,
+              "observedAt": "2026-11-13T18:46:41.806Z"
+            }
+          ],
+          "label": "DraftKings Splits",
+          "signal": null,
+          "sourceBook": "draftkings",
+          "lastUpdated": "2026-11-13T18:46:41.806Z",
+          "sourceObservedAt": "2026-11-13T18:46:41.806Z"
+        },
+        "marketDataQuality": "unavailable",
+        "modelMarketGapPct": null,
+        "opposingOddsTrail": null,
+        "lockedLineAmerican": null,
+        "reviewActionSummary": "keep",
+        "currentPriceAmerican": null,
+        "sharpBookAvailability": {
+          "status": "complete",
+          "message": "Verified two-sided named-book split data is available.",
+          "lastUpdated": "2026-11-13T18:46:41.806Z"
+        },
+        "currentPriceObservedAt": null,
+        "currentPriceSportsbook": null,
+        "recommendationConfidence": null,
+        "publishedProbabilityComparisonBasis": "stored_no_vig"
+      },
+      "moneyline": {
+        "held": true,
+        "line": null,
+        "pick": null,
+        "grade": null,
+        "betsPct": null,
+        "verdict": {
+          "key": "no_play",
+          "label": "No Play"
+        },
+        "whyLine": "game forecast without qualified wager",
+        "keyStats": [],
+        "moneyPct": null,
+        "riskLine": "This is an early-season provisional grade; the quoted line may change.",
+        "lineTrail": [],
+        "modelProb": 0.6766613532656991,
+        "oddsTrail": [],
+        "confidence": null,
+        "modelTotal": null,
+        "signalType": "model_only",
+        "guidedGuide": "Model has not published an exact-line pick.",
+        "marketTotal": null,
+        "reviewFlags": [],
+        "sharpStatus": "mixed",
+        "lockedLineAt": "2026-11-13T19:02:34.089Z",
+        "marketSignal": "market_neutral",
+        "marketSource": null,
+        "publicSplits": [
+          {
+            "side": "home",
+            "label": "CLE",
+            "betsPct": 64,
+            "isStale": false,
+            "moneyPct": 42,
+            "observedAt": "2026-11-13T18:45:25.166+00:00",
+            "staleAfterMinutes": 30,
+            "freshnessCheckedAt": "2026-11-13T18:45:25.166+00:00"
+          },
+          {
+            "side": "away",
+            "label": "WEST ",
+            "betsPct": 36,
+            "isStale": false,
+            "moneyPct": 57.99999999999999,
+            "observedAt": "2026-11-13T18:45:25.166+00:00",
+            "staleAfterMinutes": 30,
+            "freshnessCheckedAt": "2026-11-13T18:45:25.166+00:00"
+          }
+        ],
+        "modelTrustPct": null,
+        "pinnacleEvPct": null,
+        "priceAmerican": null,
+        "guidedWatchOut": "Professional reference is not yet available.",
+        "marketFairProb": null,
+        "lineOpenAmerican": null,
+        "marketImpliedPct": null,
+        "marketPrediction": {
+          "line": null,
+          "label": "WEST  ML",
+          "reason": null,
+          "source": "model_outcome",
+          "status": "available",
+          "observedAt": "2026-11-13T18:54:32.400Z",
+          "sportsbook": null,
+          "probability": 0.6766613532656991,
+          "freshnessCheckedAt": null
+        },
+        "sportsbookSplits": {
+          "rows": [
+            {
+              "side": "away",
+              "label": "WEST ",
+              "betsPct": 33,
+              "moneyPct": 51,
+              "observedAt": "2026-11-13T18:46:41.806Z"
+            },
+            {
+              "side": "home",
+              "label": "CLE",
+              "betsPct": 67,
+              "moneyPct": 49,
+              "observedAt": "2026-11-13T18:46:41.806Z"
+            }
+          ],
+          "label": "DraftKings Splits",
+          "signal": null,
+          "sourceBook": "draftkings",
+          "lastUpdated": "2026-11-13T18:46:41.806Z",
+          "sourceObservedAt": "2026-11-13T18:46:41.806Z"
+        },
+        "marketDataQuality": "unavailable",
+        "modelMarketGapPct": null,
+        "opposingOddsTrail": null,
+        "lockedLineAmerican": null,
+        "reviewActionSummary": "keep",
+        "currentPriceAmerican": null,
+        "sharpBookAvailability": {
+          "status": "complete",
+          "message": "Verified two-sided named-book split data is available.",
+          "lastUpdated": "2026-11-13T18:46:41.806Z"
+        },
+        "currentPriceObservedAt": null,
+        "currentPriceSportsbook": null,
+        "recommendationConfidence": null,
+        "publishedProbabilityComparisonBasis": "stored_no_vig"
+      },
+      "first_inning": {
+        "held": true,
+        "line": null,
+        "pick": null,
+        "grade": null,
+        "betsPct": null,
+        "verdict": {
+          "key": "no_play",
+          "label": "No Play"
+        },
+        "whyLine": "game forecast without qualified wager",
+        "keyStats": [],
+        "moneyPct": null,
+        "riskLine": "This is an early-season provisional grade; the quoted line may change.",
+        "lineTrail": [],
+        "modelProb": null,
+        "oddsTrail": [],
+        "confidence": null,
+        "modelTotal": null,
+        "signalType": "model_only",
+        "guidedGuide": "Model has not published an exact-line pick.",
+        "marketTotal": null,
+        "reviewFlags": [],
+        "sharpStatus": "mixed",
+        "lockedLineAt": "2026-11-13T19:02:34.089Z",
+        "marketSignal": "market_neutral",
+        "marketSource": null,
+        "publicSplits": [
+          {
+            "side": "home",
+            "label": "CLE",
+            "betsPct": 43,
+            "isStale": false,
+            "moneyPct": 43,
+            "observedAt": "2026-11-13T18:45:25.166+00:00",
+            "staleAfterMinutes": 30,
+            "freshnessCheckedAt": "2026-11-13T18:45:25.166+00:00"
+          },
+          {
+            "side": "away",
+            "label": "WEST ",
+            "betsPct": 56.99999999999999,
+            "isStale": false,
+            "moneyPct": 56.99999999999999,
+            "observedAt": "2026-11-13T18:45:25.166+00:00",
+            "staleAfterMinutes": 30,
+            "freshnessCheckedAt": "2026-11-13T18:45:25.166+00:00"
+          }
+        ],
+        "modelTrustPct": null,
+        "pinnacleEvPct": null,
+        "priceAmerican": null,
+        "guidedWatchOut": "Professional reference is not yet available.",
+        "marketFairProb": null,
+        "lineOpenAmerican": null,
+        "marketImpliedPct": null,
+        "marketPrediction": {
+          "line": null,
+          "label": "WEST  by 5.4",
+          "reason": null,
+          "source": "model_outcome",
+          "status": "available",
+          "observedAt": "2026-11-13T18:54:32.400Z",
+          "sportsbook": null,
+          "probability": null,
+          "freshnessCheckedAt": null
+        },
+        "sportsbookSplits": {
+          "rows": [
+            {
+              "side": "away",
+              "label": "WEST ",
+              "betsPct": 34,
+              "moneyPct": 32,
+              "observedAt": "2026-11-13T18:46:41.806Z"
+            },
+            {
+              "side": "home",
+              "label": "CLE",
+              "betsPct": 66,
+              "moneyPct": 68,
+              "observedAt": "2026-11-13T18:46:41.806Z"
+            }
+          ],
+          "label": "DraftKings Splits",
+          "signal": null,
+          "sourceBook": "draftkings",
+          "lastUpdated": "2026-11-13T18:46:41.806Z",
+          "sourceObservedAt": "2026-11-13T18:46:41.806Z"
+        },
+        "marketDataQuality": "unavailable",
+        "modelMarketGapPct": null,
+        "opposingOddsTrail": null,
+        "lockedLineAmerican": null,
+        "reviewActionSummary": "keep",
+        "currentPriceAmerican": null,
+        "sharpBookAvailability": {
+          "status": "complete",
+          "message": "Verified two-sided named-book split data is available.",
+          "lastUpdated": "2026-11-13T18:46:41.806Z"
+        },
+        "currentPriceObservedAt": null,
+        "currentPriceSportsbook": null,
+        "recommendationConfidence": null,
+        "publishedProbabilityComparisonBasis": "stored_no_vig"
+      }
+    },
+    "awayTeam": "WEST ",
+    "gameTime": "3:00 PM",
+    "homeTeam": "CLE",
+    "lockedAt": "2026-11-13T19:02:34.089Z",
+    "breakdown": {
+      "verdict": {
+        "key": "no_play",
+        "label": "No Play"
+      },
+      "sharpRead": {
+        "key": "no_data",
+        "sentence": "No clear sharp read on this matchup yet."
+      },
+      "modelBreakdown": "Independent projection: 80.0\u201374.6. Exact sportsbook prices determine the provisional play grades; professional references are shown only where verified."
+    },
+    "lockState": "locked",
+    "projected": {
+      "away": 79.99633552770129,
+      "home": 74.57849957090187
+    },
+    "updatedAt": "2026-11-13T18:54:32.400Z",
+    "holdReason": null,
+    "awayStarter": null,
+    "external_id": 10883106,
+    "gameStartAt": "2026-11-13T20:00:00.000Z",
+    "generatedAt": "2026-11-13T18:54:32.400Z",
+    "homeStarter": null,
+    "predictions": {
+      "ml": {
+        "pick": null,
+        "grade": null,
+        "confidence": null,
+        "signalType": "model_only",
+        "sharpStatus": "mixed",
+        "marketSignal": "market_neutral"
+      },
+      "nrfi": {
+        "pick": null,
+        "grade": null,
+        "confidence": null,
+        "signalType": "model_only",
+        "sharpStatus": "mixed",
+        "marketSignal": "market_neutral"
+      },
+      "total": {
+        "line": null,
+        "pick": null,
+        "grade": null,
+        "confidence": null,
+        "signalType": "model_only",
+        "sharpStatus": "mixed",
+        "marketSignal": "market_neutral"
+      }
+    },
+    "awayTeamLogo": null,
+    "decisionLine": "WEST  80.0 \u00b7 CLE 74.6; No Play.",
+    "homeTeamLogo": "https://a.espncdn.com/i/teamlogos/ncaa/500/325.png",
+    "sharpSignals": [],
+    "cbbAwayCollege": "West Florida",
+    "cbbHomeCollege": "Cleveland State",
+    "scheduledLockAt": "2026-11-13T19:00:00.000Z",
+    "gameStartMinutes": 900,
+    "awayTeamDisplayName": "West Florida Argonauts",
+    "homeTeamDisplayName": "Cleveland State Vikings"
+  }
+}
