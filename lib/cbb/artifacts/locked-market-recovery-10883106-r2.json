@@ -1,0 +1,81 @@
+{
+  "release": "cbb_locked_market_recovery_2026_11_13_r2_west_florida_cleveland_state",
+  "gameId": 10883106,
+  "startsAt": "2026-11-13T20:00:00.000Z",
+  "lockedAt": "2026-11-13T19:02:34.089Z",
+  "originalPayloadSha256": "d0c586a97bf53706f17ebea718d4289494e0db9e3f2ea0130da7d857bf724bf2",
+  "homeProviderId": 167,
+  "awayProviderId": 732,
+  "homeDisplayName": "Cleveland State Vikings",
+  "awayDisplayName": "West Florida Argonauts",
+  "awayCollege": "West Florida",
+  "originalAwayDisplayName": "West Florida Argonauts",
+  "asOf": "2026-11-13T19:00:00.000Z",
+  "book": "pinnacle",
+  "provider": "owls",
+  "providerEventId": "ncaab:West Florida@Cleveland St-20261113",
+  "retrievedAfterLock": true,
+  "meaning": "Recovered historical market context; not used for the original locked prediction. Original stored scores, picks, probabilities, prices, grades, stakes and evidence remain unchanged.",
+  "ownerDirection": "We're missing a bunch of lines and stuff across college basketball, it looks like. Not too many, but there's definitely a few. I need all lines and everything found. One game already locked without them, and that's gonna suck, but we need that fixed.",
+  "markets": [
+    {
+      "market": "moneyline",
+      "observedAt": "2026-11-13T18:42:23.860Z",
+      "line": null,
+      "firstPrice": -120,
+      "secondPrice": 103
+    },
+    {
+      "market": "spread",
+      "observedAt": "2026-11-13T18:42:23.860Z",
+      "line": -1.5,
+      "firstPrice": -112,
+      "secondPrice": -105
+    },
+    {
+      "market": "total",
+      "observedAt": "2026-11-13T17:11:24.327Z",
+      "line": 150.5,
+      "firstPrice": -109,
+      "secondPrice": -111
+    }
+  ],
+  "sourceReceipts": [
+    {
+      "market": "h2h",
+      "side": "home",
+      "file": "h2h-home.json",
+      "sha256": "f5681219e1330e0b4c73b2bd08f07ead604a89a31e1e0d95d9c7cbae331f28db"
+    },
+    {
+      "market": "h2h",
+      "side": "away",
+      "file": "h2h-away.json",
+      "sha256": "b33358b9d062c980b4ba76adf0fb7f1e8686441a219618f4c661bdbcb63eb7d3"
+    },
+    {
+      "market": "spreads",
+      "side": "home",
+      "file": "spreads-home.json",
+      "sha256": "fe0f329854b417f08b2b2168a491304f805ba99789a2f6820283c72e47eee832"
+    },
+    {
+      "market": "spreads",
+      "side": "away",
+      "file": "spreads-away.json",
+      "sha256": "895ad11ae1204fd7ec14b9a9f1174d502519f33bd7a1141d4cdbec6cb88458fe"
+    },
+    {
+      "market": "totals",
+      "side": "over",
+      "file": "totals-over.json",
+      "sha256": "d516256c9db1afad570c6de378885eb556b6e3bd2539ee6606a1200a068765ed"
+    },
+    {
+      "market": "totals",
+      "side": "under",
+      "file": "totals-under.json",
+      "sha256": "4fbae01a049a34dce2b05f33bb1246fd7bbe56a100ba488e1c79f7f885ad6674"
+    }
+  ]
+}

@@ -1,3 +1,24 @@
+## November 13 CBB real-market coverage and immutable context repair
+
+Source institution identity R9 and exact split mapping R8 accept the verified
+`Prairie View` label for school299 Prairie View A&M, including its native
+`prairie-view-am-panthers` source ID. Contextual input R7 records that source
+identity. Other schools, times, competition and paired-price validation stay
+exact. Statistical model/covariance R7 and decisionR13/gradeR12 are unchanged.
+
+AdapterR38 and observed-quote R1 retain real paired offers on new forecast-only
+cards without creating a selected wager, probability, price, grade or stake.
+Market tracking R5 archives both observed sides through the existing bounded
+collector, including when no model pick exists; it never invents an opener or
+adds provider requests. Future locks freeze those published observations.
+
+ReaderR4 / recovery registryR2 append owner-requested, hash-pinned pre-lock
+Pinnacle context for November13 West Florida–Cleveland State10883106. Source
+receipts and original payload are pinned; the original locked member fields,
+tracking and grades remain unchanged. The earlier10882715 recovery keeps its
+exact own R1 identity. No new timer, writer, schema or model/grade policy.
+See `model-audits/2026-11-13-cbb-market-line-coverage.md`.
+
 ## November 13 CBB lock-first tracking recovery
 
 - Operational runtime / publisher are `cbb_daily_refresh_runtime_2026_11_13_r3_lock_first_failure_isolation` / `cbb_member_pipeline_2026_11_13_r56_per_game_failure_isolation`. Lock sweep `cbb_pregame_lock_sweep_2026_11_13_r1_before_forecast_work` runs first inside the same `prediction_pipeline:cbb` lease and existing cadence, before any source/seed/training/model failure can consume the lock window. It freezes the exact already published decision and calls the existing immutable tracking serializer; no new forecast, provider, timer, grade rule or independent writer.

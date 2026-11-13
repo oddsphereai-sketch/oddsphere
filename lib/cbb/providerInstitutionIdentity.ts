@@ -1,7 +1,7 @@
 import { canonicalCbbTeamName } from "./dataset";
 import type {CbbGame,CbbTeam} from "./types";
 
-export const CBB_PROVIDER_IDENTITY_RELEASE = "cbb_provider_identity_2026_11_06_r8_verified_west_florida_fiu" as const;
+export const CBB_PROVIDER_IDENTITY_RELEASE = "cbb_provider_identity_2026_11_13_r9_verified_prairie_view" as const;
 
 // Provider spellings of named institutions, never mascot or substring guesses.
 // Keep State and Saint distinct and preserve ambiguous schools (USC, Miami).
@@ -19,6 +19,8 @@ const stateInstitutions = [
 ];
 const aliases = new Map<string,string>(stateInstitutions.map(name => [canonicalCbbTeamName(name.replace(/State$/, "St")), canonicalCbbTeamName(name)]));
 for (const [source, institution] of [
+  // November13 exact Owls fixture and native prairie-view-am-panthers ID.
+  ["Prairie View", "Prairie View A&M"],
   // Exact named participant in the retained West Florida–FIU Owls event.
   ["FIU", "Florida International"],
   // Exact labels and matching native school IDs in the November 6 Owls receipt.

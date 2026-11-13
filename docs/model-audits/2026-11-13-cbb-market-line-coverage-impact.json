@@ -1,0 +1,58 @@
+{
+  "at": "2026-11-13T19:52:04.421Z",
+  "mode": "offline_source_admission_audit",
+  "productionWrites": 0,
+  "model": "cbb_contextual_outcome_2026_11_06_r7_economic_total_retained_margin",
+  "meaning": "Saved independent statistics and prior context, with actually captured qualified offers; missing historical/split coverage stays explicitly unknown. This is not a prospective result or a full provider refresh.",
+  "sourceAt": "2026-11-13T19:38:49.303Z",
+  "game": 10883103,
+  "quotes": 16,
+  "before": [
+    {
+      "market": "moneyline",
+      "grade": "Held",
+      "price": null
+    },
+    {
+      "market": "spread",
+      "grade": "Held",
+      "price": null
+    },
+    {
+      "market": "total",
+      "grade": "Held",
+      "price": null
+    }
+  ],
+  "after": [
+    {
+      "market": "moneyline",
+      "grade": "No Play",
+      "price": -100000,
+      "line": null,
+      "probability": 0.9999996611720574,
+      "selection": "first",
+      "reason": "moneyline_price_below_owner_actionable_limit"
+    },
+    {
+      "market": "spread",
+      "grade": "Watchlist",
+      "price": -114,
+      "line": -40.5,
+      "probability": 0.5287377364137789,
+      "selection": "first",
+      "reason": "forecast_premium_consumed_by_current_price_margin"
+    },
+    {
+      "market": "total",
+      "grade": "Lean",
+      "price": -110,
+      "line": 154.5,
+      "probability": 0.6042795101711043,
+      "selection": "second",
+      "reason": "positive_value_below_best_angle_confidence"
+    }
+  ],
+  "beforeActionable": 0,
+  "afterActionable": 1
+}

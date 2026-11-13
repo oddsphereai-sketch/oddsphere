@@ -187,6 +187,19 @@ export function accumulateCbbPublishedQuotes(feed:BookDisplayFeed,games:DailyEdg
     }
     for(const key of ["moneyline","total","first_inning"] as const){
       const market=game.markets[key],selection=readerHistoryContractSelection(game,key),pick=market.pick?.replace(/\s+ML$/i,"").trim().toUpperCase();
+      // A forecast-only card still has real two-sided market observations.
+      // These never become a model selection, grade, stake or claimed opener.
+      const observed=market.observedMarketQuote,observedKind=key==="first_inning"?"spread":key;
+      if(observed&&observed.quotes.length===2){
+        const [first,second]=observed.quotes,labels=observedKind==="total"?["Over","Under"]:[game.homeTeam,game.awayTeam];
+        const coherent=first.label.trim().toUpperCase()===labels[0].trim().toUpperCase()&&second.label.trim().toUpperCase()===labels[1].trim().toUpperCase()&&
+          (observedKind==="moneyline"?first.line===null&&second.line===null:first.line!==null&&second.line!==null&&
+            Number.isInteger(first.line*2)&&(observedKind==="spread"?first.line===-second.line:first.line===second.line&&first.line>0))&&
+          [first.american,second.american].every(p=>Number.isFinite(p)&&Math.abs(p)>=100)&&
+          implied(first.american)+implied(second.american)>=.98&&implied(first.american)+implied(second.american)<=1.3;
+        if(coherent)for(const [side,point] of [[observedKind==="total"?"over":"home",first],[observedKind==="total"?"under":"away",second]] as const)
+          append(observedKind,side,observed.sportsbook,[[Date.parse(observed.observedAt),point.american,point.line]],now);
+      }
       const kind=key==="moneyline"?"moneyline":selection?.kind,side=selection?.side??(pick===game.awayTeam?"away":pick===game.homeTeam?"home":null);
       if(!kind||!side)continue;
       const capture=(capturedSide:string,stops:NonNullable<typeof market.oddsTrail>)=>{

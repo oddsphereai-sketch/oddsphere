@@ -1,4 +1,5 @@
 import {cbbProviderFixtureIdentity} from "@/lib/cbb/providerInstitutionIdentity";
+import {cbbObservedMarketQuote} from "./cbbObservedMarketQuote";
 import {resolveCbbContextualOutcomeRelease,readCbbContextualOutcomeEvidence,type CbbReleasedOutcomeBoard} from "./cbbContextualOutcomeRuntime";
 import {CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_RESISTANCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_GAME_RELEASE} from "@/lib/cbb/contextualOutcomeBoard";
 import {CBB_NATIVE_COUNTERPRESSURE_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
@@ -17,7 +18,7 @@ import { buildDailyEdgeMemberPresentation } from "@/app/lab/lib/dailyEdgeRespons
 import { CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INFORMATIONAL_WATCHLIST_GRADE_RELEASE,CBB_EPISODE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE } from "@/lib/cbb/marketBehaviorCandidate";
 import {CBB_CONTINUITY_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_SOURCE_ALIAS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_JOINT_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_ALIGNED_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_RETAIL_MARKET_BEHAVIOR_GRADE_RELEASE} from "@/lib/cbb/marketBehaviorCandidate";
 
-export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_06_r37_verified_school_identity" as const;
+export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_13_r38_unselected_observed_pairs" as const;
 type GradeLabel="Best Angle"|"Lean"|"Watchlist"|"No Play"|"Held";
 type BoardRow=CbbProvisionalSnapshot["board"]["rows"][number];
 type SplitEvidence=ReturnType<typeof cbbCurrentSplitEvidence>;
@@ -180,6 +181,8 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
   const cutoff=Date.parse(game.date)-60*60_000,locked=snapshot.lockedAt!==null;
   for(const [kind,market] of [["moneyline",ml],["spread",spread],["total",total]] as const){
     const boardRow=rows.get(kind)!;
+    if(snapshot.lockedAt===null&&!boardRow.selection&&!market.observedMarketQuote)
+      market.observedMarketQuote=cbbObservedMarketQuote(game,kind,args.marketQuotes??[],now);
     if(contextual){
       const stored=contextual.decision.marketDecisions.find(row=>row.market===kind)!;
       const informational=stored.grade==="Watchlist"||stored.grade==="No Play";

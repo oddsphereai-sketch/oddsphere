@@ -1,7 +1,7 @@
 import { cbbProviderInstitutionName as canonicalCbbTeamName } from "./providerInstitutionIdentity";
 
 export const CBB_SHARP_SPLIT_MAPPING_RELEASE =
-  "cbb_sharp_split_mapping_2026_11_06_r7_verified_provider_schools" as const;
+  "cbb_sharp_split_mapping_2026_11_13_r8_verified_prairie_view" as const;
 
 export type CbbSplitTeamIdentity = {
   homeTeamDisplayName?: string | null;

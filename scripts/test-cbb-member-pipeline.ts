@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import {testCbbLineCoverage} from "./test-cbb-line-coverage";
 import { CbbScoreLawNumericalError } from "../lib/cbb/contextualScoreLawResearch";
 import type { CbbGame } from "../lib/cbb/types";
 import type { CbbBallDontLieClient } from "../lib/cbb/ballDontLie";
@@ -54,6 +55,7 @@ const saveSnapshot=(async(input:{payload:DailyEdgeResponse})=>{published=structu
 
 const testRuntime=makeCbbPipelineTestRuntime();let runtimeLoads=0;const loadContextualRuntime=async()=>{runtimeLoads++;return testRuntime.runtime;};
 async function main(){
+  await testCbbLineCoverage();
   const noOdds={odds:async()=>({body:{success:true,data:[]},status:200,rateLimit:{remainingMinute:null,remainingMonth:null}}),
     splits:async()=>({body:splits,status:200,rateLimit:{remainingMinute:null,remainingMonth:null}})} as unknown as OwlsInsightClient;
   const pending=await refreshCbbMemberBoard({loadContextualRuntime,anchorDate:"2026-10-29",season:2026,now:asOf,bdlKey:"test",owlsKey:"test",
