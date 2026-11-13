@@ -1,3 +1,10 @@
+## November 13 CBB lock-first tracking recovery
+
+- Operational runtime / publisher are `cbb_daily_refresh_runtime_2026_11_13_r3_lock_first_failure_isolation` / `cbb_member_pipeline_2026_11_13_r56_per_game_failure_isolation`. Lock sweep `cbb_pregame_lock_sweep_2026_11_13_r1_before_forecast_work` runs first inside the same `prediction_pipeline:cbb` lease and existing cadence, before any source/seed/training/model failure can consume the lock window. It freezes the exact already published decision and calls the existing immutable tracking serializer; no new forecast, provider, timer, grade rule or independent writer.
+- Typed numerical evaluation refusals retain a prior publication per game without approximation. A genuinely changed-school event ID is preserved as original evidence and its corrected canonical matchup remains schedule-only; it cannot inherit the former matchup's forecast or stop unrelated games. Statistical R7/covariance, decisionR13/gradeR12 and all original lock semantics remain unchanged.
+- Historical serialization `cbb_missed_lock_recovery_2026_11_13_r1_owner_approved_original_forecast` is limited to the owner's explicit November13 approval for19 missing November12 games /55 predictions /10 Leans. Exact source hashes and clocks are pinned in the approved manifest. New rows retain original model/grade/quote fields and explicitly record the actual recovery time, original null lock and `on_time_t60_lock:false`. All19 source member payloads and15 original tracking rows remain unchanged. Outcomes are Moneyline12–7, Spread8–10, Total9–9; no outcome-driven selection or refit. The operator is dry-run by default and uses the existing sport lease, serializer, grader and tracking snapshot writer for approved apply.
+- This is operational completeness, not new predictive-performance evidence. Same valid-input grade/prediction impact is zero. Evidence, strict clocks, owner direction, tests, release gates and rollback: `docs/model-audits/2026-11-13-cbb-lock-first-tracking-recovery.md`.
+
 ## November 11 player-prop urgent review cohorts R36
 
 Future shared NBA/NFL/MLB generation is

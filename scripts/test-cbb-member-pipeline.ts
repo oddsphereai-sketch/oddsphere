@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { CbbScoreLawNumericalError } from "../lib/cbb/contextualScoreLawResearch";
 import type { CbbGame } from "../lib/cbb/types";
 import type { CbbBallDontLieClient } from "../lib/cbb/ballDontLie";
 import type { OwlsInsightClient } from "../lib/providers/owls/owlsInsightClient";
@@ -80,6 +81,12 @@ async function main(){
     assert.equal(JSON.stringify(tracked),priorTracked,"Runtime failure cannot create a tracking lock");
   }
   const actualTargets=testRuntime.evaluations.at(-1)!.input.targets;
+  const numerical=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:asOf,bdlKey:"test",owlsKey:"test",
+    trainingGames:[],provider,owls,db,fetcher,loadSchedule:async()=>schedule,saveSnapshot,
+    loadContextualRuntime:async()=>({evaluate:()=>{throw new CbbScoreLawNumericalError("rectangle integration evaluation budget exhausted");}})});
+  assert.equal(numerical.published,1);
+  assert.equal(JSON.stringify([...stored]),priorRows,"A numerical refusal preserves the original published decision");
+  assert(numerical.providerWarnings.some(p=>p.includes("numerical evaluation unavailable")));
   assert.equal(selectCbbContextualPipelineTargets([...actualTargets]).length,3);
   assert.ok(selectCbbContextualPipelineTargets([...actualTargets]).every((q,i)=>q===actualTargets[i]),"Target handoff preserves the original raw quote object");
   const partialTargets=[...actualTargets.filter(q=>q.market!=="total"),{...actualTargets.find(q=>q.market==="total")!,sportsbook:"draftkings"}];
@@ -245,6 +252,16 @@ async function verifiedWestFloridaHandoff(){
   const wrong={...canonical,games:canonical.games.map(g=>({...g,awayTeamDisplayName:"Other Argonauts"}))};
   await assert.rejects(refreshCbbMemberBoard({...args,loadSchedule:async()=>wrong}),/lost exact games/);
   assert.equal(JSON.stringify([...stored]),before,"Unverified labels cannot write or publish a mismatched game");
+  const changedFixture={...fixture,visitor_team:{...fixture.visitor_team,id:11,full_name:"Notre Dame Fighting Irish",college:"Notre Dame",abbreviation:"ND"}};
+  const changedSchedule={...canonical,games:canonical.games.map(g=>({...g,awayTeam:"ND",awayTeamDisplayName:"Notre Dame Fighting Irish"}))};
+  const changedProvider={calls:0,gamesForDates:async()=>[changedFixture]} as unknown as CbbBallDontLieClient;
+  const quarantined=await refreshCbbMemberBoard({...args,provider:changedProvider,loadSchedule:async()=>changedSchedule});
+  assert.equal(quarantined.published,0,"A reused provider event cannot inherit another matchup's prediction");
+  assert.equal(JSON.stringify([...stored]),before,"Original unmatched pregame evidence remains unchanged");
+  const quarantineBoard=published as DailyEdgeResponse|null;
+  assert(quarantineBoard?.cbbScheduleCoverage?.eligibleGameIds.includes(fixture.id),"The corrected canonical matchup remains visible in the existing schedule");
+  assert(!quarantineBoard?.cbbScheduleCoverage?.modelEligibleGameIds.includes(fixture.id));
+  assert(quarantined.providerWarnings.some(p=>p.includes("changed matchup")&&p.includes(String(fixture.id))));
   console.log("PASS full West Florida pipeline: corrected schedule/raw provider school732, no unnecessary sync, complete publication, wrong-school refusal and no mismatched writes");
   }finally{globalThis.Date=realDate;}
 }

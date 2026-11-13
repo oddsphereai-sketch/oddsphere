@@ -1,0 +1,123 @@
+{
+  "release": "cbb_missed_lock_recovery_2026_11_13_r1_owner_approved_original_forecast",
+  "ownerApproval": "Add all 19 games; preserve originals",
+  "slateDate": "2026-11-12",
+  "expectedMarkets": 55,
+  "expectedLeans": 10,
+  "sources": [
+    {
+      "gameId": 10883068,
+      "sha256": "664c21899b4636f9e326bc80b46a042f0c8ac6ea9a1a5b0fab8943a9c9462c81",
+      "capturedAt": "2026-11-12T22:51:35.714Z",
+      "startsAt": "2026-11-13T01:00:00.000Z"
+    },
+    {
+      "gameId": 10883069,
+      "sha256": "c5329274d266e3df81e7b2d2e96f3bc6bb3c4cb18322c9773520846d7ceb317c",
+      "capturedAt": "2026-11-12T22:51:32.306Z",
+      "startsAt": "2026-11-13T00:00:00.000Z"
+    },
+    {
+      "gameId": 10883070,
+      "sha256": "671c5b48dc36bf4f7465711df9970bd51319e68654d5a534631a79240556e63a",
+      "capturedAt": "2026-11-12T22:51:32.605Z",
+      "startsAt": "2026-11-13T00:00:00.000Z"
+    },
+    {
+      "gameId": 10883071,
+      "sha256": "551c8c8a4093051a2bb18de351b061d2dea9152bbb88f411369c5262ad5004b1",
+      "capturedAt": "2026-11-12T22:51:37.483Z",
+      "startsAt": "2026-11-13T02:00:00.000Z"
+    },
+    {
+      "gameId": 10883072,
+      "sha256": "41406902a61f637118480f60d9c57c281ecb8fc38125c39d160d7cd6645fa882",
+      "capturedAt": "2026-11-12T22:51:35.792Z",
+      "startsAt": "2026-11-13T01:00:00.000Z"
+    },
+    {
+      "gameId": 10883073,
+      "sha256": "46854d86e3ecb2b5fda97234077d1d1407dfeb97cca7d57eba4790ab64069d71",
+      "capturedAt": "2026-11-12T22:51:36.257Z",
+      "startsAt": "2026-11-13T01:00:00.000Z"
+    },
+    {
+      "gameId": 10883075,
+      "sha256": "66e029b7ae31f0ebbba118b982a95d31af77915f65de6fedc4bdd48b449bac20",
+      "capturedAt": "2026-11-12T22:51:36.787Z",
+      "startsAt": "2026-11-13T01:00:00.000Z"
+    },
+    {
+      "gameId": 10883076,
+      "sha256": "005a9035c81bd5ec619e4680186655ab4fd7b46f393781bfb6f0f7d85759c39e",
+      "capturedAt": "2026-11-12T22:51:37.782Z",
+      "startsAt": "2026-11-13T02:00:00.000Z"
+    },
+    {
+      "gameId": 10883082,
+      "sha256": "baa93c1a0a38f602386c8ce1338c6e5e702537b26cd2d987c96a13ffd34adab5",
+      "capturedAt": "2026-11-12T22:51:32.967Z",
+      "startsAt": "2026-11-13T00:00:00.000Z"
+    },
+    {
+      "gameId": 10883083,
+      "sha256": "c5bdff572c438c9731c3ff99a35ab2da8537cb948ffbe1b7fb8ef6a0f4fc9303",
+      "capturedAt": "2026-11-12T22:51:33.269Z",
+      "startsAt": "2026-11-13T00:00:00.000Z"
+    },
+    {
+      "gameId": 10883084,
+      "sha256": "66113d3583c76555e820062204c4e1d088560d9886e6b4ab5292765c5a467ba2",
+      "capturedAt": "2026-11-12T22:51:33.643Z",
+      "startsAt": "2026-11-13T00:00:00.000Z"
+    },
+    {
+      "gameId": 10883085,
+      "sha256": "5e7586a2e465b0b92c0314bc57002f52292c75f0ad4ae0b6a096f53058ff51c2",
+      "capturedAt": "2026-11-12T22:51:33.965Z",
+      "startsAt": "2026-11-13T00:00:00.000Z"
+    },
+    {
+      "gameId": 10883086,
+      "sha256": "83cb9013c5945030bba32f7da7d62cdff5a45d34b30e9ef42c401a461ab5d7d4",
+      "capturedAt": "2026-11-12T22:51:34.239Z",
+      "startsAt": "2026-11-13T00:00:00.000Z"
+    },
+    {
+      "gameId": 10883087,
+      "sha256": "062ed69f60b2005a546fe9ad49fa9206d632b863ce4dbb0a3f9f3ff30f0e8bf0",
+      "capturedAt": "2026-11-12T22:51:34.468Z",
+      "startsAt": "2026-11-13T00:00:00.000Z"
+    },
+    {
+      "gameId": 10883088,
+      "sha256": "bcbbbb7d8e2dc24044278343ecdff1a034156c9c6eea88a2e64baaa5282eb72f",
+      "capturedAt": "2026-11-12T22:51:34.696Z",
+      "startsAt": "2026-11-13T00:00:00.000Z"
+    },
+    {
+      "gameId": 10883089,
+      "sha256": "2b4199704e32069ba8ccd1330faeac2dcb8f4989901b6871cbd3de9b06acf809",
+      "capturedAt": "2026-11-12T22:51:35.066Z",
+      "startsAt": "2026-11-13T00:00:00.000Z"
+    },
+    {
+      "gameId": 10883090,
+      "sha256": "6fb41ef0c6506a007fce4561d37a271e33fc9c6aa54bb5646655531f2b909d5b",
+      "capturedAt": "2026-11-12T22:51:35.419Z",
+      "startsAt": "2026-11-13T00:00:00.000Z"
+    },
+    {
+      "gameId": 10883091,
+      "sha256": "20edaa7bcffd3a94bf976a138c1ceadc30065b3c83da6f09a033f4482b1d326d",
+      "capturedAt": "2026-11-12T22:51:37.069Z",
+      "startsAt": "2026-11-13T01:00:00.000Z"
+    },
+    {
+      "gameId": 10883094,
+      "sha256": "95a45a279abf705b06f47d66b89de5c5f5bb65ac1e2382ed7e631704f31cf1c5",
+      "capturedAt": "2026-11-12T22:51:38.019Z",
+      "startsAt": "2026-11-13T03:00:00.000Z"
+    }
+  ]
+}
