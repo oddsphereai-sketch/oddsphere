@@ -1,17 +1,3 @@
-## November 13 CBB owner-confirmed historical results
-
-`cbb_owner_result_correction_2026_11_13_r1` is limited to the owner's explicit
-confirmation and authorization of two wins for November12 West Florida at
-Alabama A&M (10883068), Spread and Total. It appends two manual results with
-their own release, authority and actual correction timestamp; the70 original
-tracking rows and original member payload remain unchanged. Missing wager
-tuples stay null and no action grade or ROI is invented. Counts become24 per
-market (ML17–7, Spread11–13, Total13–11). The bounded dry-run-first operator
-uses the existing sport lease and snapshot writer, verifies the original hash
-and proves the existing grading guard preserves finalized manual wins. No
-future model or runtime behavior changes. See
-`model-audits/2026-11-13-cbb-owner-confirmed-results.md`.
-
 ## November 13 CBB lock-first tracking recovery
 
 - Operational runtime / publisher are `cbb_daily_refresh_runtime_2026_11_13_r3_lock_first_failure_isolation` / `cbb_member_pipeline_2026_11_13_r56_per_game_failure_isolation`. Lock sweep `cbb_pregame_lock_sweep_2026_11_13_r1_before_forecast_work` runs first inside the same `prediction_pipeline:cbb` lease and existing cadence, before any source/seed/training/model failure can consume the lock window. It freezes the exact already published decision and calls the existing immutable tracking serializer; no new forecast, provider, timer, grade rule or independent writer.

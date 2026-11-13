@@ -24,3 +24,10 @@ then verifies the two persisted manual grades, all70 originals and original
 source hash, and refreshes the existing Tracking snapshot. Repeat execution
 is idempotent. No future model, calibration, grade policy, timer, writer,
 schema, member copy or display layout changes.
+
+The correction identifier describes manual historical result provenance, not
+a new production model/calibration release. The active runtime registry stays
+exact. An optional registry entry was removed from this candidate after the
+integration guard found the reader chat reconciling that shared file; this
+keeps both tasks' work intact and leaves this correction limited to its own
+operator and audit. The clean integration guard must still pass normally.
