@@ -16,6 +16,14 @@ export const CBB_COMPATIBLE_MEMBER_STORE_RELEASES=[CBB_MEMBER_GAME_STORE_RELEASE
 type StoreRelease=typeof CBB_COMPATIBLE_MEMBER_STORE_RELEASES[number];
 export type CbbStoredMemberGame={release:StoreRelease;snapshot:CbbProvisionalSnapshot;memberGame:DailyEdgeGameDto};
 const key=(id:number)=>`cbb::member-game::${id}`;
+/** A provider can reuse/correct an event ID to a different matchup. An older
+ * unlocked forecast is evidence for its original schools, never the new pair. */
+export function cbbStoredMemberFixtureMatches(record:CbbStoredMemberGame,game:CbbGame):boolean{
+  const forecast=record.snapshot.board.gameForecast;
+  return cbbProviderStoredSchoolMatches(record.memberGame.homeTeamDisplayName,game.home_team)&&
+    cbbProviderStoredSchoolMatches(record.memberGame.awayTeamDisplayName,game.visitor_team)&&
+    (!forecast||(forecast.homeId===game.home_team.id&&forecast.awayId===game.visitor_team.id));
+}
 const valid=(value:unknown,id:number):value is CbbStoredMemberGame=>{
   if(!value||typeof value!=="object")return false;
   const row=value as Partial<CbbStoredMemberGame>;
@@ -68,10 +76,7 @@ export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisi
   const client=db??(await import("@/lib/db/supabase")).supabase;
   const existing=await readCbbMemberGame(args.game.id,client);
   if(existing&&existing.snapshot.lockedAt!==null)return {record:existing,written:false};
-  if(existing&&(!cbbProviderStoredSchoolMatches(existing.memberGame.homeTeamDisplayName,args.game.home_team)||
-    !cbbProviderStoredSchoolMatches(existing.memberGame.awayTeamDisplayName,args.game.visitor_team)||
-    existing.snapshot.board.gameForecast&&(existing.snapshot.board.gameForecast.homeId!==args.game.home_team.id||
-      existing.snapshot.board.gameForecast.awayId!==args.game.visitor_team.id)))
+  if(existing&&!cbbStoredMemberFixtureMatches(existing,args.game))
     throw new Error("CBB stored school identity changed; fixture-clock repair is not a matchup migration");
   if(Date.parse(args.now)>=Date.parse(args.game.date)){
     if(existing&&Date.parse(existing.snapshot.startsAt)!==Date.parse(args.game.date))

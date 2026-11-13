@@ -8,9 +8,10 @@ import { CBB_ACTIVATION } from "@/lib/cbb/releases";
 import { gradePredictionsForSlate } from "@/lib/services/predictionGradingService";
 import { supabase } from "@/lib/db/supabase";
 import { readCbbSettlementFixtureCatchupDates } from "@/lib/services/cbb/cbbSettlementFixtureCatchup";
+import { sweepCbbPregameLocks } from "@/lib/services/cbb/cbbPregameLockSweep";
 
 export const dynamic = "force-dynamic";
-const CBB_DAILY_REFRESH_RUNTIME_RELEASE = "cbb_daily_refresh_runtime_2026_11_06_r2_settlement_headroom";
+const CBB_DAILY_REFRESH_RUNTIME_RELEASE = "cbb_daily_refresh_runtime_2026_11_13_r3_lock_first_failure_isolation";
 const CBB_DAILY_REFRESH_LEASE_MINUTES = 10;
 // The observed R51 publication used ~515s before the existing seven-date
 // settlement postlude. Retain 30s below the unchanged ten-minute sport lease.
@@ -24,6 +25,12 @@ export async function GET(request: Request): Promise<Response> {
     const apiKey = process.env.BALLDONTLIE_API_KEY;
     if (!apiKey) throw new Error("BALLDONTLIE_API_KEY missing for CBB fixture seed");
     const now = new Date();
+    // Freeze previously published decisions before any provider, seed, fit or
+    // numerical market evaluation can fail or consume the lock window.
+    const lockSweep = CBB_ACTIVATION.predictionWrites
+      ? await sweepCbbPregameLocks({ db: supabase, now: now.toISOString(), clock: () => new Date().toISOString() })
+      : null;
+    trace("pregame_lock_sweep_complete");
     const today = currentSlateDate("cbb", now);
     const season = now.getUTCMonth() >= 8 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
     const intraday = new URL(request.url).searchParams.get("intraday") === "true";
@@ -69,15 +76,16 @@ export async function GET(request: Request): Promise<Response> {
       ...board.problems.filter(p=>p.includes("locked_provider_conflict_preserved")).map(p=>Number(p.split(":")[0]))])]
       .filter(id=>!board.ownerApprovedExclusions.includes(id));
     return {
-      partial:conflicts.length>0||board.providerWarnings.length>0,
-      error_message:[...(conflicts.length?[`CBB locked provider conflicts preserved (${conflicts.join(",")}); remaining board refreshed`]:[]),...board.providerWarnings].join("; ")||null,
+      partial:conflicts.length>0||board.providerWarnings.length>0||!!lockSweep?.problems.length,
+      error_message:[...(conflicts.length?[`CBB locked provider conflicts preserved (${conflicts.join(",")}); remaining board refreshed`]:[]),...board.providerWarnings,...(lockSweep?.problems??[])].join("; ")||null,
       records_updated: seeded.reduce((sum, row) => sum + (row.written ? row.games + row.teams : 0), 0)
-        + board.written + board.trackingInserted + training.added + graded.reduce((sum,row)=>sum+row.settled,0),
+        + board.written + board.trackingInserted + training.added + graded.reduce((sum,row)=>sum+row.settled,0)
+        + (lockSweep?.locked??0) + (lockSweep?.trackingInserted??0),
       api_calls_made: seeded.reduce((sum, row) => sum + row.providerCalls + (row.games ? 2 : 0), 0)
         + training.providerCalls + board.providerCalls + board.owlsCalls + board.currentSourceCoverage.theOddsApiRequests,
       details: { release: board.release, runtimeRelease:CBB_DAILY_REFRESH_RUNTIME_RELEASE,
         runtimeBudget:{routeSeconds:maxDuration,leaseSeconds:CBB_DAILY_REFRESH_LEASE_MINUTES*60},
-        seeded, training:{added:training.added,pending:training.pending,rejected:training.rejected},
+        lockSweep,seeded, training:{added:training.added,pending:training.pending,rejected:training.rejected},
         board,graded,predictionPublication:true },
     };
   }, { sport: "cbb", leaseGroup: "prediction_pipeline", requireLease: true, lockMinutes: CBB_DAILY_REFRESH_LEASE_MINUTES });
