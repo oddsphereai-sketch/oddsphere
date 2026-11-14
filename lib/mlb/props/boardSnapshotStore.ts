@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
+import { mlbPropsAiCutoffPolicy, MlbPropsPublicationUncertainError } from "./aiPublicationPolicy";
 import { createClient } from "@supabase/supabase-js";
 import type { PlayerPropPreviewRow, PlayerPropsDashboardData } from "@/app/mlb/props/components/PlayerPropsDashboard";
 import type { RealPitcherSeasonStat } from "./realScoring";
@@ -265,6 +266,31 @@ export async function loadLatestMlbPropsDisplaySnapshot(slateDate: string): Prom
   return applyMlbPropsDisplayLocks(latest).catch(() => latest);
 }
 
+type CutoffSourceRow = { id?: unknown; created_at?: unknown; metadata_json: unknown };
+type PublicationIndexRow = { target_id?: unknown; created_at?: unknown; after_state?: unknown };
+const needsIndexedCutoff = (snapshot: MlbPropsBoardSnapshot) =>
+  mlbPropsAiCutoffPolicy(snapshot.modelContext?.aiHandoffRelease) === "indexed";
+function sourceRunId(value: unknown): string | null {
+  if (typeof value === "string" && value.length > 0 && value.length <= 256) return value;
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? String(value) : null;
+}
+/** Future R2 alone requires the actual index that makes its source readable by
+ * immutable ID. Neither a raw append nor a later index attests pre-lock publication. */
+function indexedSourceMatches(row: CutoffSourceRow, snapshot: MlbPropsBoardSnapshot,
+  index: PublicationIndexRow, cutoffMs = Infinity): boolean {
+  const state = index.after_state, envelope = row.metadata_json;
+  if (!isRecord(state) || !isRecord(envelope)) return false;
+  const created = Date.parse(String(row.created_at ?? "")), indexed = Date.parse(String(index.created_at ?? ""));
+  return sourceRunId(row.id) !== null && index.target_id === sourceRunId(row.id)
+    && Number.isFinite(created) && Number.isFinite(indexed) && created <= indexed && indexed <= cutoffMs
+    && envelope.snapshot_id === snapshot.snapshotId && envelope.slate_date === snapshot.slateDate
+    && envelope.as_of_timestamp === snapshot.asOfTimestamp
+    && state.snapshot_id === snapshot.snapshotId && state.slate_date === snapshot.slateDate
+    && state.as_of_timestamp === snapshot.asOfTimestamp
+    && state.model_release_id === (snapshot.modelContext?.modelReleaseId ?? null)
+    && state.payload_checksum === envelope.checksum;
+}
+
 export async function loadMlbPropsBoardSnapshotAtOrBefore(
   slateDate: string,
   cutoffTimestamp: string,
@@ -273,7 +299,7 @@ export async function loadMlbPropsBoardSnapshotAtOrBefore(
   if (!Number.isFinite(cutoffMs)) return null;
   const { data, error } = await getSupabase()
     .from("prop_scoring_runs")
-    .select("metadata_json")
+    .select("id,created_at,metadata_json")
     .eq("sport", "mlb")
     .eq("slate_date", slateDate)
     .eq("status", "completed")
@@ -285,9 +311,37 @@ export async function loadMlbPropsBoardSnapshotAtOrBefore(
     .order("created_at", { ascending: false })
     .limit(12);
   if (error) throw error;
-  for (const row of data ?? []) {
+  const candidates = (data ?? []) as CutoffSourceRow[];
+  let indexes: PublicationIndexRow[] | null = null;
+  // Decode one full board at a time, retaining the legacy early-return/memory
+  // behavior even when the bounded query returns twelve large envelopes.
+  for (const row of candidates) {
     const snapshot = decodeMlbPropsBoardSnapshot(row.metadata_json);
-    if (snapshot && Date.parse(snapshot.asOfTimestamp) <= cutoffMs) return snapshot;
+    if (!snapshot || !(Date.parse(snapshot.asOfTimestamp) <= cutoffMs)) continue;
+    if (mlbPropsAiCutoffPolicy(snapshot.modelContext?.aiHandoffRelease) === "unsupported") continue;
+    if (needsIndexedCutoff(snapshot)) {
+      if (sourceRunId(row.id) === null) throw new Error("MLB R2 cutoff source identity unavailable.");
+      if (indexes === null) {
+        if (candidates.length > 12) throw new Error("MLB R2 cutoff source limit exceeded.");
+        const ids = candidates.map((candidate) => sourceRunId(candidate.id)).filter((id): id is string => id !== null);
+        // One extra bounded lookup for at most the existing twelve candidates.
+        // Overflow/read failure is unknown authority, never an empty-index claim.
+        const { data: indexRows, error: indexError } = await getSupabase().from("admin_audit_log")
+          .select("target_id,after_state,created_at")
+          .eq("action_type", "mlb_props.board_snapshot_published")
+          .eq("target_table", "prop_scoring_runs")
+          .contains("after_state", { slate_date: slateDate })
+          .in("target_id", ids)
+          .lte("created_at", cutoffTimestamp)
+          .order("created_at", { ascending: false })
+          .limit(13);
+        if (indexError) throw indexError;
+        if ((indexRows ?? []).length > 12) throw new Error("MLB R2 cutoff publication index limit exceeded.");
+        indexes = (indexRows ?? []) as PublicationIndexRow[];
+      }
+      if (!indexes.some((index) => indexedSourceMatches(row, snapshot, index, cutoffMs))) continue;
+    }
+    return snapshot;
   }
   return null;
 }
@@ -617,20 +671,23 @@ export async function loadMlbPropsBoardSnapshotById(slateDate: string, snapshotI
   // can hit the statement timeout on a full slate.
   const { data: refs, error: refsError } = await supabase
     .from("admin_audit_log")
-    .select("target_id,after_state")
+    .select("target_id,after_state,created_at")
     .eq("action_type", "mlb_props.board_snapshot_published")
     .eq("target_table", "prop_scoring_runs")
     .order("created_at", { ascending: false })
     .limit(500);
   if (refsError) throw refsError;
-  const runId = (refs ?? []).find((row) => isRecord(row.after_state)
+  const ref = (refs ?? []).find((row) => isRecord(row.after_state)
     && row.after_state.slate_date === slateDate
-    && row.after_state.snapshot_id === snapshotId)?.target_id;
-  if (runId === undefined) return null;
-  const { data, error } = await supabase.from("prop_scoring_runs").select("metadata_json").eq("id", runId).maybeSingle();
+    && row.after_state.snapshot_id === snapshotId);
+  const runId = ref?.target_id;
+  if (!ref || runId === undefined) return null;
+  const { data, error } = await supabase.from("prop_scoring_runs").select("id,created_at,metadata_json").eq("id", runId).maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  return decodeMlbPropsBoardSnapshot(data?.metadata_json) ?? null;
+  const snapshot = decodeMlbPropsBoardSnapshot(data?.metadata_json);
+  if (snapshot && needsIndexedCutoff(snapshot) && !indexedSourceMatches(data, snapshot, ref)) return null;
+  return snapshot;
 }
 
 function summarizeDisplayProps(data: PlayerPropsDashboardData, props: PlayerPropPreviewRow[]): PlayerPropsDashboardData["summary"] {
@@ -719,56 +776,68 @@ export async function publishMlbPropsBoardSnapshot(snapshot: MlbPropsBoardSnapsh
   });
   const metadata = encodeMlbPropsBoardSnapshot(snapshot);
   const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from("prop_scoring_runs")
-    .insert({
-      sport: "mlb",
-      slate_date: snapshot.slateDate,
-      provider_mode: "real",
-      odds_provider: "balldontlie",
-      stats_provider: "mlb_stats_api+balldontlie",
-      context_provider: "nws+baseball_savant+balldontlie",
-      mlb_provider: "real",
-      started_at: snapshot.asOfTimestamp,
-      completed_at: new Date().toISOString(),
-      status: "completed",
-      dry_run: false,
-      persisted: true,
-      publish_enabled: process.env.ODDSPHERE_PROPS_REAL_PUBLISH_ENABLED === "true",
-      display_enabled: process.env.ODDSPHERE_PROPS_DISPLAY_ENABLED === "true",
-      games_seen: snapshot.data.summary.gamesWithProps,
-      markets_seen: snapshot.data.summary.marketsAvailable,
-      odds_snapshots_seen: snapshot.validation.sourceRows,
-      feature_snapshots_written: snapshot.data.props.length,
-      predictions_written: snapshot.data.props.filter((row) => row.finalProbability !== null).length,
-      edges_written: snapshot.data.props.filter((row) => row.modelEdge !== null).length,
-      recommendations_written: snapshot.validation.actionableRows,
-      metadata_json: metadata,
-    })
-    .select("id")
-    .single();
-  if (error) throw error;
-  // Lightweight scalar index for retention and lock-reference resolution.
-  // Keeping this outside metadata_json prevents maintenance queries from
-  // scanning/decompressing every multi-megabyte board payload.
-  const { error: indexError } = await supabase.from("admin_audit_log").insert({
-    action_type: "mlb_props.board_snapshot_published",
-    target_table: "prop_scoring_runs",
-    target_id: String(data.id),
-    before_state: null,
-    after_state: {
-      snapshot_id: snapshot.snapshotId,
-      slate_date: snapshot.slateDate,
-      model_release_id: snapshot.modelContext?.modelReleaseId ?? null,
-      as_of_timestamp: snapshot.asOfTimestamp,
-      game_lock_schedule: deriveMlbPropsGameLockSchedule(snapshot),
-    },
-    source_type: "real_api",
-  });
-  if (indexError) console.warn(`MLB props snapshot index write failed: ${indexError.message}`);
-  revalidateMlbPropsBoardCache();
-  await pruneOldMlbPropsBoardSnapshots(snapshot.slateDate, snapshot.snapshotId).catch(() => undefined);
-  return String(data.id);
+  try {
+    const { data, error } = await supabase
+      .from("prop_scoring_runs")
+      .insert({
+        sport: "mlb",
+        slate_date: snapshot.slateDate,
+        provider_mode: "real",
+        odds_provider: "balldontlie",
+        stats_provider: "mlb_stats_api+balldontlie",
+        context_provider: "nws+baseball_savant+balldontlie",
+        mlb_provider: "real",
+        started_at: snapshot.asOfTimestamp,
+        completed_at: new Date().toISOString(),
+        status: "completed",
+        dry_run: false,
+        persisted: true,
+        publish_enabled: process.env.ODDSPHERE_PROPS_REAL_PUBLISH_ENABLED === "true",
+        display_enabled: process.env.ODDSPHERE_PROPS_DISPLAY_ENABLED === "true",
+        games_seen: snapshot.data.summary.gamesWithProps,
+        markets_seen: snapshot.data.summary.marketsAvailable,
+        odds_snapshots_seen: snapshot.validation.sourceRows,
+        feature_snapshots_written: snapshot.data.props.length,
+        predictions_written: snapshot.data.props.filter((row) => row.finalProbability !== null).length,
+        edges_written: snapshot.data.props.filter((row) => row.modelEdge !== null).length,
+        recommendations_written: snapshot.validation.actionableRows,
+        metadata_json: metadata,
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    // Lightweight scalar index for retention and lock-reference resolution.
+    // Keeping this outside metadata_json prevents maintenance queries from
+    // scanning/decompressing every multi-megabyte board payload.
+    const { error: indexError } = await supabase.from("admin_audit_log").insert({
+      action_type: "mlb_props.board_snapshot_published",
+      target_table: "prop_scoring_runs",
+      target_id: String(data.id),
+      before_state: null,
+      after_state: {
+        snapshot_id: snapshot.snapshotId,
+        slate_date: snapshot.slateDate,
+        model_release_id: snapshot.modelContext?.modelReleaseId ?? null,
+        as_of_timestamp: snapshot.asOfTimestamp,
+        ...(needsIndexedCutoff(snapshot) ? { payload_checksum: metadata.checksum } : {}),
+        game_lock_schedule: deriveMlbPropsGameLockSchedule(snapshot),
+      },
+      source_type: "real_api",
+    });
+    if (indexError) {
+      if (needsIndexedCutoff(snapshot)) throw new MlbPropsPublicationUncertainError();
+      console.warn(`MLB props snapshot index write failed: ${indexError.message}`);
+    }
+    revalidateMlbPropsBoardCache();
+    await pruneOldMlbPropsBoardSnapshots(snapshot.slateDate, snapshot.snapshotId).catch(() => undefined);
+    return String(data.id);
+  } catch (error) {
+    // Both returned Supabase errors and rejected responses can follow a commit.
+    // Future R2 requires its real index; do not log raw transport messages or
+    // allow the ordinary final publication to enter a stale LKG fallback.
+    if (needsIndexedCutoff(snapshot)) throw new MlbPropsPublicationUncertainError();
+    throw error;
+  }
 }
 
 export function revalidateMlbPropsBoardCache(): void {

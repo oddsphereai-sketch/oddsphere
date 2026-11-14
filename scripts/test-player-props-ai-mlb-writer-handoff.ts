@@ -11,6 +11,7 @@ import * as crypto from 'node:crypto';
 import * as zlib from 'node:zlib';
 import * as source from '../lib/playerPropsAi/liveSources';
 import * as handoffs from '../lib/playerPropsAi/mlbPrelockHandoff';
+import * as publicationPolicy from '../lib/mlb/props/aiPublicationPolicy';
 import * as marketEvidence from '../lib/mlb/props/marketEvidenceCapture';
 import * as ordering from '../lib/mlb/props/releaseOrdering';
 import * as lockPolicy from '../lib/mlb/props/lockPolicy';
@@ -45,7 +46,7 @@ async function main(){
    async single(){const r=await query.execute();return{...r,data:r.data[0]??null};},async maybeSingle(){return query.single();},then(resolve:any,reject:any){return query.execute().then(resolve,reject);}};return query;}};
  class Clock extends Date{constructor(v?:string|number){super(v??tick);}static now(){return Date.parse(tick);}}
  function loadModule(file:string,modules:Record<string,unknown>){const instance={exports:{}};const javascript=ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;vm.runInNewContext(javascript,{module:instance,exports:instance.exports,Date:Clock,Buffer,console,process:{env},require:(name:string)=>{const key=name.split('/').at(-1)!;assert(Object.hasOwn(modules,key),`Unmocked ${file} dependency ${name}`);return modules[key];}},{filename:file+'.offline.cjs'});return instance.exports as any;}
- const canonical=loadModule('lib/mlb/props/boardSnapshotStore.ts',{'node:crypto':crypto,'node:zlib':zlib,'supabase-js':{createClient:()=>client},marketEvidenceCapture:marketEvidence,releaseOrdering:ordering});
+ const canonical=loadModule('lib/mlb/props/boardSnapshotStore.ts',{'node:crypto':crypto,'node:zlib':zlib,'supabase-js':{createClient:()=>client},aiPublicationPolicy:publicationPolicy,marketEvidenceCapture:marketEvidence,releaseOrdering:ordering});
  const tracking=loadModule('lib/mlb/props/internalTracking.ts',{'node:crypto':crypto,'supabase-js':{createClient:()=>client},_mlbStatsApiClient:{},boardSnapshotStore:canonical,paperTrading:{isPaperTradingMarketAllowed:()=>true},pricePolicy,marketModelVersions:versions,lockPolicy,providerClients:{},settlement});
  const games:any[]=[{id:packet.gameId,scheduledStart:start,awayTeamId:'147',homeTeamId:'111'}];
  const nativeRows=[{...native,confidence:.6,marketFamily:'batter' as const,reasonCodes:[],modelInputWarnings:[]}];

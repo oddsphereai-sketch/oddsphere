@@ -1,7 +1,15 @@
-## November 14 player-prop complete evidence and private process health R37
+## November 14 player-prop complete evidence, exact confidence and private process health R38
 
-Future shared NBA/NFL/MLB generation is `player_props_ai_2026_11_14_r37_complete_evidence_health`.
-NBA writer R24, law R2, selection R7, grade R4, NFL decision R13 and native MLB R44 remain unchanged.
+Future shared NBA/NFL/MLB generation is `player_props_ai_2026_11_14_r38_exact_confidence_and_evidence`.
+NBA writer R24, NFL decision R13 and native MLB R44 remain unchanged.
+Future law R3 (`player_props_ai_law_2026_11_14_r3_exact_paired_confidence`),
+selection R8 and grade R5 qualify the existing confidence Lean rule with exact
+integer/rational comparisons, including paired hold, non-push mass and the 55% floor.
+They preserve the existing inclusive thresholds; decimal diagnostics never decide
+qualification. Original law R2 keeps grade R4/selection R7 and its original paired
+floating arithmetic; original R1 keeps grade R3/selection R6. Their hashes, values,
+repricing semantics and locked-reader precedence remain exact. The shared Daily Edge
+confidence helper and all native models remain unchanged.
 NFL props writer is `nfl_player_props_writer_2026_11_14_r98_complete_history_health`;
 full-game evidence writer is `nfl_forward_evidence_writer_2026_11_14_r117_complete_bounded_history`.
 The shared history reader is `nfl_forward_evidence_read_2026_11_14_r1_lossless_bounded_history`.
@@ -21,8 +29,22 @@ When the existing deadline skips inventory for an eligible current-day unexpired
 private health reports deferred/unknown coverage, not an invented failed review or
 a known-empty inventory. No-game, already-locked, next-day and intentionally disabled
 cases retain their original classification. No extra request or deadline is added.
-These diagnostics never enter member transport. Same valid-input forecasts, grades, prices,
-stakes and actionable counts are unchanged; there is no actionable demotion or promotion rule.
+NBA rescue R3 retains the same private AI health and canonical-write counts under the
+existing pending-slot/absolute-deadline route. No new writer, review or timer is added.
+MLB handoff R2 (`mlb_props_ai_handoff_2026_11_14_r2_unknown_ack_fence`) stops
+later same-invocation publications after an uncertain append/index acknowledgement.
+The cron skips stale fallback writes; the next ordinary invocation reads persisted
+authority. Future R2 cutoff selection requires an exact, timely publication index
+binding the source checksum, run, snapshot, slate, clock and model release. One
+bounded lookup covers at most twelve existing source candidates, with a thirteen-row
+overflow probe. Missing/mismatched indices select a prior eligible source or hold;
+read failures remain unknown. Original absent/R1 sources and stored locks keep their
+legacy authority; unsupported tags cannot create a new cutoff source. No historical
+index is reconstructed, and no new schema, provider request or review is added.
+These diagnostics never enter member transport. Source inputs, forecasts, prices and
+stakes stay unchanged. Future exact paired-confidence grading can promote a formerly
+rounding-rejected valid Lean; paired boundary/negative controls preserve the intended
+qualification rule and report board-count impact without outcome fitting.
 Original accepted R36 and older laws, archive parsers, member locks and settled outcomes retain
 exact release authority. No prompt, numerical threshold, source call, slot, cadence, lease,
 model/output cap or spending-limit change. Live scheduled proof remains required after release.

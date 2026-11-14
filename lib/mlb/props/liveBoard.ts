@@ -591,8 +591,9 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
       games:games.map(g=>({id:g.id,start:g.scheduledStart,away:resolveMlbStatsTeamId(g.awayTeamId)?.abbreviation??g.awayTeamId,home:resolveMlbStatsTeamId(g.homeTeamId)?.abbreviation??g.homeTeamId})),
       load:(game,window)=>liveMlbPacket({game,window,snapshot:captured,currentOdds:boardSourceOdds,openingOdds})});
     aiReviewRuntime=summarizePropsAiRuntimeHealth(aiReviewOutcome,new Date().toISOString());
-    // Callback publications already owned every actual pre-lock observation.
-    // A later game's completion/lookup cannot erase a timely materialization.
+    // rows() rejects after any unacknowledged callback publication. The shared
+    // runtime can report a callback failure without throwing; that must still
+    // stop this final whole-board write from reusing stale acknowledged rows.
     snapshot.data.props=handoff.rows();
     // Every persisted payload owns a unique immutable snapshot identity. The
     // ordinary later publication must never reuse a ready lock source's ID.
