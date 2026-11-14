@@ -16,6 +16,7 @@ The shared history reader is `nfl_forward_evidence_read_2026_11_14_r1_lossless_b
 It verifies original hashes and retains every ordered observation, with explicit row,
 compressed-byte, hot-JSON and decoded-cache bounds instead of an incomplete 5,000-row read.
 Exact-boundary reads use a terminal overflow probe; excess fails closed. No history is dropped.
+Null or malformed pages, including the terminal probe, cannot attest empty inventory.
 
 Private NFL source-failure capture R2 retains complete semantic evidence inside the existing
 bounded compressed archive when the outer semantic description exceeds its original limit.
@@ -51,12 +52,28 @@ Display caches retain only the raw board; original lock authority is applied aft
 retrieval. Compact/full member boards and player props reject cached unlocked rows
 for a freshly observed locked game, falling back through the existing authoritative
 reader. Research-only shards and already locked opaque payloads remain unchanged.
-These diagnostics never enter member transport. Source inputs, forecasts, prices and
-stakes stay unchanged. Future exact paired-confidence grading can promote a formerly
+Missing original research keys remain absent rather than inheriting current modules.
+The browser honors original locked rows before current preview validation and binds
+lazy research to the exact returned original lock/core row. Prelock, foreign or
+unbound cache entries cannot hydrate a locked row or prevent its first locked read.
+Only the six declared research modules may hydrate a row; forecast/grade/quote/stake
+fields cannot be overwritten by research. Valid unlocked research remains usable.
+Future member-contract policy R1 (`player_props_ai_member_contract_2026_11_14_r1_nba_ou_execution`)
+aligns priced-tail admission with the existing NBA ordinary Over/Under adapter.
+NBA Yes/milestone offers remain complete archived/read market context, not execution
+targets. Only law R3 uses this scope policy; R1/R2 retain their original admission.
+All independent-prior tails, means, support, dependence and supported execution tails
+stay strict. Future R3 diagnostic dedup uses the canonical contract, so an implicit
+Yes at an integer line cannot mask an ordinary Over/Under check. NFL/MLB supported
+contracts remain unchanged. R38 adds a short versioned contract-purpose instruction;
+older generation meaning strings remain exact. No quote, actor or scope is dropped,
+no numerical tail/decline is fabricated and no closed review is replayed.
+These diagnostics never enter member transport. Raw source inventories, native model
+math, execution prices/stakes and all accepted legacy records stay exact. Future exact paired-confidence grading can promote a formerly
 rounding-rejected valid Lean; paired boundary/negative controls preserve the intended
 qualification rule and report board-count impact without outcome fitting.
 Original accepted R36 and older laws, archive parsers, member locks and settled outcomes retain
-exact release authority. No prompt, numerical threshold, source call, slot, cadence, lease,
+exact release authority. No model, numerical threshold, source call, slot, cadence, lease,
 model/output cap or spending-limit change. Live scheduled proof remains required after release.
 See `model-audits/2026-11-14-player-props-complete-evidence-health.md`.
 

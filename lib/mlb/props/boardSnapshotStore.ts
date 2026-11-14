@@ -443,6 +443,7 @@ async function applyStoredMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): P
 
   const lockedRowsByGame = new Map<string, PlayerPropPreviewRow[]>();
   const lockedResearch: NonNullable<PlayerPropsDashboardData["research"]> = {};
+  const lockedResearchPresence = new Map<string, boolean>();
   const lockedUpdatedByGame = new Map<string, string>();
   for (const [gameId, ref] of lockedRefs) {
     const locked = lockedSnapshots.get(ref.snapshotId);
@@ -457,13 +458,24 @@ async function applyStoredMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): P
     lockedRowsByGame.set(gameId, rows);
     lockedUpdatedByGame.set(gameId, ref.lockedAt);
     for (const row of rows) {
-      if (row.researchKey && locked.data.research && Object.hasOwn(locked.data.research, row.researchKey)) {
-        const original = locked.data.research[row.researchKey];
-        if (Object.hasOwn(lockedResearch, row.researchKey) && lockedResearch[row.researchKey] !== original &&
-          JSON.stringify(lockedResearch[row.researchKey]) !== JSON.stringify(original)) {
+      if (!row.researchKey) continue;
+      // Lookup follows JavaScript dictionary property semantics even for an
+      // opaque legacy key; the original row and key are never rewritten.
+      const researchKey = String(row.researchKey);
+      const present = Boolean(locked.data.research && Object.hasOwn(locked.data.research, researchKey));
+      if (lockedResearchPresence.has(researchKey) && lockedResearchPresence.get(researchKey) !== present) {
+        throw new Error("MLB props conflicting locked research authority unavailable.");
+      }
+      // An original missing module is still original authority. It cannot be
+      // filled from current research or from another locked source's module.
+      lockedResearchPresence.set(researchKey, present);
+      if (present) {
+        const original = locked.data.research![researchKey];
+        if (Object.hasOwn(lockedResearch, researchKey) && lockedResearch[researchKey] !== original &&
+          JSON.stringify(lockedResearch[researchKey]) !== JSON.stringify(original)) {
           throw new Error("MLB props conflicting locked research authority unavailable.");
         }
-        Object.defineProperty(lockedResearch, row.researchKey, { value: original, enumerable: true, configurable: true, writable: true });
+        Object.defineProperty(lockedResearch, researchKey, { value: original, enumerable: true, configurable: true, writable: true });
       }
     }
   }
@@ -527,7 +539,8 @@ async function applyStoredMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): P
     lastUpdated: allGamesLocked ? lockedLastUpdated : safeLatest.data.lastUpdated,
     props: capturedProps,
     research: {
-      ...(safeLatest.data.research ?? {}),
+      ...Object.fromEntries(Object.entries(safeLatest.data.research ?? {})
+        .filter(([key]) => !lockedResearchPresence.has(key))),
       ...lockedResearch,
     },
     summary: summarizeDisplayProps(safeLatest.data, props),

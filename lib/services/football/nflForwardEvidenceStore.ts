@@ -172,7 +172,8 @@ async function readNflForwardEvidenceRelease(args: {
       .range(from, from === NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE
         ? from : from + NFL_FORWARD_EVIDENCE_PAGE_SIZE - 1);
     if (error) throw new Error(`NFL forward evidence read failed: ${error.message}`);
-    const page = (data ?? []) as StoredRow[];
+    if (!Array.isArray(data)) throw new Error("NFL forward evidence read returned an unavailable page.");
+    const page = data as StoredRow[];
     if (from === NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE) {
       if (page.length === 0) return rows;
       break;

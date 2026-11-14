@@ -6,7 +6,7 @@ import type {PlayerPropPreviewRow} from "../../app/mlb/props/components/PlayerPr
 import {isSignalOptionalMemberFeature} from "../mlb/props/researchEnrichment";
 import {assessPropPrice} from "../mlb/props/pricePolicy";
 import type {SiteAiDecision} from "./publication";
-import {executionQuotes,quoteContract} from "./executionQuotes";
+import {executionQuotes,quoteContract,isSupportedMemberExecutionContract} from "./executionQuotes";
 import {gradeAiEvent,gradeAiEventFromMass,gradeAiEventFromExactPairedMass,compareAiEventValuesFromMass} from "./pricing";
 import {MLB_PROPS_STANDARD_STAKE_UNITS} from "../mlb/props/actionabilityPolicy";
 import {nflAiSourceBinding} from "./nflSourceBinding";
@@ -33,7 +33,7 @@ export function qualifyNflSourceParticipation(rows:readonly NflPlayerPropsRuntim
 }
 
 const book=(value:string)=>value.toLowerCase().replace(/[^a-z0-9]/g,"");
-const choice=(all:SiteAiDecision[],id:string,market:string,line:number,sportsbook:string,provider?:string)=>all.find(c=>c.side!=="yes"&&quoteContract(c.quote)==="two_way"&&c.playerId===id&&c.market===market&&c.line===line&&book(c.book)===book(sportsbook)&&(!provider||c.provider===provider));
+const choice=(all:SiteAiDecision[],id:string,market:string,line:number,sportsbook:string,provider?:string)=>all.find(c=>c.side!=="yes"&&isSupportedMemberExecutionContract("nba",c.quote)&&c.playerId===id&&c.market===market&&c.line===line&&book(c.book)===book(sportsbook)&&(!provider||c.provider===provider));
 /** Row repricing can use a later execution quote than the original decision.
  * Retain exactly that row and current contract group without changing pricing. */
 function memberExecutionEvidence(packet:GamePacket,c:SiteAiDecision,q:GamePacket['quotes'][number],now:string,nativeQualification?:NflNativeQualification|null):PropsAiMemberEvidence{
@@ -99,7 +99,7 @@ export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:Game
   // that exact old book/line is unavailable to the accepted AI law. Never let
   // an unqualified native event suppress another genuinely priceable AI scope.
   const current=executionQuotes(packet,now);
-  const available=choices.filter(c=>c.side!=="yes"&&quoteContract(c.quote)==="two_way"&&current.some(q=>q.id===c.quote.id&&digest(q)===digest(c.quote)));
+  const available=choices.filter(c=>c.side!=="yes"&&isSupportedMemberExecutionContract("nba",c.quote)&&current.some(q=>q.id===c.quote.id&&digest(q)===digest(c.quote)));
   const eventValue=(a:SiteAiDecision,b:SiteAiDecision)=>{
     if(!propsAiLawHasExactMass(a.evidence.lawRelease)||!propsAiLawHasExactMass(b.evidence.lawRelease))return b.expectedValue-a.expectedValue;
     const mass=(c:SiteAiDecision)=>{

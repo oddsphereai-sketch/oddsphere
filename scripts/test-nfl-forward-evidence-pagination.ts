@@ -17,13 +17,13 @@ function rows(count:number,release:string){return Array.from({length:count},(_,i
   coverage:{currentOdds:true},storedLockedValues:{probability:0.6123,line:-3.5,price:-108,stake:1.25,pick:"original",grade:"stored-grade",opaqueLegacy:{nullable:null,empty:[],zero:0}}}) as unknown as NflForwardEvidencePayload;
  return freeze({id:String(i).padStart(6,"0"),provider_game_id:payload.game.providerGameId,stage:payload.stage,captured_at:capturedAt,game_start_at:payload.game.scheduledStart,payload_sha256:hashNflForwardEvidencePayload(payload),payload});
 });}
-function clientFor(source:ReturnType<typeof rows>,release:string,failAt=-1){
+function clientFor(source:ReturnType<typeof rows>,release:string,failAt=-1,unknownPage?:{at:number;data:unknown}){
  const ranges:number[][]=[];const filters:unknown[][]=[];
  const client={from(table:string){assert.equal(table,"nfl_forward_evidence_snapshots");const order:string[]=[];
   const q={select(s:string){assert.equal(s,"id,provider_game_id,stage,captured_at,game_start_at,payload_sha256,payload");return q;},
    eq(k:string,v:unknown){filters.push([k,v]);return q;},
    order(k:string,v:{ascending:boolean}){assert(v.ascending);order.push(k);return q;},
-   async range(a:number,b:number){assert.deepEqual(order,["captured_at","id"]);assert.equal(b-a+1,a===NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE?1:NFL_FORWARD_EVIDENCE_PAGE_SIZE);ranges.push([a,b]);return a===failAt?{data:null,error:{message:"injected timeout"}}:{data:source.slice(a,b+1),error:null};}};return q;
+   async range(a:number,b:number){assert.deepEqual(order,["captured_at","id"]);assert.equal(b-a+1,a===NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE?1:NFL_FORWARD_EVIDENCE_PAGE_SIZE);ranges.push([a,b]);return a===failAt?{data:null,error:{message:"injected timeout"}}:unknownPage?.at===a?{data:unknownPage.data,error:null}:{data:source.slice(a,b+1),error:null};}};return q;
  }} as unknown as SupabaseClient;
  return {client,ranges,filters,verify(){for(let i=0;i<filters.length;i+=3)assert.deepEqual(filters.slice(i,i+3),[["evidence_release",release],["season",2026],["week",8]]);}};
 }
@@ -37,6 +37,20 @@ async function main(){
    else{const actual=await run();assert.equal(actual.length,count);for(let i=0;i<count;i++){assert.equal(actual[i]!.id,source[i]!.id);const original=JSON.stringify(source[i]!.payload);assert.equal(JSON.stringify(actual[i]!.payload),original,"exact stored locked JSON takes precedence");assert.equal(actual[i]!.payload,actual[i]!.payload,"row payload view has stable identity");assert.equal(JSON.stringify(source[i]!.payload),original,"reader cannot mutate the source");assert.equal(actual[i]!.payloadSha256,source[i]!.payload_sha256);}}
    mock.verify();mock.ranges.forEach(([a],i)=>assert.equal(a,i*50));assert(mock.ranges.at(-1)![1]<=12000);
   }
+  // An empty array is authoritative empty inventory. Null/malformed responses
+  // are unknown, including after valid rows and at the terminal overflow probe.
+  const partialSource=rows(51,release);
+  for(const at of [0,50])for(const data of [null,undefined,{},"unknown"]){
+   const unknown=clientFor(partialSource,release,-1,{at,data});
+   await assert.rejects(read({client:unknown.client,season:2026,week:8}),/unavailable page/);
+   unknown.verify();
+  }
+  const boundarySource=rows(12000,release);
+  for(const data of [null,undefined]){
+   const unknown=clientFor(boundarySource,release,-1,{at:12000,data});
+   await assert.rejects(read({client:unknown.client,season:2026,week:8}),/unavailable page/);
+   assert.equal(unknown.ranges.at(-1)![0],12000);
+  }
  }
  const source=rows(51,NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE),failure=clientFor(source,NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,50);
  await assert.rejects(readNflForwardEvidence({client:failure.client,season:2026,week:8}),/injected timeout/);
@@ -46,6 +60,6 @@ async function main(){
  const payload=source[0]!.payload,oldHash=hashNflForwardEvidencePayload(payload);
  await appendNflForwardEvidence({client:writer,runId:"append-only-proof",payloads:[payload],apply:true});
  assert.equal(inserts,1);assert.equal(hashNflForwardEvidencePayload(payload),oldHash);
- console.log("NFL pagination: all 4 releases, complete bounded chronology including 5k and exact terminal boundary, original locked JSON/hashes, stable row views, error/corruption rejection and append-only writer PASS");
+ console.log("NFL pagination: all 4 releases, complete bounded chronology including 5k and exact terminal boundary, unknown/malformed page refusal, original locked JSON/hashes, stable row views, error/corruption rejection and append-only writer PASS");
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

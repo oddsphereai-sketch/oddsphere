@@ -8,6 +8,8 @@ Each payload is bounded to 2 MB of JSON, retained hot JSON to 96 MB, compressed
 history to 256 MB, and decoded cold cache to 64 groups / 8 MB. Every original
 stored hash and metadata binding is checked before retention. Limits fail closed.
 There is no latest-N selection, active-game filtering, new query source or writer.
+Only an array response can attest a page, including the terminal probe; null or
+malformed data remains an unavailable read rather than an empty/complete release.
 
 Private capture R2 fixes a separate diagnostic gap: oversized complete semantics
 previously caused omission before compression. Complete exact semantics now remain
@@ -64,6 +66,25 @@ locked game, returning to the authoritative display path. Full manifests are che
 after assembling shards, and research-only data and opaque already locked fields
 remain unchanged. An unavailable lock inventory remains a read failure, never healthy
 mutable fallback. These are existing database reads, not provider/model requests.
+Every referenced locked research key reserves its original presence or absence,
+including opaque stored values; current dictionaries cannot fill missing originals.
+Conflicting original key presence/values hold rather than selecting another source.
+The browser likewise honors locked rows before current preview grading. Its lazy
+cache binds actual returned rows to the same original game, research key, first lock
+and core payload; prelock/unbound/foreign entries cannot become locked context or
+block the first locked read. Only six supported research modules may hydrate rows,
+with embedded locked fields taking precedence. No research can change a projection,
+probability, pick, grade, price or stake. Normal valid unlocked research remains usable.
+Future member-contract policy R1 (`player_props_ai_member_contract_2026_11_14_r1_nba_ou_execution`)
+aligns priced-tail admission with the existing NBA ordinary Over/Under adapter.
+NBA Yes/milestone offers remain complete archived/read market context, not execution
+targets. Only law R3 uses this scope policy; R1/R2 retain their original admission.
+All independent-prior tails, means, support, dependence and supported execution tails
+stay strict. Future R3 diagnostic dedup uses the canonical contract, so an implicit
+Yes at an integer line cannot mask an ordinary Over/Under check. NFL/MLB supported
+contracts remain unchanged. R38 adds a short versioned contract-purpose instruction;
+older generation meaning strings remain exact. No quote, actor or scope is dropped,
+no numerical tail/decline is fabricated and no closed review is replayed.
 R36 remains explicitly accepted under its original parser and law authority.
 Future law R3 / selection R8 / grade R5 fix floating subtraction at the existing
 paired-confidence Lean boundary using exact integer event masses and rational prices.
@@ -71,8 +92,9 @@ The original inclusive 55% floor and 98%–130% paired-implied coherence bounds 
 Only diagnostic display uses decimal conversion. Original R1/R2 laws keep their own
 hashes, probabilities, pricing/selection and R3/R4 grade semantics through initial
 pricing and later member repricing; stored locks take precedence before new semantics.
-The shared Daily Edge helper is unchanged. No prompt, source, probability, projection,
-stake or execution-price change is introduced. Synthetic paired controls include both
+The shared Daily Edge helper is unchanged. The contract-purpose instruction changes
+only future R38 requests; raw sources and accepted legacy probabilities, projections,
+stakes and execution prices remain exact. Synthetic paired controls include both
 Over and Under promotions, rejected neighboring/coherence/exception cases and exact
 legacy controls; the ordinary-price 7,902-case board has 592 boundary promotions and
 zero demotions. This is a controlled test impact, not a live board or accuracy claim.
@@ -84,7 +106,9 @@ releases, exact-boundary/overflow/page/read-error controls, bounded-memory worke
 R1/R2 corruption and rolling compatibility, real disposable PostgreSQL ACL/lease/
 append-only proof, actual writer/route health, focused and mandatory model checks,
 full TypeScript/lint/build, two consecutive fresh three-reviewer clean rounds,
-protected current-main PR/CI and actual production scheduled proof. Local memory
+protected current-main PR/CI and actual production scheduled proof. Static engine
+checks follow the current approved off-day/unavailable copy and locked-first merge
+contract; no product copy was changed to repair the old stale test expectations. Local memory
 and CPU measurements do not include production network latency or guarantee deadlines.
 Rollback is the prior protected source release; V72 is backward compatible with R1.
 Never rewrite prior payloads or replay closed review jobs during rollback.

@@ -128,6 +128,46 @@ async function main(){
   await assert.rejects(()=>player.GET(new Request('https://offline.invalid/api/mlb/props/player/'+playerId),{params:Promise.resolve({player_id:playerId})}),(error:any)=>error.message==='MLB props locked source authority unavailable.');
   const unavailable=await page.default({searchParams:Promise.resolve({})});assert.equal(find(unavailable),null);assert(JSON.stringify(unavailable).includes('Player Props data is temporarily unavailable.'));assert(!JSON.stringify(unavailable).includes('PRIVATE_STORAGE'));cases++;
  }
+ // A missing original module remains missing even when the current source
+ // has the identical research key. Optional legacy null/false/zero are own
+ // original values, not permission to substitute current statistics.
+ for(const mode of ['missing-dictionary','missing-key','present','null','false','zero']){
+  const f=fixture(),source=f.snapshot('research-original',at,legacy),key='original-research';source.data.props[0].researchKey=key;
+  const original:any=mode==='present'?{recentForm:{logs:[{value:2}]},opaque:'ORIGINAL'}:mode==='null'?null:mode==='false'?false:0;
+  if(mode==='missing-dictionary')delete source.data.research;else source.data.research=mode==='missing-key'?{}:{[key]:original};
+  await f.store.publishMlbPropsBoardSnapshot(source);originalLock(f,source);const bytes=digest(f.tables),later=laterSnapshot(f);
+  const current:any={recentForm:{logs:[{value:999}]},opaque:'CURRENT_NOT_ORIGINAL'};later.data.research={[key]:current,'current-only':current};later.data.props.push({...native,id:'current-only-row',researchKey:'current-only',providerIds:{...native.providerIds!,gameId:'current-only-game'},projection:77});
+  const display=await f.store.applyMlbPropsDisplayLocks(later),missing=mode.startsWith('missing');
+  assert.equal(Object.hasOwn(display.data.research,key),!missing,'Original own-property absence/presence survives');if(!missing)exact(display.data.research[key],original,'Original opaque research value survives');
+  exact(display.data.research['current-only'],current,'Unrelated current research is unchanged');assert.equal(display.data.props.length,2,'No valid row count change');
+  const {lockStatus,...row}=display.data.props.find((r:any)=>r.researchKey===key);exact(row,source.data.props[0],'Original stored row/key remain exact');assert.equal(lockStatus.status,'locked');assert.equal(digest(f.tables),bytes);cases++;
+ }
+ // Property lookup may stringify an opaque legacy key, but the public row
+ // retains its exact original key type/value. Prototype-shaped keys are own
+ // dictionary identities, not an inherited/current module fallback.
+ for(const [key,present] of [[42,false],['__proto__',false],[42,true]] as const){
+  const f=fixture(),source=f.snapshot('opaque-research-key',at,legacy);(source.data.props[0] as any).researchKey=key;source.data.research=present?Object.fromEntries([[String(key),false]]) as any:{};await f.store.publishMlbPropsBoardSnapshot(source);originalLock(f,source);const bytes=digest(f.tables),later=laterSnapshot(f);later.data.research=Object.fromEntries([[String(key),{opaque:'CURRENT_NOT_ORIGINAL'}]]) as any;const display=await f.store.applyMlbPropsDisplayLocks(later);assert.equal(display.data.props[0].researchKey,key);assert.equal(Object.hasOwn(display.data.research,String(key)),present);if(present)assert.equal(display.data.research[String(key)],false);assert.equal(digest(f.tables),bytes);cases++;
+ }
+ for(const order of [false,true]){
+  const f=fixture(),missing=f.snapshot('missing-original',at,legacy),present=f.snapshot('present-original','2030-06-01T19:00:00Z',legacy),key='ambiguous-original-key';missing.data.props[0].researchKey=key;missing.data.research={};present.data.props[0]={...present.data.props[0],researchKey:key,providerIds:{...native.providerIds!,gameId:'other-locked-game'}};present.data.research={[key]:{recentForm:{logs:[{value:3}]},opaque:'PRESENT'}} as any;
+  await f.store.publishMlbPropsBoardSnapshot(missing);f.clock(present.asOfTimestamp);await f.store.publishMlbPropsBoardSnapshot(present);
+  for(const source of order?[present,missing]:[missing,present])originalLock(f,source);
+  const bytes=digest(f.tables);await assert.rejects(()=>f.store.applyMlbPropsDisplayLocks(laterSnapshot(f)),/MLB props.*unavailable/,'Missing versus present original modules sharing one key are conflicting authority');assert.equal(digest(f.tables),bytes);cases++;
+ }
+ // Actual canonical-to-member serialization and public page/API reads do not
+ // reintroduce a module that was absent from the locked source.
+ {const f=fixture(),source=f.snapshot('missing-research-original',at,legacy,versions.MLB_PROPS_MODEL_RELEASE_ID),key='original-missing-research';source.data.props[0].researchKey=key;source.data.research={};await f.store.publishMlbPropsBoardSnapshot(source);originalLock(f,source);f.clock('2030-06-01T20:01:00Z');
+  const later=laterSnapshot(f);later.modelContext!.modelReleaseId=versions.MLB_PROPS_MODEL_RELEASE_ID;later.data.research={[key]:{recentForm:{logs:[{value:999}]},opponentProfile:null,pitchArsenal:null,pitchMatchup:{},matchupHistory:{},environment:{},opaque:'CURRENT_NOT_ORIGINAL'}} as any;await f.store.publishMlbPropsBoardSnapshot(later);const before=digest(f.tables.prop_scoring_runs),originalLocks=digest(f.tables.admin_audit_log.filter(r=>r.action_type==='mlb_props.game_locked_t60'));
+  await f.member.publishMlbPropsMemberReadSnapshots(later,{forceFull:true});const playerId=source.data.props[0].providerIds!.mlbStatsPlayerId!;
+  for(const payload of [await f.member.loadMlbPropsMemberBoardSnapshot(slateDate),await f.member.loadMlbPropsMemberBoardSnapshot(slateDate,true)]){assert.equal(payload.data.props[0].projection,source.data.props[0].projection);assert(!payload.data.research||!Object.hasOwn(payload.data.research,key));}
+  const serializedPlayer=await f.member.loadMlbPropsPlayerReadSnapshot(slateDate,playerId);assert(!Object.hasOwn(serializedPlayer.research,key));assert.equal(serializedPlayer.props[0].lockStatus.status,'locked');
+  const Dashboard=()=>null,Frame=()=>null,common:any={boardSnapshotStore:f.store,memberReadSnapshotStore:f.member,memberPayload,liveBoard:{easternSlateDate:()=>slateDate,mlbPropsSnapshotIsFresh:()=>true},publicPicksSafety:{getPublicPicksMode:()=>({mode:'display_enabled'})},productExperience:{isPlayerPropsExperienceCandidateEnabled:()=>false,isProductExperiencePreviewAvailable:()=>false},livePreviewStore:{loadMlbPropsLivePreviewSnapshot:()=>{throw Error('No public preview');}},ProductAppFrame:{default:Frame,__esModule:true},PlayerPropsDashboard:{PlayerPropsDashboard:Dashboard},PlayerPropsLeaguePills:{PlayerPropsLeaguePills:()=>null},memberDataAvailability:{readMemberDataWithDeadline:async(args:any)=>{try{return{value:await args.read(),unavailable:false};}catch{return{value:args.fallback,unavailable:true};}}},'jsx-runtime':jsx};
+  const picks=f.load('app/api/mlb/props/picks/route.ts',common),player=f.load('app/api/mlb/props/player/[player_id]/route.ts',common),page=f.load('app/mlb/props/page.tsx',common);
+  for(const query of ['', '?game_id='+native.providerIds!.gameId]){const response=await picks.GET(new Request('https://offline.invalid/api/mlb/props/picks'+query));const body=await response.json();assert.equal(body.board.props[0].projection,source.data.props[0].projection);assert(!body.board.research||!Object.hasOwn(body.board.research,key));}
+  const response=await player.GET(new Request('https://offline.invalid/api/mlb/props/player/'+playerId),{params:Promise.resolve({player_id:playerId})}),body=await response.json();assert.equal(body.props[0].projection,source.data.props[0].projection);assert(!Object.hasOwn(body.research,key));
+  const find=(value:any):any=>!value||typeof value!=='object'?null:Array.isArray(value)?value.map(find).find(Boolean)??null:value.type===Dashboard?value:find(value.props?.children),render=find(await page.default({searchParams:Promise.resolve({})}));assert(render);assert(!render.props.data.research||!Object.hasOwn(render.props.data.research,key));assert.equal(render.props.data.props[0].lockStatus.status,'locked');
+  assert.equal(digest(f.tables.prop_scoring_runs),before);assert.equal(digest(f.tables.admin_audit_log.filter(r=>r.action_type==='mlb_props.game_locked_t60')),originalLocks);cases++;
+ }
  console.log(JSON.stringify({lockedSourceAuthority:true,cases,exactScopedIndexLimit:2,unrelatedIndexControl:500,rawCacheCannotBypassNewLock:true,fastMemberCannotBypassNewLock:true,legacyOpaqueRowsAndDuplicateLocks:true,realIO:0}));
 }
 void main().catch(e=>{console.error(e);process.exitCode=1;});
