@@ -1,3 +1,4 @@
+import {gzipSync} from "node:zlib";
 import {PROPS_AI_WIRE_RELEASE} from "../lib/playerPropsAi/scenarioCoordinates";
 import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 /* eslint-disable @typescript-eslint/no-explicit-any -- Synthetic Supabase/HTTP and malformed JSON boundary fixtures are validated by the actual runtime. */
@@ -91,7 +92,7 @@ function packet(at:string,final=false){const p={id,name:'Synthetic Player',team:
 }
 function review(input:any,final=false){const p=input.players[0],facts=readerEvidence(input)[id],alias=[...evidenceAliases(input)][0][0],law={weights:[1,1,...Array(14).fill(0)],outcomes:{receiving_yards:final?[60,80,...v(60).slice(2)]:[40,60,...v(40).slice(2)],receptions:final?[20,30,...v(20).slice(2)]:[2,6,...v(2).slice(2)]}};
  const wire={wireRelease:PROPS_AI_WIRE_RELEASE,players:{[id]:verifiedReaderFixture(input,id,{assessment:'The supplied sources support a conditional forecast.',priorRead:priorReads(input),coverage:Object.fromEntries(READER_AREAS.map((area:string)=>[area,{status:facts[area].status,factIds:facts[area].facts.slice(0,1).map((f:any)=>f.id),effect:'uncertain',observation:'The supplied context requires caution.'}])),evidenceIds:[alias],gaps:[],law:encodeCanonicalScenarioLaw('nfl',p,law),confidence:[2,2],exceptions:final?[null,'Reception range is not supported by the supplied production.']:[null,null]})}};
- const parsed=parseJointReview(input,wire);return{...parsed,gameId:'game',sourceGameId:'game',start,lock,cutoff:input.cutoff,stage:input.stage,issuedAt:input.cutoff,inputHash:digest(input),criticalContextHashes:criticalContextHashes(input),marketScopes:{[id]:p.markets},model:'gpt-6-luna',partProvenance:[],inputEvidence:{digest:digest(input)}}as any;
+ const parsed=parseJointReview(input,wire);return{...parsed,gameId:'game',sourceGameId:'game',start,lock,cutoff:input.cutoff,stage:input.stage,issuedAt:input.cutoff,inputHash:digest(input),criticalContextHashes:criticalContextHashes(input),marketScopes:{[id]:p.markets},model:'gpt-6-luna',partProvenance:[],inputEvidence:{encoding:"gzip-base64",digest:digest(input),bytes:Buffer.byteLength(JSON.stringify(input)),data:gzipSync(Buffer.from(JSON.stringify(input))).toString("base64")}}as any;
 }
 function native(input:any){return boardRows(input.quotes.map((q:any)=>({...decision,gameId:'game',providerPlayerId:'1',playerName:'Synthetic Player',team:'BUF',opponent:'MIN',scheduledStart:start,lockAt:lock,state:'unlocked',market:q.market,line:q.line,side:q.side,sportsbook:q.book,provider:q.provider,americanPrice:q.american,observedAt:q.observedAt,projection:q.market==='receiving_yards'?55:4,projectionRange:null,grade:'No Play',roleFingerprint:'current-role',bookEvidence:[],aiReview:undefined})));}
 

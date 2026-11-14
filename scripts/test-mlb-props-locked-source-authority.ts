@@ -24,16 +24,16 @@ globalThis.fetch=async()=>{throw Error('Indexed cutoff controls forbid HTTP/prov
 const slateDate='2030-06-01';
 function fixture(){
  let tick=at,serial=0;
- const faults={gameLocks:false,trackingRefs:false,byIdIndex:false,byIdSource:false,rejectRaw:false,nullInventory:false,unknownArray:"" as string,unknownBody:undefined as unknown};
- const reads:{table:string;limit:number;filters:Record<string,unknown>}[]=[];
+ const faults={gameLocks:false,trackingRefs:false,byIdIndex:false,byIdSource:false,rejectRaw:false,nullInventory:false,unknownArray:"" as string,unknownBody:undefined as unknown,trackingPage:"" as string};
+ const reads:{table:string;limit:number;filters:Record<string,unknown>;orders:{key:string;ascending:boolean}[]}[]=[];
  const warnings:string[]=[];
  const tables:Record<string,any[]>={prop_scoring_runs:[],admin_audit_log:[],mlb_prop_tracking_entries:[],lab_response_snapshots:[]};
 
  const contains=(row:any,value:any):boolean=>Object.entries(value).every(([k,v])=>v&&typeof v==='object'?contains(row?.[k],v):row?.[k]===v);
  const client={from(table:string){assert(table in tables);const filters:((r:any)=>boolean)[]=[],orders:{key:string;ascending:boolean}[]=[];let offset=0,limit=Infinity,insert:any[]|null=null,deleting=false,selected="";const captured:Record<string,unknown>={};
-  const query:any={select(fields:string){selected=fields;return query;},eq(k:string,v:any){captured[k]=v;filters.push(r=>r[k]===v);return query;},lte(k:string,v:any){filters.push(r=>r[k]<=v);return query;},gt(k:string,v:any){filters.push(r=>r[k]>v);return query;},abortSignal(){return query;},async upsert(values:any){for(const row of Array.isArray(values)?values:[values]){tables[table]=tables[table].filter(r=>r.snapshot_key!==row.snapshot_key);tables[table].push(structuredClone(row));}return{data:null,error:null};},not(k:string,_op:string,v:any){filters.push(r=>r[k]!==v&&r[k]!==undefined);return query;},contains(k:string,v:any){captured[k]=v;filters.push(r=>contains(r[k],v));return query;},in(k:string,values:any[]){filters.push(r=>values.includes(r[k]));return query;},order(key:string,o:{ascending:boolean}){orders.push({key,ascending:o.ascending});return query;},limit(n:number){limit=n;return query;},range(from:number,to:number){offset=from;limit=to-from+1;return query;},insert(v:any){insert=Array.isArray(v)?v:[v];return query;},delete(){deleting=true;return query;},
+  const query:any={select(fields:string){selected=fields;return query;},eq(k:string,v:any){captured[k]=v;filters.push(r=>r[k]===v);return query;},lte(k:string,v:any){filters.push(r=>r[k]<=v);return query;},gt(k:string,v:any){captured["gt:"+k]=v;filters.push(r=>table==="mlb_prop_tracking_entries"&&k==="id"?BigInt(r[k])>BigInt(v):r[k]>v);return query;},abortSignal(){return query;},async upsert(values:any){for(const row of Array.isArray(values)?values:[values]){tables[table]=tables[table].filter(r=>r.snapshot_key!==row.snapshot_key);tables[table].push(structuredClone(row));}return{data:null,error:null};},not(k:string,_op:string,v:any){filters.push(r=>r[k]!==v&&r[k]!==undefined);return query;},contains(k:string,v:any){captured[k]=v;filters.push(r=>contains(r[k],v));return query;},in(k:string,values:any[]){filters.push(r=>values.includes(r[k]));return query;},order(key:string,o:{ascending:boolean}){orders.push({key,ascending:o.ascending});return query;},limit(n:number){limit=n;return query;},range(from:number,to:number){offset=from;limit=to-from+1;return query;},insert(v:any){insert=Array.isArray(v)?v:[v];return query;},delete(){deleting=true;return query;},
    async execute(){
-    reads.push({table,limit,filters:structuredClone(captured)});
+    reads.push({table,limit,filters:structuredClone(captured),orders:structuredClone(orders)});
     const unknown=faults.unknownArray;
     if(unknown==='current-index'&&table==='admin_audit_log'&&captured.action_type==='mlb_props.board_snapshot_published'&&limit===100
       ||unknown==='recent-sources'&&table==='prop_scoring_runs'&&selected==='metadata_json'&&!captured.id
@@ -42,7 +42,17 @@ function fixture(){
     if(faults.nullInventory&&captured.action_type==='mlb_props.game_locked_t60')return{data:null,error:null};
     if(faults.gameLocks&&captured.action_type==='mlb_props.game_locked_t60'||faults.trackingRefs&&table==='mlb_prop_tracking_entries'||faults.byIdIndex&&table==='admin_audit_log'&&(captured.after_state as any)?.snapshot_id||faults.byIdSource&&table==='prop_scoring_runs'&&captured.id){if(faults.rejectRaw)throw Error('PRIVATE_STORAGE_DETAILS_MUST_NOT_ESCAPE');return{data:null,error:{message:'synthetic lock authority unavailable'}};}
     if(insert){const added=insert.map(r=>({...structuredClone(r),id:String(++serial),created_at:tick}));tables[table].push(...added);return{data:added,error:null};}
-    let rows=tables[table].filter(r=>filters.every(f=>f(r)));for(const {key,ascending} of [...orders].reverse())rows.sort((a,b)=>(a[key]>b[key]?1:a[key]<b[key]?-1:0)*(ascending?1:-1));rows=rows.slice(offset,offset+limit);if(deleting)tables[table]=tables[table].filter(r=>!rows.includes(r));return{data:structuredClone(rows),error:null};
+    let rows=tables[table].filter(r=>filters.every(f=>f(r)));for(const {key,ascending} of [...orders].reverse())rows.sort((a,b)=>{const left=table==="mlb_prop_tracking_entries"&&key==="id"?BigInt(a[key]):a[key],right=table==="mlb_prop_tracking_entries"&&key==="id"?BigInt(b[key]):b[key];return(left>right?1:left<right?-1:0)*(ascending?1:-1);});rows=rows.slice(offset,offset+limit);
+    if(table==="mlb_prop_tracking_entries"&&faults.trackingPage){
+      if(faults.trackingPage==='duplicate'&&rows.length>1)rows[1]=structuredClone(rows[0]);
+      if(faults.trackingPage==='out-of-order'&&rows.length>1)[rows[0],rows[1]]=[rows[1],rows[0]];
+      if(faults.trackingPage==='cursor-repeat'&&captured['gt:id']!==undefined)rows=[structuredClone(tables[table][0])];
+      if(faults.trackingPage==='changed-id'&&captured['gt:id']!==undefined)rows=[{...structuredClone(tables[table][0]),board_snapshot_id:'different'}];
+      if(faults.trackingPage==='bad-clock'&&rows.length)rows[0]={...rows[0],locked_at:'not-a-clock'};
+      if(faults.trackingPage==='unsafe-id'&&rows.length)rows[0]={...rows[0],id:9007199254740992};
+      if(faults.trackingPage==='padded-id'&&rows.length)rows[0]={...rows[0],id:'01'};
+      if(faults.trackingPage==='overflow-id'&&rows.length)rows[0]={...rows[0],id:'9223372036854775808'};
+    }if(deleting)tables[table]=tables[table].filter(r=>!rows.includes(r));return{data:structuredClone(rows),error:null};
    },async single(){const r=await query.execute();return{...r,data:r.data?.[0]??null};},async maybeSingle(){return query.single();},then(resolve:any,reject:any){return query.execute().then(resolve,reject);}};return query;}};
  class Clock extends Date{constructor(value?:string|number){super(value??tick);}static now(){return Date.parse(tick);}}
  const env={NEXT_PUBLIC_SUPABASE_URL:'http://127.0.0.1',SUPABASE_SERVICE_ROLE_KEY:'synthetic-never-real',ODDSPHERE_PROPS_INTERNAL_TRACKING_ENABLED:'true',ODDSPHERE_PROPS_SNAPSHOT_RETENTION_PER_SLATE:'20'};
@@ -200,6 +210,45 @@ async function main(){
   const find=(value:any):any=>!value||typeof value!=='object'?null:Array.isArray(value)?value.map(find).find(Boolean)??null:value.type===Dashboard?value:find(value.props?.children),render=find(await page.default({searchParams:Promise.resolve({})}));assert(render);assert(!render.props.data.research||!Object.hasOwn(render.props.data.research,key));assert.equal(render.props.data.props[0].lockStatus.status,'locked');
   assert.equal(digest(f.tables.prop_scoring_runs),before);assert.equal(digest(f.tables.admin_audit_log.filter(r=>r.action_type==='mlb_props.game_locked_t60')),originalLocks);cases++;
  }
+ // Unique-ID keyset traversal retains every simultaneous legacy reference.
+ // The row and timestamp strings remain original; the private reader ordering
+ // still uses earliest actual lock instant rather than the sequence identity.
+ for(const count of [1001,5001]){
+  const f=fixture(),source=f.snapshot('tied-keyset-original',at,legacy);await f.store.publishMlbPropsBoardSnapshot(source);
+  const firstId=BigInt('9007199254740992');for(let i=0;i<count;i++)f.tables.mlb_prop_tracking_entries.push({id:String(firstId+BigInt(i)),slate_date:slateDate,external_game_id:native.providerIds!.gameId,board_snapshot_id:source.snapshotId,locked_at:lock});
+  const before=digest(f.tables),times=await f.store.loadMlbPropsLockedGameTimes(slateDate);assert.equal(times.get(native.providerIds!.gameId),lock);
+  const display=await f.store.applyMlbPropsDisplayLocks(laterSnapshot(f)),{lockStatus,...original}=display.data.props[0];exact(original,source.data.props[0],'Keyset complete original source remains exact');assert.equal(lockStatus.status,'locked');assert.equal(digest(f.tables),before);
+  const reads=f.reads.filter(r=>r.table==='mlb_prop_tracking_entries');assert(reads.some(r=>r.filters['gt:id']!==undefined),'More than one keyset page must actually load');for(const read of reads){assert.equal(read.limit,1000);assert.deepEqual(read.orders,[{key:'id',ascending:true}]);}cases++;
+ }
+ // Unknown page identity/order or a repeated cursor cannot establish a complete
+ // inventory even if each transport body is an array and shorter than its limit.
+ for(const fault of ['duplicate','out-of-order','cursor-repeat','changed-id','bad-clock','unsafe-id','padded-id','overflow-id']){
+  const f=fixture();for(let i=0;i<1001;i++)f.tables.mlb_prop_tracking_entries.push({id:String(i+1),slate_date:slateDate,external_game_id:native.providerIds!.gameId,board_snapshot_id:'original',locked_at:lock});f.faults.trackingPage=fault;const before=digest(f.tables);await assert.rejects(()=>f.store.loadMlbPropsLockedGameTimes(slateDate),/MLB props.*unavailable/);assert.equal(digest(f.tables),before);cases++;
+ }
+ // Stable pagination must not invent which conflicting simultaneous legacy
+ // source was first. An authoritative original game pointer still wins.
+ for(const gamePointer of [false,true]){
+  const f=fixture(),source=f.snapshot('legacy-first',at,legacy),other=f.snapshot('legacy-other','2030-06-01T19:00:00Z',legacy);await f.store.publishMlbPropsBoardSnapshot(source);f.clock(other.asOfTimestamp);await f.store.publishMlbPropsBoardSnapshot(other);
+  f.tables.mlb_prop_tracking_entries.push({id:'9',slate_date:slateDate,external_game_id:native.providerIds!.gameId,board_snapshot_id:source.snapshotId,locked_at:'2030-06-01T20:00:00.000001Z'},{id:'10',slate_date:slateDate,external_game_id:native.providerIds!.gameId,board_snapshot_id:other.snapshotId,locked_at:'2030-06-01T20:00:00.000001+00:00'});if(gamePointer)originalLock(f,source);const before=digest(f.tables);
+  if(!gamePointer)await assert.rejects(()=>f.store.applyMlbPropsDisplayLocks(laterSnapshot(f)),/MLB props.*unavailable/);else{const display=await f.store.applyMlbPropsDisplayLocks(laterSnapshot(f));assert.equal(display.data.props[0].id,source.data.props[0].id);}assert.equal(digest(f.tables),before);cases++;
+ }
+ // A later sequence ID can have an earlier actual lock, including a distinct
+ // microsecond within the same millisecond. It remains the true first source.
+ {const f=fixture(),first=f.snapshot('micro-first',at,legacy),later=f.snapshot('micro-later','2030-06-01T19:00:00Z',legacy);await f.store.publishMlbPropsBoardSnapshot(first);f.clock(later.asOfTimestamp);await f.store.publishMlbPropsBoardSnapshot(later);f.tables.mlb_prop_tracking_entries.push({id:'1',slate_date:slateDate,external_game_id:native.providerIds!.gameId,board_snapshot_id:later.snapshotId,locked_at:'2030-06-01T20:00:00.000002Z'},{id:'9223372036854775807',slate_date:slateDate,external_game_id:native.providerIds!.gameId,board_snapshot_id:first.snapshotId,locked_at:'2030-06-01T20:00:00.000001Z'});const before=digest(f.tables),display=await f.store.applyMlbPropsDisplayLocks(laterSnapshot(f));assert.equal(display.data.props[0].id,first.data.props[0].id);assert.equal(display.data.props[0].lockStatus.lockedAt,'2030-06-01T20:00:00.000001Z');assert.equal(digest(f.tables),before);cases++;}
+ // Simultaneous authoritative game-pointer records cannot choose a first
+ // source or different original lock payload via an arbitrary SQL tie order.
+ for(const conflict of ['source','lock-payload','opaque-payload'])for(const reverse of [false,true]){
+  const f=fixture(),source=f.snapshot('game-tie-original',at,legacy),other=f.snapshot('game-tie-other','2030-06-01T19:00:00Z',legacy);await f.store.publishMlbPropsBoardSnapshot(source);f.clock(other.asOfTimestamp);await f.store.publishMlbPropsBoardSnapshot(other);originalLock(f,source);
+  const original=f.tables.admin_audit_log.find(r=>r.action_type==='mlb_props.game_locked_t60')!,second=structuredClone(original);original.created_at='2030-06-01T20:00:00.000001Z';second.created_at='2030-06-01T20:00:00.000001+00:00';second.id='different-stored-game-pointer';if(conflict==='source')second.after_state.board_snapshot_id=other.snapshotId;else if(conflict==='lock-payload')second.after_state.locked_at='2030-06-01T20:00:00.000002Z';else second.after_state.opaqueHistoricalLock={kept:'DIFFERENT'};f.tables.admin_audit_log.push(second);if(reverse)f.tables.admin_audit_log.reverse();const before=digest(f.tables);await assert.rejects(()=>f.store.loadMlbPropsGameLocks(slateDate),/MLB props.*unavailable/);await assert.rejects(()=>f.store.applyMlbPropsDisplayLocks(laterSnapshot(f)),/MLB props.*unavailable/);assert.equal(digest(f.tables),before);cases++;
+ }
+ // Identical payloads at equivalent creation instants remain exact, while a
+ // later conflicting record does not displace a proved earlier original.
+ for(const mode of ['exact-tie','later-clock','microsecond-earlier'])for(const reverse of [false,true]){
+  const f=fixture(),source=f.snapshot('game-first-original',at,legacy),other=f.snapshot('game-later-original','2030-06-01T19:00:00Z',legacy);await f.store.publishMlbPropsBoardSnapshot(source);f.clock(other.asOfTimestamp);await f.store.publishMlbPropsBoardSnapshot(other);originalLock(f,source);const original=f.tables.admin_audit_log.find(r=>r.action_type==='mlb_props.game_locked_t60')!,second=structuredClone(original);original.created_at='2030-06-01T20:00:00.000001Z';second.id='second-game-pointer';second.created_at=mode==='exact-tie'?'2030-06-01T20:00:00.000001+00:00':'2030-06-01T20:00:00.000002Z';if(mode!=='exact-tie')second.after_state.board_snapshot_id=other.snapshotId;if(mode==='microsecond-earlier')second.id='smaller-unrelated-id';f.tables.admin_audit_log.push(second);if(reverse)f.tables.admin_audit_log.reverse();const before=digest(f.tables),locks=await f.store.loadMlbPropsGameLocks(slateDate);assert.equal(locks.length,1);exact(locks[0],original.after_state,'Exact earliest original game pointer remains authority');const display=await f.store.applyMlbPropsDisplayLocks(laterSnapshot(f));assert.equal(display.data.props[0].id,source.data.props[0].id);assert.equal(digest(f.tables),before);cases++;
+ }
+ // A later tied conflict is irrelevant when an earlier exact original exists.
+ {const f=fixture(),source=f.snapshot('older-certain',at,legacy);await f.store.publishMlbPropsBoardSnapshot(source);originalLock(f,source);const original=f.tables.admin_audit_log.find(r=>r.action_type==='mlb_props.game_locked_t60')!,second=structuredClone(original),third=structuredClone(original);original.created_at='2030-06-01T20:00:00.000001Z';second.created_at=third.created_at='2030-06-01T20:00:00.000002Z';second.after_state.board_snapshot_id='later-one';third.after_state.board_snapshot_id='later-two';f.tables.admin_audit_log.push(second,third);const before=digest(f.tables),locks=await f.store.loadMlbPropsGameLocks(slateDate);assert.equal(locks[0].board_snapshot_id,source.snapshotId);assert.equal(digest(f.tables),before);cases++;}
+ for(const invalid of [null,undefined,'not-an-instant']){const f=fixture(),source=f.snapshot('unknown-game-clock',at,legacy);await f.store.publishMlbPropsBoardSnapshot(source);originalLock(f,source);const row=f.tables.admin_audit_log.find(r=>r.action_type==='mlb_props.game_locked_t60')!;if(invalid===undefined)delete row.created_at;else row.created_at=invalid;const before=digest(f.tables);await assert.rejects(()=>f.store.loadMlbPropsGameLocks(slateDate),/MLB props.*unavailable/);assert.equal(digest(f.tables),before);cases++;}
  console.log(JSON.stringify({lockedSourceAuthority:true,cases,exactScopedIndexLimit:2,unrelatedIndexControl:500,rawCacheCannotBypassNewLock:true,fastMemberCannotBypassNewLock:true,legacyOpaqueRowsAndDuplicateLocks:true,realIO:0}));
 }
 void main().catch(e=>{console.error(e);process.exitCode=1;});

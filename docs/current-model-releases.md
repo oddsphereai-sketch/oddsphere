@@ -66,6 +66,12 @@ responses cannot mean empty: cutoff selection, source reads and retention fail c
 Retention preserves every original reference, including duplicate game pointers and
 nonlocked tracking references, and requires complete bounded inventories before any
 cleanup. Unindexed or ambiguous source mappings remain retained.
+Legacy reference pagination uses a total existing-ID order and rejects unknown,
+repeated or inconsistent page authority; equal timestamps cannot hide a reference.
+Conflicting tied legacy sources remain unknown rather than selecting an arbitrary
+replacement. Both shared accepted-review lookups distinguish a verified empty array
+from unavailable authority; trusted local completions and known prior reviews remain
+usable without inventing native withdrawal authority.
 Future member-contract policy R1 (`player_props_ai_member_contract_2026_11_14_r1_nba_ou_execution`)
 aligns priced-tail admission with the existing NBA ordinary Over/Under adapter.
 NBA Yes/milestone offers remain complete archived/read market context, not execution

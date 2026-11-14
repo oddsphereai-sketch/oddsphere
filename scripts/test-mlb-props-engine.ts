@@ -10,6 +10,8 @@ import {
 import { MockMLBProvider } from "../lib/mlb/props/providerClients";
 import { parseBallDontLiePlayerProps, parseMlbStatsGames, parseMlbStatsProbablePitchers, parseSharpApiProps } from "../lib/mlb/props/providerClients";
 import { existsSync, readFileSync } from "fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { buildMlbPropFeatureSnapshot } from "../lib/mlb/props/featureBuilder";
 import { PitcherStrikeoutsModel, modelForRealPitcherMarket } from "../lib/mlb/props/models";
 import { PitcherOutsModel } from "../lib/mlb/props/models";
@@ -920,7 +922,7 @@ async function main() {
   check("internal tracking lock window does not open before T-60", lockPolicySource.includes("observedMs >= cutoffMs && observedMs < startMs") && lockPolicySource.includes("startMs - MLB_PROPS_GAME_LOCK_MINUTES * 60_000") && !internalTrackingSource.includes("graceMinutes"));
   check("member props display freezes games from locked board snapshots", boardSnapshotStoreSource.includes("loadLatestMlbPropsDisplaySnapshot") && boardSnapshotStoreSource.includes("applyMlbPropsDisplayLocks") && boardSnapshotStoreSource.includes("mlb_prop_tracking_entries") && boardSnapshotStoreSource.includes("board_snapshot_id") && boardSnapshotStoreSource.includes("lockedRowsByGame") && boardSnapshotStoreSource.includes("lockStatus"));
   check("missing original lock evidence is explicitly unavailable without mutable fallback", boardSnapshotStoreSource.includes("if (unrecoverableLockedGames.size) throw") && boardSnapshotStoreSource.includes("MLB props locked source authority unavailable.") && !boardSnapshotStoreSource.includes("return applyMlbPropsDisplayLocks(latest).catch(() => latest)"));
-  check("lock reconciliation paginates the full slate instead of truncating later games", boardSnapshotStoreSource.includes("LOCK_REF_PAGE_SIZE") && boardSnapshotStoreSource.includes("MAX_LOCK_REF_PAGES") && boardSnapshotStoreSource.includes(".range(from, from + LOCK_REF_PAGE_SIZE - 1)") && boardSnapshotStoreSource.includes("loadMlbPropsLockedGameTimes"));
+  check("lock reconciliation paginates the full slate instead of truncating later games", boardSnapshotStoreSource.includes("LOCK_REF_PAGE_SIZE") && boardSnapshotStoreSource.includes("MAX_LOCK_REF_PAGES") && boardSnapshotStoreSource.includes('.order("id", { ascending: true })') && boardSnapshotStoreSource.includes('query.gt("id", cursor.toString())') && boardSnapshotStoreSource.includes("exactTrackingRefId") && boardSnapshotStoreSource.includes("loadMlbPropsLockedGameTimes"));
   check("official probable-pitcher teams override stale provider roster assignments", liveBoardSource.includes("officialPitcher") && liveBoardSource.includes("resolveMlbStatsTeamId(officialPitcher.teamId)") && boardSnapshotStoreSource.includes("suppressOfficialPitcherTeamConflicts") && boardSnapshotStoreSource.includes("officialPitcherTeamIsCoherent"));
   check("member snapshot publisher reconstructs locks from canonical evidence and fails closed", memberReadSnapshotStoreSource.includes("applyMlbPropsDisplayLocks(snapshot)") && memberReadSnapshotStoreSource.includes("assertLockedGamesUseAuthoritativeRows") && memberReadSnapshotStoreSource.includes("Refusing to publish mutable member rows for locked MLB game") && !memberReadSnapshotStoreSource.includes("mergeLockedBoardRows"));
   check("fast props refresh avoids full-slate cache write storms", memberReadSnapshotStoreSource.includes('snapshot.refreshMode === "full"') && memberReadSnapshotStoreSource.includes("Fast odds refreshes update one compact indexed member row only"));
@@ -1787,7 +1789,7 @@ async function main() {
     apiKey: "test-key",
     baseUrl: "https://example.test/api/v1",
     maxEvents: 1,
-    outputDir: `/private/tmp/mlb-props-diagnostic-test-${Date.now()}`,
+    outputDir: join(tmpdir(), `mlb-props-diagnostic-test-${Date.now()}`),
     fetchImpl: mockSharpDiagnosticFetch,
   });
   check("Sharp diagnostic writes no Supabase and classifies empty odds", diagnostic.writesToSupabase === false && diagnostic.summary.blockerReason === "PROVIDER_PROP_ODDS_UNAVAILABLE");
@@ -1800,7 +1802,7 @@ async function main() {
     apiKey: "test-key",
     baseUrl: "https://example.test/api/v1",
     sweep: true,
-    outputDir: `/private/tmp/mlb-props-diagnostic-sweep-test-${Date.now()}`,
+    outputDir: join(tmpdir(), `mlb-props-diagnostic-sweep-test-${Date.now()}`),
     fetchImpl: mockSharpDiagnosticFetch,
   });
   check("Sharp diagnostic sweep includes future window and all returned events", sweepDiagnostic.sweep && sweepDiagnostic.datesTested.includes("2026-07-10") && sweepDiagnostic.eventCount === 2);
@@ -1810,7 +1812,7 @@ async function main() {
     baseUrl: "https://example.test/api/v1",
     deep: true,
     maxEvents: 1,
-    outputDir: `/private/tmp/mlb-props-diagnostic-deep-test-${Date.now()}`,
+    outputDir: join(tmpdir(), `mlb-props-diagnostic-deep-test-${Date.now()}`),
     fetchImpl: mockSharpDiagnosticFetch,
   });
   check("Sharp deep diagnostic probes reference and event endpoints", deepDiagnostic.deepDiscovery !== null && deepDiagnostic.deepDiscovery.referenceEndpoints.length >= 6 && deepDiagnostic.deepDiscovery.eventOddsProbes.some((probe) => probe.endpointPath.includes("/odds")));

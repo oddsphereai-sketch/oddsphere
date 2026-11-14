@@ -1,3 +1,5 @@
+import {gzipSync} from "node:zlib";
+import {digest} from "../lib/playerPropsAi/evidence";
 import assert from "node:assert/strict";
 import {PRODUCT_RELEASE,type GamePacket,type Player} from "../lib/playerPropsAi/evidenceContract";
 import {criticalContextHashes} from "../lib/playerPropsAi/criticalContext";
@@ -17,7 +19,7 @@ const packet:GamePacket={release:PRODUCT_RELEASE,sport:"nba",gameId:"native",sta
   quotes:["a","b"].flatMap(playerId=>["points","rebounds"].flatMap(market=>["over","under"].map(side=>({id:[playerId,market,side].join(":"),playerId,market,provider:"synthetic",book:"one",line:market==="points"?12.5:3.5,side:side as "over"|"under",american:-110,observedAt:now,receivedAt:now,receivedAtProvenance:"provider_response" as const,opening:false,live:false}))))};
 const vector=(n:number)=>Array(16).fill(n);
 const law=(p:Player)=>validateLaw("nba",p,{weights:[9,1,...Array(14).fill(0)],outcomes:{points:[10,40,...Array(14).fill(10)],rebounds:vector(2),assists:vector(3),threes:vector(0)}});
-const review={release:"player_props_ai_2026_11_08_r17_nfl_input_status",gameId:"funded",sourceGameId:"native",start,lock,cutoff:now,stage:"early",issuedAt:now,inputHash:"synthetic",model:"synthetic",criticalContextHashes:criticalContextHashes(packet),marketScopes:{a:["points","rebounds"],b:["points","rebounds"]},partProvenance:[],inputEvidence:{digest:"synthetic"},
+const review={release:"player_props_ai_2026_11_08_r17_nfl_input_status",gameId:"funded",sourceGameId:"native",start,lock,cutoff:now,stage:"early",issuedAt:now,inputHash:digest(packet),model:"synthetic",criticalContextHashes:criticalContextHashes(packet),marketScopes:{a:["points","rebounds"],b:["points","rebounds"]},partProvenance:[],inputEvidence:{encoding:"gzip-base64",digest:digest(packet),bytes:Buffer.byteLength(JSON.stringify(packet)),data:gzipSync(Buffer.from(JSON.stringify(packet))).toString("base64")},
   players:packet.players.map(p=>({playerId:p.id,assessment:"Synthetic",law:law(p),confidence:[2,0],exceptions:[null,"Unresolved rebound source"],coverage:{}}))} as unknown as AcceptedGameReview;
 const frozen=JSON.stringify(review),original=siteAiDecisions(packet,review,now);
 for(const release of ["player_props_ai_2026_11_08_r15_review_window_handoff","player_props_ai_2026_11_08_r16_nfl_output_headroom"] as const){

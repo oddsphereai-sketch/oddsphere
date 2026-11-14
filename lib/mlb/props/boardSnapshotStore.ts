@@ -618,28 +618,75 @@ export async function loadMlbPropsLockedGameTimes(slateDate: string): Promise<Ma
   }
 }
 
-async function loadLockedDisplaySnapshotRows(slateDate: string, purpose: "display" | "retention" = "display"): Promise<LockedDisplaySnapshotRef[]> {
-  const rows: LockedDisplaySnapshotRef[] = [];
-  rows.push(...(purpose === "retention"
-    ? await loadMlbPropsGameLockRows(slateDate, false) : await loadMlbPropsGameLocks(slateDate)));
+/** PostgreSQL BIGSERIAL identities are compared without a lossy Number cast. */
+function exactTrackingRefId(value: unknown): bigint | null {
+  if (typeof value === "number") return Number.isSafeInteger(value) && value > 0 ? BigInt(value) : null;
+  if (typeof value !== "string" || !/^[1-9]\d{0,18}$/.test(value)) return null;
+  const id = BigInt(value);
+  return id <= BigInt("9223372036854775807") ? id : null;
+}
 
-  // Retain tracking-entry references for slates produced before the
-  // authoritative game-lock policy. New game-lock rows are loaded first and
-  // therefore win the first-ref map.
+/** PostgREST timestamptz strings can retain microseconds. Date.parse alone
+ * cannot establish first-source ordering for two instants in one millisecond. */
+function trackingRefInstant(value: unknown): bigint | null {
+  if (typeof value !== "string") return null;
+  const match = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.(\d{1,6}))?(?:Z|[+-]\d{2}:\d{2})$/.exec(value);
+  const milliseconds = Date.parse(value);
+  if (!match || !Number.isFinite(milliseconds)) return null;
+  return BigInt(milliseconds) * BigInt(1000) + BigInt((match[1] ?? "").padEnd(6, "0").slice(3));
+}
+
+async function loadLockedDisplaySnapshotRows(slateDate: string, purpose: "display" | "retention" = "display"): Promise<LockedDisplaySnapshotRef[]> {
+  const gameRows = purpose === "retention"
+    ? await loadMlbPropsGameLockRows(slateDate, false) : await loadMlbPropsGameLocks(slateDate);
+  const gameAuthority = new Set(gameRows.map(row => row.external_game_id));
+  const tracking: Array<{ row: LockedDisplaySnapshotRef & { external_game_id: string; board_snapshot_id: string }; id: bigint; locked: bigint | null }> = [];
+  const seen = new Set<string>();
   const supabase = getSupabase();
+  let cursor: bigint | null = null;
   for (let page = 0; page < MAX_LOCK_REF_PAGES; page++) {
-    const from = page * LOCK_REF_PAGE_SIZE;
-    const { data, error } = await supabase
-      .from("mlb_prop_tracking_entries")
-      .select("external_game_id,board_snapshot_id,locked_at")
+    // Scan the immutable unique identity, not a nonunique lock clock. Keyset
+    // pagination cannot skip an original when equal clocks reorder or a later
+    // insert shifts OFFSET positions. No timestamp/ID/row is rewritten.
+    let query = supabase.from("mlb_prop_tracking_entries")
+      .select("id,external_game_id,board_snapshot_id,locked_at")
       .eq("slate_date", slateDate)
       .not(purpose === "retention" ? "board_snapshot_id" : "locked_at", "is", null)
-      .order("locked_at", { ascending: true })
-      .range(from, from + LOCK_REF_PAGE_SIZE - 1);
+      .order("id", { ascending: true })
+      .limit(LOCK_REF_PAGE_SIZE);
+    if (cursor !== null) query = query.gt("id", cursor.toString());
+    const { data, error } = await query;
     if (error || !Array.isArray(data) || data.length > LOCK_REF_PAGE_SIZE) throw new Error("MLB props legacy-lock inventory unavailable.");
-    const pageRows = data as LockedDisplaySnapshotRef[];
-    rows.push(...pageRows);
-    if (pageRows.length < LOCK_REF_PAGE_SIZE) return rows;
+    for (const value of data) {
+      if (!isRecord(value) || typeof value.external_game_id !== "string" || !value.external_game_id
+        || typeof value.board_snapshot_id !== "string" || !value.board_snapshot_id) throw new Error("MLB props legacy-lock reference unavailable.");
+      const id = exactTrackingRefId(value.id), locked = trackingRefInstant(value.locked_at);
+      if (id === null || cursor !== null && id <= cursor || seen.has(String(id))
+        || locked === null && !(purpose === "retention" && value.locked_at === null)) throw new Error("MLB props legacy-lock inventory identity unavailable.");
+      seen.add(String(id));
+      cursor = id;
+      tracking.push({ row: value as unknown as LockedDisplaySnapshotRef & { external_game_id: string; board_snapshot_id: string }, id, locked });
+    }
+    if (data.length < LOCK_REF_PAGE_SIZE) {
+      tracking.sort((a, b) => a.locked === b.locked ? a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+        : a.locked === null ? 1 : b.locked === null ? -1 : a.locked < b.locked ? -1 : 1);
+      if (purpose === "display") {
+        const first = new Map<string, { locked: bigint; source: string }>();
+        for (const { row, locked } of tracking) {
+          if (gameAuthority.has(row.external_game_id)) continue;
+          const original = first.get(row.external_game_id);
+          if (!original) first.set(row.external_game_id, { locked: locked!, source: row.board_snapshot_id });
+          else if (original.locked === locked && original.source !== row.board_snapshot_id) {
+            // A new stable ID ordering is not proof of which conflicting
+            // simultaneous legacy source was first. Keep unknown authority.
+            throw new Error("MLB props simultaneous legacy-lock source unavailable.");
+          }
+        }
+      }
+      // Original authoritative game pointers keep first priority. Retention
+      // keeps every pointer/reference, including same-game and unlocked refs.
+      return [...gameRows, ...tracking.map(value => value.row)];
+    }
   }
   throw new Error(`MLB props lock reference limit exceeded for ${slateDate}.`);
 }
@@ -659,13 +706,30 @@ async function loadMlbPropsGameLockRows(slateDate: string, firstPerGame: boolean
     .limit(101);
   if (error || !Array.isArray(data) || data.length > 100) throw new Error("MLB props game-lock inventory unavailable.");
   const locks: MlbPropsGameLockPointer[] = [];
-  const seen = new Set<string>();
+  const first = new Map<string, { lock: MlbPropsGameLockPointer; created: bigint; bytes: string; ambiguous: boolean }>();
   for (const row of data) {
-    const lock = decodeMlbPropsGameLock(row.after_state);
+    const lock = isRecord(row) ? decodeMlbPropsGameLock(row.after_state) : null;
     if (!lock || lock.slate_date !== slateDate) throw new Error("MLB props game-lock reference unavailable.");
-    if (firstPerGame && seen.has(lock.external_game_id)) continue;
-    seen.add(lock.external_game_id);
-    locks.push(lock);
+    if (!firstPerGame) {
+      // Retention owns every referenced original, regardless of which one can
+      // be proved the first display authority. Never discard a tied source.
+      locks.push(lock);
+      continue;
+    }
+    const created = trackingRefInstant(row.created_at);
+    if (created === null) throw new Error("MLB props game-lock creation authority unavailable.");
+    const prior = first.get(lock.external_game_id), bytes = JSON.stringify(lock);
+    if (!prior || created < prior.created) first.set(lock.external_game_id, { lock, created, bytes, ambiguous: false });
+    else if (created === prior.created && bytes !== prior.bytes) prior.ambiguous = true;
+  }
+  if (firstPerGame) {
+    for (const authority of first.values()) {
+      // A SQL tie order or a new ID order cannot establish which conflicting
+      // simultaneous stored payload was originally first. Exact duplicates
+      // remain safe; later different-clock rows cannot replace the first one.
+      if (authority.ambiguous) throw new Error("MLB props simultaneous game-lock authority unavailable.");
+      locks.push(authority.lock);
+    }
   }
   return locks;
 }
