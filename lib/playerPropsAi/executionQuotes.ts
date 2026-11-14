@@ -3,6 +3,9 @@ import type {GamePacket,Quote} from "./evidenceContract";
 
 export const quoteBook=(value:string)=>value.toLowerCase().replace(/[^a-z0-9]/g,"");
 export const quoteContract=(q:Pick<Quote,"side"|"offerContract">)=>q.offerContract==="milestone"||q.side==="yes"?"milestone":"two_way";
+/** Contract purpose only, not quote freshness, source qualification or full row eligibility.
+ * NBA members execute ordinary Over/Under; Yes/milestones remain source references. */
+export const isSupportedMemberExecutionContract=(sport:GamePacket["sport"],q:Pick<Quote,"side"|"offerContract">)=>sport!=="nba"||quoteContract(q)==="two_way";
 export const executionContractKey=(q:Quote)=>JSON.stringify([q.playerId,q.market,q.provider,quoteBook(q.book),q.line,quoteContract(q)]);
 /** A retained change is evidence, not a second executable offer. Keep simultaneous lines. */
 export function latestExecutionQuotes(rows:readonly Quote[],now:string,maxAgeMs=15*60000):Quote[]{

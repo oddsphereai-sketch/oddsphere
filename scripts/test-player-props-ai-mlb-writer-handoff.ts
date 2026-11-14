@@ -2,6 +2,7 @@
 /** Actual MLB writer AI block, canonical publisher/retention/cutoff reader and
  * game-lock writer. All DB/provider I/O is an in-memory fixture. */
 import {readerCanonicalContextHash} from '../lib/playerPropsAi/readerContext';
+import {summarizePropsAiRuntimeHealth} from '../lib/playerPropsAi/runtimeHealth';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
@@ -10,6 +11,7 @@ import * as crypto from 'node:crypto';
 import * as zlib from 'node:zlib';
 import * as source from '../lib/playerPropsAi/liveSources';
 import * as handoffs from '../lib/playerPropsAi/mlbPrelockHandoff';
+import * as publicationPolicy from '../lib/mlb/props/aiPublicationPolicy';
 import * as marketEvidence from '../lib/mlb/props/marketEvidenceCapture';
 import * as ordering from '../lib/mlb/props/releaseOrdering';
 import * as lockPolicy from '../lib/mlb/props/lockPolicy';
@@ -44,7 +46,7 @@ async function main(){
    async single(){const r=await query.execute();return{...r,data:r.data[0]??null};},async maybeSingle(){return query.single();},then(resolve:any,reject:any){return query.execute().then(resolve,reject);}};return query;}};
  class Clock extends Date{constructor(v?:string|number){super(v??tick);}static now(){return Date.parse(tick);}}
  function loadModule(file:string,modules:Record<string,unknown>){const instance={exports:{}};const javascript=ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;vm.runInNewContext(javascript,{module:instance,exports:instance.exports,Date:Clock,Buffer,console,process:{env},require:(name:string)=>{const key=name.split('/').at(-1)!;assert(Object.hasOwn(modules,key),`Unmocked ${file} dependency ${name}`);return modules[key];}},{filename:file+'.offline.cjs'});return instance.exports as any;}
- const canonical=loadModule('lib/mlb/props/boardSnapshotStore.ts',{'node:crypto':crypto,'node:zlib':zlib,'supabase-js':{createClient:()=>client},marketEvidenceCapture:marketEvidence,releaseOrdering:ordering});
+ const canonical=loadModule('lib/mlb/props/boardSnapshotStore.ts',{'node:crypto':crypto,'node:zlib':zlib,'supabase-js':{createClient:()=>client},aiPublicationPolicy:publicationPolicy,marketEvidenceCapture:marketEvidence,releaseOrdering:ordering});
  const tracking=loadModule('lib/mlb/props/internalTracking.ts',{'node:crypto':crypto,'supabase-js':{createClient:()=>client},_mlbStatsApiClient:{},boardSnapshotStore:canonical,paperTrading:{isPaperTradingMarketAllowed:()=>true},pricePolicy,marketModelVersions:versions,lockPolicy,providerClients:{},settlement});
  const games:any[]=[{id:packet.gameId,scheduledStart:start,awayTeamId:'147',homeTeamId:'111'}];
  const nativeRows=[{...native,confidence:.6,marketFamily:'batter' as const,reasonCodes:[],modelInputWarnings:[]}];
@@ -52,7 +54,7 @@ async function main(){
  const snapshot:any={...fixture,schemaVersion:1,snapshotId:'initial-native',refreshMode:'fast',data,validation:{publishable:true,errors:[],warnings:[],actionableRows:0,sourceRows:1,mappedRows:1,staleOddsRows:0,researchRows:1},movement:{comparedWith:null,changedPrices:0,changedLines:0,addedRows:1,removedRows:0},modelContext:{modelReleaseId:versions.MLB_PROPS_MODEL_RELEASE_ID,trackingEventRelease:settlement.MLB_PROPS_LOCKED_EVENT_RELEASE,probablePitcherSeasonStats:[]}};
  type ReviewArgs=Parameters<typeof reviewPropsForSite>[0];
  const provider={getClient:()=>({getRequestCount:()=>{providerCalls++;return 0;}})};
- const modules:any={snapshot,args:{persist:true,writerRunId:'synthetic-lease-owner',slateDate:'2030-06-01'},asOfTimestamp:at,games,probablePitchers:[],expandedDecisionProps:nativeRows,boardSourceOdds:[],openingOdds:[],environment:{errors:[]},previous:null,mappedOdds:[{}],providerCoverage:undefined,playerGameIdentityConflictRows:0,probablePitcherResolution:{fallbackAssignments:[],findings:[]},oddsClient:provider,researchClient:provider,lineupResult:{balldontlieCalls:0},
+ const modules:any={snapshot,aiReviewRuntime:undefined,summarizePropsAiRuntimeHealth,args:{persist:true,writerRunId:'synthetic-lease-owner',slateDate:'2030-06-01'},asOfTimestamp:at,games,probablePitchers:[],expandedDecisionProps:nativeRows,boardSourceOdds:[],openingOdds:[],environment:{errors:[]},previous:null,mappedOdds:[{}],providerCoverage:undefined,playerGameIdentityConflictRows:0,probablePitcherResolution:{fallbackAssignments:[],findings:[]},oddsClient:provider,researchClient:provider,lineupResult:{balldontlieCalls:0},
   createPropsAiDbClient:()=>client,propsAiSiteConfig:()=>({integrated:true}),createMlbPrelockHandoff:(rows:any,publish:any)=>handoffs.testMlbPrelockHandoff(rows,publish,()=>tick),MLB_PROPS_AI_HANDOFF_RELEASE:handoffs.MLB_PROPS_AI_HANDOFF_RELEASE,
   Date:Clock,randomUUID:crypto.randomUUID,process:{env},buildDashboardData:live.buildDashboardData,compareMlbPropsBoardMovement:live.compareMlbPropsBoardMovement,resolveMlbStatsTeamId,
   validateMlbPropsBoardData:(args:any)=>{const validation=live.validateMlbPropsBoardData({...args,sourceRows:1});assert(validation.publishable,validation.errors.join('|'));return validation;},
@@ -65,7 +67,7 @@ async function main(){
    assert.equal(tables.prop_scoring_runs.length,2,'Observed/ready exact duplicates publish once');
    const ready=await canonical.loadMlbPropsBoardSnapshotAtOrBefore('2030-06-01',lock);assert(ready?.data.props[0].aiReview,'Actual cutoff loader sees paid final before waiting for another game');
    tick=new Date(Date.parse(lock)+1000).toISOString();await args.onReviewObserved?.(packet,review,true);
-   return{status:'active',games:[{game:{id:packet.gameId,start,away:'NYY',home:'BOS'},packet,decisions:[],authorityReview:review,observedAt:tick}],findings:[]};
+   return{status:'active',games:[{game:{id:packet.gameId,start,away:'NYY',home:'BOS'},packet,decisions:[],authorityReview:review,observedAt:tick}],findings:[],newlyCompletedReviews:1};
   },};
  // Execute the exact shipped integration block, with real publication and lock
  // code and real parser-produced values. Upstream providers remain outside it.
@@ -75,6 +77,8 @@ async function main(){
  assert(block,'Actual writer callback block missing');
  const js=ts.transpileModule(`(async()=>{${block.getText(ast)}})()`,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
  await vm.runInNewContext(js,modules,{filename:'actual-mlb-writer-ai-block.offline.cjs'});
+ assert.equal(modules.aiReviewRuntime.status,'active');assert.equal(modules.aiReviewRuntime.newlyCompletedReviews,1);assert.equal(modules.aiReviewRuntime.observedAt,tick);
+ assert(!JSON.stringify(snapshot).includes('aiReviewRuntime'),'Process health remains outside canonical/member/lock snapshots');
  assert.equal(readies,2);assert.equal(providerCalls,0,'Callback publications perform no provider reads');assert(snapshot.data.props[0].aiReview,'Returned board retains timely AI values even when runtime returns an empty late decision list');
  assert.equal(snapshot.asOfTimestamp,tick,'Final snapshot availability is the actual later clock');
  const sourceAtLock=await canonical.loadMlbPropsBoardSnapshotAtOrBefore('2030-06-01',lock);assert(sourceAtLock);assert.equal(sourceAtLock.data.props[0].finalProbability,.75);assert.equal(Date.parse(sourceAtLock.asOfTimestamp),Date.parse(now));assert.notEqual(snapshot.snapshotId,sourceAtLock.snapshotId,'Later ordinary publication owns a new immutable identity');

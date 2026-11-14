@@ -278,7 +278,7 @@ assert(finished&&Date.parse(finished.issuedAt)<Date.parse(lock));assert.equal(co
 assert(observed.some(e=>e.input===finished.inputHash&&e.at===finalAt),'Local completion authority is observed before the accepted-review GET');
 assert.deepEqual(paidSourceContexts.map(c=>c.purpose),['scheduled_review','member_publication']);assert.equal(paidSourceContexts[0].job.job_key,job.job_key,'Only the actual due slot carries its funded job identity');
 assert.equal(outcome.games.length,1);
-if(crossDuringLookup){assert(outcome.findings.some(f=>f.startsWith('current_source_unavailable:')));assert.equal(outcome.games[0].packet.cutoff,paidSourceAt,'Fallback preserves the exact generated source cutoff');}
+if(crossDuringLookup){assert(outcome.findings.some(f=>f.startsWith('current_source_reload_unavailable_after_ready_lock:')));assert.equal(outcome.games[0].packet.cutoff,paidSourceAt,'Fallback preserves the exact generated source cutoff');}
 else{assert(!outcome.findings.some(f=>f.startsWith('current_source_unavailable:')));assert(outcome.games[0].decisions.length>0,'The normal returned game is priceable before its second application');}
 for(const game of outcome.games){if(Date.parse(tick)>=Date.parse(game.packet.lock))continue;localCandidate=restoreNflNativeGame(localCandidate!,nativeBefore,game.packet,tick);localCandidate=applyNflSiteAi(localCandidate,game.packet,game.decisions,tick);frames.push(testNflHandoffCapture(()=>tick)(localCandidate!.decisions,game.packet,game.authorityReview,'ai'));}
 // Normal writer publication can cross T-60 only after the returned game's

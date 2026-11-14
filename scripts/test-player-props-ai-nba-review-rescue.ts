@@ -6,6 +6,7 @@ import type {SupabaseClient} from "@supabase/supabase-js";
 import {runNbaPropsReviewRescue,NBA_PROPS_REVIEW_RESCUE_REQUEST_BUDGET_MS,NBA_PROPS_REVIEW_RESCUE_MIN_REMAINING_MS,type NbaPropsReviewRescueArgs,type NbaPropsReviewRescueDependencies,type NbaPropsReviewRescueWriterArgs} from "../lib/playerPropsAi/nbaReviewRescue";
 import type {NbaPlayerPropsPrivateWriterResult} from "../lib/services/nba/nbaPlayerPropsPrivateWriter";
 import type {NbaRollingSchedule} from "../lib/services/nba/nbaRollingSchedule";
+import {summarizePropsAiRuntimeHealth,type PropsAiRuntimeHealth} from "../lib/playerPropsAi/runtimeHealth";
 
 globalThis.fetch=async()=>{throw Error("Rescue proof forbids HTTP/model/provider calls");};
 const start=Date.parse("2026-11-10T18:00:00Z"),client={}as SupabaseClient;
@@ -71,7 +72,41 @@ async function main(){
     const f=fixture(),secret="sk-synthetic-do-not-log/private-player-export";if(phase==="due")f.deps.hasDue=async()=>{throw Error(secret);};else if(phase==="schedule")f.deps.loadSchedule=async()=>{throw Error(secret);};else f.deps.writeCandidate=async value=>{f.calls.writers.push(value);throw Error(secret);};
     const result=await runNbaPropsReviewRescue(f.args,f.deps);assert.equal(result.partial,true);assert.equal(result.records_updated,0);assert(!JSON.stringify(result).includes(secret));assert(!JSON.stringify(result).includes("last-known-good preserved"));assert.equal(f.calls.writers.length,phase==="writer"?1:0,"No alternate writer, retry or fake recovery is invoked after failure");
   }
-  for(const status of ["bootstrap_required","last_known_good_preserved","no_games"]as const){const f=fixture();f.deps.writeCandidate=async value=>{f.calls.writers.push(value);return writerResult(status);};const result=await runNbaPropsReviewRescue(f.args,f.deps);assert.equal(result.partial,true);assert.equal(result.records_updated,0);assert.equal(result.details?.writer_status,status);assert.equal(f.calls.writers.length,1);}
+  for(const status of ["bootstrap_required","last_known_good_preserved","no_games"]as const){const f=fixture();f.deps.writeCandidate=async value=>{f.calls.writers.push(value);return writerResult(status);};const result=await runNbaPropsReviewRescue(f.args,f.deps);assert.equal(result.partial,true);assert.equal(result.error_message,"NBA props rescue did not publish a fresh candidate");assert.equal(result.records_updated,0);assert.equal(result.details?.writer_status,status);assert.equal(result.details?.aiReviewRuntime,undefined,"No missing health becomes a fabricated AI failure or count");assert.equal(f.calls.writers.length,1);}
+  // A successful native publication and an actual AI process exception are
+  // independent facts. Retain the former while reporting the latter privately.
+  for(const [status,findings,count,partial] of [
+    ["unavailable",["ai_operational_fallback_keep_independent"],0,true],
+    ["active",["current_source_unavailable:synthetic-game:unclassified"],0,true],
+    ["active",["review_deferred_writer_inventory_deadline"],0,true],
+    ["active",[],2,false],["active",[],0,false],["paid_disabled",[],0,false],["disabled",[],0,false],
+  ] as const){
+    const f=fixture(),at=new Date(f.time()).toISOString();
+    const health=summarizePropsAiRuntimeHealth({status,games:[],findings:[...findings],newlyCompletedReviews:count},at);
+    const nativeRows={projection:6.123456789,probability:.61723891,grade:"Lean",price:-117,stake:0,evidence:{original:"native"},locked:{projection:5.9931,probability:.601,grade:"Lean",price:105,stake:.25,evidence:{original:"legacy"}}};
+    const original=Object.assign(writerResult(),{aiReviewRuntime:health,unrecognizedPrivateField:"PRIVATE_EXTRA_SENTINEL",nativeRows});
+    const bytes=JSON.stringify(original);
+    f.deps.writeCandidate=async value=>{f.calls.writers.push(value);return original;};
+    const result=await runNbaPropsReviewRescue(f.args,f.deps);
+    assert.equal(result.partial,partial?true:undefined);if(partial)assert.match(result.error_message!,/scheduled.*coverage unverified/);else assert.equal(result.error_message,undefined);
+    assert.equal(result.records_updated,1);assert.equal(result.api_calls_made,3);assert.deepEqual(result.details?.aiReviewRuntime,health);
+    assert.equal((result.details?.aiReviewRuntime as PropsAiRuntimeHealth).newlyCompletedReviews,count,"Retained authority is not counted as a newly completed review");
+    assert.equal(result.details?.review_completion,"verify_normal_slot_ledger_separately");assert.equal(JSON.stringify(original),bytes,"Native/locked payload and writer health remain untouched");
+    assert(!JSON.stringify(result).includes("PRIVATE_EXTRA_SENTINEL"));assert(!JSON.stringify(result).includes("legacy"));
+    assert.equal(f.calls.due.length,1);assert.equal(f.calls.schedules.length,1);assert.equal(f.calls.writers.length,1);assert.equal(f.calls.writers[0].aiDeadline,start+480000);assert.equal(f.calls.writers[0].reserveReviewWindow,true);
+    assert.deepEqual(f.calls.writers[0],{client,writerRunId:f.args.writerRunId,slateDate:"2026-11-10",season:2026,schedule:schedule.games,ballDontLieApiKey:"synthetic-bdl-only",theOddsApiKey:"synthetic-odds-only",owlsInsightApiKey:"synthetic-owls-only",fullRefresh:false,now:at,aiDeadline:start+480000,reserveReviewWindow:true});
+  }
+  {
+    const f=fixture(),secret="sk-synthetic-never-forward",at=new Date(f.time()).toISOString();
+    const raw=Object.assign({status:"active" as const,newlyCompletedReviews:3,findings:[secret,"raw source / private path",...Array.from({length:70},(_,i)=>`diagnostic_${i}`)],observedAt:secret},{unknownPrivateField:secret});
+    const original=Object.assign(writerResult(),{aiReviewRuntime:raw}),bytes=JSON.stringify(original);
+    f.deps.writeCandidate=async value=>{f.calls.writers.push(value);return original;};
+    const result=await runNbaPropsReviewRescue(f.args,f.deps),health=result.details?.aiReviewRuntime as PropsAiRuntimeHealth;
+    assert.equal(result.partial,true);assert.equal(result.records_updated,1);assert.equal(result.api_calls_made,3);assert.equal(health.newlyCompletedReviews,3);
+    assert.equal(health.findings.length,64);assert.deepEqual(health.findings.slice(0,2),["ai_process_finding_redacted","ai_process_finding_redacted"]);assert.equal(health.findings.at(-1),"ai_process_findings_truncated");
+    assert.deepEqual(Object.keys(health).sort(),["release","status","newlyCompletedReviews","findings","observedAt"].sort());assert.equal(health.observedAt,at);
+    assert(!JSON.stringify(result).includes(secret));assert(!JSON.stringify(result).includes("private path"));assert(!JSON.stringify(result).includes("unknownPrivateField"));assert.equal(JSON.stringify(original),bytes);assert.equal(f.calls.writers.length,1);
+  }
   // Exercise the actual existing slate helper and shared provider-season helper,
   // with only due/schedule/writer services mocked. Keep the original UTC October
   // provider-year convention even while the Eastern slate is still September.

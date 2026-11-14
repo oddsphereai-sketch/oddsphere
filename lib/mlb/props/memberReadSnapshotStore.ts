@@ -262,7 +262,9 @@ export async function loadMlbPropsMemberBoardSnapshot(date: string, full = false
   if (!validBoardPayload(data?.payload)) return null;
   const manifest = data.payload;
   if (!await memberPayloadIsCurrent(date, manifest.modelReleaseId, manifest.asOfTimestamp)) return null;
-  if (!full || !manifest.shardKeys?.length) return manifest;
+  if (!full || !manifest.shardKeys?.length) {
+    return await memberRowsHonorCurrentLocks(date, manifest.data.props) ? manifest : null;
+  }
   const shards: Array<BoardPayload | null> = [];
   // Full-board reads are operator/fallback paths now. Fetch bounded batches
   // instead of opening one concurrent database request per MLB game.
@@ -282,13 +284,14 @@ export async function loadMlbPropsMemberBoardSnapshot(date: string, full = false
     }
   }
   if (shards.some((shard) => shard === null || shard.snapshotId !== manifest.snapshotId)) return null;
-  return {
+  const assembled: BoardPayload = {
     ...manifest,
     data: {
       ...manifest.data,
       props: shards.flatMap((shard) => shard?.data.props ?? []),
     },
   };
+  return await memberRowsHonorCurrentLocks(date, assembled.data.props) ? assembled : null;
 }
 
 export async function loadMlbPropsPlayerReadSnapshot(date: string, playerId: string): Promise<PlayerPayload | null> {
@@ -302,8 +305,24 @@ export async function loadMlbPropsPlayerReadSnapshot(date: string, playerId: str
   if (error) throw error;
   if (!validPlayerPayload(data?.payload)) return null;
   return await memberPlayerPayloadIsCurrent(date, data.payload.modelReleaseId)
+    && await memberRowsHonorCurrentLocks(date, data.payload.props ?? [])
     ? data.payload
     : null;
+}
+
+/** A new first lock need not advance the canonical release head. Never let a
+ * previously materialized unlocked member row bypass that original authority.
+ * Do not attach a lock to cached values: return to the canonical display path.
+ * Existing locked payload fields remain opaque and unchanged. */
+async function memberRowsHonorCurrentLocks(
+  date: string,
+  rows: readonly PlayerPropsDashboardData["props"][number][],
+): Promise<boolean> {
+  if (!rows.length) return true;
+  const locks = await loadMlbPropsLockedGameTimes(date);
+  return rows.every((row) => !row.providerIds?.gameId
+    || !locks.has(row.providerIds.gameId)
+    || row.lockStatus?.status === "locked");
 }
 
 async function memberPlayerPayloadIsCurrent(

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { gzipSync, gunzipSync } from "node:zlib";
 import {
   NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE,
   NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE,
@@ -21,10 +22,97 @@ type StoredRow = {
   payload: unknown;
 };
 
-// Keep the exact chronology and every payload, but bound the JSON response
-// buffer per API request. All pages still contribute to the same 5k ceiling.
+export const NFL_FORWARD_EVIDENCE_READ_RELEASE =
+  "nfl_forward_evidence_read_2026_11_14_r1_lossless_bounded_history" as const;
+// A complete week can exceed 5k observations before Sunday. Keep every row in
+// its original order without retaining the entire decoded JSON history.
 export const NFL_FORWARD_EVIDENCE_PAGE_SIZE = 50 as const;
-export const NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE = 5_000 as const;
+export const NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE = 12_000 as const;
+export const NFL_FORWARD_EVIDENCE_MAX_PAYLOAD_JSON_BYTES = 2_000_000 as const;
+export const NFL_FORWARD_EVIDENCE_MAX_HOT_JSON_BYTES = 96_000_000 as const;
+export const NFL_FORWARD_EVIDENCE_MAX_COMPRESSED_BYTES = 256_000_000 as const;
+export const NFL_FORWARD_EVIDENCE_MAX_DECODED_GROUPS = 64 as const;
+export const NFL_FORWARD_EVIDENCE_MAX_DECODED_JSON_BYTES = 8_000_000 as const;
+
+type JsonObject = Record<string, unknown>;
+type CompressedGroup = { bytes: Buffer; jsonBytes: number };
+
+/** One read owns its archive/cache. Hydration has no database or provider I/O. */
+function createPayloadArchive() {
+  const decoded = new Map<number, { value: JsonObject; jsonBytes: number }>();
+  let compressedBytes = 0;
+  let hotJsonBytes = 0;
+  let decodedJsonBytes = 0;
+  let nextGroupId = 0;
+
+  function retainHotBytes(bytes: number) {
+    hotJsonBytes += bytes;
+    if (hotJsonBytes > NFL_FORWARD_EVIDENCE_MAX_HOT_JSON_BYTES) {
+      throw new Error("NFL forward evidence read exceeded its bounded hot JSON byte limit.");
+    }
+  }
+
+  function readGroup(id: number, group: CompressedGroup): JsonObject {
+    const cached = decoded.get(id);
+    if (cached) {
+      decoded.delete(id);
+      decoded.set(id, cached);
+      return cached.value;
+    }
+    const value = JSON.parse(gunzipSync(group.bytes, {
+      maxOutputLength: NFL_FORWARD_EVIDENCE_MAX_PAYLOAD_JSON_BYTES,
+    }).toString("utf8")) as JsonObject;
+    decoded.set(id, { value, jsonBytes: group.jsonBytes });
+    decodedJsonBytes += group.jsonBytes;
+    while (decoded.size > NFL_FORWARD_EVIDENCE_MAX_DECODED_GROUPS ||
+      decodedJsonBytes > NFL_FORWARD_EVIDENCE_MAX_DECODED_JSON_BYTES) {
+      const oldest = decoded.keys().next().value!;
+      decodedJsonBytes -= decoded.get(oldest)!.jsonBytes;
+      decoded.delete(oldest);
+    }
+    return value;
+  }
+
+  return (payload: NflForwardAnyEvidencePayload): NflForwardAnyEvidencePayload => {
+    // These small values serve complete chronology/lock/context scans. Large
+    // market history is separate from depth/forecast evidence so reading a
+    // quote does not repeatedly decode an unrelated complete roster.
+    const view: JsonObject = {};
+    const cold: [JsonObject, JsonObject] = [{}, {}];
+    for (const [key, value] of Object.entries(payload)) {
+      retainHotBytes(Buffer.byteLength(JSON.stringify(key)));
+      const hot = value === null || typeof value !== "object" ||
+        key === "game" || key === "decisions" || key === "coverage" || key === "injuries";
+      if (hot) {
+        const json = JSON.stringify(value);
+        retainHotBytes(json === undefined ? 0 : Buffer.byteLength(json));
+        // Clone independently for each row; mock/input aliases cannot become
+        // aliases between distinct immutable stored observations.
+        Object.defineProperty(view, key, { enumerable: true, configurable: true, writable: true,
+          value: value !== null && typeof value === "object" ? JSON.parse(json!) : value });
+      } else {
+        const group = key === "market" || key === "contextualEvidenceCapture" ? 0 : 1;
+        Object.defineProperty(cold[group], key, { enumerable: true, value });
+        // Define in source-key order, even though compressed groups differ.
+        Object.defineProperty(view, key, { enumerable: true, get: () => readGroup(
+          groups[group].id, groups[group].packed,
+        )[key] });
+      }
+    }
+    const groups = cold.map((fields) => {
+      const json = JSON.stringify(fields);
+      // Copy out of zlib's chunk allocation; retaining each small chunk's
+      // unused backing capacity would defeat the compressed byte budget.
+      const bytes = Buffer.from(gzipSync(json, { level: 1 }));
+      compressedBytes += bytes.byteLength;
+      if (compressedBytes > NFL_FORWARD_EVIDENCE_MAX_COMPRESSED_BYTES) {
+        throw new Error("NFL forward evidence read exceeded its bounded compressed byte limit.");
+      }
+      return { id: nextGroupId++, packed: { bytes, jsonBytes: Buffer.byteLength(json) } };
+    });
+    return view as unknown as NflForwardAnyEvidencePayload;
+  };
+}
 
 export async function readNflForwardEvidence(args: {
   client: SupabaseClient;
@@ -68,8 +156,9 @@ async function readNflForwardEvidenceRelease(args: {
     | typeof NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE
     | typeof NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE;
 }): Promise<NflForwardStoredEvidence[]> {
-  const rows: StoredRow[] = [];
-  for (let from = 0; from < NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE; from += NFL_FORWARD_EVIDENCE_PAGE_SIZE) {
+  const rows: NflForwardStoredEvidence[] = [];
+  const archive = createPayloadArchive();
+  for (let from = 0; from <= NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE; from += NFL_FORWARD_EVIDENCE_PAGE_SIZE) {
     const { data, error } = await args.client
       .from("nfl_forward_evidence_snapshots")
       .select("id,provider_game_id,stage,captured_at,game_start_at,payload_sha256,payload")
@@ -78,12 +167,32 @@ async function readNflForwardEvidenceRelease(args: {
       .eq("week", args.week)
       .order("captured_at", { ascending: true })
       .order("id", { ascending: true })
-      .range(from, from + NFL_FORWARD_EVIDENCE_PAGE_SIZE - 1);
+      // A one-row terminal probe distinguishes a complete exact-boundary read
+      // from overflow. Never silently return an incomplete release.
+      .range(from, from === NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE
+        ? from : from + NFL_FORWARD_EVIDENCE_PAGE_SIZE - 1);
     if (error) throw new Error(`NFL forward evidence read failed: ${error.message}`);
-    const page = (data ?? []) as StoredRow[];
-    rows.push(...page);
+    if (!Array.isArray(data)) throw new Error("NFL forward evidence read returned an unavailable page.");
+    const page = data as StoredRow[];
+    if (from === NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE) {
+      if (page.length === 0) return rows;
+      break;
+    }
+    if (page.length > NFL_FORWARD_EVIDENCE_PAGE_SIZE) {
+      throw new Error("NFL forward evidence read returned an oversized page.");
+    }
+    for (const row of page) {
+      const json = JSON.stringify(row.payload);
+      if (json !== undefined && Buffer.byteLength(json) > NFL_FORWARD_EVIDENCE_MAX_PAYLOAD_JSON_BYTES) {
+        throw new Error(`NFL evidence ${row.id} exceeded its bounded payload JSON byte limit.`);
+      }
+      // Verify the original payload and original stored digest before retaining
+      // any compressed representation. The legacy hash exception stays exact.
+      const original = normalizeStoredRow(row, args.evidenceRelease);
+      rows.push({ ...original, payload: archive(original.payload) });
+    }
     if (page.length < NFL_FORWARD_EVIDENCE_PAGE_SIZE) {
-      return rows.map((row) => normalizeStoredRow(row, args.evidenceRelease));
+      return rows;
     }
   }
   throw new Error(

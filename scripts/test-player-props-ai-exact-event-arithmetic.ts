@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {validateLaw,lawForecast,lawEventMass,type PlayerLaw,type AcceptedPlayerLaw} from '../lib/playerPropsAi/law';
 import {priceAiLaw,gradeAiEventFromMass,type AiExecutionQuote} from '../lib/playerPropsAi/pricing';
 import {digest} from '../lib/playerPropsAi/evidence';
-import {LEGACY_PROPS_AI_LAW_RELEASE,LEGACY_PROPS_AI_GRADE_RELEASE,PROPS_AI_GRADE_RELEASE} from '../lib/playerPropsAi/releases';
+import {LEGACY_PROPS_AI_LAW_RELEASE,LEGACY_PROPS_AI_GRADE_RELEASE,PROPS_AI_GRADE_RELEASE,PRIOR_PROPS_AI_LAW_RELEASE,PRIOR_PROPS_AI_GRADE_RELEASE} from '../lib/playerPropsAi/releases';
 globalThis.fetch=async()=>{throw Error('Exact event arithmetic forbids network');};
 const zero=()=>Array<number>(16).fill(0),at='2030-11-11T18:00:00Z';
 const q=(side:'over'|'under',american:number,book='samebook'):AiExecutionQuote=>({id:side+book,book,provider:'synthetic',line:.5,side,american,availableAt:at,confirmedAt:at,current:true,actionRule:'qualifying_participation'});
@@ -45,3 +45,10 @@ const forged=structuredClone(exactZero);if(forged.release!==LEGACY_PROPS_AI_LAW_
 assert.throws(()=>lawEventMass(old,'receptions',.5),/requires original R2/);assert.throws(()=>gradeAiEventFromMass({win:1,loss:1,push:0,total:3,american:150,opposingAmerican:-170,confidence:2,exception:null}),/mass/);
 assert.equal(JSON.stringify(old),oldBytes);assert.deepEqual(price(old),oldPrice);assert.notEqual(validateLaw('nfl',{markets:['receptions']},reverse).hash,old.hash);
 console.log(JSON.stringify({exactEventArithmetic:true,permutationAndScalingCases:48,assertions:assertions+18,legacyR1Exact:true,zeroEVNotBest:true,genuineOverAndUnderRecovery:true,syntheticBoardImpact:boardImpact,networkCalls:0}));
+
+// R2 keeps its exact original hash/body and R4 paired-price arithmetic even
+// after new admissions become R3. Never derive a legacy law from new weights.
+const priorBody={release:PRIOR_PROPS_AI_LAW_RELEASE,weights:[128/228,100/228,...zero().slice(2)],integerWeights:[128,100,...zero().slice(2)],outcomes:{receptions:[1,0,...zero().slice(2)]}};
+const priorLaw:AcceptedPlayerLaw={...priorBody,hash:digest(priorBody)},priorBytes=JSON.stringify(priorLaw);
+const priorPrice=price(priorLaw,-148,128);assert.equal(priorPrice.grade,'Watchlist');assert.equal(priorPrice.gradeRelease,PRIOR_PROPS_AI_GRADE_RELEASE);
+assert.equal(JSON.stringify(priorLaw),priorBytes);assert.equal(priorLaw.hash,digest(priorBody));assert.deepEqual(priorLaw.integerWeights,priorBody.integerWeights);

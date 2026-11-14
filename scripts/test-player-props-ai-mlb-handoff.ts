@@ -32,15 +32,20 @@ async function main(){
  tick=new Date(Date.parse(now)+120000).toISOString();
  await handoff.observe({...packet,cutoff:tick},review,true);
  assert.equal(handoff.rows()[0].playGrade,'BEST_ANGLE');assert.equal(handoff.rows()[0].units,1,'Returning exact executable event restores existing promotion qualification');
- const success=digest(handoff.rows());fail=true;
- await assert.rejects(handoff.observe({...packet,cutoff:tick},null,false),/synthetic_durable_write_failed/);
- assert.equal(digest(handoff.rows()),success,'Failed publication cannot be labeled durable or replace its predecessor');
- fail=false;await handoff.observe({...packet,cutoff:tick},null,false);
- assert.equal(handoff.rows()[0].aiReview,undefined,'Lookup failure restores the actual independent construction');
- assert.equal(digest(handoff.rows()[1]),oldBytes,'Stored locked values win before new metadata or pricing checks');
  const count=writes.length;
  await assert.rejects(handoff.observe({...packet,start:new Date(Date.parse(start)+60000).toISOString(),cutoff:tick},review,true),/fixture clock changed/);
  assert.equal(writes.length,count);
+ fail=true;
+ await assert.rejects(handoff.observe({...packet,cutoff:tick},null,false),/publication acknowledgement unavailable/);
+ assert.throws(()=>handoff.rows(),/publication acknowledgement unavailable/,'An uncertain write fences the final generic board');
+ fail=false;
+ await assert.rejects(handoff.observe({...packet,cutoff:tick},null,false),/publication acknowledgement unavailable/,'A later callback cannot clear uncertain authority');
+ assert.equal(writes.length,count,'No later same-invocation publication can reuse stale rows');
+ assert.equal(digest(writes.at(-1)!.rows[1]),oldBytes,'Stored locked values remain unchanged');
+ const lookupFallback=testMlbPrelockHandoff([native,oldLock],async()=>{},()=>tick);
+ await lookupFallback.observe({...packet,cutoff:tick},null,false);
+ assert.equal(lookupFallback.rows()[0].aiReview,undefined,'An independent invocation can retain its actual native construction');
+ assert.equal(digest(lookupFallback.rows()[1]),oldBytes);
  assert.equal(digest(oldLock),oldBytes);
  // A missing review cannot reopen a current own-player lineup block through
  // native fallback. An explicit later posted return restores the same native

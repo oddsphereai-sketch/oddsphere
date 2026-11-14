@@ -2,7 +2,7 @@ import {qualifiedForecastMarkets} from "./sourceEvents";
 import type { GamePacket, Player, Sport } from "./evidenceContract";
 import { COMBOS } from "./evidenceContract";
 import { invariant, digest } from "./evidence";
-import { PROPS_AI_LAW_RELEASE, LEGACY_PROPS_AI_LAW_RELEASE, PROPS_AI_SCENARIOS } from "./releases";
+import { PROPS_AI_LAW_RELEASE, PRIOR_PROPS_AI_LAW_RELEASE, LEGACY_PROPS_AI_LAW_RELEASE, PROPS_AI_SCENARIOS, propsAiLawHasExactMass } from "./releases";
 import { readerEvidence, validatePlayerCoverage, type ReaderCoverage } from "./readerCoverage";
 
 const NBA = ["points", "rebounds", "assists", "threes"] as const;
@@ -24,7 +24,7 @@ export type GameReview = { players: Record<string, PlayerReview> };
 type AcceptedLawFields = { hash: string; weights: number[]; outcomes: Record<string, number[]> };
 export type AcceptedPlayerLaw = AcceptedLawFields & (
   | {release:typeof LEGACY_PROPS_AI_LAW_RELEASE;integerWeights?:never}
-  | {release:typeof PROPS_AI_LAW_RELEASE;integerWeights:number[]}
+  | {release:typeof PRIOR_PROPS_AI_LAW_RELEASE|typeof PROPS_AI_LAW_RELEASE;integerWeights:number[]}
 );
 export type ExactLawEventMass={over:number;under:number;push:number;total:number;weightedValue:number};
 /** Dependencies of the canonical mathematical contract, including nested combos. */
@@ -76,10 +76,10 @@ function legacyLawForecast(law: AcceptedPlayerLaw, market: string, line: number,
   return { mean, over, under, push, preferredSide: over >= under ? "over" as const : "under" as const };
 }
 
-/** R2 retains its original bounded integer weights. Never reconstruct these from
+/** R2/R3 retain their original bounded integer weights. Never reconstruct these from
  * an R1 normalized law or change any archived normalized weight/hash. */
 export function lawEventMass(law:AcceptedPlayerLaw,market:string,line:number,milestone=false):ExactLawEventMass{
-  invariant(law.release===PROPS_AI_LAW_RELEASE,"Exact event mass requires original R2 integer weights");
+  invariant(propsAiLawHasExactMass(law.release),"Exact event mass requires original R2/R3 integer weights");
   invariant(Number.isFinite(line),"Missing exact line");
   const weights=law.integerWeights;
   invariant(Array.isArray(weights)&&weights.length===PROPS_AI_SCENARIOS&&weights.every(w=>Number.isSafeInteger(w)&&w>=0&&w<=10000),"Invalid original integer scenario weights");

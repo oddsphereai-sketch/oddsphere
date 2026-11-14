@@ -1,5 +1,5 @@
 import { cronHandler } from "@/lib/cron/runCron";
-import { isInactiveMlbPropsRefresh } from "@/lib/cron/playerPropsRefreshTelemetry";
+import { isInactiveMlbPropsRefresh, mlbPlayerPropsRefreshFailure } from "@/lib/cron/playerPropsRefreshTelemetry";
 import { loadLatestMlbPropsBoardSnapshot } from "@/lib/mlb/props/boardSnapshotStore";
 import { publishMlbPropsMemberReadSnapshots } from "@/lib/mlb/props/memberReadSnapshotStore";
 import {
@@ -31,6 +31,27 @@ export async function GET(request: Request) {
     try {
       result = await refreshMlbPropsBoard({ slateDate, refreshMode, persist: true,writerRunId:runId,aiDeadline:requestStartedAt+480_000 });
     } catch (error) {
+      // The canonical row/index may already have committed. Do not use this
+      // invocation's cached/LKG authority for more tracking or member writes.
+      // The next ordinary leased invocation reads persisted sources afresh.
+      if (error instanceof Error && error.name === "MlbPropsPublicationUncertainError") {
+        return {
+          partial: true,
+          error_message: error.message,
+          details: {
+            slateDate,
+            refreshMode,
+            published: false,
+            refreshFailed: true,
+            publicationAuthorityUncertain: true,
+            publicationAcknowledgement: "unavailable",
+            publicationCommit: "unknown",
+            databaseWriteCount: "unknown",
+            providerCallCount: "unknown",
+            lockFallbackAttempted: false,
+          },
+        };
+      }
       // Locking must not depend on a completely successful provider refresh.
       // If BDL expands unexpectedly or a nonessential enrichment call fails,
       // freeze the latest publishable pregame board for every game currently
@@ -74,6 +95,7 @@ export async function GET(request: Request) {
     }
     const trackingFailed = result.tracking.status === "failed";
     const inactive = isInactiveMlbPropsRefresh(result);
+    const playerPropsReviewError = mlbPlayerPropsRefreshFailure(result);
     return {
       // This metric is database writes, not the number of display rows carried
       // inside one compressed snapshot. Reporting thousands of props here made
@@ -83,10 +105,9 @@ export async function GET(request: Request) {
           + (result.privateTrackingCapture?.written ? 1 : 0)
         : 0,
       api_calls_made: result.providerCalls.balldontlie,
-      partial: (!result.published && !inactive) || trackingFailed,
-      error_message: !result.published && !inactive
-        ? result.snapshot.validation.errors.join(", ")
-        : trackingFailed ? result.tracking.error : null,
+      partial: (!result.published && !inactive) || trackingFailed || playerPropsReviewError !== null,
+      error_message: [!result.published && !inactive ? result.snapshot.validation.errors.join(", ") : null,
+        trackingFailed ? result.tracking.error : null, playerPropsReviewError].filter(Boolean).join("; ") || null,
       details: {
         slateDate,
         refreshMode: result.snapshot.refreshMode,
@@ -108,6 +129,8 @@ export async function GET(request: Request) {
         },
         tracking: result.tracking,
         privateTracking: result.privateTrackingCapture,
+        ...(result.aiReviewRuntime ? { aiReviewRuntime: result.aiReviewRuntime } : {}),
+        player_props_review_error: playerPropsReviewError,
         lastKnownGoodPreserved: !result.published && result.usedPreviousSnapshot,
       },
     };

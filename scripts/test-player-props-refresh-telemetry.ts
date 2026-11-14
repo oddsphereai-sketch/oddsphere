@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import ts from "typescript";
-import { isInactiveMlbPropsRefresh, nbaPlayerPropsRefreshFailure } from "../lib/cron/playerPropsRefreshTelemetry";
+import { isInactiveMlbPropsRefresh, nbaPlayerPropsRefreshFailure, mlbPlayerPropsRefreshFailure } from "../lib/cron/playerPropsRefreshTelemetry";
 
 const processHealth={status:'active',newlyCompletedReviews:0,findings:['source_or_review_unavailable:nba-bdl:21718081:source_or_preparation_timeout'],observedAt:'2026-11-11T22:47:38Z'};
 assert.match(nbaPlayerPropsRefreshFailure({status:'published_private',aiReviewRuntime:processHealth})!,/scheduled coverage unverified/,'A native board publication cannot hide failed AI preparation');
 assert.match(nbaPlayerPropsRefreshFailure({status:'published_private',aiReviewRuntime:{...processHealth,status:'unavailable',findings:[]}})!,/AI process unavailable/);
-for(const finding of ['ai_process_finding_redacted','lock_source_unavailable:nba-bdl:21718081:source_or_preparation_timeout','pending_review_inventory_exceeds_two_slots_per_game','review_deferred_writer_game_bound'])assert.match(nbaPlayerPropsRefreshFailure({status:'published_private',aiReviewRuntime:{...processHealth,findings:[finding]}})!,/scheduled coverage unverified/,'Unknown or source-failed review health cannot become a green publication');
+for(const finding of ['ai_process_finding_redacted','lock_source_unavailable:nba-bdl:21718081:source_or_preparation_timeout','pending_review_inventory_exceeds_two_slots_per_game','review_deferred_writer_game_bound','current_source_unavailable:g:unclassified','ai_process_findings_truncated'])assert.match(nbaPlayerPropsRefreshFailure({status:'published_private',aiReviewRuntime:{...processHealth,findings:[finding]}})!,/scheduled coverage unverified/,'Unknown or source-failed review health cannot become a green publication');
 assert.equal(nbaPlayerPropsRefreshFailure({status:'published_private',aiReviewRuntime:{...processHealth,newlyCompletedReviews:1,findings:[]}}),null,'A healthy completed review clears the process exception');
 assert.equal(nbaPlayerPropsRefreshFailure({status:'published_private',aiReviewRuntime:{...processHealth,status:'paid_disabled',findings:[]}}),null,'An intentional paid switch does not fabricate a failed scheduled review');
 assert.equal(nbaPlayerPropsRefreshFailure({status:'published_private',aiReviewRuntime:{...processHealth,findings:['review_deferred_empty_current_offers:nba-bdl:21718081']}}),null,'Honest empty offered inventory is distinct from failed input preparation');
@@ -66,7 +66,7 @@ async function testMlbRoute(): Promise<void> {
       assert.equal(options.requireLease, true);
       return run({runId:'offline-shared-mlb-writer'});
     } },
-    "@/lib/cron/playerPropsRefreshTelemetry": { isInactiveMlbPropsRefresh },
+    "@/lib/cron/playerPropsRefreshTelemetry": { isInactiveMlbPropsRefresh,mlbPlayerPropsRefreshFailure },
     "@/lib/mlb/props/liveBoard": { easternSlateDate: () => "2026-11-04", refreshMlbPropsBoard: async () => { refreshes++; return supplied; } },
     "@/lib/mlb/props/boardSnapshotStore": {},
     "@/lib/mlb/props/memberReadSnapshotStore": {},

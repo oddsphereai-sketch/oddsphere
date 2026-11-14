@@ -1,7 +1,8 @@
 import { assessConfidenceLeanPrice } from "../services/dailyEdge/confidenceLeanPrice";
 import type { AcceptedPlayerLaw } from "./law";
 import { lawForecast,lawEventMass } from "./law";
-import { PROPS_AI_GRADE_RELEASE,LEGACY_PROPS_AI_GRADE_RELEASE,PROPS_AI_LAW_RELEASE } from "./releases";
+import { PROPS_AI_LAW_RELEASE,propsAiLawHasExactMass,propsAiLawGradeRelease } from "./releases";
+import {assessExactPropsConfidencePrice} from './exactConfidencePrice';
 import { invariant } from "./evidence";
 export type PropsAiGrade = "Best Angle" | "Lean" | "Watchlist" | "No Play";
 export type AiExecutionQuote = { id: string; book: string; provider: string; line: number; side: "over" | "under" | "yes";
@@ -49,9 +50,19 @@ export function gradeAiEventFromMass(args:ExactEventGradeArgs){
   else if(args.confidence>=1&&economics.numerator>BigInt(0)||args.confidence===2&&confidenceLean?.qualified)grade="Lean";
   return{grade,ev:economics.ev,confidenceLean};
 }
+/** R3 only. R2's accepted paired-confidence arithmetic above remains unchanged. */
+export function gradeAiEventFromExactPairedMass(args:ExactEventGradeArgs){
+  const economics=exactEventEconomics(args);
+  const confidenceLean=args.opposingAmerican===null?null:assessExactPropsConfidencePrice({...args,opposingAmerican:args.opposingAmerican});
+  let grade:PropsAiGrade="Watchlist";
+  if(args.exception)grade="No Play";
+  else if(args.confidence===2&&economics.numerator>BigInt(0))grade="Best Angle";
+  else if(args.confidence>=1&&economics.numerator>BigInt(0)||args.confidence===2&&confidenceLean?.qualified)grade="Lean";
+  return{grade,ev:economics.ev,confidenceLean};
+}
 export function priceAiLaw(args: { law: AcceptedPlayerLaw; market: string; quotes: AiExecutionQuote[]; now: string;
   maxAgeMs: number; confidence: number; exception: string | null; milestone?: boolean }) {
-  const exact=args.law.release===PROPS_AI_LAW_RELEASE;
+  const exact=propsAiLawHasExactMass(args.law.release),gradeRelease=propsAiLawGradeRelease(args.law.release);
   const now = Date.parse(args.now); invariant(Number.isFinite(now) && Number.isFinite(args.maxAgeMs) && args.maxAgeMs >= 0, "Invalid pricing clock");
   invariant([0, 1, 2].includes(args.confidence), "Invalid estimated evidence confidence");
   const latest=new Map<string,AiExecutionQuote>(),ambiguous=new Set<string>();
@@ -70,9 +81,9 @@ export function priceAiLaw(args: { law: AcceptedPlayerLaw; market: string; quote
     const opposing = eligible.find(o => o.book === q.book && o.provider === q.provider && o.line === q.line && o.side !== q.side && o.side !== "yes" && Math.abs(Date.parse(o.confirmedAt!)-Date.parse(q.confirmedAt!))<=5*60000);
     const mass=exact?lawEventMass(args.law,args.market,q.line,args.milestone||q.side==="yes"):null;
     const exactArgs=mass?{win:side==="under"?mass.under:mass.over,loss:side==="under"?mass.over:mass.under,push:mass.push,total:mass.total,american:q.american,opposingAmerican:opposing?.american??null,confidence:args.confidence,exception:args.exception}:null;
-    const {grade,ev,confidenceLean}=exactArgs?gradeAiEventFromMass(exactArgs):gradeAiEvent({win,loss,american:q.american,opposingAmerican:opposing?.american??null,confidence:args.confidence,exception:args.exception});
+    const {grade,ev,confidenceLean}=exactArgs?(args.law.release===PROPS_AI_LAW_RELEASE?gradeAiEventFromExactPairedMass(exactArgs):gradeAiEventFromMass(exactArgs)):gradeAiEvent({win,loss,american:q.american,opposingAmerican:opposing?.american??null,confidence:args.confidence,exception:args.exception});
     const fairWin=exactArgs?.win??win,fairLoss=exactArgs?.loss??loss;
-    const decision={ gradeRelease: exact?PROPS_AI_GRADE_RELEASE:LEGACY_PROPS_AI_GRADE_RELEASE, grade, forecast, quote: q, side, probability: win, loss, push: forecast.push,
+    const decision={ gradeRelease, grade, forecast, quote: q, side, probability: win, loss, push: forecast.push,
       expectedValue: ev, fairAmerican: fairWin > 0 && fairLoss > 0 ? fairWin >= fairLoss ? -100 * fairWin / fairLoss : 100 * fairLoss / fairWin : null,
       confidence: args.confidence, confidenceMeaning: "AI-estimated evidence strength; not empirical calibration" as const,
       recommendationBasis: ev > 0 ? "estimated_value" as const : confidenceLean?.qualified ? "outcome_confidence_with_paired_margin" as const : "monitor" as const,

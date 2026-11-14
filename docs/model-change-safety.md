@@ -1,3 +1,78 @@
+## November 14 player-prop complete evidence, exact confidence and private process health R38
+
+Future shared NBA/NFL/MLB generation is `player_props_ai_2026_11_14_r38_exact_confidence_and_evidence`.
+NBA writer R24, NFL decision R13 and native MLB R44 remain unchanged.
+Future law R3 (`player_props_ai_law_2026_11_14_r3_exact_paired_confidence`),
+selection R8 and grade R5 qualify the existing confidence Lean rule with exact
+integer/rational comparisons, including paired hold, non-push mass and the 55% floor.
+They preserve the existing inclusive thresholds; decimal diagnostics never decide
+qualification. Original law R2 keeps grade R4/selection R7 and its original paired
+floating arithmetic; original R1 keeps grade R3/selection R6. Their hashes, values,
+repricing semantics and locked-reader precedence remain exact. The shared Daily Edge
+confidence helper and all native models remain unchanged.
+NFL props writer is `nfl_player_props_writer_2026_11_14_r98_complete_history_health`;
+full-game evidence writer is `nfl_forward_evidence_writer_2026_11_14_r117_complete_bounded_history`.
+The shared history reader is `nfl_forward_evidence_read_2026_11_14_r1_lossless_bounded_history`.
+It verifies original hashes and retains every ordered observation, with explicit row,
+compressed-byte, hot-JSON and decoded-cache bounds instead of an incomplete 5,000-row read.
+Exact-boundary reads use a terminal overflow probe; excess fails closed. No history is dropped.
+Null or malformed normal/terminal pages are unavailable, never empty-inventory proof.
+
+Private NFL source-failure capture R2 retains complete semantic evidence inside the existing
+bounded compressed archive when the outer semantic description exceeds its original limit.
+V72 accepts both original R1 and new R2; old archives remain exact. Source identity refusals
+still refuse review admission. Operations diagnostics R7/private runtime health report actual newly completed reviews
+and blocked work across NBA/NFL/MLB without treating native publication as completed AI coverage.
+A postlock reload exception remains separately visible when that exact game's ready
+callback was actually awaited wholly before lock; counts/SQL completion alone never
+suppress a source failure. MLB health is transient writer/cron data, outside snapshots.
+When the existing deadline skips inventory for an eligible current-day unexpired game,
+private health reports deferred/unknown coverage, not an invented failed review or
+a known-empty inventory. No-game, already-locked, next-day and intentionally disabled
+cases retain their original classification. No extra request or deadline is added.
+NBA rescue R3 retains the same private AI health and canonical-write counts under the
+existing pending-slot/absolute-deadline route. No new writer, review or timer is added.
+MLB handoff R2 fences later callbacks and final writes after uncertain publication
+acknowledgements, including returned database errors. The cron avoids stale fallback
+writes. Future R2 cutoff sources require their exact timely publication index; one
+bounded lookup covers twelve candidates with a thirteen-row overflow probe. Missing
+bindings use a prior eligible source or hold, while unknown reads fail closed.
+Original absent/R1 source selection and stored locks retain their legacy authority;
+unsupported tags cannot create a new cutoff source. No historical index is repaired,
+no schema is added and no additional provider/model request or review is made.
+MLB locked-source reader R1 scopes source-index lookup to the exact slate/snapshot
+before the bounded query. Unavailable inventory, missing/ambiguous originals and
+empty locked-game sources raise an explicit read failure instead of mutable fallback.
+Existing locked row values and opaque evidence retain precedence over current
+context checks. It performs no raw JSON scan or historical index/payload repair.
+Cached raw boards still coalesce reads, while lock authority is checked after cache
+retrieval. Existing member board/player fast paths consult bounded current lock
+inventory and reject stale unlocked rows instead of attaching lock labels to them.
+Full-board validation follows shard assembly; research-only payloads are unchanged.
+Missing original research cannot inherit current data. Browser preview checks return
+the original locked row first; lazy research must bind its actual returned original
+lock and core row. Prelock/unbound/foreign caches cannot supply locked context.
+Research hydration allowlists the six module fields and preserves embedded locked
+fields, preventing any research object from rewriting forecasts, prices or grades.
+Future member-contract policy R1 (`player_props_ai_member_contract_2026_11_14_r1_nba_ou_execution`)
+aligns priced-tail admission with the existing NBA ordinary Over/Under adapter.
+NBA Yes/milestone offers remain complete archived/read market context, not execution
+targets. Only law R3 uses this scope policy; R1/R2 retain their original admission.
+All independent-prior tails, means, support, dependence and supported execution tails
+stay strict. Future R3 diagnostic dedup uses the canonical contract, so an implicit
+Yes at an integer line cannot mask an ordinary Over/Under check. NFL/MLB supported
+contracts remain unchanged. R38 adds a short versioned contract-purpose instruction;
+older generation meaning strings remain exact. No quote, actor or scope is dropped,
+no numerical tail/decline is fabricated and no closed review is replayed.
+These diagnostics never enter member transport. Raw source inventories, native model
+math, execution prices/stakes and all accepted legacy records stay exact. Future exact paired-confidence grading can promote a formerly
+rounding-rejected valid Lean; paired boundary/negative controls preserve the intended
+qualification rule and report board-count impact without outcome fitting.
+Original accepted R36 and older laws, archive parsers, member locks and settled outcomes retain
+exact release authority. No model, numerical threshold, source call, slot, cadence, lease,
+model/output cap or spending-limit change. Live scheduled proof remains required after release.
+See `model-audits/2026-11-14-player-props-complete-evidence-health.md`.
+
 ## November 11 player-prop urgent review cohorts R36
 
 Future shared NBA/NFL/MLB generation is

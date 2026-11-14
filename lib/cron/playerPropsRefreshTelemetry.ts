@@ -1,3 +1,4 @@
+import {propsAiRuntimeFailure,type PropsAiRuntimeHealth} from "../playerPropsAi/runtimeHealth";
 import type { MlbPropsBoardRefreshResult } from "@/lib/mlb/props/liveBoard";
 import type { NbaPlayerPropsPrivateWriterResult } from "@/lib/services/nba/nbaPlayerPropsPrivateWriter";
 
@@ -5,8 +6,9 @@ import type { NbaPlayerPropsPrivateWriterResult } from "@/lib/services/nba/nbaPl
 export function nbaPlayerPropsRefreshFailure(
   result: Pick<NbaPlayerPropsPrivateWriterResult, "status"|"aiReviewRuntime">,
 ): string | null {
-  if(result.aiReviewRuntime?.status==='unavailable')return 'NBA player props AI process unavailable; scheduled review coverage unverified';
-  if(result.aiReviewRuntime?.findings.some(f=>/^(?:source_or_review_unavailable:|lock_source_unavailable:|lock_prior_authority_unavailable|review_unavailable:|review_deferred_writer_|review_preparation_deferred_|calendar_identity_unavailable|pending_review_inventory_exceeds_two_slots_per_game|ai_unavailable:|due_review_read_failed|ai_operational_fallback_keep_independent|ai_process_finding_redacted)/.test(f)))return 'NBA player props AI preparation or review incomplete; scheduled coverage unverified';
+  const failure=propsAiRuntimeFailure(result.aiReviewRuntime);
+  if(failure==='unavailable')return 'NBA player props AI process unavailable; scheduled review coverage unverified';
+  if(failure==='incomplete')return 'NBA player props AI source verification or review incomplete; scheduled coverage unverified';
   return result.status === "bootstrap_required" || result.status === "last_known_good_preserved"
     ? `NBA player props ${result.status}; fresh publication unavailable`
     : null;
@@ -22,4 +24,16 @@ export function isInactiveMlbPropsRefresh(result: MlbPropsBoardRefreshResult): b
     && result.snapshot.validation.sourceRows === 0
     && result.snapshot.validation.errors.length === 1
     && result.snapshot.validation.errors[0] === "PROP_ODDS_UNAVAILABLE";
+}
+
+/** Native continuity is not evidence that a scheduled AI review completed. */
+export function nflPlayerPropsRefreshFailure(result:{aiReviewRuntime?:PropsAiRuntimeHealth}):string|null{
+ const failure=propsAiRuntimeFailure(result.aiReviewRuntime);
+ return failure==='unavailable'?'NFL player props AI process unavailable; scheduled review coverage unverified':failure==='incomplete'?'NFL player props AI preparation or review incomplete; scheduled coverage unverified':null;
+}
+
+/** Private cron classification; native publication and AI completion are separate. */
+export function mlbPlayerPropsRefreshFailure(result:{aiReviewRuntime?:PropsAiRuntimeHealth}):string|null{
+ const failure=propsAiRuntimeFailure(result.aiReviewRuntime);
+ return failure==='unavailable'?'MLB player props AI process unavailable; scheduled review coverage unverified':failure==='incomplete'?'MLB player props AI source verification or review incomplete; scheduled coverage unverified':null;
 }

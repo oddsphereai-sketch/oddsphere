@@ -5,7 +5,8 @@ import {buildNflIdentityFailureEvidence,appendNflIdentityFailureEvidence,nflIden
 import {siteAiDecisions} from "../../playerPropsAi/publication";
 import {captureNflHandoffBundle,observeNflSourceAuthority,mergeNflHandoffs,type NflLockHandoff} from "../../playerPropsAi/nflLockAuthority";
 import {propsAiSiteConfig} from "../../playerPropsAi/siteConfig";
-import {reviewPropsForSite} from "../../playerPropsAi/siteRuntime";
+import {reviewPropsForSite,type SiteReviewOutcome} from "../../playerPropsAi/siteRuntime";
+import {summarizePropsAiRuntimeHealth,propsAiRuntimeFailure,propsAiRuntimeCriticalFindings,type PropsAiRuntimeHealth} from "../../playerPropsAi/runtimeHealth";
 import {liveNflPacket} from "../../playerPropsAi/liveSources";
 import {applyNflSiteAi,restoreNflNativeGame} from "../../playerPropsAi/siteBindings";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -83,7 +84,7 @@ import {
 } from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_11_11_r97_urgent_slot_cohorts" as const;
+  "nfl_player_props_writer_2026_11_14_r98_complete_history_health" as const;
 export const NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES = 60 as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
@@ -138,6 +139,8 @@ export type NflPlayerPropsCandidateImpact = {
 };
 
 export type NflPlayerPropsWriterResult = {
+  /** Private process status only; never part of the member transport. */
+  aiReviewRuntime?:PropsAiRuntimeHealth;
   identityFailureEvidence?:{captures:number;constructionFailures:number;statuses:Record<string,number>};
   writerRelease: typeof NFL_PLAYER_PROPS_WRITER_RELEASE;
   settlementRelease: typeof NFL_PLAYER_PROPS_SETTLEMENT_RELEASE;
@@ -466,11 +469,12 @@ export async function runNflPlayerPropsProductionWriter(args: {
     publicationQueue=work.catch(error=>{if(!publicationFailed){publicationFailed=true;publicationFailure=error;}});
     return work;
   };
+  let aiReviewOutcome:SiteReviewOutcome|null=null;
   if(args.apply&&propsAiSiteConfig().integrated){
     const observer=await readNflPlayerPropsMarketObserverHistory({client:args.client,season:args.season,week:args.week}).catch(()=>null);
     const marketHistory={observer,references:effectiveReferenceOffers,availableAt:new Date().toISOString()};
     const aiBaseline=reconcileNflPlayerPropsProductionSnapshot({requireVerifiedInterceptionSource:true,season:args.season,week:args.week,evaluatedAt:args.now,nextBoard,previous});
-    await reviewPropsForSite({client:args.client,sport:"nfl",writerRunId:args.writerRunId,
+    aiReviewOutcome=await reviewPropsForSite({client:args.client,sport:"nfl",writerRunId:args.writerRunId,
       onSourceReady:(packet,review,_at,lookupAvailable)=>observe(packet,review,lookupAvailable),
       onReviewObserved:(packet,review,lookupAvailable)=>observe(packet,review,lookupAvailable),
       onReviewReady:(packet,review)=>observe(packet,review,true),deadline:Math.min(Date.parse(args.now)+480000,args.aiDeadline??Date.parse(args.now)+390000),
@@ -582,6 +586,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
   const sourceFailureCaptureResults=Date.now()-Date.parse(args.now)<439000
     ?await Promise.all([...identitySourceFailures.values()].map(capture=>appendNflIdentityFailureEvidence(args.client,capture)))
     :[...identitySourceFailures.values()].map(()=>({status:"unavailable",reason:"writer_deadline"}));
+  const aiReviewRuntime=aiReviewOutcome?summarizePropsAiRuntimeHealth(aiReviewOutcome,new Date().toISOString()):undefined;
   const identityFailureEvidence={captures:identitySourceFailures.size,constructionFailures:identityCaptureConstructionFailures,
     statuses:Object.fromEntries([...new Set(sourceFailureCaptureResults.map(r=>r.status))].map(status=>[status,sourceFailureCaptureResults.filter(r=>r.status===status).length]))};
   const providerRequests = Object.values(collection.snapshot.providerRequests).reduce((sum, value) => sum + (value ?? 0), 0);
@@ -595,6 +600,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
   return {
     writerRelease: NFL_PLAYER_PROPS_WRITER_RELEASE,
     identityFailureEvidence,
+    ...(aiReviewRuntime?{aiReviewRuntime}:{}),
     settlementRelease: NFL_PLAYER_PROPS_SETTLEMENT_RELEASE,
     contextSource: context.source,
     published: args.apply,
@@ -649,6 +655,8 @@ export async function runNflPlayerPropsProductionWriter(args: {
     ...(liveImpact ? { liveImpact } : {}),
     healthFindings: [...new Set([
       ...collection.snapshot.healthFindings,
+      ...(propsAiRuntimeFailure(aiReviewRuntime)==="unavailable"?["NFL_PLAYER_PROPS_AI_PROCESS_UNAVAILABLE"]:propsAiRuntimeFailure(aiReviewRuntime)==="incomplete"?["NFL_PLAYER_PROPS_AI_REVIEW_INCOMPLETE"]:[]),
+      ...(aiReviewRuntime?propsAiRuntimeCriticalFindings(aiReviewRuntime).map(f=>`NFL_PLAYER_PROPS_AI_FINDING:${f}`):[]),
       ...context.healthHolds,
       ...(settlement.deferredGames > 0 ? [`NFL_PLAYER_PROPS_SETTLEMENT_GAMES_DEFERRED:${settlement.deferredGames}`] : []),
       ...(settlement.recordReadLimitReached ? ["NFL_PLAYER_PROPS_SETTLEMENT_RECORD_READ_LIMIT_REACHED"] : []),

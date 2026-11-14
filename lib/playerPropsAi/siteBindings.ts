@@ -6,11 +6,11 @@ import type {PlayerPropPreviewRow} from "../../app/mlb/props/components/PlayerPr
 import {isSignalOptionalMemberFeature} from "../mlb/props/researchEnrichment";
 import {assessPropPrice} from "../mlb/props/pricePolicy";
 import type {SiteAiDecision} from "./publication";
-import {executionQuotes,quoteContract} from "./executionQuotes";
-import {gradeAiEvent,gradeAiEventFromMass,compareAiEventValuesFromMass} from "./pricing";
+import {executionQuotes,quoteContract,isSupportedMemberExecutionContract} from "./executionQuotes";
+import {gradeAiEvent,gradeAiEventFromMass,gradeAiEventFromExactPairedMass,compareAiEventValuesFromMass} from "./pricing";
 import {MLB_PROPS_STANDARD_STAKE_UNITS} from "../mlb/props/actionabilityPolicy";
 import {nflAiSourceBinding} from "./nflSourceBinding";
-import {PROPS_AI_ESTIMATE_RELEASE,PROPS_AI_NFL_DECISION_RELEASE,PROPS_AI_LAW_RELEASE} from "./releases";
+import {PROPS_AI_ESTIMATE_RELEASE,PROPS_AI_NFL_DECISION_RELEASE,PROPS_AI_LAW_RELEASE,propsAiLawHasExactMass,propsAiLawGradeRelease,propsAiLawSelectionRelease} from "./releases";
 import type {GamePacket} from "./evidenceContract";
 import {digest,instant} from "./evidence";
 import {PROPS_AI_EXECUTION_EVIDENCE_RELEASE,type PropsAiMemberEvidence} from "./publicationContract";
@@ -33,7 +33,7 @@ export function qualifyNflSourceParticipation(rows:readonly NflPlayerPropsRuntim
 }
 
 const book=(value:string)=>value.toLowerCase().replace(/[^a-z0-9]/g,"");
-const choice=(all:SiteAiDecision[],id:string,market:string,line:number,sportsbook:string,provider?:string)=>all.find(c=>c.side!=="yes"&&quoteContract(c.quote)==="two_way"&&c.playerId===id&&c.market===market&&c.line===line&&book(c.book)===book(sportsbook)&&(!provider||c.provider===provider));
+const choice=(all:SiteAiDecision[],id:string,market:string,line:number,sportsbook:string,provider?:string)=>all.find(c=>c.side!=="yes"&&isSupportedMemberExecutionContract("nba",c.quote)&&c.playerId===id&&c.market===market&&c.line===line&&book(c.book)===book(sportsbook)&&(!provider||c.provider===provider));
 /** Row repricing can use a later execution quote than the original decision.
  * Retain exactly that row and current contract group without changing pricing. */
 function memberExecutionEvidence(packet:GamePacket,c:SiteAiDecision,q:GamePacket['quotes'][number],now:string,nativeQualification?:NflNativeQualification|null):PropsAiMemberEvidence{
@@ -44,9 +44,11 @@ function currentEventPrice(packet:GamePacket,c:SiteAiDecision,q:GamePacket["quot
   const opposite=executionQuotes(packet,now).find(o=>o.playerId===q.playerId&&o.market===q.market&&o.line===q.line&&book(o.book)===book(q.book)&&o.provider===q.provider&&quoteContract(o)===quoteContract(q)&&o.side!==q.side&&o.side!=="yes"&&Math.abs(instant(o.receivedAt)-instant(q.receivedAt))<=5*60000);
   const price={american:q.american,opposingAmerican:opposite?.american??null,confidence:c.evidence.confidence,exception:c.evidence.exception};
   const mass=c.exactEventMass;
-  if(c.evidence.lawRelease===PROPS_AI_LAW_RELEASE&&!mass)throw new Error("Exact-law member pricing requires its original integer event mass");
-  if(c.evidence.lawRelease!==PROPS_AI_LAW_RELEASE&&mass)throw new Error("Legacy law pricing cannot acquire prospective integer mass");
-  return mass?gradeAiEventFromMass({...price,win:q.side==="under"?mass.under:mass.over,loss:q.side==="under"?mass.over:mass.under,push:mass.push,total:mass.total})
+  if(propsAiLawHasExactMass(c.evidence.lawRelease)&&!mass)throw new Error("Exact-law member pricing requires its original integer event mass");
+  if(!propsAiLawHasExactMass(c.evidence.lawRelease)&&mass)throw new Error("Legacy law pricing cannot acquire prospective integer mass");
+  const future=c.evidence.lawRelease===PROPS_AI_LAW_RELEASE;
+  if(future&&(c.evidence.gradeRelease!==propsAiLawGradeRelease(c.evidence.lawRelease)||c.evidence.selectionRelease!==propsAiLawSelectionRelease(c.evidence.lawRelease)))throw new Error("Exact paired member release mismatch");
+  return mass?(future?gradeAiEventFromExactPairedMass:gradeAiEventFromMass)({...price,win:q.side==="under"?mass.under:mass.over,loss:q.side==="under"?mass.over:mass.under,push:mass.push,total:mass.total})
     :gradeAiEvent({...price,win:q.side==="under"?c.under:c.over,loss:q.side==="under"?c.over:c.under});
 }
 function currentGrade(packet:GamePacket,c:SiteAiDecision,q:GamePacket["quotes"][number],now:string){
@@ -97,9 +99,9 @@ export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:Game
   // that exact old book/line is unavailable to the accepted AI law. Never let
   // an unqualified native event suppress another genuinely priceable AI scope.
   const current=executionQuotes(packet,now);
-  const available=choices.filter(c=>c.side!=="yes"&&quoteContract(c.quote)==="two_way"&&current.some(q=>q.id===c.quote.id&&digest(q)===digest(c.quote)));
+  const available=choices.filter(c=>c.side!=="yes"&&isSupportedMemberExecutionContract("nba",c.quote)&&current.some(q=>q.id===c.quote.id&&digest(q)===digest(c.quote)));
   const eventValue=(a:SiteAiDecision,b:SiteAiDecision)=>{
-    if(a.evidence.lawRelease!==PROPS_AI_LAW_RELEASE||b.evidence.lawRelease!==PROPS_AI_LAW_RELEASE)return b.expectedValue-a.expectedValue;
+    if(!propsAiLawHasExactMass(a.evidence.lawRelease)||!propsAiLawHasExactMass(b.evidence.lawRelease))return b.expectedValue-a.expectedValue;
     const mass=(c:SiteAiDecision)=>{
       if(!c.exactEventMass)throw new Error("Exact-law member selection requires its original integer event mass");
       const m=c.exactEventMass;

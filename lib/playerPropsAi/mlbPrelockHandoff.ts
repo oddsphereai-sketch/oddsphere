@@ -12,8 +12,8 @@ import { playerParticipationEligibility } from "./participationEligibility";
 import { siteAiDecisions } from "./publication";
 import { applyMlbSiteAi } from "./siteBindings";
 import { propsTeam } from "./teamIdentity";
-
-export const MLB_PROPS_AI_HANDOFF_RELEASE = "mlb_props_ai_handoff_2026_11_10_r1_ready_publication" as const;
+import { MlbPropsPublicationUncertainError } from "../mlb/props/aiPublicationPolicy";
+export { MLB_PROPS_AI_HANDOFF_RELEASE, MlbPropsPublicationUncertainError } from "../mlb/props/aiPublicationPolicy";
 type Publisher = (rows: Row[], gameId: string) => Promise<void>;
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const actor = (row: Row) => row.providerIds?.mlbStatsPlayerId ?? `bdl:${row.providerIds?.bdlPlayerId}`;
@@ -22,14 +22,22 @@ function create(nativeRows: readonly Row[], publish: Publisher, clock: () => str
   const baseline = clone([...nativeRows]);
   let rows = clone([...nativeRows]), queue: Promise<void> = Promise.resolve();
   let published = false;
+  // A rejection may follow a committed canonical row or publication index.
+  // Do not let any later callback or final whole-board write reuse stale rows.
+  // This boolean also fences null/undefined rejection reasons.
+  let publicationFailed = false;
+  const assertPublicationAvailable = () => {
+    if (publicationFailed) throw new MlbPropsPublicationUncertainError();
+  };
   const signatures = new Map<string, string>();
   return {
-    rows: () => clone(rows),
+    rows: () => { assertPublicationAvailable(); return clone(rows); },
     observe(packet: GamePacket, review: AcceptedGameReview | null, lookupAvailable: boolean): Promise<void> {
       // Own immutable inputs at the callback boundary. Numeric readiness is
       // sampled below, after any earlier same-writer publication has drained.
       const source = clone(packet), accepted = review ? clone(review) : null;
       const work = queue.then(async () => {
+        assertPublicationAvailable();
         const readyAt = clock();
         if (instant(readyAt) >= instant(source.lock)) return;
         validatePacket(source); assert.equal(source.sport, "mlb");
@@ -69,7 +77,12 @@ function create(nativeRows: readonly Row[], publish: Publisher, clock: () => str
             && (candidate.offerContract ?? "two_way") === (row.offerContract ?? "two_way")) ?? row : row);
         // Clone the full actual materialization. The publisher must sample its
         // own real publication time and run all ordinary publication gates.
-        await publish(clone(next), gameId);
+        try {
+          await publish(clone(next), gameId);
+        } catch {
+          publicationFailed = true;
+          throw new MlbPropsPublicationUncertainError();
+        }
         rows = next; published = true; signatures.set(gameId, signature);
       });
       queue = work.catch(() => undefined);

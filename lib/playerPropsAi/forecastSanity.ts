@@ -7,6 +7,8 @@ import {lawForecast,scenarioStat,marketUsesStatistic} from "./law";
 import {readerLogWindows} from "./readerLogs";
 import {independentPriorEvents} from "./priorEvents";
 import {invariant} from "./evidence";
+import {isSupportedMemberExecutionContract,quoteContract} from "./executionQuotes";
+import {propsAiLawHasMemberExecutionContracts} from "./releases";
 export type SourceEventScope={market:string;line:number;contract:"two_way"|"milestone"};
 export type ForecastSanityIssue={code:string;markets:string[];detail:string;example?:string;events?:SourceEventScope[]};
 type ObservedSupport={n:number;minimum:number;maximum:number;mean:number};
@@ -140,10 +142,14 @@ export function sourceForecastIssues(packet:GamePacket,player:Player,law:Accepte
     if(f.over===0||f.under===0)issues.push({code:"unsupported_zero_probability_tail",markets:[prior.market],example:`${prior.market}@${prior.line}: missing opposing prior tail`,events:[{market:prior.market,line:prior.line,contract:inclusive?"milestone":"two_way"}],
       detail:`${player.id} ${prior.market} at ${prior.line} has zero opposite-event mass although the independent source assigns both outcomes positive probability. Include realistic opposing tails or explicitly except this market; never clip the displayed probability.`});
   }
-  const seen=new Set<string>();
+  const memberContracts=propsAiLawHasMemberExecutionContracts(law.release),seen=new Set<string>();
   for(const q of packet.quotes){
     if(!qualified.includes(q.market)||!sourceEventUsable(q)||q.playerId!==player.id||q.opening||q.live||q.receivedAtProvenance!=="provider_response"||Date.parse(q.receivedAt)>Date.parse(packet.cutoff)||Date.parse(packet.cutoff)-Date.parse(q.receivedAt)>15*60000)continue;
-    const key=`${q.market}|${q.line}|${q.offerContract??"two_way"}`;if(seen.has(key))continue;seen.add(key);
+    // Original R1/R2 admission and dedup remain exact. Only future laws align
+    // priced-tail admission with the actual member contract; source priors above
+    // still constrain every supplied independent event, including milestones.
+    if(memberContracts&&!isSupportedMemberExecutionContract(packet.sport,q))continue;
+    const key=`${q.market}|${q.line}|${memberContracts?quoteContract(q):q.offerContract??"two_way"}`;if(seen.has(key))continue;seen.add(key);
     const f=lawForecast(law,q.market,q.line,q.offerContract==="milestone"||q.side==="yes");
     if(unqualifiedEventTail(f,q.side==="yes"))issues.push({code:"unsupported_priced_event_certainty",markets:[q.market],example:`${q.market}@${q.line}: missing opposing priced tail`,events:[{market:q.market,line:q.line,contract:q.side==="yes"||q.offerContract==="milestone"?"milestone":"two_way"}],
       detail:`${player.id} ${q.market} at offered line ${q.line} has no opposing tail. A finite scenario sample does not establish certainty for an executable event; re-evaluate tails or explicitly except this scope.`});
