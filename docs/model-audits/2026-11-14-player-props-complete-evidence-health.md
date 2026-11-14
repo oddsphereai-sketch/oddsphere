@@ -18,8 +18,13 @@ release and R2 stub validation; R1 writes/reads, service-only ACL, sport lease,
 job clocks, deduplication, append-only evidence and four states plus overflow persist.
 It does not reconstruct older missing archives or waive an identity refusal.
 
-NFL private writer/cron health now distinguishes incomplete or unavailable AI
-work from native board publication. No diagnostic or result surface is public.
+Private writer/cron health across NBA/NFL/MLB now distinguishes incomplete or unavailable
+AI work from native board publication. Operations R7 retains a separate postlock
+reload diagnostic only after the exact game's ready callback was actually awaited
+wholly before its lock. SQL completion/new-review counts alone cannot establish it.
+Absent, failed or late acknowledgements and genuine prelock current-source failures
+remain process exceptions. This changes no source admission, fallback or lock payload.
+MLB health remains transient writer-result/cron data outside all member snapshots. No diagnostic or result surface is public.
 R36 remains explicitly accepted under its original parser and law authority.
 No prompt, probability, projection, selection, grade, stake or price formula changes.
 Same valid-input board-count change is zero; no demotion/promotion policy is added.

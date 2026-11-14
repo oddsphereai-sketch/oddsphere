@@ -17,8 +17,8 @@ export function summarizePropsAiRuntimeHealth(outcome:SiteReviewOutcome,observed
  return{release:PROPS_AI_RUNTIME_HEALTH_RELEASE,status:validCount?status:'unavailable',newlyCompletedReviews:validCount?outcome.newlyCompletedReviews??0:0,findings,observedAt};
 }
 const critical=/^(?:source_or_review_unavailable:|current_source_unavailable:|lock_source_unavailable:|lock_prior_authority_unavailable|review_unavailable:|review_deferred_writer_|review_preparation_deferred_|calendar_identity_unavailable|pending_review_inventory_exceeds_two_slots_per_game|ai_unavailable:|due_review_read_failed|ai_operational_fallback_keep_independent|ai_process_finding_redacted|ai_process_findings_truncated)/;
-export function propsAiRuntimeCriticalFindings(health:PropsAiRuntimeHealth):string[]{return health.findings.filter(f=>critical.test(f)).slice(0,16);}
-export function propsAiRuntimeFailure(health:PropsAiRuntimeHealth|undefined):'unavailable'|'incomplete'|null{
+export function propsAiRuntimeCriticalFindings(health:{status:string;findings:readonly string[]}):string[]{return health.findings.filter(f=>critical.test(f)).slice(0,16);}
+export function propsAiRuntimeFailure(health:{status:string;findings:readonly string[]}|undefined):'unavailable'|'incomplete'|null{
  if(health?.status==='unavailable')return'unavailable';
  return health&&propsAiRuntimeCriticalFindings(health).length?'incomplete':null;
 }

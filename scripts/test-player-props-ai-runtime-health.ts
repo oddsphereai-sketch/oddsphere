@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {summarizePropsAiRuntimeHealth,propsAiRuntimeFailure} from '../lib/playerPropsAi/runtimeHealth';
 import {nflPlayerPropsRefreshFailure} from '../lib/cron/playerPropsRefreshTelemetry';
 const at='2026-11-14T12:00:00Z',outcome={status:'active',games:[],findings:[],newlyCompletedReviews:0};
-for(const findings of [[],['review_deferred_empty_current_offers:game'],['accepted_review_read_failed_use_trusted_local']])assert.equal(propsAiRuntimeFailure(summarizePropsAiRuntimeHealth({...outcome,findings},at)),null);
+for(const findings of [[],['current_source_reload_unavailable_after_ready_lock:g:unclassified'],['review_deferred_empty_current_offers:game'],['accepted_review_read_failed_use_trusted_local']])assert.equal(propsAiRuntimeFailure(summarizePropsAiRuntimeHealth({...outcome,findings},at)),null);
 for(const code of ['lock_source_unavailable:g:nfl_offered_player_identity_incomplete','source_or_review_unavailable:g:failed','current_source_unavailable:g:failed','due_review_read_failed','review_deferred_writer_deadline','ai_operational_fallback_keep_independent']){
  const health=summarizePropsAiRuntimeHealth({...outcome,findings:[code]},at);assert.equal(health.newlyCompletedReviews,0);assert.equal(propsAiRuntimeFailure(health),'incomplete');assert.match(nflPlayerPropsRefreshFailure({aiReviewRuntime:health})!,/coverage unverified/);
 }

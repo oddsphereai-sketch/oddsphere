@@ -1,5 +1,6 @@
 import {createClient as createPropsAiDbClient} from "@supabase/supabase-js";
 import {reviewPropsForSite} from "../../playerPropsAi/siteRuntime";
+import {summarizePropsAiRuntimeHealth,type PropsAiRuntimeHealth} from "../../playerPropsAi/runtimeHealth";
 import {liveMlbPacket} from "../../playerPropsAi/liveSources";
 import {propsAiSiteConfig} from "../../playerPropsAi/siteConfig";
 import {createMlbPrelockHandoff,MLB_PROPS_AI_HANDOFF_RELEASE} from "../../playerPropsAi/mlbPrelockHandoff";
@@ -195,6 +196,8 @@ export type MlbPropsBoardRefreshResult = {
   usedPreviousSnapshot: boolean;
   snapshot: MlbPropsBoardSnapshot;
   forecastTelemetry: MlbPropsForecastTelemetry;
+  /** Private process evidence; never part of the canonical or member snapshot. */
+  aiReviewRuntime?: PropsAiRuntimeHealth;
   tracking: MlbPropsTrackingSyncResult;
   privateTrackingCapture: MlbPropsPrivateTrackingCaptureResult | null;
   providerCalls: {
@@ -298,6 +301,7 @@ const DEFAULT_RECENT_FORM_SEASON_LOG_LIMIT = 180;
 const MEMBER_EXCLUDED_MARKETS = new Set(["first_home_run", "pitcher_record_a_win"]);
 
 export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsBoardRefreshResult> {
+  let aiReviewRuntime: PropsAiRuntimeHealth | undefined;
   const asOfTimestamp = args.asOfTimestamp ?? new Date().toISOString();
   const requestedMode = args.refreshMode ?? "fast";
   const previous = await loadLatestMlbPropsBoardSnapshot(args.slateDate).catch(() => null);
@@ -580,12 +584,13 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
       await publishMlbPropsBoardSnapshot(ready);
       Object.assign(snapshot,ready);
     });
-    await reviewPropsForSite({client,sport:"mlb",writerRunId:args.writerRunId,deadline:Math.min(Date.parse(asOfTimestamp)+480000,args.aiDeadline??Date.parse(asOfTimestamp)+260000),
+    const aiReviewOutcome=await reviewPropsForSite({client,sport:"mlb",writerRunId:args.writerRunId,deadline:Math.min(Date.parse(asOfTimestamp)+480000,args.aiDeadline??Date.parse(asOfTimestamp)+260000),
       onSourceReady:(packet,review,_observedAt,lookupAvailable)=>handoff.observe(packet,review,lookupAvailable),
       onReviewObserved:(packet,review,lookupAvailable)=>handoff.observe(packet,review,lookupAvailable),
       onReviewReady:(packet,review)=>handoff.observe(packet,review,true),
       games:games.map(g=>({id:g.id,start:g.scheduledStart,away:resolveMlbStatsTeamId(g.awayTeamId)?.abbreviation??g.awayTeamId,home:resolveMlbStatsTeamId(g.homeTeamId)?.abbreviation??g.homeTeamId})),
       load:(game,window)=>liveMlbPacket({game,window,snapshot:captured,currentOdds:boardSourceOdds,openingOdds})});
+    aiReviewRuntime=summarizePropsAiRuntimeHealth(aiReviewOutcome,new Date().toISOString());
     // Callback publications already owned every actual pre-lock observation.
     // A later game's completion/lookup cannot erase a timely materialization.
     snapshot.data.props=handoff.rows();
@@ -612,6 +617,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
       usedPreviousSnapshot: Boolean(previous),
       snapshot,
       forecastTelemetry,
+      ...(aiReviewRuntime?{aiReviewRuntime}:{}),
       tracking: disabledTrackingResult(),
       privateTrackingCapture: null,
       providerCalls: {
@@ -667,6 +673,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     usedPreviousSnapshot: false,
     snapshot,
     forecastTelemetry,
+    ...(aiReviewRuntime?{aiReviewRuntime}:{}),
     tracking,
     privateTrackingCapture,
     providerCalls: {

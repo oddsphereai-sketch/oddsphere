@@ -1,4 +1,4 @@
-import {nflPlayerPropsRefreshFailure} from '../lib/cron/playerPropsRefreshTelemetry';
+import {nflPlayerPropsRefreshFailure,mlbPlayerPropsRefreshFailure} from '../lib/cron/playerPropsRefreshTelemetry';
 import {summarizePropsAiRuntimeHealth} from '../lib/playerPropsAi/runtimeHealth';
 /** Actual NFL/MLB routes with virtual slow dependencies; zero external I/O. */
 import assert from 'node:assert/strict';
@@ -43,7 +43,7 @@ function mlb(options:{leaseWait?:number;fault?:boolean;empty?:boolean;disabled?:
  const previous={modelRelease:MLB_PROPS_MODEL_RELEASE_ID,data:{props:[{id:'exact-old-lock',lockedAt:'2026-11-10T22:00:00Z',probability:.61345678,price:-117,grade:'Lean',evidence:{original:'exact',nullValue:null}}]}};const saved=JSON.stringify(previous);
  const imports:Record<string,unknown>={
   '@/lib/cron/runCron':{cronHandler:async(_r:Request,_name:string,handler:(c:{runId:string})=>Promise<unknown>,opts:Record<string,unknown>)=>{assert.equal(opts.sport,'mlb');assert.equal(opts.leaseGroup,'prediction_pipeline');assert.equal(opts.lockMinutes,10);assert.equal(opts.requireLease,true);now+=options.leaseWait??0;held=true;try{return Response.json(await handler({runId:'same-mlb-owner'}));}finally{held=false;}}},
-  '@/lib/cron/playerPropsRefreshTelemetry':{isInactiveMlbPropsRefresh:()=>Boolean(options.empty)},
+  '@/lib/cron/playerPropsRefreshTelemetry':{isInactiveMlbPropsRefresh:()=>Boolean(options.empty),mlbPlayerPropsRefreshFailure},
   '@/lib/mlb/props/liveBoard':{easternSlateDate:()=> '2026-11-11',refreshMlbPropsBoard:async(args:Record<string,unknown>)=>{assert(held);calls++;assert.equal(args.writerRunId,'same-mlb-owner');assert.equal(args.aiDeadline,started+480000);assert.equal(args.persist,true);assert.equal(args.slateDate,'2026-11-11');assert.equal(args.refreshMode,'full');now+=339000;if(options.fault)throw Error('injected source failure');return{published:!options.empty,usedPreviousSnapshot:false,tracking:{status:'ok',entriesLocked:2,closingPricesUpdated:1,error:null},privateTrackingCapture:{written:true},providerCalls:{balldontlie:12},snapshot:{refreshMode:'full',snapshotId:'current',data:{props:[]},validation:{errors:[],warnings:[],actionableRows:0}}};}},
   '@/lib/mlb/props/boardSnapshotStore':{loadLatestMlbPropsBoardSnapshot:async()=>previous},
   '@/lib/mlb/props/internalTracking':{syncInternalMlbPropsTracking:async(snapshot:unknown,at:string)=>{assert(held);trackingCalls++;assert.equal(snapshot,previous);assert.equal(at,new Date(now).toISOString());assert.equal(JSON.stringify(previous),saved);if(options.trackingFault)throw Error('injected tracking fault');return{gameLocksCreated:options.locks??1,entriesLocked:2,closingPricesUpdated:1};}},

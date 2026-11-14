@@ -12,8 +12,11 @@ Exact-boundary reads use a terminal overflow probe; excess fails closed. No hist
 Private NFL source-failure capture R2 retains complete semantic evidence inside the existing
 bounded compressed archive when the outer semantic description exceeds its original limit.
 V72 accepts both original R1 and new R2; old archives remain exact. Source identity refusals
-still refuse review admission. Private runtime health reports actual newly completed reviews
-and blocked work without treating native publication as completed AI coverage.
+still refuse review admission. Operations diagnostics R7/private runtime health report actual newly completed reviews
+and blocked work across NBA/NFL/MLB without treating native publication as completed AI coverage.
+A postlock reload exception remains separately visible when that exact game's ready
+callback was actually awaited wholly before lock; counts/SQL completion alone never
+suppress a source failure. MLB health is transient writer/cron data, outside snapshots.
 These diagnostics never enter member transport. Same valid-input forecasts, grades, prices,
 stakes and actionable counts are unchanged; there is no actionable demotion or promotion rule.
 Original accepted R36 and older laws, archive parsers, member locks and settled outcomes retain

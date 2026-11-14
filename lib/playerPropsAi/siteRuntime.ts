@@ -31,6 +31,10 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
   const clock=args.clock??(()=>new Date().toISOString()),now=clock(),deadline=args.deadline??Date.now()+250000,findings:string[]=[],results:SiteReviewResult[]=[];
   const coverage:SiteCoverage[]=[];
   let newlyCompletedReviews=0;
+  // Private process classification only. A completed SQL job/count is not a
+  // successful source handoff. Record only a callback actually awaited wholly
+  // before its exact lock; this is not independent transaction-commit proof.
+  const readyHandoffBeforeLock=new Map<string,number>();
   const sourceAudits=new Map<string,PropsSourceContextAudit>();
   const auditSource=async(packet:GamePacket,review:AcceptedGameReview|null,observedAt:string,lookupAvailable:boolean)=>{
     if(!args.onSourceAudit)return;
@@ -178,7 +182,7 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
           const {job,native,packet,fundedPacket,parts}=preparedGame;
           try{
             const result=await runPropsReview({packet:fundedPacket,job,store,key:config.key,writerRunId:args.writerRunId!,generationSlot,gameAdmission,prepare:async()=>parts,preferStronger:job.stage==="final"&&packet.players.some(p=>p.missing.length>0),fetchImpl:args.fetchImpl,clock,deadline});
-            if(result.status==="completed"&&"review" in result&&result.review){newlyCompletedReviews++;localCompleted.set(native.id,{packet,review:result.review});await auditSource(packet,result.review,clock(),true);await args.onReviewObserved?.(packet,result.review,true);await args.onReviewReady?.(packet,result.review);}
+            if(result.status==="completed"&&"review" in result&&result.review){newlyCompletedReviews++;localCompleted.set(native.id,{packet,review:result.review});await auditSource(packet,result.review,clock(),true);await args.onReviewObserved?.(packet,result.review,true);if(args.onReviewReady){const before=instant(clock());await args.onReviewReady(packet,result.review);const acknowledged=instant(clock()),lockAt=instant(packet.lock);if(before<lockAt&&acknowledged<lockAt)readyHandoffBeforeLock.set(native.id,lockAt);}}
             if(result.status!=="completed")findings.push(`review_unavailable:${native.id}:${"reason" in result?result.reason:result.status}`);
           }catch(error){findings.push(`source_or_review_unavailable:${native.id}:${propsAiFailureCode(error)}`);}
         }));
@@ -204,7 +208,9 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
           eligiblePlayers:packet.sourceOfferSetStatus==='empty'?0:players.filter(p=>p.markets.length>0).length,pricedPlayers:new Set(decisions.map(c=>c.playerId)).size,
           ...siteReviewQualification(packet,latest,clock(),15*60000,decisions)});
         results.push({game,packet,decisions,authorityReview:latest,observedAt});
-      }catch(error){findings.push(`current_source_unavailable:${game.id}:${propsAiFailureCode(error)}`);const packet=localCompleted.get(game.id)?.packet??capturedPackets.get(game.id);if(packet){const observedAt=clock(),latest=latestForPacket(packet,accepted,observedAt);await auditSource(packet,latest,observedAt,lookupAvailable(game.id));await args.onReviewObserved?.(packet,latest,lookupAvailable(game.id));results.push({game,packet,decisions:[],authorityReview:latest,observedAt});}}
+      }catch(error){const lockAt=instant(game.start)-3600000;
+        const postlockReady=instant(clock())>=lockAt&&readyHandoffBeforeLock.get(game.id)===lockAt;
+        findings.push(`${postlockReady?'current_source_reload_unavailable_after_ready_lock':'current_source_unavailable'}:${game.id}:${propsAiFailureCode(error)}`);const packet=localCompleted.get(game.id)?.packet??capturedPackets.get(game.id);if(packet){const observedAt=clock(),latest=latestForPacket(packet,accepted,observedAt);await auditSource(packet,latest,observedAt,lookupAvailable(game.id));await args.onReviewObserved?.(packet,latest,lookupAvailable(game.id));results.push({game,packet,decisions:[],authorityReview:latest,observedAt});}}
 
     }
     return finish({status:paid?(pendingInventoryAvailable?"active":"unavailable"):"paid_disabled",games:results,findings,coverage});

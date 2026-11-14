@@ -1,3 +1,4 @@
+import * as runtimeHealth from '../lib/playerPropsAi/runtimeHealth';
 import * as completionWindow from '../lib/playerPropsAi/completionWindow';
 /** Actual shipped NBA writer + canonical codec/reader + lock/tracking, mocked I/O.
  * No environment files, provider HTTP, real SQL or paid calls are permitted. */
@@ -63,7 +64,7 @@ function harness(options:{games?:number;staggered?:boolean;emptyLive?:boolean;em
    return{data:{written:true,status:'written',checksum:(args.p_record.payload as {checksum:string}).checksum,server_admitted_at:admitted,server_write_completed_at:tick},error:null};
   }finally{activeWrites--;}
  }};
- const modules:Record<string,unknown>={completionWindow,sourceContextAudit,
+ const modules:Record<string,unknown>={runtimeHealth,completionWindow,sourceContextAudit,
   nbaSourceIdentity,evidence,siteBindings:bindings,publication,nbaPlayerPropsLifecycle:lifecycle,nbaPlayerPropsProductContract:product,
   nbaLockAuthority:{...authority,observeNbaSourceAuthority:authority.testNbaSourceAuthority(()=>tick),captureNbaHandoffBundle:authority.testNbaHandoffCapture(()=>tick)},
   siteConfig:{propsAiSiteConfig:()=>({integrated:true})},espnNbaInjuries:{canonicalNbaAbbreviation:(s:string)=>s,fetchEspnNbaGameInjuries:async(id:string|number)=>options.allOut?{eventId:String(id),teams:new Map([['BOS',[{name:'Synthetic a',status:'out',reported_at:null},{name:'Synthetic b',status:'out',reported_at:null}]],['NYK',[]]])}:null},nbaPlayerPropsSettlementStore:{},

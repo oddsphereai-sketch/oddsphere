@@ -1,3 +1,4 @@
+import {summarizePropsAiRuntimeHealth} from '../../playerPropsAi/runtimeHealth';
 import {propsAiTwoPhaseCompletionWindowMs} from "../../playerPropsAi/completionWindow";
 import {buildPropsSourceContextAuditSlate,retainedPropsSourceContextAudits,type PropsSourceContextAudit} from "../../playerPropsAi/sourceContextAudit";
 import {digest} from "../../playerPropsAi/evidence";
@@ -372,12 +373,11 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   const retainedAudits=retainedPropsSourceContextAudits(initialPrevious?.diagnostics.sourceContextAudits,{slateDate:args.slateDate,generatedAt:initialPrevious?.generatedAt??now,games:initialPrevious?.games??[]});
   const sourceAudits=new Map<string,PropsSourceContextAudit>(retainedAudits.audits.map(audit=>[audit.gameId,audit]));
   let aiReviewOutcome:SiteReviewOutcome|null=null;
-  const runtimeTelemetry=():NbaPlayerPropsMemberSnapshot['diagnostics']['aiReviewRuntime']=>aiReviewOutcome?{
-    status:['active','disabled','paid_disabled','unavailable'].includes(aiReviewOutcome.status)?aiReviewOutcome.status:'unavailable',
-    newlyCompletedReviews:aiReviewOutcome.newlyCompletedReviews??0,
-    findings:aiReviewOutcome.findings.slice(0,64).map(f=>/^[A-Za-z0-9_:|.\-]{1,320}$/.test(f)&&!/sk-|bearer/i.test(f)?f:'ai_process_finding_redacted'),
-    observedAt:new Date().toISOString(),
-  }:undefined;
+  const runtimeTelemetry=():NbaPlayerPropsMemberSnapshot['diagnostics']['aiReviewRuntime']=>{
+    if(!aiReviewOutcome)return undefined;
+    const health=summarizePropsAiRuntimeHealth(aiReviewOutcome,new Date().toISOString());
+    return{status:health.status,newlyCompletedReviews:health.newlyCompletedReviews,findings:[...health.findings],observedAt:health.observedAt};
+  };
   const withSourceAudits=(snapshot:NbaPlayerPropsMemberSnapshot):NbaPlayerPropsMemberSnapshot=>sourceAudits.size||retainedAudits.status==='unavailable'
     ?{...snapshot,diagnostics:{...snapshot.diagnostics,sourceContextAudits:{...buildPropsSourceContextAuditSlate([...sourceAudits.values()]),...(retainedAudits.status==='unavailable'&&!sourceAudits.size?{comparisonComplete:false}:{} )},...(retainedAudits.status==='unavailable'?{sourceContextAuditRetention:'prior_metadata_unavailable' as const}:{} ),...(aiReviewOutcome?{aiReviewRuntime:runtimeTelemetry()}:{} )}}
     :aiReviewOutcome?{...snapshot,diagnostics:{...snapshot.diagnostics,aiReviewRuntime:runtimeTelemetry()}}:snapshot;
