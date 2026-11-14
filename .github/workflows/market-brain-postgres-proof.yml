@@ -62,6 +62,8 @@ jobs:
         run: cp .env.example .env.local
       - name: Prove exact NFL tracking quote evidence and immutable legacy records
         run: node --import tsx scripts/test-nfl-player-props-snapshot-store.ts && node --import tsx scripts/test-nfl-player-props-tracking-identity.ts
+      - name: Prove complete bounded NFL history and private AI process health
+        run: node --import tsx scripts/test-nfl-forward-evidence-pagination.ts && node --import tsx scripts/test-nfl-forward-evidence-json-roundtrip.ts && node --import tsx scripts/test-nfl-forward-evidence-bounded-history.ts && node --import tsx scripts/test-player-props-ai-nfl-source-failure-r2.ts && node --import tsx scripts/test-player-props-ai-runtime-health.ts
       - name: Prove truthful NFL input status and retained review authority
         run: node --import tsx scripts/test-player-props-ai-nfl-identity.ts && node --import tsx scripts/test-player-props-ai-scoped-publication.ts
       - name: Prove all offered NFL quarterback markets settle without changing locked predictions

@@ -1,3 +1,26 @@
+## November 14 player-prop complete evidence and private process health R37
+
+Future shared NBA/NFL/MLB generation is `player_props_ai_2026_11_14_r37_complete_evidence_health`.
+NBA writer R24, law R2, selection R7, grade R4, NFL decision R13 and native MLB R44 remain unchanged.
+NFL props writer is `nfl_player_props_writer_2026_11_14_r98_complete_history_health`;
+full-game evidence writer is `nfl_forward_evidence_writer_2026_11_14_r117_complete_bounded_history`.
+The shared history reader is `nfl_forward_evidence_read_2026_11_14_r1_lossless_bounded_history`.
+It verifies original hashes and retains every ordered observation, with explicit row,
+compressed-byte, hot-JSON and decoded-cache bounds instead of an incomplete 5,000-row read.
+Exact-boundary reads use a terminal overflow probe; excess fails closed. No history is dropped.
+
+Private NFL source-failure capture R2 retains complete semantic evidence inside the existing
+bounded compressed archive when the outer semantic description exceeds its original limit.
+V72 accepts both original R1 and new R2; old archives remain exact. Source identity refusals
+still refuse review admission. Private runtime health reports actual newly completed reviews
+and blocked work without treating native publication as completed AI coverage.
+These diagnostics never enter member transport. Same valid-input forecasts, grades, prices,
+stakes and actionable counts are unchanged; there is no actionable demotion or promotion rule.
+Original accepted R36 and older laws, archive parsers, member locks and settled outcomes retain
+exact release authority. No prompt, numerical threshold, source call, slot, cadence, lease,
+model/output cap or spending-limit change. Live scheduled proof remains required after release.
+See `model-audits/2026-11-14-player-props-complete-evidence-health.md`.
+
 ## November 13 CBB real-market coverage and immutable context repair
 
 Source institution identity R9 and exact split mapping R8 accept the verified
@@ -1790,7 +1813,7 @@ refresh start; a clock failure retains the previous stored board.
 Only the publication family advances:
 
 - `nfl_forward_member_snapshot_2026_11_06_r73_publication_clock`
-- `nfl_forward_evidence_writer_2026_11_06_r116_publication_clock`
+- `nfl_forward_evidence_writer_2026_11_14_r117_complete_bounded_history`
 
 Collector R37/model R57/calibration R56/decision-grade R66/member R64/fixture R80
 and all numerical market methods remain unchanged. There is no new source

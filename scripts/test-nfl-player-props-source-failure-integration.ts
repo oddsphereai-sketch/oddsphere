@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 import * as evidence from '../lib/playerPropsAi/nflIdentityFailureEvidence';
+import * as runtimeHealth from '../lib/playerPropsAi/runtimeHealth';
 import {syntheticNflIdentityFailureArgs} from './test-player-props-ai-nfl-identity-failure-evidence';
 import type {runNflPlayerPropsProductionWriter} from '../lib/services/football/nflPlayerPropsProductionWriter';
 import type {reviewPropsForSite} from '../lib/playerPropsAi/siteRuntime';
@@ -31,6 +32,7 @@ async function run(mode:Mode){
  }};
  const modules:Record<string,Record<string,unknown>>={
   evidence:{digest},
+  runtimeHealth,
   nflIdentityFailureEvidence:{...evidence,buildNflIdentityFailureEvidence:(args:Parameters<typeof evidence.buildNflIdentityFailureEvidence>[0])=>{builds++;if(mode==='construction')throw Error('synthetic archive construction failure');return evidence.buildNflIdentityFailureEvidence(args);}},
   publication:{siteAiDecisions:()=>[]},
   nflLockAuthority:{captureNflHandoffBundle:()=>({}),observeNflSourceAuthority:()=>({}),mergeNflHandoffs:()=>({frames:[]})},

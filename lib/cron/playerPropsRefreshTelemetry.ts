@@ -1,3 +1,4 @@
+import {propsAiRuntimeFailure,type PropsAiRuntimeHealth} from "../playerPropsAi/runtimeHealth";
 import type { MlbPropsBoardRefreshResult } from "@/lib/mlb/props/liveBoard";
 import type { NbaPlayerPropsPrivateWriterResult } from "@/lib/services/nba/nbaPlayerPropsPrivateWriter";
 
@@ -22,4 +23,10 @@ export function isInactiveMlbPropsRefresh(result: MlbPropsBoardRefreshResult): b
     && result.snapshot.validation.sourceRows === 0
     && result.snapshot.validation.errors.length === 1
     && result.snapshot.validation.errors[0] === "PROP_ODDS_UNAVAILABLE";
+}
+
+/** Native continuity is not evidence that a scheduled AI review completed. */
+export function nflPlayerPropsRefreshFailure(result:{aiReviewRuntime?:PropsAiRuntimeHealth}):string|null{
+ const failure=propsAiRuntimeFailure(result.aiReviewRuntime);
+ return failure==='unavailable'?'NFL player props AI process unavailable; scheduled review coverage unverified':failure==='incomplete'?'NFL player props AI preparation or review incomplete; scheduled coverage unverified':null;
 }

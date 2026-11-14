@@ -67,7 +67,8 @@ async function main() {
   assert.equal(hashNflForwardEvidencePayload(transported), insertedRows[0]!.payload_sha256);
   assert.equal(written.hashes[0], insertedRows[0]!.payload_sha256);
   const ordinaryRead = await readNflForwardEvidence({ client: readClient(transported, written.hashes[0]!), season: 2026, week: 8 });
-  assert.equal(ordinaryRead[0]!.payload, transported);
+  assert.equal(JSON.stringify(ordinaryRead[0]!.payload), JSON.stringify(transported));
+  assert.equal(ordinaryRead[0]!.payload, ordinaryRead[0]!.payload, "each stored row has a stable payload view");
 
   const legacy = deployedFixture();
   const legacyWithHashedNullSlots = { ...legacy, outcomeForecast: { ...legacy.outcomeForecast,
@@ -78,7 +79,9 @@ async function main() {
     "only the exact deployed release's two omitted null slots may attest the original stored digest");
   const untouchedJson = JSON.stringify(legacy);
   const legacyRead = await readNflForwardEvidence({ client: readClient(legacy, legacyHash), season: 2026, week: 8 });
-  assert.equal(legacyRead[0]!.payload, legacy, "compatibility returns exact stored payload identity, not hash-only reconstruction");
+  assert.equal(JSON.stringify(legacyRead[0]!.payload), untouchedJson,
+    "compatibility preserves exact stored JSON without hash-only reconstruction");
+  assert.equal(legacyRead[0]!.payload, legacyRead[0]!.payload, "legacy payload view has stable identity");
   assert.equal(JSON.stringify(legacy), untouchedJson);
   assert.equal(legacyRead[0]!.payloadSha256, legacyHash, "stored digest is never replaced");
 

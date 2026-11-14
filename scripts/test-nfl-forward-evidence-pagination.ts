@@ -23,19 +23,19 @@ function clientFor(source:ReturnType<typeof rows>,release:string,failAt=-1){
   const q={select(s:string){assert.equal(s,"id,provider_game_id,stage,captured_at,game_start_at,payload_sha256,payload");return q;},
    eq(k:string,v:unknown){filters.push([k,v]);return q;},
    order(k:string,v:{ascending:boolean}){assert(v.ascending);order.push(k);return q;},
-   async range(a:number,b:number){assert.deepEqual(order,["captured_at","id"]);assert.equal(b-a+1,NFL_FORWARD_EVIDENCE_PAGE_SIZE);ranges.push([a,b]);return a===failAt?{data:null,error:{message:"injected timeout"}}:{data:source.slice(a,b+1),error:null};}};return q;
+   async range(a:number,b:number){assert.deepEqual(order,["captured_at","id"]);assert.equal(b-a+1,a===NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE?1:NFL_FORWARD_EVIDENCE_PAGE_SIZE);ranges.push([a,b]);return a===failAt?{data:null,error:{message:"injected timeout"}}:{data:source.slice(a,b+1),error:null};}};return q;
  }} as unknown as SupabaseClient;
  return {client,ranges,filters,verify(){for(let i=0;i<filters.length;i+=3)assert.deepEqual(filters.slice(i,i+3),[["evidence_release",release],["season",2026],["week",8]]);}};
 }
 async function main(){
- assert.equal(NFL_FORWARD_EVIDENCE_PAGE_SIZE,50);assert.equal(NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE,5000);
+ assert.equal(NFL_FORWARD_EVIDENCE_PAGE_SIZE,50);assert.equal(NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE,12000);
  for(const[read,release]of [[readNflForwardEvidence,NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE],[readPreviousNflForwardEvidence,NFL_FORWARD_EVIDENCE_PREVIOUS_SCHEMA_RELEASE],[readPriorNflForwardEvidence,NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE],[readLegacyNflForwardEvidence,NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE]] as const){
-  for(const count of [0,49,50,51,251,4999,5000]){
+  for(const count of [0,49,50,51,251,4999,5000,5001,12000,12001]){
    const source=rows(count,release),mock=clientFor(source,release);
    const run=()=>read({client:mock.client,season:2026,week:8});
-   if(count===5000)await assert.rejects(run,/bounded 5000-row release limit/);
-   else{const actual=await run();assert.equal(actual.length,count);for(let i=0;i<count;i++){assert.equal(actual[i]!.id,source[i]!.id);assert.equal(actual[i]!.payload,source[i]!.payload,"exact stored locked object takes precedence");assert.equal(actual[i]!.payloadSha256,source[i]!.payload_sha256);}}
-   mock.verify();mock.ranges.forEach(([a],i)=>assert.equal(a,i*50));assert(mock.ranges.at(-1)![1]<5000);
+   if(count>12000)await assert.rejects(run,/bounded 12000-row release limit/);
+   else{const actual=await run();assert.equal(actual.length,count);for(let i=0;i<count;i++){assert.equal(actual[i]!.id,source[i]!.id);const original=JSON.stringify(source[i]!.payload);assert.equal(JSON.stringify(actual[i]!.payload),original,"exact stored locked JSON takes precedence");assert.equal(actual[i]!.payload,actual[i]!.payload,"row payload view has stable identity");assert.equal(JSON.stringify(source[i]!.payload),original,"reader cannot mutate the source");assert.equal(actual[i]!.payloadSha256,source[i]!.payload_sha256);}}
+   mock.verify();mock.ranges.forEach(([a],i)=>assert.equal(a,i*50));assert(mock.ranges.at(-1)![1]<=12000);
   }
  }
  const source=rows(51,NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE),failure=clientFor(source,NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,50);
@@ -46,6 +46,6 @@ async function main(){
  const payload=source[0]!.payload,oldHash=hashNflForwardEvidencePayload(payload);
  await appendNflForwardEvidence({client:writer,runId:"append-only-proof",payloads:[payload],apply:true});
  assert.equal(inserts,1);assert.equal(hashNflForwardEvidencePayload(payload),oldHash);
- console.log("NFL pagination: all 4 releases, boundary-complete chronology, unchanged ceiling, original locked values/hashes, error/corruption rejection and append-only writer PASS");
+ console.log("NFL pagination: all 4 releases, complete bounded chronology including 5k and exact terminal boundary, original locked JSON/hashes, stable row views, error/corruption rejection and append-only writer PASS");
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
