@@ -41,6 +41,16 @@ overflow probe. Missing/mismatched indices select a prior eligible source or hol
 read failures remain unknown. Original absent/R1 sources and stored locks keep their
 legacy authority; unsupported tags cannot create a new cutoff source. No historical
 index is reconstructed, and no new schema, provider request or review is added.
+MLB locked-source reader R1 (`mlb_props_locked_source_reader_2026_11_14_r1_exact_original_authority`)
+resolves the exact slate/snapshot index before its query limit. Unknown lock inventory,
+missing or conflicting original sources and empty locked-game sources cannot fall
+back to mutable current rows. Original locked row fields, including evidence and
+historical team context, remain first authority. No raw JSON scan, missing-index
+repair or historical payload replacement is introduced.
+Display caches retain only the raw board; original lock authority is applied after
+retrieval. Compact/full member boards and player props reject cached unlocked rows
+for a freshly observed locked game, falling back through the existing authoritative
+reader. Research-only shards and already locked opaque payloads remain unchanged.
 These diagnostics never enter member transport. Source inputs, forecasts, prices and
 stakes stay unchanged. Future exact paired-confidence grading can promote a formerly
 rounding-rejected valid Lean; paired boundary/negative controls preserve the intended

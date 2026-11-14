@@ -48,6 +48,22 @@ sources. No index reconstruction/backdating, migration, provider call or extra r
 is introduced. Fault tests exercise actual append/index/cutoff/first-lock/display
 paths, returned errors, unknown acknowledgements, sibling queues, restart, midnight
 and legacy controls; a retained unindexed source cannot become an unreadable new lock.
+MLB locked-source reader R1 fixes a separately reproduced legacy lookup failure:
+the previous global 500-index limit let unrelated later publications hide a retained
+original source, and unavailable inventory/all-missing sources could return mutable
+current rows. Source resolution now filters the exact slate/snapshot before its
+bound; missing/ambiguous/empty original authority is an explicit read failure.
+The existing 100-row game-lock inventory bound gains a one-row overflow probe;
+null, malformed and overflowing inventories remain unknown rather than no-lock.
+Opaque original locked rows retain their evidence and historical team context.
+No raw JSON scan, reconstructed index, changed stored lock or new source is used.
+Raw-board caching still coalesces canonical reads; lock application follows retrieval
+so a prelock cached display cannot bypass a new first lock. Member fast paths use the
+existing bounded fresh lock inventory and reject cached unlocked rows for a known
+locked game, returning to the authoritative display path. Full manifests are checked
+after assembling shards, and research-only data and opaque already locked fields
+remain unchanged. An unavailable lock inventory remains a read failure, never healthy
+mutable fallback. These are existing database reads, not provider/model requests.
 R36 remains explicitly accepted under its original parser and law authority.
 Future law R3 / selection R8 / grade R5 fix floating subtraction at the existing
 paired-confidence Lean boundary using exact integer event masses and rational prices.

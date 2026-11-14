@@ -39,6 +39,15 @@ bindings use a prior eligible source or hold, while unknown reads fail closed.
 Original absent/R1 source selection and stored locks retain their legacy authority;
 unsupported tags cannot create a new cutoff source. No historical index is repaired,
 no schema is added and no additional provider/model request or review is made.
+MLB locked-source reader R1 scopes source-index lookup to the exact slate/snapshot
+before the bounded query. Unavailable inventory, missing/ambiguous originals and
+empty locked-game sources raise an explicit read failure instead of mutable fallback.
+Existing locked row values and opaque evidence retain precedence over current
+context checks. It performs no raw JSON scan or historical index/payload repair.
+Cached raw boards still coalesce reads, while lock authority is checked after cache
+retrieval. Existing member board/player fast paths consult bounded current lock
+inventory and reject stale unlocked rows instead of attaching lock labels to them.
+Full-board validation follows shard assembly; research-only payloads are unchanged.
 These diagnostics never enter member transport. Source inputs, forecasts, prices and
 stakes stay unchanged. Future exact paired-confidence grading can promote a formerly
 rounding-rejected valid Lean; paired boundary/negative controls preserve the intended
