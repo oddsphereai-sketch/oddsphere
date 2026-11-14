@@ -1,0 +1,56 @@
+name: Offline PostgREST memory attribution
+on:
+  pull_request:
+    paths:
+      - 'scripts/operator/measure-postgrest-memory-retention.mjs'
+      - '.github/workflows/postgrest-memory-retention-audit.yml'
+permissions:
+  contents: read
+jobs:
+  synthetic-linux-retention:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_PASSWORD: memory-test
+          POSTGRES_DB: memory_retention_fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install isolated test client
+        run: npm install --prefix "$RUNNER_TEMP/memory-client" --no-audit --no-fund --ignore-scripts pg@8.16.3
+      - name: Download official matching PostgREST
+        run: |
+          mkdir -p "$RUNNER_TEMP/postgrest"
+          curl --fail --location --retry 2 'https://github.com/PostgREST/postgrest/releases/download/v14.5/postgrest-v14.5-linux-static-x86-64.tar.xz' -o "$RUNNER_TEMP/postgrest.tar.xz"
+          tar -xJf "$RUNNER_TEMP/postgrest.tar.xz" -C "$RUNNER_TEMP/postgrest"
+          "$RUNNER_TEMP/postgrest/postgrest" --version
+      - name: Measure synthetic requests without production access
+        run: >-
+          node scripts/operator/measure-postgrest-memory-retention.mjs
+          "$RUNNER_TEMP/postgrest/postgrest"
+          "$RUNNER_TEMP/memory-client/node_modules/pg/lib/index.js"
+          'postgresql://postgres:memory-test@127.0.0.1:5432/memory_retention_fixture'
+          "$RUNNER_TEMP/memory-results"
+          "$(docker ps --filter ancestor=postgres:17.6 --format '{{.ID}}')"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: synthetic-linux-memory-results
+          path: |
+            ${{ runner.temp }}/memory-results/results.json
+            ${{ runner.temp }}/memory-results/*.log
+          retention-days: 14
