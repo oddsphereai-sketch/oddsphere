@@ -24,16 +24,21 @@ globalThis.fetch=async()=>{throw Error('Indexed cutoff controls forbid HTTP/prov
 const slateDate='2030-06-01';
 function fixture(){
  let tick=at,serial=0;
- const faults={gameLocks:false,trackingRefs:false,byIdIndex:false,byIdSource:false,rejectRaw:false,nullInventory:false};
+ const faults={gameLocks:false,trackingRefs:false,byIdIndex:false,byIdSource:false,rejectRaw:false,nullInventory:false,unknownArray:"" as string,unknownBody:undefined as unknown};
  const reads:{table:string;limit:number;filters:Record<string,unknown>}[]=[];
  const warnings:string[]=[];
  const tables:Record<string,any[]>={prop_scoring_runs:[],admin_audit_log:[],mlb_prop_tracking_entries:[],lab_response_snapshots:[]};
 
  const contains=(row:any,value:any):boolean=>Object.entries(value).every(([k,v])=>v&&typeof v==='object'?contains(row?.[k],v):row?.[k]===v);
- const client={from(table:string){assert(table in tables);const filters:((r:any)=>boolean)[]=[],orders:{key:string;ascending:boolean}[]=[];let offset=0,limit=Infinity,insert:any[]|null=null,deleting=false;const captured:Record<string,unknown>={};
-  const query:any={select(){return query;},eq(k:string,v:any){captured[k]=v;filters.push(r=>r[k]===v);return query;},lte(k:string,v:any){filters.push(r=>r[k]<=v);return query;},gt(k:string,v:any){filters.push(r=>r[k]>v);return query;},abortSignal(){return query;},async upsert(values:any){for(const row of Array.isArray(values)?values:[values]){tables[table]=tables[table].filter(r=>r.snapshot_key!==row.snapshot_key);tables[table].push(structuredClone(row));}return{data:null,error:null};},not(k:string,_op:string,v:any){filters.push(r=>r[k]!==v&&r[k]!==undefined);return query;},contains(k:string,v:any){captured[k]=v;filters.push(r=>contains(r[k],v));return query;},in(k:string,values:any[]){filters.push(r=>values.includes(r[k]));return query;},order(key:string,o:{ascending:boolean}){orders.push({key,ascending:o.ascending});return query;},limit(n:number){limit=n;return query;},range(from:number,to:number){offset=from;limit=to-from+1;return query;},insert(v:any){insert=Array.isArray(v)?v:[v];return query;},delete(){deleting=true;return query;},
+ const client={from(table:string){assert(table in tables);const filters:((r:any)=>boolean)[]=[],orders:{key:string;ascending:boolean}[]=[];let offset=0,limit=Infinity,insert:any[]|null=null,deleting=false,selected="";const captured:Record<string,unknown>={};
+  const query:any={select(fields:string){selected=fields;return query;},eq(k:string,v:any){captured[k]=v;filters.push(r=>r[k]===v);return query;},lte(k:string,v:any){filters.push(r=>r[k]<=v);return query;},gt(k:string,v:any){filters.push(r=>r[k]>v);return query;},abortSignal(){return query;},async upsert(values:any){for(const row of Array.isArray(values)?values:[values]){tables[table]=tables[table].filter(r=>r.snapshot_key!==row.snapshot_key);tables[table].push(structuredClone(row));}return{data:null,error:null};},not(k:string,_op:string,v:any){filters.push(r=>r[k]!==v&&r[k]!==undefined);return query;},contains(k:string,v:any){captured[k]=v;filters.push(r=>contains(r[k],v));return query;},in(k:string,values:any[]){filters.push(r=>values.includes(r[k]));return query;},order(key:string,o:{ascending:boolean}){orders.push({key,ascending:o.ascending});return query;},limit(n:number){limit=n;return query;},range(from:number,to:number){offset=from;limit=to-from+1;return query;},insert(v:any){insert=Array.isArray(v)?v:[v];return query;},delete(){deleting=true;return query;},
    async execute(){
     reads.push({table,limit,filters:structuredClone(captured)});
+    const unknown=faults.unknownArray;
+    if(unknown==='current-index'&&table==='admin_audit_log'&&captured.action_type==='mlb_props.board_snapshot_published'&&limit===100
+      ||unknown==='recent-sources'&&table==='prop_scoring_runs'&&selected==='metadata_json'&&!captured.id
+      ||unknown==='schedule'&&table==='admin_audit_log'&&captured.action_type==='mlb_props.board_snapshot_published'&&selected==='after_state'&&limit===10
+      ||unknown==='by-id-index'&&table==='admin_audit_log'&&(captured.after_state as any)?.snapshot_id)return{data:faults.unknownBody,error:null};
     if(faults.nullInventory&&captured.action_type==='mlb_props.game_locked_t60')return{data:null,error:null};
     if(faults.gameLocks&&captured.action_type==='mlb_props.game_locked_t60'||faults.trackingRefs&&table==='mlb_prop_tracking_entries'||faults.byIdIndex&&table==='admin_audit_log'&&(captured.after_state as any)?.snapshot_id||faults.byIdSource&&table==='prop_scoring_runs'&&captured.id){if(faults.rejectRaw)throw Error('PRIVATE_STORAGE_DETAILS_MUST_NOT_ESCAPE');return{data:null,error:{message:'synthetic lock authority unavailable'}};}
     if(insert){const added=insert.map(r=>({...structuredClone(r),id:String(++serial),created_at:tick}));tables[table].push(...added);return{data:added,error:null};}
@@ -128,6 +133,14 @@ async function main(){
   await assert.rejects(()=>player.GET(new Request('https://offline.invalid/api/mlb/props/player/'+playerId),{params:Promise.resolve({player_id:playerId})}),(error:any)=>error.message==='MLB props locked source authority unavailable.');
   const unavailable=await page.default({searchParams:Promise.resolve({})});assert.equal(find(unavailable),null);assert(JSON.stringify(unavailable).includes('Player Props data is temporarily unavailable.'));assert(!JSON.stringify(unavailable).includes('PRIVATE_STORAGE'));cases++;
  }
+ // Every array-select reader treats unknown transport bodies as unavailable,
+ // including current/head/history/schedule/by-ID paths, not just first locks.
+ for(const reader of ['current-index','release-head','recent-sources','schedule','by-id-index'])for(const body of [null,undefined,{},'not-an-array',false,0]){
+  const f=fixture(),source=f.snapshot('unknown-array-source',at,legacy);await f.store.publishMlbPropsBoardSnapshot(source);const before=digest(f.tables);
+  f.faults.unknownArray=reader==='release-head'?'current-index':reader;f.faults.unknownBody=body;
+  const read=reader==='current-index'?()=>f.store.loadLatestMlbPropsBoardSnapshot(slateDate):reader==='release-head'?()=>f.store.loadHighestIndexedMlbPropsReleaseHead(slateDate):reader==='recent-sources'?()=>f.store.loadRecentMlbPropsBoardSnapshots(slateDate):reader==='schedule'?()=>f.store.loadLatestMlbPropsGameLockSchedule(slateDate):()=>f.store.loadMlbPropsBoardSnapshotById(slateDate,source.snapshotId);
+  await assert.rejects(read,/MLB props.*unavailable/,'Unknown array transport cannot prove empty authority');assert.equal(digest(f.tables),before);cases++;
+ }
  // A missing original module remains missing even when the current source
  // has the identical research key. Optional legacy null/false/zero are own
  // original values, not permission to substitute current statistics.
@@ -147,6 +160,25 @@ async function main(){
  // dictionary identities, not an inherited/current module fallback.
  for(const [key,present] of [[42,false],['__proto__',false],[42,true]] as const){
   const f=fixture(),source=f.snapshot('opaque-research-key',at,legacy);(source.data.props[0] as any).researchKey=key;source.data.research=present?Object.fromEntries([[String(key),false]]) as any:{};await f.store.publishMlbPropsBoardSnapshot(source);originalLock(f,source);const bytes=digest(f.tables),later=laterSnapshot(f);later.data.research=Object.fromEntries([[String(key),{opaque:'CURRENT_NOT_ORIGINAL'}]]) as any;const display=await f.store.applyMlbPropsDisplayLocks(later);assert.equal(display.data.props[0].researchKey,key);assert.equal(Object.hasOwn(display.data.research,String(key)),present);if(present)assert.equal(display.data.research[String(key)],false);assert.equal(digest(f.tables),bytes);cases++;
+ }
+ // Opaque reference keys use JavaScript dictionary lookup without truthiness:
+ // zero, false and an empty string reserve original presence and absence.
+ for(const key of [0,false,""])for(const mode of ['missing','present','null','false','zero']){
+  const f=fixture(),source=f.snapshot('falsy-original-key',at,legacy);(source.data.props[0] as any).researchKey=key;
+  const original=mode==='present'?{recentForm:{logs:[{value:2}]},opaque:'ORIGINAL'}:mode==='null'?null:mode==='false'?false:0;
+  source.data.research=mode==='missing'?{}:Object.fromEntries([[String(key),original]]) as any;
+  await f.store.publishMlbPropsBoardSnapshot(source);originalLock(f,source);const bytes=digest(f.tables),later=laterSnapshot(f);
+  later.data.research=Object.fromEntries([[String(key),{recentForm:{logs:[{value:999}]},opaque:'CURRENT_NOT_ORIGINAL'}]]) as any;
+  const display=await f.store.applyMlbPropsDisplayLocks(later);assert.equal(display.data.props[0].researchKey,key,'Original opaque key type/value is never rewritten');
+  assert.equal(Object.hasOwn(display.data.research,String(key)),mode!=='missing','Original falsy-key own presence remains authority');
+  if(mode!=='missing')exact(display.data.research[String(key)],original,'Original falsy-key opaque value remains authority');assert.equal(digest(f.tables),bytes);cases++;
+ }
+ // Null/undefined denote absence of a reference; do not invent dictionary keys
+ // named "null" or "undefined" from those non-references.
+ for(const key of [null,undefined]){
+  const f=fixture(),source=f.snapshot('no-original-reference',at,legacy);(source.data.props[0] as any).researchKey=key;
+  source.data.research=Object.fromEntries([[String(key),{opaque:'UNREFERENCED_OLD'}]]) as any;await f.store.publishMlbPropsBoardSnapshot(source);originalLock(f,source);const bytes=digest(f.tables),later=laterSnapshot(f),current={opaque:'UNRELATED_CURRENT'};
+  later.data.research=Object.fromEntries([[String(key),current]]) as any;const display=await f.store.applyMlbPropsDisplayLocks(later);assert.equal(display.data.props[0].researchKey,key);exact(display.data.research[String(key)],current,'No guessed null/undefined research reference');assert.equal(digest(f.tables),bytes);cases++;
  }
  for(const order of [false,true]){
   const f=fixture(),missing=f.snapshot('missing-original',at,legacy),present=f.snapshot('present-original','2030-06-01T19:00:00Z',legacy),key='ambiguous-original-key';missing.data.props[0].researchKey=key;missing.data.research={};present.data.props[0]={...present.data.props[0],researchKey:key,providerIds:{...native.providerIds!,gameId:'other-locked-game'}};present.data.research={[key]:{recentForm:{logs:[{value:3}]},opaque:'PRESENT'}} as any;

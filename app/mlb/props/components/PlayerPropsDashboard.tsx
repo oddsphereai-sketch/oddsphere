@@ -1637,7 +1637,7 @@ function sameFirstClientAuthority(a:PlayerPropsDashboardData,b:PlayerPropsDashbo
   if(a.date!==b.date)return false;
   const left=a.props.filter(isClientLockedRow),right=b.props.filter(isClientLockedRow);
   if(left.length!==right.length||left.some((row,index)=>row!==right[index]))return false;
-  const keys=new Set(left.flatMap(row=>row.researchKey?[String(row.researchKey)]:[]));
+  const keys=new Set(left.flatMap(row=>{const key=clientResearchLookupKey(row);return key===null?[]:[key];}));
   return [...keys].every(key=>{
     const ah=Boolean(a.research&&Object.hasOwn(a.research,key)),bh=Boolean(b.research&&Object.hasOwn(b.research,key));
     return ah===bh&&(!ah||Object.is(a.research![key],b.research![key]));
@@ -1645,7 +1645,7 @@ function sameFirstClientAuthority(a:PlayerPropsDashboardData,b:PlayerPropsDashbo
 }
 
 function researchForClientRows(research:PlayerPropsDashboardData["research"],rows:PlayerPropPreviewRow[]) {
-  const keys=new Set(rows.flatMap(row=>row.researchKey?[String(row.researchKey)]:[]));
+  const keys=new Set(rows.flatMap(row=>{const key=clientResearchLookupKey(row);return key===null?[]:[key];}));
   return Object.fromEntries(Object.entries(research??{}).filter(([key])=>keys.has(key)));
 }
 
@@ -1686,14 +1686,14 @@ function mergeClientPropRows(current: PlayerPropPreviewRow[], incoming: PlayerPr
 
 function mergeClientBoardResearch(current: PlayerPropsDashboardData,incoming: PlayerPropsDashboardData,props:PlayerPropPreviewRow[]) {
   const research = {...(current.research??{}),...(incoming.research??{})};
-  const keys=new Set(props.filter(isClientLockedRow).flatMap(row=>row.researchKey?[String(row.researchKey)]:[]));
+  const keys=new Set(props.filter(isClientLockedRow).flatMap(row=>{const key=clientResearchLookupKey(row);return key===null?[]:[key];}));
   for(const key of keys){
-    const old=current.props.filter(row=>isClientLockedRow(row)&&String(row.researchKey)===key);
-    const own=old.length&&current.research&&Object.hasOwn(current.research,key);
-    const original=own?current.research:incoming.research;
-    const bound=!old.length||old.every(row=>incoming.props.some(candidate=>lockedClientRowBinding(row)!==null&&lockedClientRowBinding(row)===lockedClientRowBinding(candidate)));
+    const old=current.props.filter(row=>isClientLockedRow(row)&&clientResearchLookupKey(row)===key);
+    // The first locked dictionary owns presence AND absence. A later board
+    // cannot fill an absent original module merely by repeating the old row.
+    const original=old.length?current.research:incoming.research;
     Reflect.deleteProperty(research,key);
-    if(original&&Object.hasOwn(original,key)&&(own||bound))Object.defineProperty(research,key,{value:original[key],enumerable:true,configurable:true,writable:true});
+    if(original&&Object.hasOwn(original,key))Object.defineProperty(research,key,{value:original[key],enumerable:true,configurable:true,writable:true});
   }
   return research;
 }
@@ -2083,6 +2083,13 @@ const CLIENT_RESEARCH_MODULES = ["recentForm","opponentProfile","pitchArsenal","
 type ClientResearchMap = NonNullable<PlayerPropsDashboardData["research"]>;
 type LoadedPlayerResearch = Record<string,{value:ClientResearchMap[string];sourceRows:PlayerPropPreviewRow[];date:string}>;
 function isClientLockedRow(row: PlayerPropPreviewRow) { return row.lockStatus?.status === "locked"; }
+/** Dictionary lookup only: opaque stored key types and their exact rows stay
+ * untouched. Only null/undefined mean no reference; falsy keys still reserve
+ * their original dictionary presence or absence. This grants no fetch binding. */
+function clientResearchLookupKey(row:Pick<PlayerPropPreviewRow,"researchKey">):string|null {
+  const value:unknown=row.researchKey;
+  return value===null||value===undefined?null:String(value);
+}
 
 /** Exact original public row identity, excluding only the six separately stored
  * heavy research modules. This never hashes/reconstructs a forecast or changes it. */
@@ -2102,7 +2109,7 @@ function availableClientResearch(data:PlayerPropsDashboardData,loaded:LoadedPlay
   const available={...(data.research??{})};
   for(const [key,entry] of Object.entries(loaded)){
     if(entry.date!==data.date)continue;
-    const locked=data.props.filter(row=>isClientLockedRow(row)&&row.researchKey&&String(row.researchKey)===key);
+    const locked=data.props.filter(row=>isClientLockedRow(row)&&clientResearchLookupKey(row)===key);
     if(locked.length){
       if(Object.hasOwn(available,key))continue;
       if(!lockedResearchSourcesMatch(locked,entry.sourceRows,key))continue;
@@ -2115,7 +2122,7 @@ function availableClientResearch(data:PlayerPropsDashboardData,loaded:LoadedPlay
  * appearing beside one correctly bound original row. */
 function lockedResearchSourcesMatch(locked:PlayerPropPreviewRow[],sources:PlayerPropPreviewRow[],key:string):boolean {
   if(!locked.length||!Array.isArray(sources))return false;
-  const original=locked[0]!, candidates=sources.filter(row=>row&&row.researchKey&&String(row.researchKey)===key);
+  const original=locked[0]!, candidates=sources.filter(row=>row&&clientResearchLookupKey(row)===key);
   if(!candidates.length)return false;
   const samePlayer=(row:PlayerPropPreviewRow)=>row.providerIds?.mlbStatsPlayerId===original.providerIds?.mlbStatsPlayerId
     &&row.providerIds?.bdlPlayerId===original.providerIds?.bdlPlayerId&&row.player===original.player;
@@ -2127,14 +2134,16 @@ function lockedResearchSourcesMatch(locked:PlayerPropPreviewRow[],sources:Player
 function boundLockedPlayerPayload(row:PlayerPropPreviewRow,
   payload:{props?:PlayerPropPreviewRow[];research?:PlayerPropsDashboardData["research"]}) {
   if(!isClientLockedRow(row))return payload;
-  if(!row.researchKey||!lockedResearchSourcesMatch([row],payload.props??[],String(row.researchKey)))return {};
+  const key=clientResearchLookupKey(row);
+  if(key===null||!lockedResearchSourcesMatch([row],payload.props??[],key))return {};
   return {...payload,props:(payload.props??[]).filter(source=>isClientLockedRow(source)
     &&source.providerIds?.gameId===row.providerIds?.gameId&&source.lockStatus?.lockedAt===row.lockStatus?.lockedAt
     &&source.providerIds?.mlbStatsPlayerId===row.providerIds?.mlbStatsPlayerId
     &&source.providerIds?.bdlPlayerId===row.providerIds?.bdlPlayerId&&source.player===row.player)};
 }
 function hasClientResearch(row:PlayerPropPreviewRow,research:PlayerPropsDashboardData["research"]){
-  if(!row.researchKey||!research)return false;const key=String(row.researchKey);
+  const key=clientResearchLookupKey(row);
+  if(key===null||!research)return false;
   return Object.hasOwn(research,key) && (isClientLockedRow(row) || Boolean(research[key]));
 }
 function clientResearchRequestKey(date:string,row:PlayerPropPreviewRow):string|null {
@@ -2146,8 +2155,8 @@ function cachePlayerResearch(current:LoadedPlayerResearch,payload:{props?:Player
   const next={...current};for(const [key,value] of Object.entries(payload.research??{}))Object.defineProperty(next,key,{value:{value,sourceRows:payload.props??[],date},enumerable:true,configurable:true,writable:true});return next;
 }
 function hydrateResearchEvidence(row:PlayerPropPreviewRow,research:PlayerPropsDashboardData["research"]):PlayerPropPreviewRow {
-  const key=row.researchKey?String(row.researchKey):null;
-  const evidence=key&&research&&Object.hasOwn(research,key)?research[key]:null;
+  const key=clientResearchLookupKey(row);
+  const evidence=key!==null&&research&&Object.hasOwn(research,key)?research[key]:null;
   if(!evidence||typeof evidence!=="object"||Array.isArray(evidence))return row;
   const next={...row};
   for(const key of CLIENT_RESEARCH_MODULES)if(Object.hasOwn(evidence,key)&&(!isClientLockedRow(row)||!Object.hasOwn(row,key)))Object.defineProperty(next,key,{value:evidence[key],enumerable:true,configurable:true,writable:true});

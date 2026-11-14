@@ -58,6 +58,14 @@ lazy research to the exact returned original lock/core row. Prelock, foreign or
 unbound cache entries cannot hydrate a locked row or prevent its first locked read.
 Only the six declared research modules may hydrate a row; forecast/grade/quote/stake
 fields cannot be overwritten by research. Valid unlocked research remains usable.
+Every defined non-null original research key reserves its exact presence or absence,
+including opaque zero, false and empty-string keys; null/undefined are not references.
+Lookup normalization never changes the stored key. Only canonical nonempty string
+keys can authorize a bound lazy research fetch. Unknown or malformed array query
+responses cannot mean empty: cutoff selection, source reads and retention fail closed.
+Retention preserves every original reference, including duplicate game pointers and
+nonlocked tracking references, and requires complete bounded inventories before any
+cleanup. Unindexed or ambiguous source mappings remain retained.
 Future member-contract policy R1 (`player_props_ai_member_contract_2026_11_14_r1_nba_ou_execution`)
 aligns priced-tail admission with the existing NBA ordinary Over/Under adapter.
 NBA Yes/milestone offers remain complete archived/read market context, not execution

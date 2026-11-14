@@ -101,6 +101,48 @@ async function main(){
  check("wrong date and no returned props cannot qualify locked lazy research",()=>{for(const [sources,date]of [[[],"2030-06-01"],[[original],"2030-06-02"]]){const cache=api.cachePlayerResearch({}, {props:sources,research:{[original.researchKey!]:modules}},date);assert.equal(api.hasClientResearch(original,api.availableClientResearch(board([original]),cache)),false);}});
  check("supported bound original response qualifies six modules",()=>{const cache=api.cachePlayerResearch({}, {props:[original],research:{[original.researchKey!]:modules}},"2030-06-01");equivalent(api.availableClientResearch(board([original]),cache)[original.researchKey!],modules);});
  check("unsupported numeric legacy key preserved but not guessed for lazy binding",()=>{const r=locked({researchKey:42});equivalent(api.enforcePreviewIntegrity(r),r);assert.equal(api.lockedClientRowBinding(r),null);assert.equal(api.clientResearchRequestKey("2030-06-01",r),null);equivalent(api.hydrateResearchEvidence(r,{"42":modules}).recentForm,modules.recentForm);});
+ // Dictionary identity includes every defined, non-null opaque key, even
+ // when the old row is not eligible for a canonical lazy-fetch binding.
+ for(const key of [0,false,""]){
+  const lookup=String(key),opaque=locked({researchKey:key}),replacement={recentForm:{logs:[{value:999}]}},incoming=board([locked({researchKey:key,projection:999})],{[lookup]:replacement});
+  for(const value of [modules,null,false,0])check(`opaque ${JSON.stringify(key)} original owned ${value===modules?"modules":String(value)} dictionary wins incoming and loaded cache`,()=>{
+   const current=board([opaque],{[lookup]:value}),loaded=api.cachePlayerResearch({}, {props:[opaque],research:{[lookup]:replacement}},current.date);
+   for(const merged of [api.mergeScopedBoardData(current,incoming,{family:null,market:null,gameId:"game"}),api.mergeInitialLockedBoardData(current,incoming),api.mergePlayerResponseData(current,{props:incoming.props,research:incoming.research})]){
+    equivalent(merged.props,[opaque]);assert.equal(merged.props[0].researchKey,key);equivalent(merged.research[lookup],value);
+    equivalent(api.availableClientResearch(merged,loaded)[lookup],value);
+   }
+   assert.equal(api.hasClientResearch(opaque,api.availableClientResearch(current,loaded)),true);
+   assert.equal(api.lockedClientRowBinding(opaque),null);assert.equal(api.clientResearchRequestKey(current.date,opaque),null);
+  });
+  check(`opaque ${JSON.stringify(key)} original absent dictionary blocks incoming and loaded modules`,()=>{
+   const current=board([opaque]),loaded=api.cachePlayerResearch({}, {props:[opaque],research:{[lookup]:replacement}},current.date);
+   for(const merged of [api.mergeScopedBoardData(current,incoming,{family:null,market:null,gameId:"game"}),api.mergeInitialLockedBoardData(current,incoming)]){
+    equivalent(merged.props,[opaque]);assert.equal(Object.hasOwn(merged.research,lookup),false);
+    const available=api.availableClientResearch(merged,loaded);assert.equal(Object.hasOwn(available,lookup),false);equivalent(api.hydrateResearchEvidence(opaque,available),opaque);
+   }
+  });
+  for(const present of [true,false]){
+   const c=componentHarness(),first=board([opaque],present?{[lookup]:modules}:{});
+   c.render({data:first,mode:"member",initialSelectedId:opaque.id});await c.settle();
+   c.value.controls.setLoadedResearch(api.cachePlayerResearch({}, {props:[opaque],research:{[lookup]:replacement}},first.date));
+   c.render({data:incoming,mode:"member",initialSelectedId:opaque.id});await c.settle();
+   equivalent(c.value.data.props,[opaque]);assert.equal(c.value.data.props[0].researchKey,key);
+   assert.equal(Object.hasOwn(c.value.data.research,lookup),present);assert.equal(Object.hasOwn(c.value.availableResearch,lookup),present);
+   if(present)equivalent(c.value.availableResearch[lookup],modules);else equivalent(c.value.hydratedProps[0],opaque);
+   assert.equal(c.requests.length,0,"Opaque keys reserve dictionary authority but cannot authorize a guessed lazy fetch");c.unmount();
+   checks.push(`actual component opaque ${JSON.stringify(key)} first dictionary ${present?"presence":"absence"} persists without requests`);
+  }
+ }
+ check("canonical locked dictionary absence cannot be filled by matching incoming core",()=>{
+  const current=board([original]),incoming=board([original],{[original.researchKey!]:modules});
+  for(const merged of [api.mergeScopedBoardData(current,incoming,{family:null,market:null,gameId:"game"}),api.mergeInitialLockedBoardData(current,incoming)])assert.equal(Object.hasOwn(merged.research,original.researchKey!),false);
+ });
+ for(const key of [null,undefined])check(`${String(key)} is no identity and never reserves a guessed dictionary key`,()=>{
+  const missing=locked({researchKey:key}),lookup=String(key),current=board([missing],{[lookup]:modules}),incoming=board([missing],{[lookup]:null});
+  assert.equal(api.hasClientResearch(missing,current.research),false);equivalent(api.hydrateResearchEvidence(missing,current.research),missing);
+  assert.equal(api.clientResearchRequestKey(current.date,missing),null);assert.equal(api.lockedClientRowBinding(missing),null);
+  const merged=api.mergeScopedBoardData(current,incoming,{family:null,market:null,gameId:"game"});equivalent(merged.props,[missing]);assert.equal(merged.props[0].researchKey,key);assert.equal(merged.research[lookup],null,"Unreferenced literal dictionary strings are not falsely reserved");
+ });
  check("scoped/player/initial updates preserve exact locked duplicate multiset",()=>{const current=board([original,clone(original)],{[original.researchKey!]:null}),incoming=board([locked({projection:999}),row({id:"late"})],{[original.researchKey!]:modules});for(const result of [api.mergeScopedBoardData(current,incoming,{family:null,market:null,gameId:"game"}),api.mergePlayerResponseData(current,{props:incoming.props,research:incoming.research}),api.mergeInitialLockedBoardData(current,incoming)]){equivalent(result.props,[original,original]);assert.equal(result.research[original.researchKey!],null);}});
  check("new initial lock outranks prelock full-data rows and research",()=>{const c=componentHarness();c.render({data:board([row()]),mode:"preview"});c.value.controls.setFullData(board([row({projection:999})],{[original.researchKey!]:{recentForm:{logs:[{value:999}]}}}));c.render({data:board([original]),mode:"preview"});equivalent(c.value.data.props,[original]);assert.equal(c.value.hydratedProps[0].recentForm,undefined);c.unmount();});
  for(const replacement of [locked({projection:999,playGrade:"NO_PLAY"}),row({projection:999})])check(`first initial lock persists without any lazy full-data state (${replacement.lockStatus?"changed lock":"stale unlocked"})`,()=>{const c=componentHarness(),first=board([original,clone(original)],{[original.researchKey!]:null});c.render({data:first,mode:"preview"});c.render({data:board([replacement],{[original.researchKey!]:modules}),mode:"preview"});equivalent(c.value.data.props,[original,original]);assert.equal(c.value.availableResearch[original.researchKey!],null);c.unmount();});
@@ -110,7 +152,7 @@ async function main(){
  const live=componentHarness();live.render({data:board([original]),mode:"member",initialSelectedId:original.id});await live.settle();
  assert.equal(live.requests.length,1);assert.match(live.requests[0].url,/\/api\/mlb\/props\/player\//);checks.push("actual missing locked research effect performs fresh lazy GET");
  live.requests[0].resolve({props:[{...original,...modules}],research:{[original.researchKey!]:{...modules,projection:999,units:99,playGrade:"NO_PLAY"}}});await live.settle();
- for(const key of moduleKeys)equivalent(live.value.hydratedProps[0][key],(modules as any)[key]);for(const key of ["projection","playGrade","units"])assert.equal(live.value.hydratedProps[0][key],(original as any)[key]);checks.push("actual postlock lazy callback binds original row and six modules only");
+ for(const key of moduleKeys)equivalent(live.value.hydratedProps[0][key],(modules as any)[key]);for(const key of ["projection","playGrade","units"])assert.equal(live.value.hydratedProps[0][key],(original as any)[key]);assert.equal(live.requests.length,1,"Successful bound lazy research must not trigger another request");checks.push("actual postlock lazy callback binds original row and six modules only");
  const refused=componentHarness();refused.render({data:board([original]),mode:"member",initialSelectedId:original.id});await refused.settle();
  refused.requests[0].resolve({props:[locked({projection:999})],research:{[original.researchKey!]:modules}});await refused.settle();assert.equal(refused.value.hydratedProps[0].recentForm,undefined);
  refused.value.controls.setSelectedId(null);refused.render();await refused.settle();refused.value.controls.setSelectedId(original.id);refused.render();await refused.settle();

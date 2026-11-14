@@ -22,6 +22,7 @@ globalThis.fetch=async()=>{throw Error('Indexed cutoff controls forbid HTTP/prov
 const slateDate='2030-06-01';
 function fixture(){
  let tick=at,serial=0,indexError=false,indexOverflow=false,rawOverflow=false,indexInsertError=false;
+ let unknownIndex=false,unknownRaw=false,unknownValue:unknown;
  const warnings:string[]=[];
  const tables:Record<string,any[]>={prop_scoring_runs:[],admin_audit_log:[],mlb_prop_tracking_entries:[]};
  const boundedLookups:{ids:string[];limit:number}[]=[];
@@ -30,8 +31,9 @@ function fixture(){
   const query:any={select(){return query;},eq(k:string,v:any){filters.push(r=>r[k]===v);return query;},lte(k:string,v:any){filters.push(r=>r[k]<=v);return query;},not(k:string,_op:string,v:any){filters.push(r=>r[k]!==v&&r[k]!==undefined);return query;},contains(k:string,v:any){filters.push(r=>contains(r[k],v));return query;},in(k:string,values:any[]){filters.push(r=>values.includes(r[k]));if(table==='admin_audit_log'&&k==='target_id')ids=values;return query;},order(key:string,o:{ascending:boolean}){orders.push({key,ascending:o.ascending});return query;},limit(n:number){limit=n;return query;},range(from:number,to:number){offset=from;limit=to-from+1;return query;},insert(v:any){insert=Array.isArray(v)?v:[v];return query;},delete(){deleting=true;return query;},
    async execute(){
     if(insert){if(indexInsertError&&table==='admin_audit_log'&&insert[0]?.action_type==='mlb_props.board_snapshot_published'){indexInsertError=false;return{data:null,error:{message:'PRIVATE_INDEX_INSERT_ERROR'}};}const added=insert.map(r=>({...structuredClone(r),id:String(++serial),created_at:tick}));tables[table].push(...added);return{data:added,error:null};}
+    if(unknownRaw&&table==='prop_scoring_runs'&&limit===12)return{data:unknownValue,error:null};
     if(rawOverflow&&table==='prop_scoring_runs'&&limit===12)return{data:Array(13).fill(tables[table].at(-1)),error:null};
-    if(ids){assert(ids.length<=12);assert.equal(limit,13);boundedLookups.push({ids:[...ids],limit});if(indexError)return{data:null,error:{message:'synthetic cutoff index unavailable'}};if(indexOverflow)return{data:Array(13).fill({}),error:null};}
+    if(ids){assert(ids.length<=12);assert.equal(limit,13);boundedLookups.push({ids:[...ids],limit});if(unknownIndex)return{data:unknownValue,error:null};if(indexError)return{data:null,error:{message:'synthetic cutoff index unavailable'}};if(indexOverflow)return{data:Array(13).fill({}),error:null};}
     let rows=tables[table].filter(r=>filters.every(f=>f(r)));for(const {key,ascending} of [...orders].reverse())rows.sort((a,b)=>(a[key]>b[key]?1:a[key]<b[key]?-1:0)*(ascending?1:-1));rows=rows.slice(offset,offset+limit);if(deleting)tables[table]=tables[table].filter(r=>!rows.includes(r));return{data:structuredClone(rows),error:null};
    },async single(){const r=await query.execute();return{...r,data:r.data?.[0]??null};},async maybeSingle(){return query.single();},then(resolve:any,reject:any){return query.execute().then(resolve,reject);}};return query;}};
  class Clock extends Date{constructor(value?:string|number){super(value??tick);}static now(){return Date.parse(tick);}}
@@ -40,7 +42,7 @@ function fixture(){
  const store=load('lib/mlb/props/boardSnapshotStore.ts',{'node:crypto':crypto,'node:zlib':zlib,'supabase-js':{createClient:()=>client},aiPublicationPolicy:publicationPolicy,marketEvidenceCapture:marketEvidence,releaseOrdering:ordering});
  const tracking=load('lib/mlb/props/internalTracking.ts',{'node:crypto':crypto,'supabase-js':{createClient:()=>client},_mlbStatsApiClient:{},boardSnapshotStore:store,paperTrading:{},pricePolicy,marketModelVersions:versions,lockPolicy,providerClients:{},settlement});
  const snapshot=(id:string,time:string,release:string|undefined=publicationPolicy.MLB_PROPS_AI_HANDOFF_RELEASE,model='mlb_props_2030_06_01_r101')=>({schemaVersion:1,snapshotId:id,slateDate,asOfTimestamp:time,refreshMode:'fast',data:{date:slateDate,lastUpdated:time,props:[{...native,id:'row-'+id,projection:id==='prior'?1:2}],summary:{gamesWithProps:1,marketsAvailable:1},research:{}},validation:{publishable:true,sourceRows:1,mappedRows:1,actionableRows:0,errors:[],warnings:[]},movement:{},modelContext:{modelReleaseId:model,...(release?{aiHandoffRelease:release}:{}),probablePitcherSeasonStats:[]}} as unknown as MlbPropsBoardSnapshot);
- return{tables,boundedLookups,warnings,store,tracking,snapshot,clock:(at:string)=>{tick=at;},failIndexInsert:()=>{indexInsertError=true;},fault:(readError:boolean,overflow=false,raw=false)=>{indexError=readError;indexOverflow=overflow;rawOverflow=raw;}};
+ return{tables,boundedLookups,warnings,store,tracking,snapshot,unavailable:(kind:"index"|"source",value:unknown)=>{unknownIndex=kind==="index";unknownRaw=kind==="source";unknownValue=value;},clock:(at:string)=>{tick=at;},failIndexInsert:()=>{indexInsertError=true;},fault:(readError:boolean,overflow=false,raw=false)=>{indexError=readError;indexOverflow=overflow;rawOverflow=raw;}};
 }
 async function main(){
  const results=[];
@@ -77,6 +79,21 @@ async function main(){
   }else assert.equal(f.tables.admin_audit_log.some(r=>r.action_type==='mlb_props.game_locked_t60'),false,'No eligible source creates no invented lock');
   assert.equal(digest(f.tables.prop_scoring_runs),originalRows);results.push({mode,selected:selected?.snapshotId??null});
  }
+ // Unknown transport bodies are not genuine empty inventories. Exercise the
+ // actual future cutoff selector and lock writer with an original legacy prior;
+ // no unknown source/index response may choose that prior or create a new lock.
+ for(const kind of ["index","source"] as const)for(const value of [null,undefined,{},"not-an-array",false,0]){
+  const f=fixture(),prior=f.snapshot('prior',at,'mlb_props_ai_handoff_2026_11_10_r1_ready_publication'),final=f.snapshot('final','2030-06-01T19:00:00Z');
+  await f.store.publishMlbPropsBoardSnapshot(prior);f.clock(final.asOfTimestamp);await f.store.publishMlbPropsBoardSnapshot(final);
+  const original=digest(f.tables);f.unavailable(kind,value);
+  await assert.rejects(()=>f.store.loadMlbPropsBoardSnapshotAtOrBefore(slateDate,lock),/MLB.*unavailable/);
+  await assert.rejects(()=>f.tracking.ensureMlbPropsGameLocks(final,'2030-06-01T20:00:01Z'),/MLB.*unavailable/);
+  assert.equal(f.tables.admin_audit_log.some(r=>r.action_type==='mlb_props.game_locked_t60'),false,'Unknown inventory cannot create a new immutable lock');
+  assert.equal(digest(f.tables),original,'Unknown transport leaves every original source/index byte unchanged');results.push({mode:kind+'-'+String(value),held:true});
+ }
+ // A witnessed empty index array is different: the original legacy prior is
+ // still eligible and can become the genuine first lock under its own policy.
+ {const f=fixture(),prior=f.snapshot('prior',at,'mlb_props_ai_handoff_2026_11_10_r1_ready_publication'),final=f.snapshot('final','2030-06-01T19:00:00Z');await f.store.publishMlbPropsBoardSnapshot(prior);f.clock(final.asOfTimestamp);await f.store.publishMlbPropsBoardSnapshot(final);f.unavailable('index',[]);assert.equal((await f.store.loadMlbPropsBoardSnapshotAtOrBefore(slateDate,lock)).snapshotId,'prior');const locked=await f.tracking.ensureMlbPropsGameLocks(final,'2030-06-01T20:00:01Z');assert.equal(locked.created,1);assert.equal(locked.locks[0].board_snapshot_id,'prior');results.push({mode:'known-empty-index-array',selected:'prior'});}
  // Legacy raw/unindexed cutoff authority is unchanged, including its historical
  // by-ID absence. This migration neither repairs nor reinterprets old records.
  for(const release of ['mlb_props_ai_handoff_2026_11_10_r1_ready_publication','']){
