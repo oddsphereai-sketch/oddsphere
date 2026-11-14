@@ -19,7 +19,7 @@ async function exercise(sport:Sport){
   load:(_game,window,context)=>{loads++;if(context?.purpose==='member_publication')throw Error('synthetic_current_source_failure');return{release:PRODUCT_RELEASE,sport,gameId:game.id,start:game.start,lock:window.lock,cutoff:window.cutoff,stage:window.stage,players:[],quotes:[],sourceLimitations:[]};},
   onSourceReady:()=>{sourceReady++;}});
  assert.equal(loads,2);assert.equal(sourceReady,1);assert.equal(outcome.status,'active');assert.equal(outcome.newlyCompletedReviews,0);
- assert.deepEqual(outcome.findings,[`current_source_unavailable:${game.id}:unclassified`]);
+ assert.deepEqual(outcome.findings,['review_deferred_writer_inventory_deadline',`current_source_unavailable:${game.id}:unclassified`]);
  const health=summarizePropsAiRuntimeHealth(outcome,at);assert.equal(propsAiRuntimeFailure(health),'incomplete');
  const result={aiReviewRuntime:health};
  assert.match(nflPlayerPropsRefreshFailure(result)!,/source|preparation/);assert.match(mlbPlayerPropsRefreshFailure(result)!,/source verification/);

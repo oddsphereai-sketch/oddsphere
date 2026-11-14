@@ -24,7 +24,11 @@ reload diagnostic only after the exact game's ready callback was actually awaite
 wholly before its lock. SQL completion/new-review counts alone cannot establish it.
 Absent, failed or late acknowledgements and genuine prelock current-source failures
 remain process exceptions. This changes no source admission, fallback or lock payload.
-MLB health remains transient writer-result/cron data outside all member snapshots. No diagnostic or result surface is public.
+MLB health remains transient writer-result/cron data outside all member snapshots. When a short or expired invocation deadline skips scheduled-slot inventory for an
+eligible current-day unexpired game, a private deferred-inventory finding keeps
+coverage unverified; it does not invent a specific failed review. Off-day, locked,
+next-day and intentionally disabled states remain distinct. No extra call is made.
+No diagnostic or result surface is public.
 R36 remains explicitly accepted under its original parser and law authority.
 No prompt, probability, projection, selection, grade, stake or price formula changes.
 Same valid-input board-count change is zero; no demotion/promotion policy is added.

@@ -57,6 +57,13 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
       const plan=await store.plan(calendarWalletPlan(calendar,clock()),calendar);
       if(!plan.funded){findings.push(`ai_unavailable:${plan.reason??"month_not_funded"}`);calendar=null;}
       await store.reap();
+    }else if(paid){
+      const checkedAt=clock();
+      if(args.games.some(g=>etDate(g.start)===etDate(checkedAt)&&instant(g.start)-3600000>instant(checkedAt))){
+        // Inventory was not read. Do not infer no due slots from native/source
+        // success, or invent a known failed review. This adds no request.
+        findings.push("review_deferred_writer_inventory_deadline");
+      }
     }
     const generationSlot=propsAiGenerationPool(16),gameAdmission=propsAiGameAdmission(16);
     const active=args.games.filter(g=>etDate(g.start)===etDate(now)&&instant(g.start)-3600000>instant(clock()));

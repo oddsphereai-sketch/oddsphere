@@ -38,8 +38,9 @@ function repack(record:NflIdentityFailureRecord,change:(input:Record<string,unkn
  altered.sourceHashes.identityInput=sha(raw);return altered;
 }
 
-/** Dynamic SQL clock fixture only. Golden comparison proves the original R1
- * small-record bytes; this never converts a stored historical record. */
+/** Dynamic SQL clock fixture only. Golden comparison proves original raw R1
+ * bytes/bindings. gzip encoders may differ by Node/zlib/OS; this never converts
+ * a stored historical record or replaces its compressed bytes/hash. */
 export function syntheticLegacyNflFailureRecord(args:NflIdentityFailureArgs){
  const r=ready(args).record;assert.equal(r.status,'captured');assert(Buffer.byteLength(r.semanticCanonical)<NFL_IDENTITY_FAILURE_SEMANTIC_LIMIT);
  const semantic=JSON.parse(r.semanticCanonical);semantic.release=LEGACY_NFL_IDENTITY_FAILURE_EVIDENCE_RELEASE;
@@ -54,7 +55,15 @@ export async function runNflSourceFailureR2Proof(){
  const legacy=JSON.parse(readFileSync('scripts/fixtures/player-props-ai/source-failure-r1.json','utf8')) as {small:ReturnType<typeof ready>;semanticBound:ReturnType<typeof ready>;scale:ReturnType<typeof ready>};
  const legacyBefore=digest(legacy),legacyBytes=JSON.stringify(legacy.small.record.archive);
  assert.equal(legacy.small.record.release,LEGACY_NFL_IDENTITY_FAILURE_EVIDENCE_RELEASE);
- assert.deepEqual(syntheticLegacyNflFailureRecord(syntheticNflIdentityFailureArgs()),legacy.small.record,'Dynamic SQL R1 fixture matches every original frozen R1 byte');
+ const dynamicLegacy=syntheticLegacyNflFailureRecord(syntheticNflIdentityFailureArgs());
+ const {archive:dynamicArchive,...dynamicFields}=dynamicLegacy,{archive:goldenArchive,...goldenFields}=legacy.small.record;
+ assert.deepEqual(dynamicFields,goldenFields,'Dynamic SQL R1 fixture retains every original non-compression field');
+ assert(dynamicArchive&&goldenArchive);
+ assert.deepEqual({encoding:dynamicArchive.encoding,bytes:dynamicArchive.bytes,sha256:dynamicArchive.sha256},
+   {encoding:goldenArchive.encoding,bytes:goldenArchive.bytes,sha256:goldenArchive.sha256});
+ assert.deepEqual(gunzipSync(Buffer.from(dynamicArchive.data,'base64')),gunzipSync(Buffer.from(goldenArchive.data,'base64')),
+   'Every original raw R1 byte remains exact across Node/zlib/OS compression implementations');
+ assert.deepEqual(decodeNflIdentityFailureArchive(dynamicLegacy),decodeNflIdentityFailureArchive(legacy.small.record));
  const legacyDecoded=decodeNflIdentityFailureArchive(legacy.small.record) as {semanticCanonical:string};
  assert.equal(legacyDecoded.semanticCanonical,legacy.small.record.semanticCanonical);
  assert.equal(legacy.semanticBound.record.archiveUnavailable,'semantic_bound');assert.equal(legacy.semanticBound.record.archive,null);

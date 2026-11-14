@@ -17,6 +17,10 @@ and blocked work across NBA/NFL/MLB without treating native publication as compl
 A postlock reload exception remains separately visible when that exact game's ready
 callback was actually awaited wholly before lock; counts/SQL completion alone never
 suppress a source failure. MLB health is transient writer/cron data, outside snapshots.
+When the existing deadline skips inventory for an eligible current-day unexpired game,
+private health reports deferred/unknown coverage, not an invented failed review or
+a known-empty inventory. No-game, already-locked, next-day and intentionally disabled
+cases retain their original classification. No extra request or deadline is added.
 These diagnostics never enter member transport. Same valid-input forecasts, grades, prices,
 stakes and actionable counts are unchanged; there is no actionable demotion or promotion rule.
 Original accepted R36 and older laws, archive parsers, member locks and settled outcomes retain
