@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { invariant } from "./evidence";
 import type { WalletPlan } from "./walletPlan";
-import type { PropsAiModel } from "./releases";
+import {PROPS_AI_PRIMARY_MODEL,PROPS_AI_STRONG_MODEL,type PropsAiModel} from "./releases";
 import type {PropsCalendar} from "./calendar";
 export const PROPS_AI_RECONCILIATION_RELEASE="player_props_ai_reconciliation_2026_11_10_r1_immutable_consumed_slots" as const;
 export type PropsAiBudget = { month_key: string; cap_micro: number; target_micro: number; core_reserved_micro: number; consumed_micro: number; fallback_remaining_micro: number; recovery_remaining_micro: number; unexpected_overrun_micro: number; planned_games: number; stronger_finals: number; full_calendar: boolean; funding_error: string | null; plan_hash: string | null };
@@ -46,7 +46,10 @@ export class PropsAiStore {
 }
 /** Allows real Supabase and the exact same SQL through a disposable local pg adapter. */
 export type PropsAiReviewStore = Pick<PropsAiStore,"claim"|"send"|"receipt"|"fallback"|"finish">;
-/** Integer ceiling includes all output/reasoning. Cache writes are charged even if unexpectedly returned. */
+/** Conservative integer estimate, also retained for legacy receipt replay.
+ * Its absent/unknown-tier Standard upper bound is NOT a known-bill attestation.
+ * New actual settlement must use verifiedUsageMicroUsd instead.
+ */
 export function usageMicroUsd(model: PropsAiModel, usage: { input_tokens: number; output_tokens: number; input_tokens_details?: { cache_write_tokens?: number; cache_write_tokens_details?: { ttl_12h_tokens?: number } } },confirmedTier?:string) {
   const input = usage?.input_tokens, output = usage?.output_tokens, writes = usage?.input_tokens_details?.cache_write_tokens ?? 0, longWrites = usage?.input_tokens_details?.cache_write_tokens_details?.ttl_12h_tokens ?? 0;
   invariant([input, output, writes, longWrites].every(n => Number.isSafeInteger(n) && n >= 0) && longWrites <= writes && writes <= input, "Missing/invalid usage receipt");
@@ -58,4 +61,10 @@ export function usageMicroUsd(model: PropsAiModel, usage: { input_tokens: number
   const denominator=BigInt(confirmedTier==="flex"?80:40);
   const result=Number((numerator+denominator-BigInt(1))/denominator);
   invariant(Number.isSafeInteger(result),"Usage charge exceeds safe integer range");return result;
+}
+/** Price only an explicitly supported actual response mode/model. */
+export function verifiedUsageMicroUsd(model:PropsAiModel,usage:Parameters<typeof usageMicroUsd>[1],actualTier:unknown){
+ invariant(model===PROPS_AI_PRIMARY_MODEL||model===PROPS_AI_STRONG_MODEL,"unsupported_billed_model");
+ invariant(actualTier==="default"||actualTier==="flex","unsupported_actual_service_tier");
+ return usageMicroUsd(model,usage,actualTier);
 }

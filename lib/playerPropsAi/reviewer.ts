@@ -10,9 +10,9 @@ import type {PropsAiGameAdmission} from "./gameAdmission";
 import { gzipSync } from "node:zlib";
 import type { GamePacket } from "./evidenceContract";
 import { digest, invariant, instant, etDate } from "./evidence";
-import { usageMicroUsd, type PropsAiJob, type PropsAiReviewStore } from "./budget";
+import { verifiedUsageMicroUsd, type PropsAiJob, type PropsAiReviewStore } from "./budget";
 import { jointReviewRequest, parseJointReview } from "./request";
-import { countAiInput, generateAiReview,serializeAiRequest, structuredAiText, AiGenerationError, AiRequestNotStartedError, responseModelIdentity } from "./openai";
+import { countAiInput, generateAiReview,serializeAiRequest, structuredAiText, AiGenerationError, AiRequestNotStartedError, responseModelIdentity, responseTierIdentity, responseReferenceIdentity } from "./openai";
 import { prepareReviewParts } from "./partitions";
 import {criticalContextHashes} from "./criticalContext";
 import {PROPS_AI_WIRE_RELEASE} from "./scenarioCoordinates";
@@ -106,11 +106,19 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
           }
           const texts=response.output?.flatMap(o=>o.content??[]).filter(c=>c.type==="output_text").map(c=>c.text??"")??[];
           const identity=responseModelIdentity(attempt.model,response.model);
-          if(identity.status!=="verified"){
-            const reason=`response_model_identity_${identity.status}`;
+          const tierIdentity=responseTierIdentity(attempt.requested_tier,response.service_tier);
+          const referenceIdentity=responseReferenceIdentity(response.id);
+          const responseIdentity={response_model_identity:identity,response_tier_identity:tierIdentity,response_reference_identity:referenceIdentity};
+          const terminalReceipt=["completed","incomplete","failed","cancelled"].includes(response.status);
+          const identityFailure=identity.status!=="verified"?`response_model_identity_${identity.status}`
+            :referenceIdentity.status!=="verified"?"response_reference_identity_unavailable"
+            :tierIdentity.status!=="verified"?`response_tier_identity_${tierIdentity.status}`
+            :!terminalReceipt?"response_receipt_not_terminal":null;
+          if(identityFailure){
+            const reason=identityFailure;
             const reportedUsage=response.usage??null;
-            await args.store.receipt(attempt.id,token,null,response.id,{
-              kind:reason,response_model_identity:identity,response_status:response.status,
+            await args.store.receipt(attempt.id,token,null,referenceIdentity.responseId,{
+              kind:reason,...responseIdentity,response_status:typeof response.status==="string"&&response.status.length<=64?response.status:null,
               reported_usage:Buffer.byteLength(JSON.stringify(reportedUsage),"utf8")<=4096?reportedUsage:{unavailable:"reported_usage_bound"},
               transport:response.transportDiagnostics??null,
               failureEvidence:failureEvidence({packet:part.packet,requestBody,draftText:texts.length===1?texts[0]:null,reason,physical:[]}),
@@ -120,10 +128,10 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
             // it is not a reason to purchase a correction or later paid wave.
             return {index,reason,known:false};
           }
-          if(!response.usage){await args.store.receipt(attempt.id,token,null,response.id,{kind:"missing_usage",response_model_identity:identity,transport:response.transportDiagnostics??null,failureEvidence:failureEvidence({packet:part.packet,requestBody,draftText:texts.length===1?texts[0]:null,reason:"missing_billed_usage",physical:[]})});return {index,reason:"missing_billed_usage",known:false};}
+          if(!response.usage){await args.store.receipt(attempt.id,token,null,response.id,{kind:"missing_usage",...responseIdentity,transport:response.transportDiagnostics??null,failureEvidence:failureEvidence({packet:part.packet,requestBody,draftText:texts.length===1?texts[0]:null,reason:"missing_billed_usage",physical:[]})});return {index,reason:"missing_billed_usage",known:false};}
           let actual:number;
-          try{actual=usageMicroUsd(attempt.model,response.usage,response.service_tier);}
-          catch{await args.store.receipt(attempt.id,token,null,response.id,{...response.usage,response_model_identity:identity,transport:response.transportDiagnostics??null,failureEvidence:failureEvidence({packet:part.packet,requestBody,draftText:texts.length===1?texts[0]:null,reason:"invalid_billed_usage",physical:[]})});return {index,reason:"invalid_billed_usage",known:false};}
+          try{actual=verifiedUsageMicroUsd(attempt.model,response.usage,tierIdentity.responseTier);}
+          catch{await args.store.receipt(attempt.id,token,null,response.id,{...response.usage,...responseIdentity,transport:response.transportDiagnostics??null,failureEvidence:failureEvidence({packet:part.packet,requestBody,draftText:texts.length===1?texts[0]:null,reason:"invalid_billed_usage",physical:[]})});return {index,reason:"invalid_billed_usage",known:false};}
           let parsed:ReturnType<typeof parseJointReview>|null=null,reason:string|null=null,draft:unknown;
           try{draft=structuredAiText(response);parsed=parseJointReview(part.packet,draft);}
           catch(error){reason=(error as Error).message;}
@@ -159,7 +167,7 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
             requestedActorIds:actorProposal.requestedActorIds,consumedActorIds:actorProposal.consumedActorIds,ignoredActorIds:actorProposal.ignoredActorIds,
             eligibleActors:actorProposal.admittedActors.map(actor=>({playerId:actor.playerId,rawActorHash:actor.rawActorHash,canonicalHash:actor.canonicalHash,canonicalLawHash:actor.canonical.law?.hash??null,sourceDeclinedMarkets:actor.canonical.sourceDeclinedMarkets})),rejectedActors:actorProposal.rejectedActors,
           }:null;
-          const usage:Record<string,unknown>={...response.usage,service_tier:response.service_tier??"unknown",response_status:response.status,response_model:response.model,response_model_identity:identity,transport:response.transportDiagnostics??null,
+          const usage:Record<string,unknown>={...response.usage,service_tier:response.service_tier??"unknown",response_status:response.status,response_model:response.model,...responseIdentity,transport:response.transportDiagnostics??null,
             ...(phase===1&&feedbackTexts.has(index)?{nextCorrectionText:feedbackTexts.get(index)}:{}),...(correctionUnavailable?{correctionFeedbackUnavailable:true}:{}),
             ...(wire?{responseEvidence:wire}:{}),
             ...(archivedFailure?{failureEvidence:archivedFailure}:{}),...(actorEvidence?{actorAdmissionEvidence:actorEvidence}:{}),...(actorUnavailable?{actorAdmissionUnavailable:true}:{})};

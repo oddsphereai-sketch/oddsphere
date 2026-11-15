@@ -16,6 +16,18 @@ part: launched siblings settle normally, with no new correction or later paid wa
 purchased for the unprovable result. Valid configured-model responses retain their
 existing arithmetic, service-tier pricing and ordinary bounded correction policy.
 Known response receipts carry the explicit verified identity marker for later audit.
+
+Receipt validation also requires a bounded nonempty original response reference and
+an explicit supported actual service tier. The actual tier may legitimately differ
+from the requested one: both Default and Flex retain their correct rates. Priority,
+Fast, Scale, Auto, missing and malformed returned modes cannot be silently priced
+as Standard. Nonterminal queued/in-progress responses cannot establish final usage.
+All these unavailable cases retain unknown-charge holds and stop further purchases.
+`verifiedUsageMicroUsd` settles only configured models and supported actual tiers;
+`usageMicroUsd` retains its original conservative planning/legacy upper-bound behavior.
+No old receipt is repriced. Known generated receipts carry model, tier and reference
+identity markers; zero-charge pre-generation rejections retain their original evidence.
+
 No model-prefix or unlisted-snapshot equivalence is invented. Supported identity
 changes require a deliberate versioned policy update.
 

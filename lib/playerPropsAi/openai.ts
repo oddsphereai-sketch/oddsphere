@@ -24,6 +24,27 @@ export function responseModelIdentity(requestedModel:PropsAiModel, observedModel
   status:verified?"verified" as const:responseModel===null?"unavailable" as const:"mismatch" as const,
   requestedModel,responseModel};
 }
+export const PROPS_AI_RESPONSE_TIER_IDENTITY_RELEASE="player_props_ai_response_tier_2026_11_15_r1_supported_actual_tier" as const;
+/** The actual supported tier may differ from the requested one. Never guess an
+ * unsupported processing mode's price from the request or a Standard fallback.
+ */
+export function responseTierIdentity(requestedTier:unknown,observedTier:unknown){
+ const requested=safeCode(requestedTier),responseTier=safeCode(observedTier);
+ const verified=(requested==="default"||requested==="flex")&&(observedTier==="default"||observedTier==="flex");
+ return {release:PROPS_AI_RESPONSE_TIER_IDENTITY_RELEASE,
+  status:verified?"verified" as const:responseTier===null?"unavailable" as const:"unsupported" as const,
+  requestedTier:requested,responseTier};
+}
+export const PROPS_AI_RESPONSE_REFERENCE_IDENTITY_RELEASE="player_props_ai_response_reference_2026_11_15_r1_nonempty_bounded_reference" as const;
+export function responseReferenceIdentity(observedId:unknown){
+ // IDs are opaque: preserve the exact original string, with no prefix guess,
+ // normalization or reconstruction. Invalid database/control characters refuse.
+ const verified=typeof observedId==="string"&&observedId.length>0&&observedId===observedId.trim()
+  &&Buffer.byteLength(observedId,"utf8")<=256&&Buffer.from(observedId,"utf8").toString("utf8")===observedId
+  &&!/[\u0000-\u001f\u007f]/u.test(observedId);
+ return {release:PROPS_AI_RESPONSE_REFERENCE_IDENTITY_RELEASE,
+  status:verified?"verified" as const:"unavailable" as const,responseId:verified?observedId:null};
+}
 const rateHeaders=["x-ratelimit-limit-requests","x-ratelimit-limit-tokens","x-ratelimit-remaining-requests","x-ratelimit-remaining-tokens","x-ratelimit-reset-requests","x-ratelimit-reset-tokens","x-ratelimit-limit-project-tokens","x-ratelimit-remaining-project-tokens","x-ratelimit-reset-project-tokens"];
 function transportDiagnostics(response:Response,code:string|null=null,type:string|null=null):AiTransportDiagnostics{
  const rateLimits=Object.fromEntries(rateHeaders.flatMap(name=>{const value=response.headers.get(name);const valid=name.includes("-reset-")?/^(?:\d+(?:\.\d+)?(?:ms|s|m|h|d))+$/.test(value??""):/^\d{1,20}$/.test(value??"");return value&&value.length<=96&&valid?[[name,value]]:[];}));

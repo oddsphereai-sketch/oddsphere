@@ -12,7 +12,12 @@ original failed request/draft evidence remains archived; no guessed higher/lower
 model price becomes known spend. No correction or later paid wave is purchased for
 this unknown result. Already launched siblings retain independent settlement.
 Valid Luna and Terra replies preserve the ordinary numerical and retry policy.
-A bounded verified identity marker binds known receipts to the requested model.
+Bounded verified model, actual-tier and original-reference markers bind known receipts.
+The next independent round also reproduced explicit Priority priced as Standard and
+empty IDs accepted in full-part provenance. R39 refuses unsupported/missing actual
+tiers, invalid original references, and nonterminal usage. Supported Default/Flex
+responses can differ from the requested tier and keep their correct rates.
+The new strict settlement helper preserves the original planning/legacy estimator.
 Original R38 and all earlier review/receipt/law/lock authority remains unchanged.
 
 The OpenAI Responses reference defines the response model as its generation model;
@@ -24,6 +29,8 @@ unlisted snapshots are held instead of silently assumed equivalent:
 
 Offline controls exercise actual reviewer success/rejection for both configured
 models, JSON and event-stream responses, missing/malformed/contradictory identities,
+all requested/actual Default/Flex pairs, unsupported tiers, invalid/empty/oversized
+references, nonterminal receipts,
 all three sports, the correction phase, and suppression of later paid waves.
 They retain exact failed request/draft hashes, unknown charge state and old R38
 policy membership. Existing wallet tests with real disposable PostgreSQL and ALL
