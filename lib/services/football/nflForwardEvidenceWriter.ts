@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { reportNflWriterResourceStage } from "./nflWriterResourceHealth";
+import { nflForwardMarketView } from "./nflForwardMarketView";
 import { isDeepStrictEqual } from "node:util";
 import type { PredictionRecordRow } from "@/lib/types/domain/Tracking";
 import type { IWeatherProvider } from "@/lib/providers/interfaces/IWeatherProvider";
@@ -161,7 +162,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_15_r118_resource_diagnostics" as const;
+  "nfl_forward_evidence_writer_2026_11_15_r119_bounded_member_market" as const;
 
 const NFL_REGULAR_MARKETS = ["moneyline", "spread", "total"] as const;
 const NFL_OWLS_COVERAGE_DIAGNOSTICS = new Set([
@@ -1457,6 +1458,7 @@ export async function runNflForwardEvidenceWriter(args: {
     payloads: authoritativePayloads,
     apply: args.apply,
   });
+  reportNflWriterResourceStage(NFL_FORWARD_WRITER_RELEASE, "append_ready", resourceStartedAt);
   const memberSnapshot = await refreshCompactMemberSnapshot({
     client: args.client,
     existing: historicalExisting,
@@ -1466,11 +1468,13 @@ export async function runNflForwardEvidenceWriter(args: {
     now: args.now,
     apply: args.apply,
   });
+  reportNflWriterResourceStage(NFL_FORWARD_WRITER_RELEASE, "member_ready", resourceStartedAt);
   const tracking = await writeOfficialTrackingFromPayloads({
     client: args.client,
     payloads: [...currentT60Payloads(existing), ...authoritativePayloads.filter((payload) => payload.stage === "t60")],
     apply: args.apply,
   });
+  reportNflWriterResourceStage(NFL_FORWARD_WRITER_RELEASE, "tracking_ready", resourceStartedAt);
   let marketBrainWrite = {
     proposed: payloads.filter((payload) => payload.marketBrainShadow).length,
     inserted: 0,
@@ -2064,7 +2068,7 @@ export async function refreshCompactMemberSnapshot(args: {
       memberSnapshotError: null,
     };
   }
-  const rows = [...args.existing, ...args.payloads.map(storedEvidenceForPayload)];
+  const rows = nflForwardMarketView([...args.existing, ...args.payloads.map(storedEvidenceForPayload)]);
   if (rows.length === 0) {
     return {
       memberSnapshotAttempted: false,

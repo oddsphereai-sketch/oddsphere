@@ -1,3 +1,31 @@
+## November 15 NFL finalization work R100 / R119
+
+NFL props writer is `nfl_player_props_writer_2026_11_15_r100_finalization_stages`;
+full-game writer is `nfl_forward_evidence_writer_2026_11_15_r119_bounded_member_market`.
+Shared generation R39, history reader R2, law R3, selection R8, grade R5, NFL decision R13,
+NBA writer R25 and native MLB R44 remain unchanged. These identifiers supersede the
+R99/R118 writer identifiers in the historical entries below.
+
+The compact member reader memoizes only immutable market values from its original
+verified lazy history, within one invocation and one game, with an 8MB serialized
+value ceiling and LRU eviction. All history rows, checksums, other source fields,
+selection rules and old locked payloads remain exact. Handoff baseline capture
+clones only the current game's native rows; foreign-game rows cannot qualify that
+packet's actors. It changes no readiness clock or numerical qualification.
+
+Private stage telemetry now distinguishes source preparation/callbacks, canonical
+write acknowledgement, tracking and later observer/settlement work. No player or
+source payload enters these logs or member transport. All launched work remains
+awaited under the existing sport lease; there is no race-return or background writer.
+
+Offline work identified repeated compact-reader inflation and an unnecessary native
+baseline copy. These are confirmed avoidable costs, **not proof of the complete
+540-second live timeout cause or its cure**. Actual R99 append and compact publication
+completed before that timeout; the outstanding await remains unproved. The new
+stages must be checked during normal production, without buying a replay/test.
+No provider request, model, review slot, output cap, AI deadline, budget, grade,
+settlement result or locked forecast is changed. See the R100/R119 model audit.
+
 ## November 15 shared player-prop response identity R39
 
 Shared NBA/NFL/MLB generation is `player_props_ai_2026_11_15_r39_verified_response_model`.
