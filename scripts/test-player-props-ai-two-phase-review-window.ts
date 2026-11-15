@@ -80,7 +80,7 @@ async function simulation(modes:Mode[],options:{sharedPool?:boolean;wholeGameAdm
 }
 
 async function main(){
-  assert.equal(propsAiCompletionWindowMs(1),120000);assert.equal(propsAiTwoPhaseCompletionWindowMs(1),240000);assert.equal(propsAiTwoPhaseCompletionWindowMs(8),240000);assert.equal(propsAiTwoPhaseCompletionWindowMs(16),420000);assert.throws(()=>propsAiTwoPhaseCompletionWindowMs(17));
+  assert.equal(propsAiCompletionWindowMs(1),120000);assert.equal(propsAiTwoPhaseCompletionWindowMs(1),240000);assert.equal(propsAiTwoPhaseCompletionWindowMs(8),240000);assert.equal(propsAiTwoPhaseCompletionWindowMs(16),240000);assert.throws(()=>propsAiTwoPhaseCompletionWindowMs(17));
   for(const remaining of [141000,104513,111391]){const deferred=await simulation([{deadlineMs:remaining}]);assert.equal(deferred.results[0].status,'skipped');assert.equal(deferred.claims[0],0);assert.equal(deferred.attempts.length,0);assert.equal(deferred.jobs[0].state,'pending');}
   // A claim ACK, generation queue or unknown response must never make a
   // later wave buy work after an earlier mandatory wave cannot be recovered.
@@ -95,9 +95,9 @@ async function main(){
   }
   for(const parts of [9,16]){
     const unknownWave=await simulation([{parts,deadlineMs:480000,primaryMs:180001}]);
-    assert.equal(unknownWave.attempts.length,8);assert.equal(unknownWave.bodies.length,8);assert(unknownWave.attempts.every(a=>a.actual_micro===null&&a.state==='unknown'));assert.equal(unknownWave.fallbacks[0],0);assert.equal(unknownWave.finishes[0],1);assert.equal(unknownWave.results[0].status,'failed');
+    assert.equal(unknownWave.attempts.length,parts);assert.equal(unknownWave.bodies.length,parts);assert(unknownWave.attempts.every(a=>a.actual_micro===null&&a.state==='unknown'));assert.equal(unknownWave.fallbacks[0],0);assert.equal(unknownWave.finishes[0],1);assert.equal(unknownWave.results[0].status,'failed');
     const finalWave=await simulation([{parts,deadlineMs:480000,invalidPrimary:true,invalidCorrection:true}]);
-    assert.equal(finalWave.bodies.filter(b=>b.phase===1).length,parts);assert.equal(finalWave.bodies.filter(b=>b.phase===2).length,8);assert.equal(finalWave.fallbacks[0],1);assert.equal(finalWave.finishes[0],1);assert.equal(finalWave.results[0].status,'failed');assert(finalWave.attempts.every(a=>a.actual_micro!==null),'Known receipts stay exact; no unknown hold is fabricated or released');
+    assert.equal(finalWave.bodies.filter(b=>b.phase===1).length,parts);assert.equal(finalWave.bodies.filter(b=>b.phase===2).length,parts);assert.equal(finalWave.fallbacks[0],1);assert.equal(finalWave.finishes[0],1);assert.equal(finalWave.results[0].status,'failed');assert(finalWave.attempts.every(a=>a.actual_micro!==null),'Known receipts stay exact; no unknown hold is fabricated or released');
   }
   const prepared=await simulation([{deadlineMs:300000,prepareMs:159000,invalidPrimary:true}],{pendingRescue:true});assert.equal(prepared.results[1].status,'completed');assert.equal(prepared.claims[0],1);assert.equal(prepared.fallbacks[0],1);assert.equal(prepared.jobs[0].job_key,'props-ai|nba|synthetic-window-0|2030-11-17|final');assert(prepared.events.find(e=>e.kind==='claim-0')!.at>=200000);
   const delayedAdmission=await simulation([{deadlineMs:300000,admissionMs:100000}]);assert.equal(delayedAdmission.results[0].status,'skipped');assert.equal(delayedAdmission.claims[0],0);assert(delayedAdmission.events.some(e=>e.kind==='permit-released-0'));
@@ -105,7 +105,16 @@ async function main(){
   const retained=bounded.results[0];assert('review'in retained&&retained.review);const review=retained.review as AcceptedGameReview;assert(review.partProvenance.some(p=>p.phase===1&&p.actorAdmissionRelease));assert(review.partProvenance.some(p=>p.phase===2&&p.actorAdmissionRelease));
   const originalPart=JSON.parse(gunzipSync(Buffer.from(review.inputEvidence.data,'base64')).toString()) as GamePacket;const partSource=playerSubset(originalPart,originalPart.players.slice(0,2).map(p=>p.id));const retainedAttempts=bounded.attempts.filter(a=>a.part===1);assert(auditPropsActorAdmissionPart({packet:partSource,attempts:retainedAttempts,provenance:review.partProvenance.filter(p=>p.part===1)}).complete);
   assert.equal(bounded.events.filter(e=>e.kind==='http-0'&&e.phase===1).length,2);assert.equal(bounded.events.filter(e=>e.kind==='http-0'&&e.phase===2).length,1,'Successful original part is never regenerated');assert.deepEqual(bounded.events.find(e=>e.kind==='http-0'&&e.phase===2)!.ids,partSource.players.map(p=>p.id),'Correction still requests the exact whole original part');
-  const allParts=await simulation([{parts:16,deadlineMs:480000,prepareMs:60000,primaryMs:90000,correctionMs:90000,invalidPrimary:true}]);assert.equal(allParts.results[0].status,'completed');assert.equal(allParts.bodies.length,32);assert.equal(allParts.fallbacks[0],1);assert.equal(allParts.peak,PROPS_AI_PART_CONCURRENCY);assert.equal(allParts.now,420000);assert(allParts.now<480000);
+  const allParts=await simulation([{parts:16,deadlineMs:480000,prepareMs:60000,primaryMs:90000,correctionMs:90000,invalidPrimary:true}]);assert.equal(allParts.results[0].status,'completed');assert.equal(allParts.bodies.length,32);assert.equal(allParts.fallbacks[0],1);assert.equal(allParts.peak,PROPS_AI_PART_CONCURRENCY);assert.equal(allParts.now,240000);assert(allParts.now<480000);
+  // Supported large games keep both complete phases after the actual observed
+  // pre-source overhead. These use the real reviewer with synthetic IO only.
+  for(const parts of [9,16])for(const prepareMs of [108000,128430]){
+    const large=await simulation([{parts,deadlineMs:480000,prepareMs,primaryMs:90000,correctionMs:90000,invalidPrimary:true}]);
+    assert.equal(large.results[0].status,'completed');assert.equal(large.claims[0],1);
+    assert.equal(large.bodies.length,2*parts);assert.equal(large.fallbacks[0],1);
+    assert.equal(large.peak,parts);assert.equal(large.now,prepareMs+180000);
+    assert(large.now<480000);assert.equal(large.finishes[0],1);
+  }
   const optional=await simulation([{deadlineMs:245000,preferStronger:true,invalidPrimary:true}]);assert.equal(optional.results[0].status,'completed');assert.equal(optional.strongCounts,0,'Optional count cannot consume two-phase reserve');
   const delayedSend=await simulation([{deadlineMs:240000,sendMs:20000}]);assert.equal(delayedSend.bodies.length,0);assert.equal(delayedSend.attempts.length,1);assert.equal(delayedSend.attempts[0].actual_micro,0);assert.equal((delayedSend.attempts[0].usage as {kind:string}).kind,'known_unbilled_before_http');assert.equal(delayedSend.fallbacks[0],0);
   const capacity=await simulation([{deadlineMs:300000,capacityRejection:true}]);assert.equal(capacity.results[0].status,'completed');assert.equal(capacity.fallbacks[0],1);assert.equal(capacity.attempts.length,2);assert.equal(capacity.attempts[0].actual_micro,0);assert.equal((capacity.attempts[0].usage as {kind:string}).kind,'known_unbilled');assert.equal(capacity.attempts[0].requested_tier,'flex');assert.equal(capacity.attempts[1].requested_tier,'default');assert.equal(capacity.bodies.length,2,'A genuinely dispatched known-unbilled Flex capacity response retains exactly the existing Standard recovery');

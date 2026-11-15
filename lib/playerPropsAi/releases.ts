@@ -40,7 +40,7 @@ export function propsAiLawSelectionRelease(release:string){
  if(release===LEGACY_PROPS_AI_LAW_RELEASE)return LEGACY_PROPS_AI_SELECTION_RELEASE;
  throw new Error("Unsupported props law selection release");
 }
-export const PROPS_AI_SCHEDULE_RELEASE = "player_props_ai_schedule_2026_11_08_r3_no_late_early_purchase" as const;
+export const PROPS_AI_SCHEDULE_RELEASE = "player_props_ai_schedule_2026_11_15_r4_full_wave_admission" as const;
 export const PROPS_AI_BUDGET_RELEASE = "player_props_ai_budget_2026_11_09_r5_standard_primary_and_early" as const;
 export const PROPS_AI_MONTHLY_TARGET_MICRO_USD = 50_000_000;
 export const PROPS_AI_MONTHLY_CAP_MICRO_USD = 60_000_000;
@@ -48,7 +48,10 @@ export const PROPS_AI_RECOVERY_RESERVE_MICRO_USD = 3_000_000;
 export const PROPS_AI_MAX_INPUT_PER_REQUEST = 145_000;
 export const PROPS_AI_MAX_OUTPUT_PER_REQUEST = 7_000;
 export const PROPS_AI_MAX_PARTS = 16;
-export const PROPS_AI_PART_CONCURRENCY = 8;
+/** One whole game can use the existing sixteen-request sport pool. Whole-game
+ * admission reserves that exact weight through both phases and all receipts;
+ * this raises no global concurrency, request count or spending ceiling. */
+export const PROPS_AI_PART_CONCURRENCY = 16;
 export const PROPS_AI_MIN_REVIEW_WINDOW_MS = 120_000;
 export const PROPS_AI_SCENARIOS = 16;
 export const PROPS_AI_PRIMARY_MODEL = "gpt-6-luna" as const;

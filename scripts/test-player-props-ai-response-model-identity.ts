@@ -54,7 +54,7 @@ async function main(){let cases=0;
   const bad=await run({model:PROPS_AI_PRIMARY_MODEL,observed,sport});assert.equal(bad.result.status,"failed");assert.equal(bad.calls,1);assert.equal(bad.receipts[0]!.actual,null);assert.equal(bad.finishes[0]!.review,null);cases++;
  }
  const wave=await run({model:PROPS_AI_PRIMARY_MODEL,observed:PROPS_AI_STRONG_MODEL,parts:9});
- assert.equal(wave.calls,8);assert.equal(wave.receipts.length,8);assert(wave.receipts.every(r=>r.actual===null));assert.equal(wave.result.status,"failed");cases++;
+ assert.equal(wave.calls,9);assert.equal(wave.receipts.length,9);assert(wave.receipts.every(r=>r.actual===null));assert.equal(wave.result.status,"failed");cases++;
  const correction=await run({model:PROPS_AI_PRIMARY_MODEL,observed:PROPS_AI_STRONG_MODEL,correction:true});
  assert.equal(correction.calls,2);assert.equal(correction.receipts[0]!.actual,usageMicroUsd(PROPS_AI_PRIMARY_MODEL,{input_tokens:100,output_tokens:100},"default"));assert.equal(correction.receipts[1]!.actual,null);assert.equal(correction.finishes[0]!.review,null);cases++;
  for(const model of [PROPS_AI_PRIMARY_MODEL,PROPS_AI_STRONG_MODEL])for(const requestedTier of ["default","flex"] as const)for(const observedTier of ["default","flex"] as const)for(const stream of [false,true]){
@@ -82,7 +82,7 @@ async function main(){let cases=0;
  }
  for(const extra of [{observedTier:"priority"},{observedId:""}]){
   const late=await run({model:PROPS_AI_PRIMARY_MODEL,observed:PROPS_AI_PRIMARY_MODEL,...extra,correction:true});assert.equal(late.calls,2);assert.equal(late.receipts[1]!.actual,null);assert.equal(late.finishes[0]!.review,null);cases++;
-  const siblings=await run({model:PROPS_AI_PRIMARY_MODEL,observed:PROPS_AI_PRIMARY_MODEL,...extra,parts:9});assert.equal(siblings.calls,8);assert.equal(siblings.receipts.length,8);assert(siblings.receipts.every(r=>r.actual===null));cases++;
+  const siblings=await run({model:PROPS_AI_PRIMARY_MODEL,observed:PROPS_AI_PRIMARY_MODEL,...extra,parts:9});assert.equal(siblings.calls,9);assert.equal(siblings.receipts.length,9);assert(siblings.receipts.every(r=>r.actual===null));cases++;
  }
  assert.equal(usageMicroUsd(PROPS_AI_PRIMARY_MODEL,{input_tokens:100,output_tokens:100},"unknown"),60,"legacy/planning upper bound remains exact, not a known settlement");
  assert.equal(PROPS_AI_RELEASE,"player_props_ai_2026_11_15_r39_verified_response_model");

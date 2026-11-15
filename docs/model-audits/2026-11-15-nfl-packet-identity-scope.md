@@ -25,12 +25,13 @@ private failure capture also creates one invocation-local candidate scope, retai
 all original R2 outcome codes, source/archive bytes and hashes. No cache spans
 packets, source/cutoff changes, games, requests or writers.
 
-No numerical model/input field, actionable promotion/demotion, quote, deadline,
-concurrency, two logical stages, budget, API/wallet/lease or locked field changes.
+The identity optimization itself changes no numerical model/input field, actionable
+promotion/demotion, quote, deadline, two logical stages, budget, API/wallet/lease or
+locked field. The combined schedule R4 execution correction is described below.
 Fixed-clock complete packet bytes/refusals and board counts must be exact. The actual
 source-context/quote, full-part input/receipt, member/public-reader, separate-refresh
 and first-lock proof remains required during ordinary production. Nine-or-more-part
-capacity remains an explicit limitation of the unchanged 420-second full reserve;
+capacity was an explicit limitation of the original 420-second full reserve;
 a faster source path alone does not prove it fits after other preparation overhead.
 Do not increase caps, weaken validation, buy a proof, replay a closed job or make a
 perfect-coverage/accuracy claim.
@@ -41,3 +42,22 @@ two consecutive fresh all-three whole-product clean rounds on unchanged source,
 fresh-main/overlap/protection/exact-tree/expected-head merge, actual Ready-www/source,
 then normal scheduled proof only. All original laws, locks, tracking and receipts
 remain exact; original paid-test ledger is still unavailable, historical baseline only.
+
+
+Round56 correction: the new current registry wording now names the actual exported
+NFL event-source R3, without changing its runtime or any historical contract.
+Round56 also independently reproduced a supported 9–16-part admission gap. The
+combined prospective schedule R4 uses one full game wave in the existing global
+sixteen pool and exact full-weight whole-game admission, retaining both complete
+phase reserves, all rechecks and all fixed limits. Historical descriptions above
+of the eight-part local wave/420-second capacity constraint document the pre-R4
+finding, not current candidate behavior. Larger games can now enter with the same
+240-second complete two-phase opportunity after observed preparation. Normal live
+completion and actual current game part counts remain unproved; this is not a
+promise that every game/correction will finish or that the whole month fits $50.
+
+R4 retains the same total sixteen-request concurrency and funded maximum requests.
+A large game can launch more siblings before a terminal failure is observed, so
+actual failure-path spend distribution/timing can differ. Every launched sibling
+still settles; unknown-charge holds remain and no correction is bought for terminal
+unknown failures. No identical failure-cost or month-total guarantee is claimed.

@@ -1,8 +1,38 @@
+## November 15 shared full-wave review admission R4
+
+Shared NBA/NFL/MLB scheduling and execution admission is
+`player_props_ai_schedule_2026_11_15_r4_full_wave_admission`. It supersedes schedule
+R3 while preserving exactly the original EARLY/FINAL slots and final-only cutoff.
+NFL props writer R101 below includes the immutable packet identity optimization.
+Generation R39, models, law R3, grade R5, selection R8, NFL event-source R3 and
+identity R1, NBA writer R25, full-game writer R119 and native MLB R44 are unchanged.
+
+Each supported game of up to sixteen parts can now occupy one wave of the existing
+sixteen-request sport pool. More siblings in a large game can already be launched
+when an irrecoverable result arrives; all launched siblings settle normally. Thus
+failure-path spending timing/distribution may change within the same funded maximum,
+and no claim of identical failure cost or guaranteed monthly affordability is made.
+Whole-game admission reserves every part's actual
+weight until both phases, receipts and finish settle, preserving FIFO and fresh
+deadline/lock checks after waiting and claim acknowledgement. This removes the
+artificial second eight-part wave that made 9–16-part reviews require 420 seconds
+and remain pending after observed 108–128 seconds of preparation. Every part still
+reserves 90 seconds per phase plus the same 30-second phase cushion: the complete
+two-phase minimum is 240 seconds, not a primary-only admission. No global capacity,
+source, request count, model, output cap, correction count, writer deadline, lease,
+calendar slot, budget, price, forecast formula or old accepted/locked value changes.
+
+Virtual-time actual-reviewer tests must cover 9/16-part full corrections after the
+observed preparation, mixed-game FIFO/receipt drainage, lock and acknowledgement
+boundaries, known/unknown charges and unchanged total concurrency. This repairs a
+supported-path counterexample, not evidence of actual current game part counts or
+a complete production cure. Normal scheduled evidence remains required.
+
 ## November 15 NFL packet-scoped identity work R101
 
 NFL props writer is `nfl_player_props_writer_2026_11_15_r101_packet_identity_scope`.
 It supersedes R100 below; full-game writer R119 remains current. Generation R39,
-NFL event-source R2 and identity R1, law R3, grade R5, selection R8, NFL decision
+NFL event-source R3 and identity R1, law R3, grade R5, selection R8, NFL decision
 R13, NBA writer R25 and native MLB R44 are unchanged.
 
 A synchronous NFL packet construction now prepares its immutable captured identity
@@ -21,7 +51,7 @@ The actual R100 normal request still hit 540 seconds while repeatedly preparing
 source packets; append, member and full-game tracking had already settled. The
 identity hot path showed quadratic repeated work in offline source-tuple fixtures.
 This version removes that demonstrated cost without changing the two-phase reserve,
-part/global concurrency, stage boundaries, output caps, providers, slots, budgets,
+global concurrency, stage boundaries, output caps, providers, slots, budgets,
 lease drainage or original first locks. Exact complete packet bytes and original
 refusals must remain identical under fixed captured inputs/clocks. A faster identity
 lookup is not a guarantee of every game's remaining partition/time capacity or a
