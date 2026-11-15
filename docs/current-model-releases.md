@@ -11,6 +11,9 @@ market and side protects against a newly accepted spelling appending a second
 lock. Legacy name guards and every stored locked byte, order and duplicate
 multiplicity remain authoritative. Null/unknown IDs are never inferred. Old
 snapshot releases remain decoded without relabeling their locked records.
+The shared team aliases (including AZ/ARI) define the same exact event. A current
+canonical-ID event also supersedes an older unlocked spelling at the first-lock
+transition; this never deduplicates stored locks or different current book lines.
 The explicit name-data catalog is
 `player_props_ai_nfl_alias_catalog_2026_11_15_r1_official_names`, recorded as
 `sourceAliasRelease` in new immutable NFL packets. The existing cutoff/exact-ID,

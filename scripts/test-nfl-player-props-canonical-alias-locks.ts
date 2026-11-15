@@ -10,6 +10,7 @@ http.get = http.request = https.get = https.request = deny;
 net.connect = net.createConnection = tls.connect = deny;
 
 async function main(){
+process.env.NODE_ENV="test";
 
 const currentLock = await import('../lib/playerPropsAi/nflLockAuthority');
 
@@ -104,6 +105,26 @@ for (const c of [
   // are not collapsed. All lines/books of the already locked outcome stay owned.
   for(const delta of [{scheduledStart:'2030-11-17T21:00:00.000Z',lockAt:'2030-11-17T20:00:00.000Z'},{line:4.5},{sportsbook:'new-book'}]){
     assert.deepEqual(reconcile(previous,[{...candidate,...delta}]).board.decisions,[row]);checks++;
+  }
+  for(const reverse of [false,true]){
+    for(const aliases of [false,true]){
+      const old={...row,state:'unlocked' as const,playerName:reverse?c.alias:c.full,
+        team:aliases&&c.team==='ARI'?'AZ':c.team,opponent:aliases?'JAC':'JAX'};
+      const next={...candidate,playerName:reverse?c.full:c.alias,team:c.team,opponent:'JAX'};
+      const input={...packet,players:packet.players.map(p=>({...p,opponent:'JAX'}))};
+      const pre={...previous,generatedAt:'2030-11-17T19:55:00Z',board:board([old]),memberDecisions:[old]};
+      const handoff=capture([next],input as Parameters<typeof capture>[1],null,'native');
+      assert.equal(handoff.nativeProofs.length,1);checks++;
+      const first=reconcile(pre,[next],handoff);
+      assert.equal(first.board.decisions.length,1);checks++;
+      assert.equal(currentPub.buildNflPlayerPropsMemberSnapshot(first,now).memberDecisions.length,1);checks++;
+      assert.equal(currentPub.buildNflPlayerPropsTrackingEntries(first).length,1);checks++;
+      const locked={...old,state:'locked' as const};
+      const priorLock={...pre,board:board([locked]),memberDecisions:[locked]};
+      const kept=reconcile(priorLock,[next],handoff);
+      assert.deepEqual(kept.board.decisions,[locked]);checks++;
+      assert.deepEqual(kept.memberDecisions,[locked]);checks++;
+    }
   }
   const legacySnapshot={...historical,release:'nfl_player_props_member_2026_11_10_r60_current_execution_authority'};
   const decoded=store.decodeNflPlayerPropsSnapshotPayload(legacySnapshot);

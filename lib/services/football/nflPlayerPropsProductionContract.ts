@@ -152,8 +152,13 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
   }
   const nextKeys = new Set(decisions.map(offerKey));
   const nextOutcomeScopes = new Set(nextBoard.decisions.map(outcomeScopeKey));
+  const nextCanonicalScopes=new Set(nextBoard.decisions.map(canonicalLockedOutcomeScopeKey).filter((key):key is string=>key!==null));
   for (const prior of priorRows) {
     if(prior.state==="locked"||alreadyLocked(prior)||!canRetainUnlocked(prior))continue;
+    const canonicalScope=canonicalLockedOutcomeScopeKey(prior);
+    // Current exact-ID event authority also wins when the old spelling was
+    // unlocked before this first-lock transition. Never alter old stored locks.
+    if(canonicalScope!==null&&nextCanonicalScopes.has(canonicalScope))continue;
     if (!nextKeys.has(offerKey(prior)) && evaluatedAt >= Date.parse(prior.lockAt)
       && isFreshAtLock(prior)) {
       decisions.push({ ...prior, state: "locked" as const });
@@ -366,8 +371,8 @@ function decisionKey(row: NflPlayerPropsRuntimeDecision): string {
 function canonicalLockedOutcomeScopeKey(row:NflPlayerPropsRuntimeDecision):string|null{
   const id=row.providerPlayerId;
   const start=Date.parse(row.scheduledStart),lock=Date.parse(row.lockAt);
-  const team=typeof row.team==="string"?row.team.trim().toUpperCase():"";
-  const opponent=typeof row.opponent==="string"?row.opponent.trim().toUpperCase():"";
+  const team=typeof row.team==="string"?propsTeam(row.team.trim()):"";
+  const opponent=typeof row.opponent==="string"?propsTeam(row.opponent.trim()):"";
   if(typeof id!=="string"||!id.trim()||(typeof row.gameId!=="string"||!row.gameId.trim())||!team||!opponent
     ||!Number.isFinite(start)||!Number.isFinite(lock))return null;
   return JSON.stringify([row.gameId,id,team,opponent,start,lock,row.market,row.side]);
