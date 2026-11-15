@@ -15,8 +15,8 @@ import {
   collectNflPlayerPropsObservations,
   NFL_PLAYER_PROPS_COLLECTION_LIMITS,
 } from "./nflPlayerPropsCollector";
-import { buildNflPlayerPropsInferenceContextFromForwardEvidence } from "./nflPlayerPropsInferenceContext";
-import { readNflForwardEvidence } from "./nflForwardEvidenceStore";
+import { readNflPlayerPropsInferenceContextFromForwardEvidence } from "./nflPlayerPropsInferenceContext";
+import { reportNflWriterResourceStage } from "./nflWriterResourceHealth";
 import {
   buildNflPlayerPropsExactBoard,
   type NflPlayerPropsExactOffer,
@@ -85,7 +85,7 @@ import {
 } from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_11_14_r98_complete_history_health" as const;
+  "nfl_player_props_writer_2026_11_15_r99_streamed_context_history" as const;
 export const NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES = 60 as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
@@ -287,6 +287,8 @@ export async function runNflPlayerPropsProductionWriter(args: {
   auditDiscreteMarketCorrectionMarkets?: NflPlayerPropMarket[];
   fetchImpl?: typeof fetch;
 }): Promise<NflPlayerPropsWriterResult> {
+  const resourceStartedAt = Date.now();
+  reportNflWriterResourceStage(NFL_PLAYER_PROPS_WRITER_RELEASE, "started", resourceStartedAt);
   verifyNflPlayerPropsRuntimeParity();
   const [priorCurrentSeasonState, previous, retainedReferenceOffers] = await Promise.all([
     readNflPlayerPropsCurrentSeasonState({ client: args.client, season: args.season }),
@@ -317,12 +319,13 @@ export async function runNflPlayerPropsProductionWriter(args: {
       }),
     fetchImpl: args.fetchImpl,
   });
-  const evidence = await readNflForwardEvidence({ client: args.client, season: args.season, week: args.week });
-  const context = buildNflPlayerPropsInferenceContextFromForwardEvidence({
+  reportNflWriterResourceStage(NFL_PLAYER_PROPS_WRITER_RELEASE, "collection_ready", resourceStartedAt);
+  const context = await readNflPlayerPropsInferenceContextFromForwardEvidence({
+    client: args.client,
     snapshot: collection.snapshot,
-    evidence,
     capturedAt: args.now,
   });
+  reportNflWriterResourceStage(NFL_PLAYER_PROPS_WRITER_RELEASE, "context_ready", resourceStartedAt);
   const eligibleGameIds = new Set(context.games.map((game) => game.canonicalGameId));
   const eligibleSnapshot = {
     ...collection.snapshot,

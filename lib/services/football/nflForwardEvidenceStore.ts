@@ -23,7 +23,7 @@ type StoredRow = {
 };
 
 export const NFL_FORWARD_EVIDENCE_READ_RELEASE =
-  "nfl_forward_evidence_read_2026_11_14_r1_lossless_bounded_history" as const;
+  "nfl_forward_evidence_read_2026_11_15_r2_streamed_context_history" as const;
 // A complete week can exceed 5k observations before Sunday. Keep every row in
 // its original order without retaining the entire decoded JSON history.
 export const NFL_FORWARD_EVIDENCE_PAGE_SIZE = 50 as const;
@@ -122,6 +122,22 @@ export async function readNflForwardEvidence(args: {
   return readNflForwardEvidenceRelease({ ...args, evidenceRelease: NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE });
 }
 
+/** Visit the same complete verified history without retaining an unused copy.
+ * The visitor is synchronous: no selected result is authoritative until this
+ * promise resolves, including the final page/overflow and aggregate byte checks.
+ * Each row keeps the ordinary independent archived view and original hash.
+ */
+export async function visitNflForwardEvidence(args: {
+  client: SupabaseClient;
+  season: number;
+  week: number;
+  onRow: (row: NflForwardStoredEvidence) => void;
+}): Promise<void> {
+  await readNflForwardEvidenceRelease(
+    { ...args, evidenceRelease: NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE }, args.onRow,
+  );
+}
+
 export async function readLegacyNflForwardEvidence(args: {
   client: SupabaseClient;
   season: number;
@@ -155,7 +171,7 @@ async function readNflForwardEvidenceRelease(args: {
     | typeof NFL_FORWARD_EVIDENCE_PREVIOUS_SCHEMA_RELEASE
     | typeof NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE
     | typeof NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE;
-}): Promise<NflForwardStoredEvidence[]> {
+}, onRow?: (row: NflForwardStoredEvidence) => void): Promise<NflForwardStoredEvidence[]> {
   const rows: NflForwardStoredEvidence[] = [];
   const archive = createPayloadArchive();
   for (let from = 0; from <= NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE; from += NFL_FORWARD_EVIDENCE_PAGE_SIZE) {
@@ -189,7 +205,9 @@ async function readNflForwardEvidenceRelease(args: {
       // Verify the original payload and original stored digest before retaining
       // any compressed representation. The legacy hash exception stays exact.
       const original = normalizeStoredRow(row, args.evidenceRelease);
-      rows.push({ ...original, payload: archive(original.payload) });
+      const retained = { ...original, payload: archive(original.payload) };
+      if (onRow) onRow(retained);
+      else rows.push(retained);
     }
     if (page.length < NFL_FORWARD_EVIDENCE_PAGE_SIZE) {
       return rows;

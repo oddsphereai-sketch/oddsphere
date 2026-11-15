@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { visitNflForwardEvidence } from "./nflForwardEvidenceStore";
 import {
   fetchBalldontlieNflSlateAvailability,
   nflAvailabilityRequestBudgetMaximum,
@@ -144,19 +146,26 @@ export async function collectNflPlayerPropsInferenceContext(args: {
   };
 }
 
-export function buildNflPlayerPropsInferenceContextFromForwardEvidence(args: {
+type ForwardContextArgs = {
   snapshot: NflPlayerPropsObservationSnapshot;
-  evidence: NflForwardStoredEvidence[];
   capturedAt: string;
-}): NflPlayerPropsInferenceContext & { source: "nfl_forward_evidence" } {
+};
+
+/** One selector defines both the ordinary pure build and the streaming read.
+ * Equal time/stage retains the first observation, exactly as the original scan.
+ * Rows outside the current collector's game inventory cannot supply context.
+ */
+function createForwardContextSelection(args: ForwardContextArgs) {
   const capturedAtMs = Date.parse(args.capturedAt);
   if (!Number.isFinite(capturedAtMs)) throw new Error("NFL props shared context capturedAt is invalid.");
+  const gameIds = new Set(args.snapshot.games.map(game => game.providerGameId));
   const latest = new Map<string, NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }>();
   const latestWithInjuries = new Map<string, NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }>();
-  for (const row of args.evidence) {
-    if (row.payload.schemaRelease !== NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE) continue;
-    if (row.payload.season !== args.snapshot.season || row.payload.week !== args.snapshot.week) continue;
-    if (Date.parse(row.capturedAt) > capturedAtMs) continue;
+  const accept = (row: NflForwardStoredEvidence) => {
+    if (!gameIds.has(row.providerGameId)) return;
+    if (row.payload.schemaRelease !== NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE) return;
+    if (row.payload.season !== args.snapshot.season || row.payload.week !== args.snapshot.week) return;
+    if (Date.parse(row.capturedAt) > capturedAtMs) return;
     const current = latest.get(row.providerGameId);
     if (!current || compareEvidence(row, current) > 0) {
       latest.set(row.providerGameId, row as NflForwardStoredEvidence & { payload: NflForwardEvidencePayload });
@@ -165,7 +174,28 @@ export function buildNflPlayerPropsInferenceContextFromForwardEvidence(args: {
     if (row.payload.injuries && (!injuryCurrent || compareEvidence(row, injuryCurrent) > 0)) {
       latestWithInjuries.set(row.providerGameId, row as NflForwardStoredEvidence & { payload: NflForwardEvidencePayload });
     }
-  }
+  };
+  return { latest, latestWithInjuries, accept };
+}
+
+export async function readNflPlayerPropsInferenceContextFromForwardEvidence(args: ForwardContextArgs & {
+  client: SupabaseClient;
+}): Promise<NflPlayerPropsInferenceContext & { source: "nfl_forward_evidence" }> {
+  const selection = createForwardContextSelection(args);
+  await visitNflForwardEvidence({ client: args.client, season: args.snapshot.season,
+    week: args.snapshot.week, onRow: selection.accept });
+  // All pages, original hashes, and original resource limits have passed before
+  // this result can reach any forecast, source handoff or paid review claim.
+  return buildNflPlayerPropsInferenceContextFromForwardEvidence({ ...args,
+    evidence: [...new Set([...selection.latest.values(), ...selection.latestWithInjuries.values()])] });
+}
+
+export function buildNflPlayerPropsInferenceContextFromForwardEvidence(args: ForwardContextArgs & {
+  evidence: NflForwardStoredEvidence[];
+}): NflPlayerPropsInferenceContext & { source: "nfl_forward_evidence" } {
+  const { latest, latestWithInjuries, accept } = createForwardContextSelection(args);
+  const capturedAtMs = Date.parse(args.capturedAt);
+  for (const row of args.evidence) accept(row);
   const sourceRows: Array<NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }> = [];
   const games: NflPlayerPropsInferenceGameContext[] = [];
   const excludedGames: NflPlayerPropsExcludedGame[] = [];

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { reportNflWriterResourceStage } from "./nflWriterResourceHealth";
 import { isDeepStrictEqual } from "node:util";
 import type { PredictionRecordRow } from "@/lib/types/domain/Tracking";
 import type { IWeatherProvider } from "@/lib/providers/interfaces/IWeatherProvider";
@@ -160,7 +161,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_14_r117_complete_bounded_history" as const;
+  "nfl_forward_evidence_writer_2026_11_15_r118_resource_diagnostics" as const;
 
 const NFL_REGULAR_MARKETS = ["moneyline", "spread", "total"] as const;
 const NFL_OWLS_COVERAGE_DIAGNOSTICS = new Set([
@@ -358,7 +359,10 @@ export async function runNflForwardEvidenceWriter(args: {
   // Publication and planning need the complete current release only. Loading
   // superseded large JSON releases added no current fixture authority and can
   // make Postgres cancel the writer before it reaches the provider slate.
+  const resourceStartedAt = Date.now();
+  reportNflWriterResourceStage(NFL_FORWARD_WRITER_RELEASE, "started", resourceStartedAt);
   const existing = await readNflForwardEvidence({ client: args.client, season: args.season, week: args.week });
+  reportNflWriterResourceStage(NFL_FORWARD_WRITER_RELEASE, "history_ready", resourceStartedAt);
   const historicalExisting = existing;
   const need = determineNflForwardCollectionNeed({
     existing,
@@ -1446,6 +1450,7 @@ export async function runNflForwardEvidenceWriter(args: {
   args.auditSemanticImpact?.(semanticImpactRows);
   args.auditPayloads?.(payloads);
   const authoritativePayloads = payloads.map(withoutMarketBrainShadow).map(normalizeNflForwardEvidenceForStorage);
+  reportNflWriterResourceStage(NFL_FORWARD_WRITER_RELEASE, "forecasts_ready", resourceStartedAt);
   const write = await appendNflForwardEvidence({
     client: args.client,
     runId: args.runId,

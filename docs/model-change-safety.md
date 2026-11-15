@@ -1,3 +1,33 @@
+## November 15 NFL verified-history context retention R99
+
+NFL props writer is `nfl_player_props_writer_2026_11_15_r99_streamed_context_history`;
+the shared history reader is `nfl_forward_evidence_read_2026_11_15_r2_streamed_context_history`.
+The full-game writer is `nfl_forward_evidence_writer_2026_11_15_r118_resource_diagnostics`.
+Shared generation R38, law R3, grade R5, selection R8, NFL decision R13, NBA writer R25
+and native MLB R44 are unchanged. No forecast formula, input selection rule, provider
+request, slot, cap, deadline, lease, budget or locked-record behavior changes.
+
+The props context read visits every original ordered row and verifies every checksum,
+identity and original row/hot/compressed/decode bound, including terminal and late errors.
+It retains only the same latest and latest-with-injuries rows for the current collector's
+games. The original timestamp/stage comparison and first equal-rank tie remain exact;
+all original source IDs, clocks, hashes and resulting context bytes retain authority.
+It runs at the existing later props read point, preserving access to newly appended
+same-cycle full-game evidence. It does not share an earlier history read or skip history.
+The full-game reader continues retaining complete chronology. Synchronous visitation
+cannot publish a partial selection: the whole read must finish before context returns.
+
+This addresses demonstrated unnecessary retained memory after an ordinary NFL runtime
+hit its 2 GB limit before any AI claim. Exact 5,117-row offline replay showed substantial
+retained-memory reduction with identical context winners, but did not reproduce the
+entire live 2 GB failure. Private phase/resource diagnostics contain only release, stage,
+elapsed time and process byte counts, never player/source/price data or member fields.
+Actual normal-cycle completion, all submitted player/market coverage, evidence validity,
+member publication and locks still require live verification. Do not claim the OOM is
+fully cured, or predictive accuracy guaranteed, from the optimization or offline tests.
+No closed job is replayed and no historical payload is changed.
+See `model-audits/2026-11-15-nfl-context-history-retention.md`.
+
 ## November 14 player-prop complete evidence, exact confidence and private process health R38
 
 Future shared NBA/NFL/MLB generation is `player_props_ai_2026_11_14_r38_exact_confidence_and_evidence`.
@@ -10,9 +40,9 @@ qualification. Original law R2 keeps grade R4/selection R7 and its original pair
 floating arithmetic; original R1 keeps grade R3/selection R6. Their hashes, values,
 repricing semantics and locked-reader precedence remain exact. The shared Daily Edge
 confidence helper and all native models remain unchanged.
-NFL props writer is `nfl_player_props_writer_2026_11_14_r98_complete_history_health`;
-full-game evidence writer is `nfl_forward_evidence_writer_2026_11_14_r117_complete_bounded_history`.
-The shared history reader is `nfl_forward_evidence_read_2026_11_14_r1_lossless_bounded_history`.
+NFL props writer is `nfl_player_props_writer_2026_11_15_r99_streamed_context_history`;
+full-game evidence writer is `nfl_forward_evidence_writer_2026_11_15_r118_resource_diagnostics`.
+The shared history reader is `nfl_forward_evidence_read_2026_11_15_r2_streamed_context_history`.
 It verifies original hashes and retains every ordered observation, with explicit row,
 compressed-byte, hot-JSON and decoded-cache bounds instead of an incomplete 5,000-row read.
 Exact-boundary reads use a terminal overflow probe; excess fails closed. No history is dropped.
