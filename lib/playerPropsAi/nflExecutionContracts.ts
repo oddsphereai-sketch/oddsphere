@@ -47,7 +47,7 @@ export function assertNflExecutionContracts(packet:GamePacket){
     const e=q.sourceEvent;
     if(q.line===0.5){if(e?.release===PROPS_AI_NFL_EXECUTION_CONTRACT_RELEASE)throw Error('Supported binary event falsely held');continue;}
     if(!Number.isFinite(q.line)||e?.release!==PROPS_AI_NFL_EXECUTION_CONTRACT_RELEASE||e.status!=='unresolved'||e.statistic!==null
-      ||e.threshold!==q.line||e.reason!==REASON||!(e.providerMarket===null||typeof e.providerMarket==='string')
+      ||e.threshold!==q.line||typeof e.reason!=='string'||!e.reason.trim()||e.reason.length>2048||!(e.providerMarket===null||typeof e.providerMarket==='string')
       ||!(e.observationId===null||typeof e.observationId==='string')||!(e.normalizedOfferType===null||typeof e.normalizedOfferType==='string'))throw Error('Unsupported NFL binary event lacks exact held source qualification');
   }
   if(packet.players.some(p=>String(p.sourceEventContracts?.anytime_td?.release)===PROPS_AI_NFL_EXECUTION_CONTRACT_RELEASE))throw Error('Quote qualification cannot silently decline an entire numeric market');

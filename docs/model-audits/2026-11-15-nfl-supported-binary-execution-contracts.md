@@ -13,6 +13,9 @@ holds thresholds other than 0.5. Future AI inputs now retain those unsupported
 quotes and all supplied actors/scopes, with an explicit unresolved event qualifier,
 original line/price and available provider declaration/normalized offer type.
 They cannot demand an impossible priced tail, form a price comparison or publish.
+Owned unresolved raw-declaration conflicts keep their actual diagnostic; a change
+in explanation text cannot abort the otherwise supported game. Held status,
+statistic, threshold and declaration fields remain structurally validated.
 There is no inferred count-event meaning, line clamp or historical repair. A valid
 0.5 event in the same actor/market remains eligible; supported ordinary NFL
 milestones and Over/Under contracts remain unchanged. An actor with only an unsupported offered threshold remains in the numeric

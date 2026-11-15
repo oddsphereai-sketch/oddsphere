@@ -64,7 +64,8 @@ for(const sport of ['nba','mlb'] as const){assert.throws(()=>qualifyNflExecution
 // no price, line, player or otherwise supported binary event is replaced.
 type Args=Parameters<typeof liveNflPacket>[0];
 const observations=[.5,2].map(line=>({provider:'balldontlie',providerObservationId:'source-'+line,providerEventId:'event',providerPlayerId:'697',playerName:player.name,playerTeam:'TEN',canonicalGameId:'game',scheduledStart:start,homeTeam:'TEN',awayTeam:'CHI',market:'anytime_td',providerMarket:'anytime_td',offerType:'milestone',side:'yes',line,sportsbook:'synthetic',americanPrice:150,observedAt:at,receivedAt:at,fetchedAt:at,isOpening:false,isLive:false}));
-const live=liveNflPacket({game:{id:'game',start,home:'TEN',away:'CHI'},window:{gameId:'game',stage:'early',cutoff:at,lock},snapshot:{week:11,generatedAt:at,board:{decisions:[]},memberDecisions:[]} as unknown as Args['snapshot'],observations:{generatedAt:at,observations} as unknown as Args['observations'],history:{games:[],stats:[],teamStats:[],playMetrics:[],updatedAt:at} as unknown as Args['history'],context:{capturedAt:at,games:[{canonicalGameId:'game',scheduledStart:start,homeTeam:'TEN',awayTeam:'CHI',homeDepth:{team:'TEN',capturedAt:at,roster:[{playerId:'697',name:player.name,position:'RB'}]},awayDepth:{team:'CHI',capturedAt:at,roster:[]},injuries:{players:[]},weather:null}]} as unknown as Args['context']});
+const liveArgs:Args={game:{id:'game',start,home:'TEN',away:'CHI'},window:{gameId:'game',stage:'early',cutoff:at,lock},snapshot:{week:11,generatedAt:at,board:{decisions:[]},memberDecisions:[]} as unknown as Args['snapshot'],observations:{generatedAt:at,observations} as unknown as Args['observations'],history:{games:[],stats:[],teamStats:[],playMetrics:[],updatedAt:at} as unknown as Args['history'],context:{capturedAt:at,games:[{canonicalGameId:'game',scheduledStart:start,homeTeam:'TEN',awayTeam:'CHI',homeDepth:{team:'TEN',capturedAt:at,roster:[{playerId:'697',name:player.name,position:'RB'}]},awayDepth:{team:'CHI',capturedAt:at,roster:[]},injuries:{players:[]},weather:null}]} as unknown as Args['context']};
+const live=liveNflPacket(liveArgs);
 validatePacket(live);checks++;
 assert.equal(live.players.length,1);checks++;
 assert.deepEqual(live.players[0].markets,['anytime_td']);checks++;
@@ -74,4 +75,20 @@ assert.equal(unsupported.sourceEvent!.providerMarket,'anytime_td');checks++;
 assert.equal(unsupported.sourceEvent!.normalizedOfferType,'milestone');checks++;
 assert.equal(unsupported.sourceEvent!.observationId,'source-2');checks++;
 assertNflExecutionContracts(live);checks++;
+// The owned upstream conflict diagnostic must remain an unqualified source
+// reference, without blocking the valid binary quote or another healthy actor.
+const conflictArgs=structuredClone(liveArgs);
+conflictArgs.observations.observations.push({...conflictArgs.observations.observations[1],providerMarket:'player_anytime_td'});
+const conflictBefore=digest(conflictArgs),conflict=liveNflPacket(conflictArgs);
+validatePacket(conflict);checks++;
+assert.equal(digest(conflictArgs),conflictBefore);checks++;
+assert.equal(conflict.players.length,1);checks++;
+assert.deepEqual(conflict.players[0].markets,['anytime_td']);checks++;
+assert.deepEqual(criticalContextHashes(conflict),criticalContextHashes(live));checks++;
+assert.deepEqual(executionQuotes(conflict,at).map(q=>q.line),[.5]);checks++;
+const conflicts=conflict.quotes.filter(q=>q.line===2);
+assert.equal(conflicts.length,2);checks++;
+assert(conflicts.every(q=>!sourceEventUsable(q)&&q.sourceEvent!.reason.includes('Conflicting raw market declarations')));checks++;
+assert.deepEqual(conflicts.map(q=>q.sourceEvent!.providerMarket).sort(),['anytime_td','player_anytime_td']);checks++;
+for(const reason of ['', '  ', 'x'.repeat(2049)]){const bad=structuredClone(future);bad.quotes[1].sourceEvent!.reason=reason;assert.throws(()=>validatePacket(bad));checks++;}
 console.log(`NFL binary execution contract: ${checks} controls passed; all actors/scopes retained, valid event promotion and invalid-quote refusal, original law and context unchanged. No network or paid calls.`);
