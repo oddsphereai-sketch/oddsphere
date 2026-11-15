@@ -26,7 +26,7 @@ const {evidenceAliases}=await import(root+'/lib/playerPropsAi/input.ts');
 const {parseJointReview}=await import(root+'/lib/playerPropsAi/request.ts');
 const {encodeCanonicalScenarioLaw}=await import(root+'/lib/playerPropsAi/generativeCoordinates.ts');
 const {PRODUCT_RELEASE}=await import(root+'/lib/playerPropsAi/evidenceContract.ts');
-const {digest}=await import(root+'/lib/playerPropsAi/evidence.ts');
+const {digest,etDate}=await import(root+'/lib/playerPropsAi/evidence.ts');
 const {independentPriorEvents}=await import(root+'/lib/playerPropsAi/priorEvents.ts');
 const priorReads=(input:any)=>Object.fromEntries(independentPriorEvents(input.players[0]).map((e:any)=>[[...evidenceAliases(input)].find(([,id])=>id===e.sourceId)![0],e.preferredOutcome]));
 const v=(n:number)=>Array(16).fill(n);
@@ -112,31 +112,62 @@ const previous:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductio
 const publicLocked:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:lock,nextBoard:native(earlyCurrent),previous});
 function allDeclined(){const p=final.players[0],wire={wireRelease:PROPS_AI_WIRE_RELEASE,players:{[id]:verifiedReaderFixture(currentPacket,id,{assessment:'The supplied sources do not qualify a numerical forecast.',priorRead:priorReads(currentPacket),coverage:Object.fromEntries(Object.entries(p.coverage).map(([area,value]:any)=>{const{facts,...raw}=value;void facts;return[area,raw];})),evidenceIds:['e0'],gaps:['Both scopes explicitly remain unqualified.'],law:null,confidence:[0,0],exceptions:['Reviewed scope is unqualified.','Reviewed scope is unqualified.']})}};return{...final,...parseJointReview(currentPacket,wire)};}
 
- type Mode='ready_then_delay'|'fault_after_ready'|'source_write_failure'|'decline'|'withdrawal'|'duplicate'|'late_before_send'|'ack_after_lock'|'legacy'|'restart'|'changed_no_native'|'later_game'|'partial_write_failure'|'midnight'|'same_early'|'unknown_lookup'|'unknown_ack'|'ai_health_incomplete'|'ai_health_unavailable'|'ai_health_clean';
+ type Mode='ready_then_delay'|'fault_after_ready'|'source_write_failure'|'decline'|'withdrawal'|'duplicate'|'late_before_send'|'ack_after_lock'|'legacy'|'restart'|'changed_no_native'|'later_game'|'partial_write_failure'|'midnight'|'same_early'|'unknown_lookup'|'unknown_ack'|'ai_health_incomplete'|'ai_health_unavailable'|'ai_health_clean'|'unknown_initial'|'unknown_after_ready'|'unknown_recover'|'unknown_known_empty'|'unknown_other_game'|'unknown_other_initial'|'unknown_locked'|'prelock_reload_other_game'|'prelock_reload_after_ready'|'final_source_findings_only'|'postlock_reload_ready'|'unobserved_other_game'|'offday_native'|'unknown_queue_recover'|'unknown_late_recover';
  async function run(mode:Mode){
-  let tick=initialAt,writes=0,stateWrites=0,readies=0;
+  let tick=initialAt,writes=0,stateWrites=0,readies=0,invocations=0;
   const lookupReceipts:boolean[]=[];
   const trace:string[]=[],snapshots:NflPlayerPropsProductionSnapshot[]=[];
-  const initial=mode==='legacy'?publicLocked:previous;
+  const initial=mode==='legacy'||mode==='unknown_locked'?publicLocked:previous;
   let persisted=structuredClone(initial);
-  const immutableLocks=JSON.stringify(publicLocked.memberDecisions);
+  const immutableLocks=JSON.stringify(publicLocked.memberDecisions),originalCanonicalHash=digest(initial),originalPacketsHash=digest([earlyPacket,earlyCurrent,currentPacket]);
   const clock=()=>tick;
   class Clock extends Date{constructor(value?:string|number){super(value??tick);}static now(){return Date.parse(tick);}}
   const fixture=syntheticNflIdentityFailureArgs(initialAt);
   const source={...fixture.observations,providerRequests:{},observations:[],games:[]};
   const secondStart=new Date(Date.parse(start)+(mode==='midnight'?140:20)*60000).toISOString(),secondLock=new Date(Date.parse(lock)+(mode==='midnight'?140:20)*60000).toISOString();
-  const contexts={...fixture.context,requestBudget:{totalMaximum:0},games:[{canonicalGameId:'game',scheduledStart:start,awayTeam:'BUF',homeTeam:'MIN'},...(['later_game','partial_write_failure','midnight','unknown_ack'].includes(mode)?[{canonicalGameId:'second',scheduledStart:secondStart,awayTeam:'BUF',homeTeam:'MIN'}]:[])]};
+  const contexts={...fixture.context,requestBudget:{totalMaximum:0},games:[{canonicalGameId:'game',scheduledStart:mode==='offday_native'?new Date(Date.parse(start)+86400000).toISOString():start,awayTeam:'BUF',homeTeam:'MIN'},...(['later_game','partial_write_failure','midnight','unknown_ack','unknown_other_game','unknown_other_initial','prelock_reload_other_game','unobserved_other_game'].includes(mode)?[{canonicalGameId:'second',scheduledStart:secondStart,awayTeam:'BUF',homeTeam:'MIN'}]:[])]};
   const sourceAuthority=testNflSourceAuthority(clock),capture=testNflHandoffCapture(clock);
-  const cycleNative=mode==='changed_no_native'?{...base,decisions:[],counts:{...base.counts,'Best Angle':0,Lean:0,Watchlist:0,'No Play':0,Held:0,actionable:0}}:['later_game','partial_write_failure','midnight','unknown_ack'].includes(mode)?boardRows([...base.decisions,...base.decisions.map(row=>({...row,gameId:'second',scheduledStart:secondStart,lockAt:secondLock}))]):base;
+  const cycleNative=mode==='offday_native'?boardRows(base.decisions.map(row=>({...row,scheduledStart:new Date(Date.parse(start)+86400000).toISOString(),lockAt:new Date(Date.parse(lock)+86400000).toISOString()}))):mode==='changed_no_native'?{...base,decisions:[],counts:{...base.counts,'Best Angle':0,Lean:0,Watchlist:0,'No Play':0,Held:0,actionable:0}}:['later_game','partial_write_failure','midnight','unknown_ack','unknown_other_game','unknown_other_initial','prelock_reload_other_game','unobserved_other_game'].includes(mode)?boardRows([...base.decisions,...base.decisions.map(row=>({...row,gameId:'second',scheduledStart:secondStart,lockAt:secondLock}))]):base;
   const modules:Record<string,Record<string,unknown>>={
-   evidence:{digest},publication:{siteAiDecisions},nflIdentityFailureEvidence:identityEvidence,runtimeHealth,
+   evidence:{digest,etDate},publication:{siteAiDecisions},nflIdentityFailureEvidence:identityEvidence,runtimeHealth,
    nflLockAuthority:{observeNflSourceAuthority:(p:any,r:any,lookup:boolean)=>{lookupReceipts.push(lookup);return sourceAuthority(p,r,lookup);},captureNflHandoffBundle:capture,mergeNflHandoffs},
    siteConfig:{propsAiSiteConfig:()=>({integrated:true})},
    siteRuntime:{reviewPropsForSite:async(args:any)=>{
+    if(invocations>1)return{status:'active',newlyCompletedReviews:0,games:[],findings:[]};
+    if(mode==='offday_native')return{status:'active',newlyCompletedReviews:0,games:[],findings:[]};
+    if(mode==='ai_health_clean')await args.onSourceReady(earlyCurrent,early,tick,true);
     if(mode.startsWith('ai_health_'))return{status:mode==='ai_health_unavailable'?'unavailable':'active',newlyCompletedReviews:0,games:[],findings:mode==='ai_health_incomplete'?['source_or_review_unavailable:game:nfl_offered_player_identity_incomplete']:[]};
-    const p=mode==='same_early'?earlyCurrent:mode==='withdrawal'?{...currentPacket,executionQuotes:[],quotes:[]}:mode==='changed_no_native'?{...earlyCurrent,players:earlyCurrent.players.map((p:any)=>({...p,evidence:[...p.evidence,{id:'synthetic-new-matchup',kind:'matchup',source:'synthetic fresh context',availableAt:earlyCurrent.cutoff,value:{opponentDefense:'new verified scheme'}}]}))}:currentPacket;
+    const p=mode==='same_early'||['unknown_lookup','unknown_initial','unknown_after_ready','unknown_recover','unknown_known_empty','unknown_other_game','unknown_other_initial','unknown_locked'].includes(mode)?earlyCurrent:mode==='withdrawal'?{...currentPacket,executionQuotes:[],quotes:[]}:mode==='changed_no_native'?{...earlyCurrent,players:earlyCurrent.players.map((p:any)=>({...p,evidence:[...p.evidence,{id:'synthetic-new-matchup',kind:'matchup',source:'synthetic fresh context',availableAt:earlyCurrent.cutoff,value:{opponentDefense:'new verified scheme'}}]}))}:currentPacket;
     const r=mode==='same_early'?early:mode==='decline'?allDeclined():final;
-    if(mode==='unknown_lookup'){await args.onSourceReady(p,early,tick,false);await args.onReviewObserved(p,early,false);return{status:'active',games:[{game:{id:'game',start},packet:p,decisions:[],authorityReview:early,observedAt:tick}],findings:['accepted_review_read_failed_use_trusted_local']};}
+    if(['unknown_lookup','unknown_initial','unknown_after_ready','unknown_recover','unknown_known_empty','unknown_other_game','unknown_other_initial','unknown_locked','prelock_reload_other_game','prelock_reload_after_ready','final_source_findings_only','postlock_reload_ready','unobserved_other_game','unknown_queue_recover','unknown_late_recover'].includes(mode)){
+     if(['unknown_after_ready','prelock_reload_other_game','prelock_reload_after_ready','final_source_findings_only','postlock_reload_ready'].includes(mode)){await args.onSourceReady(currentPacket,early,tick,true);await args.onReviewReady(currentPacket,final);}
+     const before=structuredClone(persisted),beforeWrites=writes;
+     if(!['final_source_findings_only','postlock_reload_ready','unobserved_other_game','unknown_queue_recover','unknown_late_recover'].includes(mode)){await args.onSourceReady(p,null,tick,false);await args.onReviewObserved(p,null,false);}
+     assert.equal(writes,beforeWrites,'Unavailable lookup cannot issue a native replacement write');
+     assert.deepEqual(persisted,before,'Unknown callback leaves every ACKed canonical field exact');
+     if(mode==='unknown_queue_recover'){
+      await Promise.all([args.onSourceReady(p,null,tick,false),args.onReviewReady(currentPacket,final)]);
+      assert(persisted.memberDecisions.some(row=>row.aiReview?.lawHash===final.players[0].law!.hash),'Serialized known same-game callback recovers after queued unknown');tick=afterLock;
+     }else if(mode==='unknown_late_recover'){
+      tick=afterLock;const beforeLate=writes;await args.onReviewReady(currentPacket,final);assert.equal(writes,beforeLate,'Late known callback cannot backdate recovery');
+     }else if(mode==='unknown_recover'){
+      await args.onSourceReady(currentPacket,final,tick,true);
+      assert(persisted.memberDecisions.some(row=>row.aiReview?.lawHash===final.players[0].law!.hash),'Known later same-game review clears read unavailability');
+      tick=afterLock;
+     }else if(mode==='unknown_known_empty'){
+      const withdrawn={...currentPacket,executionQuotes:[],quotes:[]};await args.onSourceReady(withdrawn,null,tick,true);
+      assert.equal(persisted.memberDecisions.filter(row=>row.gameId==='game').length,0,'Known empty source remains authoritative withdrawal');
+      tick=afterLock;
+     }else if(mode==='unknown_other_game'||mode==='unknown_other_initial'||mode==='prelock_reload_other_game'||mode==='unobserved_other_game'){
+      tick=afterLock;const second={...currentPacket,gameId:'second',sourceGameId:'second',start:secondStart,lock:secondLock,cutoff:tick};
+      const secondReview={...review(second,true),gameId:'second',sourceGameId:'second',start:secondStart,lock:secondLock,cutoff:tick,issuedAt:tick,inputHash:digest(second),inputEvidence:{digest:digest(second)},criticalContextHashes:criticalContextHashes(second)};
+      await args.onSourceReady(second,null,tick,true);await args.onReviewReady(second,secondReview);
+      assert(persisted.memberDecisions.some(row=>row.gameId==='second'&&row.aiReview),'Another healthy game still publishes after held game crosses lock');
+      assert.equal(persisted.memberDecisions.filter(row=>row.gameId==='game').length,0,'Another header omits held unlocked rows rather than giving them a new cutoff/lock');
+     }else if(mode==='postlock_reload_ready'){tick=afterLock;await args.onReviewObserved(currentPacket,final,true);}
+     else if(mode!=='final_source_findings_only'&&mode!=='prelock_reload_after_ready')tick=afterLock;
+     return{status:'active',games:[{game:{id:'game',start},packet:p,decisions:[],authorityReview:null,observedAt:tick}],findings:mode==='postlock_reload_ready'?['current_source_reload_unavailable_after_ready_lock:game:unclassified']:['prelock_reload_other_game','prelock_reload_after_ready','final_source_findings_only'].includes(mode)?['current_source_unavailable:game:unclassified']:['accepted_review_read_failed_use_trusted_local']};
+    }
     if(mode==='source_write_failure'){
      await assert.rejects(()=>args.onSourceReady(p,early,tick,true),/synthetic snapshot failure/);
      assert.equal(writes,1);assert.equal(readies,0,'Its failed source write cannot authorize paid work');
@@ -178,7 +209,7 @@ function allDeclined(){const p=final.players[0],wire={wireRelease:PROPS_AI_WIRE_
      const originalA=persisted.memberDecisions.filter(row=>row.gameId==='game').map(row=>({...row,state:'locked'}));
      tick=mode==='midnight'?'2026-11-10T00:00:01Z':afterLock;
      const second={...currentPacket,gameId:'second',sourceGameId:'second',start:secondStart,lock:secondLock,cutoff:tick};
-     const secondReview={...final,gameId:'second',sourceGameId:'second',start:secondStart,lock:secondLock,cutoff:tick,issuedAt:tick,inputHash:digest(second),inputEvidence:{digest:digest(second)},criticalContextHashes:criticalContextHashes(second)};
+     const secondReview={...review(second,true),gameId:'second',sourceGameId:'second',start:secondStart,lock:secondLock,cutoff:tick,issuedAt:tick,inputHash:digest(second),inputEvidence:{digest:digest(second)},criticalContextHashes:criticalContextHashes(second)};
      if(mode==='partial_write_failure')await assert.rejects(()=>args.onSourceReady(second,null,tick,true),/synthetic later write failure/);
      else{await args.onSourceReady(second,null,tick,true);await args.onReviewReady(second,secondReview);assert.deepEqual(persisted.memberDecisions.filter(row=>row.gameId==='game'),originalA,'Later game header first freezes prior ACKed game with exact stored payloads');}
     }
@@ -192,7 +223,7 @@ function allDeclined(){const p=final.players[0],wire={wireRelease:PROPS_AI_WIRE_
    nflPlayerPropsMarketBoard:{buildNflPlayerPropsExactBoard:()=>[]},
    nflPlayerPropsRuntime:{...actualRuntime,buildNflPlayerPropsRuntimeBoard:()=>structuredClone(cycleNative),buildNflPlayerPropsRuntimeFeatureRows:()=>[],buildNflPlayerPropsRuntimeMarketEvidence:()=>({capture:{i:[]}}),verifyNflPlayerPropsRuntimeParity:()=>{}},
    nflPlayerPropsProductionContract:actualContract,
-   nflPlayerPropsSnapshotStore:{readNflPlayerPropsSnapshot:async()=>structuredClone(persisted),writeNflPlayerPropsSnapshot:async({snapshot}:any)=>{
+   nflPlayerPropsSnapshotStore:{readNflPlayerPropsSnapshot:async()=>['unknown_initial','unknown_other_initial','offday_native'].includes(mode)?null:structuredClone(persisted),writeNflPlayerPropsSnapshot:async({snapshot}:any)=>{
     writes++;assert.equal(snapshot.board.publicationEnabled,true,'Draft runtime flags never alter the stored publication contract');assert.equal(snapshot.board.trackingEnabled,true);assert(stateWrites>0,'Current-season state precedes the first canonical snapshot');
     if(mode==='partial_write_failure'&&writes===3)throw Error('synthetic later write failure');
     if(mode==='source_write_failure'&&writes===1)throw Error('synthetic snapshot failure');
@@ -212,23 +243,41 @@ function allDeclined(){const p=final.players[0],wire={wireRelease:PROPS_AI_WIRE_
   const requireMock=(request:string)=>{const name=request.split('/').at(-1)!;assert(Object.hasOwn(modules,name),`Unmocked writer dependency ${request}`);return new Proxy(modules[name],{get:(target,key)=>{if(key==='__esModule')return false;assert(Object.hasOwn(target,key),`Unmocked writer dependency member ${name}.${String(key)}`);return target[key as string];}});};
   vm.runInNewContext(javascript,{module:moduleFixture,exports:moduleFixture.exports,require:requireMock,Date:Clock,console,fetch:globalThis.fetch},{filename:'actual-nfl-durable-writer-under-offline-test.cjs'});
   const writer=(moduleFixture.exports as any).runNflPlayerPropsProductionWriter;
-  const invoke=()=>writer({client:{} as never,writerRunId:'synthetic-owner',season:2026,week:9,now:initialAt,apply:true,ballDontLieApiKey:'synthetic-never-real',fetchImpl:globalThis.fetch});
+  const invoke=()=>{invocations++;return writer({client:{} as never,writerRunId:'synthetic-owner',season:2026,week:9,now:tick,apply:true,ballDontLieApiKey:'synthetic-never-real',fetchImpl:globalThis.fetch});};
   let result:any;
   if(['fault_after_ready','source_write_failure','late_before_send','partial_write_failure','unknown_ack'].includes(mode))await assert.rejects(invoke,/synthetic|publication window closed|indeterminate snapshot acknowledgement/);else result=await invoke();
   if(mode.startsWith('ai_health_')){assert.equal(result.aiReviewRuntime.newlyCompletedReviews,0,'Retained native/AI rows are never new review completions');assert.equal(result.aiReviewRuntime.status,mode==='ai_health_unavailable'?'unavailable':'active');assert.equal(result.healthFindings.some((f:string)=>f.startsWith('NFL_PLAYER_PROPS_AI_')),mode!=='ai_health_clean');assert(!JSON.stringify(actualContract.buildNflPlayerPropsMemberSnapshot(persisted,tick)).includes('aiReviewRuntime'),'Private process status never enters members');}
   if(mode==='fault_after_ready'||mode==='partial_write_failure'){assert(persisted.memberDecisions.some(row=>row.aiReview?.lawHash===final.players[0].law!.hash));assert.equal(readies,1);}
   if(mode==='source_write_failure'||mode==='late_before_send')assert.deepEqual(persisted,initial,'A refused write never advances or replaces the canonical pointer');
   if(mode==='legacy')assert.equal(JSON.stringify(persisted.memberDecisions),immutableLocks,'All original member locks preserve exact writer/reader precedence');
-  if(mode==='unknown_lookup'){assert(lookupReceipts.length>0&&lookupReceipts.every(v=>v===false),'A returned game cannot upgrade unknown review lookup into true authority');assert(persisted.memberDecisions.filter(row=>row.aiReview).every(row=>row.aiReview!.lawHash===early.players[0].law!.hash),'Unknown lookup never invents a final review');}
+  if(['unknown_lookup','unknown_initial','unknown_after_ready','unknown_recover','unknown_known_empty','unknown_other_game','unknown_other_initial','unknown_locked','prelock_reload_other_game','prelock_reload_after_ready','final_source_findings_only','postlock_reload_ready','unobserved_other_game','unknown_queue_recover','unknown_late_recover'].includes(mode)){
+   if(['unknown_lookup','unknown_initial','unknown_locked'].includes(mode))assert.equal(lookupReceipts.length,0,'Unknown lookup creates no new source/review authority frame');
+   if(['unknown_lookup','unknown_after_ready','unknown_other_game','prelock_reload_other_game','prelock_reload_after_ready','final_source_findings_only','unobserved_other_game','unknown_late_recover'].includes(mode)){
+    assert(initial.memberDecisions.some((row:NflPlayerPropsRuntimeDecision)=>row.aiReview),'Nonvacuous original AI cohort');
+    assert.equal(persisted.memberDecisions.filter(row=>row.gameId==='game').length,0,'Uncertain game is explicitly omitted, never native replacement or new first lock');
+    assert.equal(persisted.board.decisions.filter(row=>row.gameId==='game').length,0,'Generic final board cannot resurrect withheld native rows');
+    const restartNative=base;
+    const restarted=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:restartNative,previous:persisted,lockHandoff:mergeNflHandoffs([])});
+    assert.equal(restarted.memberDecisions.filter((row:NflPlayerPropsRuntimeDecision)=>row.gameId==='game').length,0,'A later ordinary postlock reconciliation cannot reconstruct a withheld first lock');
+    if(mode==='unknown_lookup'||mode==='unobserved_other_game'){tick=afterLock;await invoke();assert.equal(persisted.memberDecisions.filter(row=>row.gameId==='game').length,0,'Actual second ordinary writer invocation cannot reconstruct omitted first lock');}
+   }
+   if(['unknown_initial','unknown_other_initial'].includes(mode))assert.equal(persisted.memberDecisions.filter(row=>row.gameId==='game').length,0,'No ACKed row means unavailable game cannot invent native fallback');
+   assert.equal(result.healthFindings.some((f:string)=>f.includes('lock_prior_authority_unavailable:game')),!['unknown_recover','unknown_known_empty','postlock_reload_ready','unknown_queue_recover'].includes(mode),'Unresolved read authority is critical; known same-game recovery clears only this hold');
+   if(mode==='postlock_reload_ready')assert(persisted.memberDecisions.some(row=>row.aiReview?.lawHash===final.players[0].law!.hash&&row.state==='locked'),'Actual timely ready ACK survives the distinct postlock reload exception');
+   if(mode==='unknown_recover'||mode==='unknown_queue_recover')assert(persisted.memberDecisions.some(row=>row.aiReview?.lawHash===final.players[0].law!.hash&&row.state==='locked'),'Known recovery can create its actual final first lock');
+   if(mode==='unknown_locked')assert.equal(JSON.stringify(persisted.memberDecisions),immutableLocks,'Stored locked payloads retain first authority');
+  }
+  if(mode==='offday_native'){assert(persisted.board.decisions.length>0&&persisted.memberDecisions.length>0,'Future/offday native previews stay visible without a current-day AI callback');assert.equal(persisted.board.decisions.length,cycleNative.decisions.length);assert(!result.healthFindings.some((f:string)=>f.includes('lock_prior_authority_unavailable')));assert(persisted.board.decisions.every(row=>row.scheduledStart===new Date(Date.parse(start)+86400000).toISOString()&&!row.aiReview));}
   if(mode==='restart'){
    // A next ordinary writer starts from the acknowledged canonical snapshot;
    // no inference replay or reconstructed prior is used to freeze the final.
    const after:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:afterLock,nextBoard:base,previous:persisted});
    assert(after.memberDecisions.filter(row=>row.aiReview).every(row=>row.aiReview!.lawHash===final.players[0].law!.hash));
   }
+  assert.equal(digest(initial),originalCanonicalHash,'Original ACKed source snapshot is never mutated');assert.equal(digest([earlyPacket,earlyCurrent,currentPacket]),originalPacketsHash,'Original inputs stay exact');
   return{mode,writes,stateWrites,readies,locks: persisted.memberDecisions.filter(r=>r.state==='locked').length};
  }
- const results=[];for(const mode of ['ready_then_delay','fault_after_ready','source_write_failure','decline','withdrawal','duplicate','late_before_send','ack_after_lock','legacy','restart','changed_no_native','later_game','partial_write_failure','midnight','same_early','unknown_lookup','unknown_ack','ai_health_incomplete','ai_health_unavailable','ai_health_clean'] as const)results.push(await run(mode));
+ const results=[];for(const mode of ['ready_then_delay','fault_after_ready','source_write_failure','decline','withdrawal','duplicate','late_before_send','ack_after_lock','legacy','restart','changed_no_native','later_game','partial_write_failure','midnight','same_early','unknown_lookup','unknown_ack','ai_health_incomplete','ai_health_unavailable','ai_health_clean','unknown_initial','unknown_after_ready','unknown_recover','unknown_known_empty','unknown_other_game','unknown_other_initial','unknown_locked','prelock_reload_other_game','prelock_reload_after_ready','final_source_findings_only','postlock_reload_ready','unobserved_other_game','offday_native','unknown_queue_recover','unknown_late_recover'] as const)results.push(await run(mode));
  console.log('NFL durable actual-writer handoff passed: awaited prelock source/review publication, later delay/fault, failed source ACK hold, decline/empty withdrawal, duplicate serialization, pre-send cutoff, honest delayed ACK, exact legacy locks and restart first-lock precedence. Plain store under the existing sole lease, not server-clock/CAS proof. All I/O mocked.',JSON.stringify(results));
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

@@ -1,6 +1,6 @@
 import {createClient as createPropsAiDbClient} from "@supabase/supabase-js";
 import {reviewPropsForSite} from "../../playerPropsAi/siteRuntime";
-import {summarizePropsAiRuntimeHealth,type PropsAiRuntimeHealth} from "../../playerPropsAi/runtimeHealth";
+import {summarizePropsAiRuntimeHealth,propsAiFinalSourceHolds,type PropsAiRuntimeHealth} from "../../playerPropsAi/runtimeHealth";
 import {liveMlbPacket} from "../../playerPropsAi/liveSources";
 import {propsAiSiteConfig} from "../../playerPropsAi/siteConfig";
 import {createMlbPrelockHandoff,MLB_PROPS_AI_HANDOFF_RELEASE} from "../../playerPropsAi/mlbPrelockHandoff";
@@ -566,7 +566,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
   if(args.persist!==false&&propsAiSiteConfig().integrated){
     const client=createPropsAiDbClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
     const captured={...snapshot,data:buildDashboardData({slateDate:args.slateDate,asOfTimestamp,games,probablePitchers,props:expandedDecisionProps,sourceOdds:boardSourceOdds,environmentErrors:environment.errors})};
-    const handoff=createMlbPrelockHandoff(snapshot.data.props,async(rows)=>{
+    const handoff=createMlbPrelockHandoff(snapshot.data.props,async(rows,_gameId,authority)=>{
       // This is an actual canonical publication, not a snapshot backdated to
       // review completion. The existing cutoff loader still requires its DB
       // creation time AND payload availability to precede a future lock.
@@ -575,7 +575,10 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
         modelContext:{...snapshot.modelContext!,aiHandoffRelease:MLB_PROPS_AI_HANDOFF_RELEASE},
         data:buildDashboardData({slateDate:args.slateDate,asOfTimestamp:publishedAt,games,probablePitchers,props:rows,research:snapshot.data.research,sourceOdds:boardSourceOdds,environmentErrors:environment.errors}),
         movement:compareMlbPropsBoardMovement(previous,rows)};
-      ready.validation=validateMlbPropsBoardData({data:ready.data,sourceRows:boardSourceOdds.length,mappedRows:mappedOdds.length,asOfTimestamp:publishedAt,providerCoverage,playerGameIdentityConflictRows,previousSnapshot:previous,probablePitcherFallbackAssignments:probablePitcherResolution.fallbackAssignments.length,probablePitcherFallbackFindings:probablePitcherResolution.findings});
+      const previousInKnownScope=previous?{...previous,data:{...previous.data,props:previous.data.props.filter(row=>row.lockStatus?.status==="locked"||authority.knownGameIds.includes(row.providerIds?.gameId??""))}}:null;
+      const currentKnownData={...ready.data,props:ready.data.props.filter(row=>row.lockStatus?.status!=="locked")};
+      const previousCurrentKnownScope=previousInKnownScope?{...previousInKnownScope,data:{...previousInKnownScope.data,props:previousInKnownScope.data.props.filter(row=>row.lockStatus?.status!=="locked")}}:null;
+      ready.validation=validateMlbPropsBoardData({data:currentKnownData,sourceRows:boardSourceOdds.length,mappedRows:mappedOdds.length,asOfTimestamp:publishedAt,providerCoverage,playerGameIdentityConflictRows,previousSnapshot:previousCurrentKnownScope,probablePitcherFallbackAssignments:probablePitcherResolution.fallbackAssignments.length,probablePitcherFallbackFindings:probablePitcherResolution.findings});
       enforceSnapshotPayloadLimits(ready);
       if(!ready.validation.publishable)throw new Error(`MLB ready publication invalid:${ready.validation.errors.join("|")}`);
       // Freeze any already-due existing canonical source before the normal
@@ -583,13 +586,16 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
       await ensureMlbPropsGameLocks(ready,new Date().toISOString());
       await publishMlbPropsBoardSnapshot(ready);
       Object.assign(snapshot,ready);
-    });
+    },{slateDate:args.slateDate,previousSnapshot:previous,games:games.map(game=>({gameId:game.id,start:game.scheduledStart}))});
     const aiReviewOutcome=await reviewPropsForSite({client,sport:"mlb",writerRunId:args.writerRunId,deadline:Math.min(Date.parse(asOfTimestamp)+480000,args.aiDeadline??Date.parse(asOfTimestamp)+260000),
       onSourceReady:(packet,review,_observedAt,lookupAvailable)=>handoff.observe(packet,review,lookupAvailable),
       onReviewObserved:(packet,review,lookupAvailable)=>handoff.observe(packet,review,lookupAvailable),
       onReviewReady:(packet,review)=>handoff.observe(packet,review,true),
       games:games.map(g=>({id:g.id,start:g.scheduledStart,away:resolveMlbStatsTeamId(g.awayTeamId)?.abbreviation??g.awayTeamId,home:resolveMlbStatsTeamId(g.homeTeamId)?.abbreviation??g.homeTeamId})),
       load:(game,window)=>liveMlbPacket({game,window,snapshot:captured,currentOdds:boardSourceOdds,openingOdds})});
+    handoff.holdSources(propsAiFinalSourceHolds(aiReviewOutcome,games.map(game=>game.id)));
+    const heldAuthority=handoff.authority();
+    for(const id of heldAuthority.heldGameIds) aiReviewOutcome.findings.push(`source_or_review_unavailable:${id}:review_authority_held`);
     aiReviewRuntime=summarizePropsAiRuntimeHealth(aiReviewOutcome,new Date().toISOString());
     // rows() rejects after any unacknowledged callback publication. The shared
     // runtime can report a callback failure without throwing; that must still
@@ -601,7 +607,9 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     snapshot.asOfTimestamp=new Date().toISOString();
     snapshot.data=buildDashboardData({slateDate:args.slateDate,asOfTimestamp:snapshot.asOfTimestamp,games,probablePitchers,props:snapshot.data.props,research:snapshot.data.research,sourceOdds:boardSourceOdds,environmentErrors:environment.errors});
     snapshot.movement=compareMlbPropsBoardMovement(previous,snapshot.data.props);
-    snapshot.validation=validateMlbPropsBoardData({data:snapshot.data,sourceRows:boardSourceOdds.length,mappedRows:mappedOdds.length,asOfTimestamp:snapshot.asOfTimestamp,providerCoverage,playerGameIdentityConflictRows,previousSnapshot:previous,probablePitcherFallbackAssignments:probablePitcherResolution.fallbackAssignments.length,probablePitcherFallbackFindings:probablePitcherResolution.findings});
+    const finalCurrentData={...snapshot.data,props:snapshot.data.props.filter(row=>row.lockStatus?.status!=="locked")};
+    const previousFinalCurrent=previous?{...previous,data:{...previous.data,props:previous.data.props.filter(row=>row.lockStatus?.status!=="locked")}}:null;
+    snapshot.validation=validateMlbPropsBoardData({data:finalCurrentData,sourceRows:boardSourceOdds.length,mappedRows:mappedOdds.length,asOfTimestamp:snapshot.asOfTimestamp,providerCoverage,playerGameIdentityConflictRows,previousSnapshot:previousFinalCurrent,probablePitcherFallbackAssignments:probablePitcherResolution.fallbackAssignments.length,probablePitcherFallbackFindings:probablePitcherResolution.findings});
   }
   enforceSnapshotPayloadLimits(snapshot);
   const forecastTelemetry = summarizeMlbPropsForecastTelemetry({
@@ -2738,6 +2746,9 @@ function compactResearchEvidence(rows: PlayerPropPreviewRow[]): {
 } {
   const research: NonNullable<PlayerPropsDashboardData["research"]> = {};
   const props = rows.map((row) => {
+    // Opaque original locked fields own precedence, including embedded
+    // research modules; current transport compaction cannot rewrite them.
+    if (row.lockStatus?.status === "locked") return row;
     const {
       recentForm = null,
       opponentProfile = null,

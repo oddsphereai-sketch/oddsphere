@@ -25,7 +25,16 @@ AI work from native board publication. Operations R7 retains a separate postlock
 reload diagnostic only after the exact game's ready callback was actually awaited
 wholly before its lock. SQL completion/new-review counts alone cannot establish it.
 Absent, failed or late acknowledgements and genuine prelock current-source failures
-remain process exceptions. This changes no source admission, fallback or lock payload.
+remain process exceptions. This changes no source admission or locked payload.
+NBA writer R25 and the existing NFL/MLB writers keep unknown review lookup separate
+from authorized native withdrawal through callbacks and final publication. They
+preserve acknowledged authority and original locks; only later known same-game
+authority can recover a lookup hold. Unknown write acknowledgement remains a distinct
+sticky fence. New ready writes preserve already locked rows and original acknowledged source
+history. Held or unobserved unlocked games are omitted from a newer source clock
+until their own authority returns, so another game can publish without either native
+replacement or a fabricated first lock for the held game. Actual source/offer/participation withdrawals still require
+and use their established known authority.
 MLB health remains transient writer-result/cron data outside all member snapshots. When a short or expired invocation deadline skips scheduled-slot inventory for an
 eligible current-day unexpired game, a private deferred-inventory finding keeps
 coverage unverified; it does not invent a specific failed review. Off-day, locked,
@@ -89,6 +98,17 @@ Conflicting tied legacy sources remain unknown rather than selecting an arbitrar
 replacement. Both shared accepted-review lookups distinguish a verified empty array
 from unavailable authority; trusted local completions and known prior reviews remain
 usable without inventing native withdrawal authority.
+Whole-board member caches must represent every newly observed locked game;
+an empty or partial cache cannot bypass an entire game's original lock. Scoped
+player/research payloads retain their narrower contract. Current-source reload
+failure reaches the writer as unavailable authority before any sibling can advance
+the header; a cached packet is not audited as a fresh successful source. Actual
+timely acknowledgements followed by postlock reload failure remain separate.
+Prospective source-head and cutoff queries use exact PostgreSQL microsecond clocks
+and actual BIGSERIAL ordering before their existing bounds. Two serialized acknowledged
+publications at one clock cannot silently select an earlier source. Missing or
+malformed equal-clock identity remains unknown. Original immutable by-ID sources and
+already stored locks are never reordered or replaced.
 Future member-contract policy R1 (`player_props_ai_member_contract_2026_11_14_r1_nba_ou_execution`)
 aligns priced-tail admission with the existing NBA ordinary Over/Under adapter.
 NBA Yes/milestone offers remain complete archived/read market context, not execution

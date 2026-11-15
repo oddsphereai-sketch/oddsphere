@@ -3,7 +3,7 @@
 // by rejected acknowledgement. All transport is controlled; no real DB/HTTP.
 // The pre-fence b148 negative control is frozen privately with its diagnosis.
 import {readerCanonicalContextHash} from '../lib/playerPropsAi/readerContext';
-import {summarizePropsAiRuntimeHealth} from '../lib/playerPropsAi/runtimeHealth';
+import {summarizePropsAiRuntimeHealth,propsAiFinalSourceHolds} from '../lib/playerPropsAi/runtimeHealth';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
@@ -62,7 +62,7 @@ async function runScenario(mode:Mode){
  const canonical=loadModule('lib/mlb/props/boardSnapshotStore.ts',{'node:crypto':crypto,'node:zlib':zlib,'supabase-js':{createClient:()=>client},aiPublicationPolicy:publicationPolicy,marketEvidenceCapture:marketEvidence,releaseOrdering:ordering});
  const tracking=loadModule('lib/mlb/props/internalTracking.ts',{'node:crypto':crypto,'supabase-js':{createClient:()=>client},_mlbStatsApiClient:{},boardSnapshotStore:canonical,paperTrading:{isPaperTradingMarketAllowed:()=>true},pricePolicy,marketModelVersions:versions,lockPolicy,providerClients:{},settlement});
  const lockB=new Date(Date.parse(lock)+600000).toISOString(),startB=new Date(Date.parse(lockB)+3600000).toISOString();
- const packetB={...structuredClone(packet),gameId:'balldontlie-game-2',start:startB,lock:lockB};
+ const packetB={...structuredClone(packet),gameId:'balldontlie-game-2',sourceGameId:'balldontlie-game-2',start:startB,lock:lockB};
  const archivedB=Buffer.from(JSON.stringify(packetB));
  const reviewB={...structuredClone(review),gameId:packetB.gameId,sourceGameId:packetB.gameId,start:startB,lock:lockB,criticalContextHashes:criticalContextHashes(packetB),inputHash:digest(packetB),inputEvidence:{encoding:'gzip-base64' as const,bytes:archivedB.length,data:zlib.gzipSync(archivedB).toString('base64'),digest:digest(packetB)}};
  for(const player of reviewB.players){player.sourceReadProofs!.originalCriticalContextHash=reviewB.criticalContextHashes[player.playerId];player.sourceReadProofs!.canonicalContextHash=readerCanonicalContextHash(packetB,player.playerId);}
@@ -72,7 +72,7 @@ async function runScenario(mode:Mode){
  const snapshot:any={...retime(fixture),asOfTimestamp:at,schemaVersion:1,snapshotId:'initial-native',refreshMode:'fast',data,validation:{publishable:true,errors:[],warnings:[],actionableRows:0,sourceRows:1,mappedRows:1,staleOddsRows:0,researchRows:1},movement:{comparedWith:null,changedPrices:0,changedLines:0,addedRows:1,removedRows:0},modelContext:{modelReleaseId:versions.MLB_PROPS_MODEL_RELEASE_ID,trackingEventRelease:settlement.MLB_PROPS_LOCKED_EVENT_RELEASE,probablePitcherSeasonStats:[]}};
  type ReviewArgs=Parameters<typeof reviewPropsForSite>[0];
  const provider={getClient:()=>({getRequestCount:()=>{providerCalls++;return 0;}})};
- const modules:any={snapshot,aiReviewRuntime:undefined,summarizePropsAiRuntimeHealth,args:{persist:true,writerRunId:'synthetic-lease-owner',slateDate:'2030-06-01'},asOfTimestamp:at,games,probablePitchers:[],expandedDecisionProps:nativeRows,boardSourceOdds:[],openingOdds:[],environment:{errors:[]},previous:null,mappedOdds:[{}],providerCoverage:undefined,playerGameIdentityConflictRows:0,probablePitcherResolution:{fallbackAssignments:[],findings:[]},oddsClient:provider,researchClient:provider,lineupResult:{balldontlieCalls:0},
+ const modules:any={snapshot,aiReviewRuntime:undefined,summarizePropsAiRuntimeHealth,propsAiFinalSourceHolds,args:{persist:true,writerRunId:'synthetic-lease-owner',slateDate:'2030-06-01'},asOfTimestamp:at,games,probablePitchers:[],expandedDecisionProps:nativeRows,boardSourceOdds:[],openingOdds:[],environment:{errors:[]},previous:null,mappedOdds:[{}],providerCoverage:undefined,playerGameIdentityConflictRows:0,probablePitcherResolution:{fallbackAssignments:[],findings:[]},oddsClient:provider,researchClient:provider,lineupResult:{balldontlieCalls:0},
   createPropsAiDbClient:()=>client,propsAiSiteConfig:()=>({integrated:true}),createMlbPrelockHandoff:handoffs.createMlbPrelockHandoff,MLB_PROPS_AI_HANDOFF_RELEASE:handoffs.MLB_PROPS_AI_HANDOFF_RELEASE,
   Date:Clock,randomUUID:crypto.randomUUID,process:{env},buildDashboardData:live.buildDashboardData,compareMlbPropsBoardMovement:live.compareMlbPropsBoardMovement,resolveMlbStatsTeamId,
   validateMlbPropsBoardData:(args:any)=>{const validation=live.validateMlbPropsBoardData({...args,sourceRows:1});assert(validation.publishable,validation.errors.join('|'));return validation;},
@@ -140,12 +140,15 @@ async function runScenario(mode:Mode){
  const restart=handoffs.createMlbPrelockHandoff(restartRows,async(rows)=>{
   const next={...snapshot,snapshotId:crypto.randomUUID(),asOfTimestamp:tick,data:live.buildDashboardData({slateDate:'2030-06-01',asOfTimestamp:tick,games,probablePitchers:[],props:rows,sourceOdds:[],environmentErrors:[]})};
   await tracking.ensureMlbPropsGameLocks(next,tick);await canonical.publishMlbPropsBoardSnapshot(next);
- });
+ },{slateDate:'2030-06-01',previousSnapshot:display,games:games.map(g=>({gameId:g.id,start:g.scheduledStart}))});
  await restart.observe(packet,review,true);
- assert.equal(digest(restart.rows()),storedRowsBefore,'Restart cannot reinterpret or backdate an already locked game');
+ if(restart.authority().heldGameIds.length)assert.throws(()=>restart.rows(),handoffs.MlbPropsReviewAuthorityUnavailableError,'An unobserved unlocked sibling cannot become fresh final materialization');
+ else assert.equal(digest(restart.rows()),storedRowsBefore,'An all-locked restart preserves every original row exactly');
+ assert.equal(digest(display.data.props),storedRowsBefore,'Read hold cannot mutate the acknowledged original display');
  {
   await restart.observe(packetB,reviewB,true);
   const current=await canonical.loadLatestMlbPropsBoardSnapshot('2030-06-01');assert(current);
+  assert.equal(digest(aRow({data:{props:restart.rows()}})),digest(aRow(display)),'Restart cannot reinterpret or backdate the original locked game after a known sibling recovers');
   const lockedDisplay=await canonical.applyMlbPropsDisplayLocks(current);assert.equal(digest(aRow(lockedDisplay)),digest(aRow(display)),'An ordinary restart keeps the existing exact locked row');
  }
  for(let i=0;i<3;i++)await tracking.ensureMlbPropsGameLocks(snapshot,tick);

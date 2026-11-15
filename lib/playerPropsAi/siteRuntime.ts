@@ -262,7 +262,13 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
         results.push({game,packet,decisions,authorityReview:latest,observedAt});
       }catch(error){const lockAt=instant(game.start)-3600000;
         const postlockReady=instant(clock())>=lockAt&&readyHandoffBeforeLock.get(game.id)===lockAt;
-        findings.push(`${postlockReady?'current_source_reload_unavailable_after_ready_lock':'current_source_unavailable'}:${game.id}:${propsAiFailureCode(error)}`);const packet=localCompleted.get(game.id)?.packet??capturedPackets.get(game.id);if(packet){const observedAt=clock(),latest=latestForPacket(packet,accepted,observedAt);await auditSource(packet,latest,observedAt,lookupAvailable(game.id));await args.onReviewObserved?.(packet,latest,lookupAvailable(game.id));results.push({game,packet,decisions:[],authorityReview:latest,observedAt});}}
+        findings.push(`${postlockReady?'current_source_reload_unavailable_after_ready_lock':'current_source_unavailable'}:${game.id}:${propsAiFailureCode(error)}`);const packet=localCompleted.get(game.id)?.packet??capturedPackets.get(game.id);if(packet){const observedAt=clock(),latest=latestForPacket(packet,accepted,observedAt);
+          // A captured packet is not a successful current reload. Unknown
+          // prelock source authority must reach the writer before a sibling
+          // advances the common header; it may not publish native or AI fallback.
+          if(postlockReady)await auditSource(packet,latest,observedAt,lookupAvailable(game.id));
+          await args.onReviewObserved?.(packet,latest,postlockReady&&lookupAvailable(game.id));
+          results.push({game,packet,decisions:[],authorityReview:latest,observedAt});}}
 
     }
     return finish({status:paid?(pendingInventoryAvailable?"active":"unavailable"):"paid_disabled",games:results,findings,coverage});

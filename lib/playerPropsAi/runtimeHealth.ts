@@ -22,3 +22,10 @@ export function propsAiRuntimeFailure(health:{status:string;findings:readonly st
  if(health?.status==='unavailable')return'unavailable';
  return health&&propsAiRuntimeCriticalFindings(health).length?'incomplete':null;
 }
+
+/** Final reload failures are distinct from an earlier preparation failure that
+ * a later source callback recovered. Never treat the postlock-after-ready
+ * diagnostic as permission to erase an actually acknowledged prelock source. */
+export function propsAiFinalSourceHolds(outcome:Pick<SiteReviewOutcome,'findings'>|null|undefined,gameIds:readonly string[]):string[]{
+ return [...new Set(gameIds)].filter(id=>id.length>0&&(outcome?.findings??[]).some(f=>f.startsWith(`current_source_unavailable:${id}:`)));
+}

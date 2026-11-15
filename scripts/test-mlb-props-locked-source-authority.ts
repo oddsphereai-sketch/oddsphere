@@ -36,7 +36,7 @@ function fixture(){
     reads.push({table,limit,filters:structuredClone(captured),orders:structuredClone(orders)});
     const unknown=faults.unknownArray;
     if(unknown==='current-index'&&table==='admin_audit_log'&&captured.action_type==='mlb_props.board_snapshot_published'&&limit===100
-      ||unknown==='recent-sources'&&table==='prop_scoring_runs'&&selected==='metadata_json'&&!captured.id
+      ||unknown==='recent-sources'&&table==='prop_scoring_runs'&&selected==='id,created_at,metadata_json'&&!captured.id
       ||unknown==='schedule'&&table==='admin_audit_log'&&captured.action_type==='mlb_props.board_snapshot_published'&&selected==='after_state'&&limit===10
       ||unknown==='by-id-index'&&table==='admin_audit_log'&&(captured.after_state as any)?.snapshot_id)return{data:faults.unknownBody,error:null};
     if(faults.nullInventory&&captured.action_type==='mlb_props.game_locked_t60')return{data:null,error:null};

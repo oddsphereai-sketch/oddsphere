@@ -244,7 +244,7 @@ function assertLockedGamesUseAuthoritativeRows(
   }
   for (const gameId of lockedGames.keys()) {
     const gameRows = rowsByGame.get(gameId) ?? [];
-    if (gameRows.some((row) => row.lockStatus?.status !== "locked")) {
+    if (!gameRows.length || gameRows.some((row) => row.lockStatus?.status !== "locked")) {
       throw new Error(`Refusing to publish mutable member rows for locked MLB game ${gameId}.`);
     }
   }
@@ -263,7 +263,7 @@ export async function loadMlbPropsMemberBoardSnapshot(date: string, full = false
   const manifest = data.payload;
   if (!await memberPayloadIsCurrent(date, manifest.modelReleaseId, manifest.asOfTimestamp)) return null;
   if (!full || !manifest.shardKeys?.length) {
-    return await memberRowsHonorCurrentLocks(date, manifest.data.props) ? manifest : null;
+    return await memberRowsHonorCurrentLocks(date, manifest.data.props, true) ? manifest : null;
   }
   const shards: Array<BoardPayload | null> = [];
   // Full-board reads are operator/fallback paths now. Fetch bounded batches
@@ -291,7 +291,7 @@ export async function loadMlbPropsMemberBoardSnapshot(date: string, full = false
       props: shards.flatMap((shard) => shard?.data.props ?? []),
     },
   };
-  return await memberRowsHonorCurrentLocks(date, assembled.data.props) ? assembled : null;
+  return await memberRowsHonorCurrentLocks(date, assembled.data.props, true) ? assembled : null;
 }
 
 export async function loadMlbPropsPlayerReadSnapshot(date: string, playerId: string): Promise<PlayerPayload | null> {
@@ -317,9 +317,14 @@ export async function loadMlbPropsPlayerReadSnapshot(date: string, playerId: str
 async function memberRowsHonorCurrentLocks(
   date: string,
   rows: readonly PlayerPropsDashboardData["props"][number][],
+  completeBoard = false,
 ): Promise<boolean> {
-  if (!rows.length) return true;
+  if (!rows.length && !completeBoard) return true;
   const locks = await loadMlbPropsLockedGameTimes(date);
+  if (completeBoard) {
+    const represented = new Set(rows.flatMap(row => row.providerIds?.gameId ? [row.providerIds.gameId] : []));
+    if ([...locks.keys()].some(gameId => !represented.has(gameId))) return false;
+  }
   return rows.every((row) => !row.providerIds?.gameId
     || !locks.has(row.providerIds.gameId)
     || row.lockStatus?.status === "locked");

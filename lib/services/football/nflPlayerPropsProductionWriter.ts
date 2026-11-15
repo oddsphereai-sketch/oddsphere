@@ -1,4 +1,4 @@
-import {digest} from "../../playerPropsAi/evidence";
+import {digest,etDate} from "../../playerPropsAi/evidence";
 import type {GamePacket} from "../../playerPropsAi/evidenceContract";
 import type {AcceptedGameReview} from "../../playerPropsAi/reviewer";
 import {buildNflIdentityFailureEvidence,appendNflIdentityFailureEvidence,nflIdentityFailureTrigger,type NflIdentityFailureCapture} from "../../playerPropsAi/nflIdentityFailureEvidence";
@@ -6,7 +6,7 @@ import {siteAiDecisions} from "../../playerPropsAi/publication";
 import {captureNflHandoffBundle,observeNflSourceAuthority,mergeNflHandoffs,type NflLockHandoff} from "../../playerPropsAi/nflLockAuthority";
 import {propsAiSiteConfig} from "../../playerPropsAi/siteConfig";
 import {reviewPropsForSite,type SiteReviewOutcome} from "../../playerPropsAi/siteRuntime";
-import {summarizePropsAiRuntimeHealth,propsAiRuntimeFailure,propsAiRuntimeCriticalFindings,type PropsAiRuntimeHealth} from "../../playerPropsAi/runtimeHealth";
+import {summarizePropsAiRuntimeHealth,propsAiRuntimeFailure,propsAiRuntimeCriticalFindings,propsAiFinalSourceHolds,type PropsAiRuntimeHealth} from "../../playerPropsAi/runtimeHealth";
 import {liveNflPacket} from "../../playerPropsAi/liveSources";
 import {applyNflSiteAi,restoreNflNativeGame} from "../../playerPropsAi/siteBindings";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -32,6 +32,7 @@ import {
   NFL_PLAYER_PROPS_SOURCE_AWARE_QUALIFIED_MARKETS,
   nflPlayerPropsRuntimePolicy,
   verifyNflPlayerPropsRuntimeParity,
+  type NflPlayerPropsRuntimeBoard,
 } from "./nflPlayerPropsRuntime";
 import {
   buildNflPlayerPropsTrackingRows,
@@ -433,6 +434,21 @@ export async function runNflPlayerPropsProductionWriter(args: {
   let durablePrevious=previous,seasonStateWritten=false;
   let publicationQueue:Promise<void>=Promise.resolve(),publicationFailure:unknown,publicationFailed=false;
   const publishedSources=new Map<string,{packet:string;review:string|null;lookupAvailable:boolean}>();
+  // Review lookup failure is not source/medical withdrawal authority. A new
+  // shared header must omit this game's unlocked rows rather than relabel its
+  // old ACKed quote as newly observed or manufacture a first lock. The original
+  // stored locks remain first authority; a known same-game callback can recover.
+  const reviewAuthorityUnavailable=new Set<string>(args.apply&&propsAiSiteConfig().integrated
+    ?context.games.filter(game=>etDate(game.scheduledStart)===etDate(args.now)&&Date.parse(game.scheduledStart)-3600000>Date.parse(args.now)).map(game=>game.canonicalGameId):[]);
+  const reconcileAvailableGames=(board:NflPlayerPropsRuntimeBoard,at:string,previous:NflPlayerPropsProductionSnapshot|null,knownGame?:string)=>{
+    const held=new Set(reviewAuthorityUnavailable);if(knownGame)held.delete(knownGame);
+    if(!held.size)return reconcileNflPlayerPropsProductionSnapshot({requireVerifiedInterceptionSource:true,season:args.season,week:args.week,evaluatedAt:at,nextBoard:board,previous,lockHandoff:mergeNflHandoffs(aiLockFrames)});
+    const allowed=(row:{gameId:string;state:string})=>!held.has(row.gameId)||row.state==='locked';
+    const availablePrevious=previous?{...previous,board:{...previous.board,decisions:previous.board.decisions.filter(allowed)},memberDecisions:previous.memberDecisions.filter(allowed)}:null;
+    const handoff=mergeNflHandoffs(aiLockFrames),known=(value:{gameId:string})=>!held.has(value.gameId);
+    const filtered={...handoff,authorities:handoff.authorities.filter(known),nativeRows:handoff.nativeRows.filter(known),nativeProofs:handoff.nativeProofs.filter(known),candidateProofs:handoff.candidateProofs.filter(known),sourceFrames:handoff.sourceFrames?.filter(known),executionAuthorities:handoff.executionAuthorities?.filter(known)};
+    return reconcileNflPlayerPropsProductionSnapshot({requireVerifiedInterceptionSource:true,season:args.season,week:args.week,evaluatedAt:at,nextBoard:{...board,decisions:board.decisions.filter(allowed)},previous:availablePrevious,lockHandoff:filtered});
+  };
   const persistSeasonState=async()=>{if(!seasonStateWritten){await writeNflPlayerPropsCurrentSeasonState({client:args.client,state:currentSeason.state});seasonStateWritten=true;}};
   // The route's existing sport lease remains the sole writer authority. Each
   // completed source/review handoff is durably awaited before unrelated work.
@@ -447,7 +463,11 @@ export async function runNflPlayerPropsProductionWriter(args: {
       if(packet.sport!=="nfl"||!context.games.some(g=>g.canonicalGameId===gameId&&Date.parse(g.scheduledStart)===Date.parse(packet.start))
         ||Date.parse(packet.lock)!==Date.parse(packet.start)-3600000)throw new Error("NFL publication source identity unavailable");
       const packetHash=digest(packet),reviewHash=review?digest(review):null,last=publishedSources.get(gameId);
-      if(last?.packet===packetHash&&last.review===reviewHash&&last.lookupAvailable===lookupAvailable)return;
+      if(!lookupAvailable){
+        reviewAuthorityUnavailable.add(gameId);
+        return;
+      }
+      if(!reviewAuthorityUnavailable.has(gameId)&&last?.packet===packetHash&&last.review===reviewHash&&last.lookupAvailable===lookupAvailable)return;
       const sourceFrame=observeNflSourceAuthority(packet,review,lookupAvailable);aiLockFrames.push(sourceFrame);
       const at=new Date().toISOString();
       if(Date.parse(at)>=Date.parse(packet.lock))return;
@@ -459,11 +479,12 @@ export async function runNflPlayerPropsProductionWriter(args: {
       let candidate=restoreNflNativeGame(draftSource,nativeAiBaseline,packet,at);
       if(review&&lookupAvailable)candidate=applyNflSiteAi(candidate,packet,siteAiDecisions(packet,review,at),at,nativeAiBaseline.decisions);
       aiLockFrames.push(captureNflHandoffBundle(candidate.decisions,packet,review,"ai",nativeAiBaseline.decisions));
-      const snapshot=reconcileNflPlayerPropsProductionSnapshot({requireVerifiedInterceptionSource:true,season:args.season,week:args.week,evaluatedAt:at,nextBoard:candidate,previous:durablePrevious,lockHandoff:mergeNflHandoffs(aiLockFrames)});
+      const snapshot=reconcileAvailableGames(candidate,at,durablePrevious,gameId);
       await persistSeasonState();
       if(Date.now()>=Date.parse(packet.lock))throw new Error("NFL publication window closed before write");
       await writeNflPlayerPropsSnapshot({client:args.client,snapshot,source:NFL_PLAYER_PROPS_WRITER_RELEASE});
       durablePrevious=snapshot;nextBoard={...snapshot.board,publicationEnabled:false,trackingEnabled:false};
+      reviewAuthorityUnavailable.delete(gameId);
       publishedSources.set(gameId,{packet:packetHash,review:reviewHash,lookupAvailable});
     });
     publicationQueue=work.catch(error=>{if(!publicationFailed){publicationFailed=true;publicationFailure=error;}});
@@ -495,16 +516,12 @@ export async function runNflPlayerPropsProductionWriter(args: {
       }});
     await publicationQueue;
     if(publicationFailed)throw publicationFailure;
+    for(const gameId of propsAiFinalSourceHolds(aiReviewOutcome,context.games.map(game=>game.canonicalGameId)))reviewAuthorityUnavailable.add(gameId);
   }
   const publicationNow=args.apply&&propsAiSiteConfig().integrated?new Date().toISOString():args.now;
-  const snapshot = reconcileNflPlayerPropsProductionSnapshot({requireVerifiedInterceptionSource:true,
-    season: args.season,
-    week: args.week,
-    evaluatedAt: publicationNow,
-    ...(args.apply&&propsAiSiteConfig().integrated?{lockHandoff:mergeNflHandoffs(aiLockFrames)}:{}),
-    nextBoard,
-    previous:durablePrevious,
-  });
+  const snapshot = args.apply&&propsAiSiteConfig().integrated
+    ?reconcileAvailableGames(nextBoard,publicationNow,durablePrevious)
+    :reconcileNflPlayerPropsProductionSnapshot({requireVerifiedInterceptionSource:true,season:args.season,week:args.week,evaluatedAt:publicationNow,nextBoard,previous:durablePrevious});
   const candidateImpact = compareNflPlayerPropsCandidateImpact(
     reconcileNflPlayerPropsProductionSnapshot({requireVerifiedInterceptionSource:true,
         season: args.season,
@@ -586,7 +603,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
   const sourceFailureCaptureResults=Date.now()-Date.parse(args.now)<439000
     ?await Promise.all([...identitySourceFailures.values()].map(capture=>appendNflIdentityFailureEvidence(args.client,capture)))
     :[...identitySourceFailures.values()].map(()=>({status:"unavailable",reason:"writer_deadline"}));
-  const aiReviewRuntime=aiReviewOutcome?summarizePropsAiRuntimeHealth(aiReviewOutcome,new Date().toISOString()):undefined;
+  const aiReviewRuntime=aiReviewOutcome?summarizePropsAiRuntimeHealth({...aiReviewOutcome,findings:[...aiReviewOutcome.findings,...[...reviewAuthorityUnavailable.keys()].map(game=>`lock_prior_authority_unavailable:${game}`)]},new Date().toISOString()):undefined;
   const identityFailureEvidence={captures:identitySourceFailures.size,constructionFailures:identityCaptureConstructionFailures,
     statuses:Object.fromEntries([...new Set(sourceFailureCaptureResults.map(r=>r.status))].map(status=>[status,sourceFailureCaptureResults.filter(r=>r.status===status).length]))};
   const providerRequests = Object.values(collection.snapshot.providerRequests).reduce((sum, value) => sum + (value ?? 0), 0);

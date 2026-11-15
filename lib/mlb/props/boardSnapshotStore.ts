@@ -163,20 +163,34 @@ export async function loadLatestMlbPropsBoardSnapshot(slateDate: string): Promis
   return (await loadRecentMlbPropsBoardSnapshots(slateDate, 1))[0] ?? null;
 }
 
+/** Exact server chronology for mutable source selection only. Existing
+ * serialized DB index/append IDs break identical-instant ties under the sole
+ * writer; IDs never replace time ordering or choose an old locked payload. */
+function compareStoredSourceOrder(left: { id?: unknown; created_at?: unknown }, right: { id?: unknown; created_at?: unknown }): number {
+  const a=trackingRefInstant(left.created_at),b=trackingRefInstant(right.created_at);
+  if(a===null||b===null)throw new Error("MLB props source clock authority unavailable.");
+  if(a!==b)return a>b?-1:1;
+  const aId=exactTrackingRefId(left.id),bId=exactTrackingRefId(right.id);
+  if(aId===null||bId===null||aId===bId)throw new Error("MLB props tied source identity unavailable.");
+  return aId>bId?-1:1;
+}
+
 async function loadIndexedMlbPropsBoardSnapshot(slateDate: string): Promise<MlbPropsBoardSnapshot | null> {
   const supabase = getSupabase();
   const { data: indexRows, error: indexError } = await supabase
     .from("admin_audit_log")
-    .select("target_id,after_state,created_at")
+    .select("id,target_id,after_state,created_at")
     .eq("action_type", "mlb_props.board_snapshot_published")
     .eq("target_table", "prop_scoring_runs")
     .contains("after_state", { slate_date: slateDate })
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(100);
   if (indexError || !Array.isArray(indexRows) || indexRows.length > 100) throw new Error("MLB props current index inventory unavailable.");
   const matching = indexRows.filter(
     (row) => isRecord(row.after_state) && row.after_state.slate_date === slateDate,
   );
+  matching.sort(compareStoredSourceOrder);
   const indexed = matching.filter(
     (row) => isRecord(row.after_state) && parseMlbPropsReleaseOrder(indexedReleaseId(row.after_state)),
   );
@@ -188,7 +202,7 @@ async function loadIndexedMlbPropsBoardSnapshot(slateDate: string): Promise<MlbP
       indexedReleaseId(leftState),
     ) ?? 0;
     if (releaseComparison !== 0) return releaseComparison;
-    return Date.parse(String(right.created_at ?? "")) - Date.parse(String(left.created_at ?? ""));
+    return compareStoredSourceOrder(left,right);
   });
   const index = indexed[0] ?? matching[0];
   if (!index?.target_id) return null;
@@ -224,11 +238,12 @@ async function loadHighestIndexedMlbPropsReleaseHeadUncached(
 ): Promise<MlbPropsPublishedReleaseHead | null> {
   const { data, error } = await getSupabase()
     .from("admin_audit_log")
-    .select("target_id,after_state,created_at")
+    .select("id,target_id,after_state,created_at")
     .eq("action_type", "mlb_props.board_snapshot_published")
     .eq("target_table", "prop_scoring_runs")
     .contains("after_state", { slate_date: slateDate })
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(100);
   if (error || !Array.isArray(data) || data.length > 100) throw new Error("MLB props release-head inventory unavailable.");
   const candidates = data.flatMap((row) => {
@@ -240,6 +255,7 @@ async function loadHighestIndexedMlbPropsReleaseHeadUncached(
       : null;
     if (!parseMlbPropsReleaseOrder(releaseId) || !snapshotId || !asOfTimestamp) return [];
     return [{
+      indexId: row.id,
       runId: String(row.target_id),
       snapshotId,
       releaseId: releaseId as string,
@@ -250,7 +266,7 @@ async function loadHighestIndexedMlbPropsReleaseHeadUncached(
   candidates.sort((left, right) => {
     const releaseComparison = compareMlbPropsReleaseIds(right.releaseId, left.releaseId) ?? 0;
     if (releaseComparison !== 0) return releaseComparison;
-    return Date.parse(right.createdAt) - Date.parse(left.createdAt);
+    return compareStoredSourceOrder({id:left.indexId,created_at:left.createdAt},{id:right.indexId,created_at:right.createdAt});
   });
   const selected = candidates[0];
   return selected ? {
@@ -269,7 +285,7 @@ export async function loadLatestMlbPropsDisplaySnapshot(slateDate: string): Prom
 }
 
 type CutoffSourceRow = { id?: unknown; created_at?: unknown; metadata_json: unknown };
-type PublicationIndexRow = { target_id?: unknown; created_at?: unknown; after_state?: unknown };
+type PublicationIndexRow = { id?: unknown; target_id?: unknown; created_at?: unknown; after_state?: unknown };
 const needsIndexedCutoff = (snapshot: MlbPropsBoardSnapshot) =>
   mlbPropsAiCutoffPolicy(snapshot.modelContext?.aiHandoffRelease) === "indexed";
 function sourceRunId(value: unknown): string | null {
@@ -279,12 +295,12 @@ function sourceRunId(value: unknown): string | null {
 /** Future R2 alone requires the actual index that makes its source readable by
  * immutable ID. Neither a raw append nor a later index attests pre-lock publication. */
 function indexedSourceMatches(row: CutoffSourceRow, snapshot: MlbPropsBoardSnapshot,
-  index: PublicationIndexRow, cutoffMs = Infinity): boolean {
+  index: PublicationIndexRow, cutoff: bigint | null = null): boolean {
   const state = index.after_state, envelope = row.metadata_json;
   if (!isRecord(state) || !isRecord(envelope)) return false;
-  const created = Date.parse(String(row.created_at ?? "")), indexed = Date.parse(String(index.created_at ?? ""));
+  const created = trackingRefInstant(row.created_at), indexed = trackingRefInstant(index.created_at);
   return sourceRunId(row.id) !== null && index.target_id === sourceRunId(row.id)
-    && Number.isFinite(created) && Number.isFinite(indexed) && created <= indexed && indexed <= cutoffMs
+    && created!==null && indexed!==null && created <= indexed && (cutoff===null||indexed<=cutoff)
     && envelope.snapshot_id === snapshot.snapshotId && envelope.slate_date === snapshot.slateDate
     && envelope.as_of_timestamp === snapshot.asOfTimestamp
     && state.snapshot_id === snapshot.snapshotId && state.slate_date === snapshot.slateDate
@@ -297,8 +313,8 @@ export async function loadMlbPropsBoardSnapshotAtOrBefore(
   slateDate: string,
   cutoffTimestamp: string,
 ): Promise<MlbPropsBoardSnapshot | null> {
-  const cutoffMs = Date.parse(cutoffTimestamp);
-  if (!Number.isFinite(cutoffMs)) return null;
+  const cutoff = trackingRefInstant(cutoffTimestamp);
+  if (cutoff===null) return null;
   const { data, error } = await getSupabase()
     .from("prop_scoring_runs")
     .select("id,created_at,metadata_json")
@@ -311,15 +327,17 @@ export async function loadMlbPropsBoardSnapshotAtOrBefore(
     .eq("persisted", true)
     .lte("created_at", cutoffTimestamp)
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(12);
   if (error || !Array.isArray(data) || data.length > 12) throw new Error("MLB props cutoff source inventory unavailable.");
-  const candidates = data as CutoffSourceRow[];
+  const candidates = (data as CutoffSourceRow[]).slice().sort(compareStoredSourceOrder);
   let indexes: PublicationIndexRow[] | null = null;
   // Decode one full board at a time, retaining the legacy early-return/memory
   // behavior even when the bounded query returns twelve large envelopes.
   for (const row of candidates) {
     const snapshot = decodeMlbPropsBoardSnapshot(row.metadata_json);
-    if (!snapshot || !(Date.parse(snapshot.asOfTimestamp) <= cutoffMs)) continue;
+    const available=snapshot?trackingRefInstant(snapshot.asOfTimestamp):null;
+    if (!snapshot || available===null || available>cutoff) continue;
     if (mlbPropsAiCutoffPolicy(snapshot.modelContext?.aiHandoffRelease) === "unsupported") continue;
     if (needsIndexedCutoff(snapshot)) {
       if (sourceRunId(row.id) === null) throw new Error("MLB R2 cutoff source identity unavailable.");
@@ -329,19 +347,20 @@ export async function loadMlbPropsBoardSnapshotAtOrBefore(
         // One extra bounded lookup for at most the existing twelve candidates.
         // Overflow/read failure is unknown authority, never an empty-index claim.
         const { data: indexRows, error: indexError } = await getSupabase().from("admin_audit_log")
-          .select("target_id,after_state,created_at")
+          .select("id,target_id,after_state,created_at")
           .eq("action_type", "mlb_props.board_snapshot_published")
           .eq("target_table", "prop_scoring_runs")
           .contains("after_state", { slate_date: slateDate })
           .in("target_id", ids)
           .lte("created_at", cutoffTimestamp)
           .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
           .limit(13);
         if (indexError || !Array.isArray(indexRows)) throw new Error("MLB R2 cutoff publication index unavailable.");
         if (indexRows.length > 12) throw new Error("MLB R2 cutoff publication index limit exceeded.");
         indexes = indexRows as PublicationIndexRow[];
       }
-      if (!indexes.some((index) => indexedSourceMatches(row, snapshot, index, cutoffMs))) continue;
+      if (!indexes.some((index) => indexedSourceMatches(row, snapshot, index, cutoff))) continue;
     }
     return snapshot;
   }
@@ -351,7 +370,7 @@ export async function loadMlbPropsBoardSnapshotAtOrBefore(
 export async function loadRecentMlbPropsBoardSnapshots(slateDate: string, limit = 3): Promise<MlbPropsBoardSnapshot[]> {
   const { data, error } = await getSupabase()
     .from("prop_scoring_runs")
-    .select("metadata_json")
+    .select("id,created_at,metadata_json")
     .eq("sport", "mlb")
     .eq("slate_date", slateDate)
     .eq("status", "completed")
@@ -360,6 +379,7 @@ export async function loadRecentMlbPropsBoardSnapshots(slateDate: string, limit 
     .eq("context_provider", "nws+baseball_savant+balldontlie")
     .eq("persisted", true)
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     // Snapshot payloads can be several megabytes on a full slate. Fetch only
     // the requested number of already-filtered rows; over-fetching five rows
     // for the common "latest" lookup can exceed the database statement
@@ -367,7 +387,7 @@ export async function loadRecentMlbPropsBoardSnapshots(slateDate: string, limit 
     .limit(Math.max(1, Math.min(limit, 20)));
   if (error || !Array.isArray(data) || data.length > Math.max(1, Math.min(limit, 20))) throw new Error("MLB props recent source inventory unavailable.");
   const snapshots: MlbPropsBoardSnapshot[] = [];
-  for (const row of data) {
+  for (const row of data.slice().sort(compareStoredSourceOrder)) {
     const decoded = decodeMlbPropsBoardSnapshot(row.metadata_json);
     if (decoded) snapshots.push(decoded);
     if (snapshots.length >= limit) break;
@@ -805,13 +825,14 @@ async function loadExactMlbPropsBoardSnapshotById(slateDate: string, snapshotId:
   // can hit the statement timeout on a full slate.
   const { data: refs, error: refsError } = await supabase
     .from("admin_audit_log")
-    .select("target_id,after_state,created_at")
+    .select("id,target_id,after_state,created_at")
     .eq("action_type", "mlb_props.board_snapshot_published")
     .eq("target_table", "prop_scoring_runs")
     // Bound the exact lightweight identity, not unrelated later publications.
     // Two rows expose ambiguous authority instead of choosing one arbitrarily.
     .contains("after_state", { slate_date: slateDate, snapshot_id: snapshotId })
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(2);
   if (refsError || !Array.isArray(refs) || refs.length > 1) throw new Error("MLB props locked source index unavailable.");
   const ref = refs[0];

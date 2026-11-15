@@ -6,7 +6,7 @@ import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import vm from 'node:vm';
 import ts from 'typescript';
-import {summarizePropsAiRuntimeHealth} from '../lib/playerPropsAi/runtimeHealth';
+import {summarizePropsAiRuntimeHealth,propsAiFinalSourceHolds} from '../lib/playerPropsAi/runtimeHealth';
 import {mlbPlayerPropsRefreshFailure,isInactiveMlbPropsRefresh} from '../lib/cron/playerPropsRefreshTelemetry';
 import * as memberPayload from '../lib/mlb/props/memberPayload';
 import * as marketEvidence from '../lib/mlb/props/marketEvidenceCapture';
@@ -44,7 +44,7 @@ async function writer(outcome:SiteReviewOutcome,published=true,integrated=true,n
  s.validation.publishable=published;
  const rowsBefore=JSON.stringify(s.data.props),track={status:'complete',entriesLocked:0,closingPricesUpdated:0,gameLocksCreated:0,error:null};
  let reviews=0;const scope:any={snapshot:s,args:{persist:true,writerRunId:'synthetic-lease',slateDate,aiDeadline:Clock.now()+480000},asOfTimestamp:at,client:{},games:[],probablePitchers:[],expandedDecisionProps:s.data.props,boardSourceOdds:[],openingOdds:[],environment:{errors:[]},previous:null,mappedOdds:[],providerCoverage:{},playerGameIdentityConflictRows:0,probablePitcherResolution:{fallbackAssignments:[],findings:[]},
-  propsAiSiteConfig:()=>({integrated}),createPropsAiDbClient:()=>({}),createMlbPrelockHandoff:(rows:any)=>({rows:()=>rows,observe:()=>{throw Error('No callback expected in process-only failure controls');}}),MLB_PROPS_AI_HANDOFF_RELEASE:'unchanged-handoff',randomUUID:()=> 'synthetic-next-snapshot',buildDashboardData:(a:any)=>({...s.data,props:a.props}),compareMlbPropsBoardMovement:()=>s.movement,resolveMlbStatsTeamId:()=>null,liveMlbPacket:()=>{throw Error('No source reads in health-only control');},validateMlbPropsBoardData:()=>s.validation,enforceSnapshotPayloadLimits:()=>{},summarizePropsAiRuntimeHealth,
+  propsAiSiteConfig:()=>({integrated}),createPropsAiDbClient:()=>({}),createMlbPrelockHandoff:(rows:any)=>({rows:()=>rows,holdSources:()=>{},authority:()=>({knownGameIds:[],heldGameIds:[],omittedUnlockedRows:0}),observe:()=>{throw Error('No callback expected in process-only failure controls');}}),MLB_PROPS_AI_HANDOFF_RELEASE:'unchanged-handoff',randomUUID:()=> 'synthetic-next-snapshot',buildDashboardData:(a:any)=>({...s.data,props:a.props}),compareMlbPropsBoardMovement:()=>s.movement,resolveMlbStatsTeamId:()=>null,liveMlbPacket:()=>{throw Error('No source reads in health-only control');},validateMlbPropsBoardData:()=>s.validation,enforceSnapshotPayloadLimits:()=>{},summarizePropsAiRuntimeHealth,propsAiFinalSourceHolds,
   reviewPropsForSite:async(args:any)=>{reviews++;assert.equal(args.sport,'mlb');assert.equal(args.deadline,Clock.now()+480000);return outcome;},process:{env:{}},scoringRunId:'synthetic-score',forecastTelemetry:{runtimeReleaseId:MLB_PROPS_MODEL_RELEASE_ID},tracking:track,disabledTrackingResult:()=>track,privateTrackingCapture:null,balldontlieCalls:3,providerCalls:{balldontlieOdds:1,balldontlieResearch:1,balldontlieLineups:1}};
  const result=await evaluate(`(async()=>{let aiReviewRuntime;${aiBlock.getText(ast)}${unpublished.getText(ast)}${finalReturn.getText(ast)}})()`,scope);
  assert.equal(reviews,integrated?1:0,'Exactly one existing logical runtime invocation');

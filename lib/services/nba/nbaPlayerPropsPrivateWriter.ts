@@ -1,4 +1,4 @@
-import {summarizePropsAiRuntimeHealth} from '../../playerPropsAi/runtimeHealth';
+import {summarizePropsAiRuntimeHealth,propsAiFinalSourceHolds} from '../../playerPropsAi/runtimeHealth';
 import {propsAiTwoPhaseCompletionWindowMs} from "../../playerPropsAi/completionWindow";
 import {buildPropsSourceContextAuditSlate,retainedPropsSourceContextAudits,type PropsSourceContextAudit} from "../../playerPropsAi/sourceContextAudit";
 import {digest} from "../../playerPropsAi/evidence";
@@ -6,7 +6,7 @@ import {reviewPropsForSite,type SiteReviewOutcome} from "../../playerPropsAi/sit
 import {liveNbaPacket} from "../../playerPropsAi/liveSources";
 import {applyNbaSiteAi,restoreNbaNativeGame} from "../../playerPropsAi/siteBindings";
 import {siteAiDecisions} from "../../playerPropsAi/publication";
-import {observeNbaSourceAuthority,captureNbaHandoffBundle,mergeNbaHandoffs,captureNbaWithdrawalAuthority,NBA_PROPS_WITHDRAWAL_AUTHORITY_RELEASE,type NbaLockHandoff} from "../../playerPropsAi/nbaLockAuthority";
+import {observeNbaSourceAuthority,captureNbaHandoffBundle,mergeNbaHandoffs,nbaLockScope,captureNbaWithdrawalAuthority,NBA_PROPS_WITHDRAWAL_AUTHORITY_RELEASE,type NbaLockHandoff} from "../../playerPropsAi/nbaLockAuthority";
 import type {GamePacket} from "../../playerPropsAi/evidenceContract";
 import type {AcceptedGameReview} from "../../playerPropsAi/reviewer";
 import type {CapturedNbaParticipationReport} from "../../playerPropsAi/participationEligibility";
@@ -49,7 +49,7 @@ import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
 import { buildNbaPlayerPropsMemberPrices } from "./nbaPlayerPropsMemberPrices";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_11_11_r24_urgent_slot_cohorts" as const;
+  "nba_player_props_private_writer_2026_11_14_r25_review_authority" as const;
 
 export function nbaPlayerPropsForecastIsPublishable(
   row: Pick<NbaPlayerPropsForwardDecision, "independentProjection" | "finalProjection">,
@@ -387,21 +387,52 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   let previous=initialPrevious;
   let publicationQueue:Promise<void>=Promise.resolve();
   let publicationFailure:unknown;
+  let publicationFailed=false;
+  let publicationWriteFailed=false;
+  let publicationWriteFailure:unknown;
   let trackingConflicts=0;
   const unreadyGames=new Set<string>();
+  // A prelock game has no native-withdrawal authority merely because the
+  // accepted-review store was unavailable or its callback never ran. Other
+  // games may still commit through scoped writes using ACKed canonical rows.
+  const unresolvedReviewAuthority=new Set(integrated?games
+    .filter(game=>Date.parse(now)<Date.parse(game.scheduledStart)-NBA_PLAYER_PROPS_LOCK_LEAD_MINUTES*60000)
+    .map(game=>game.gameId):[]);
   type WithdrawalReceipt={release:typeof NBA_PROPS_WITHDRAWAL_AUTHORITY_RELEASE;gameId:string;start:string;cutoff:string;observedAt:string;sourcePacketHash:string};
   const receipts=(snapshot:NbaPlayerPropsMemberSnapshot|null)=>(snapshot as (NbaPlayerPropsMemberSnapshot&{sourceWithdrawals?:WithdrawalReceipt[]})|null)?.sourceWithdrawals??[];
   type PublicationSource={packet:GamePacket;frame:NbaLockHandoff};
+  const holdUnresolvedGames=(snapshot:NbaPlayerPropsMemberSnapshot,knownGameId:string|null=null)=>{
+    // A whole-board header must not turn an unresolved other game's old
+    // unlocked rows into a new prelock source. Retain only already stored locks
+    // for held games; the currently known callback may publish its own game.
+    const storedLocks=new Map((previous?.decisions??[]).filter(row=>row.lockedAt!==null).map(row=>[nbaLockScope(row),row]));
+    const decisions=snapshot.decisions.flatMap(row=>{
+      if(!unresolvedReviewAuthority.has(row.gameId)||row.gameId===knownGameId)return[row];
+      const locked=storedLocks.get(nbaLockScope(row));
+      return locked?[locked]:[];
+    });
+    if(decisions.length===snapshot.decisions.length&&decisions.every((row,index)=>row===snapshot.decisions[index]))return snapshot;
+    const filtered=buildNbaPlayerPropsMemberSnapshot({...snapshot,decisions,inputRows:snapshot.diagnostics.inputRows});
+    return{...snapshot,...filtered,diagnostics:{...snapshot.diagnostics,...filtered.diagnostics}};
+  };
   const commit=async(snapshot:NbaPlayerPropsMemberSnapshot,publicationNow:string,source?:PublicationSource,
     withdrawalAuthority?:Parameters<typeof writeNbaPlayerPropsPrivateSnapshot>[0]['withdrawalAuthority'])=>{
-    await writeNbaPlayerPropsPrivateSnapshot({client:args.client,snapshot,
+    snapshot=holdUnresolvedGames(snapshot,source?(source.packet.sourceGameId??source.packet.gameId):null);
+    try{await writeNbaPlayerPropsPrivateSnapshot({client:args.client,snapshot,
       source:NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE,...(integrated?{writerRunId:args.writerRunId,expectedSnapshot:previous}:{}),
       ...(source?{publicationBefore:source.packet.lock,sourceCutoff:source.packet.cutoff}:{}),
       ...(withdrawalAuthority?{withdrawalAuthority}:{})});
+    }catch(error){
+      // A store rejection may follow a committed canonical row. This write
+      // uncertainty fences all later callbacks, even for null/undefined errors;
+      // an unrelated source validation failure before this call does not.
+      publicationWriteFailed=true;publicationWriteFailure=error;throw error;
+    }
     previous=snapshot;
     const tracking=await captureNbaPlayerPropsPrivateTracking({client:args.client,season:args.season,
       slateDate:args.slateDate,evaluatedAt:publicationNow,snapshot});
     trackingConflicts+=tracking.conflicts;
+    return snapshot;
   };
   const persist=async(publicationNow:string,source?:PublicationSource)=>{
     const gameId=source?(source.packet.sourceGameId??source.packet.gameId):null;
@@ -417,12 +448,12 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       let due=advanceNbaPlayerPropsCandidateLifecycle({now:publicationNow,previous,candidate:previous,
         ...(integrated?{lockHandoff:mergeNbaHandoffs(lockFrames)}:{})}).snapshot;
       if(receipts(previous).length)due={...due,sourceWithdrawals:receipts(previous)} as NbaPlayerPropsMemberSnapshot;
-      due=withSourceAudits(due);
+      due=holdUnresolvedGames(withSourceAudits(due));
       canonicalOtherRows=due.decisions.filter(row=>row.gameId!==gameId);
       // If every old unlocked row is ineligible, the ordinary empty-board
       // guard still applies. Compose those removals with this valid ready game
       // in the same final write rather than blocking its independent handoff.
-      if(due.decisions.length)await commit(due,publicationNow);
+      if(due.decisions.length)due=await commit(due,publicationNow);
       candidate=buildNbaPlayerPropsMemberSnapshot({...prepared,generatedAt:publicationNow,
         decisions:[...due.decisions.filter(row=>row.gameId!==gameId),...prepared.decisions.filter(row=>row.gameId===gameId)],
         inputRows:aiBaseline.diagnostics.inputRows});
@@ -443,9 +474,9 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     // An already empty board needs no refreshed publication clock. This also
     // avoids laundering old withdrawal evidence through a later final sweep.
     if(previous&&previous.decisions.length===0&&lifecycle.snapshot.decisions.length===0){candidate=previous;return{...lifecycle,snapshot:previous};}
-    const withdrawalAuthority=withdrawn&&source&&previous?captureNbaWithdrawalAuthority({packet:source.packet,source:source.frame,
+    const withdrawalAuthority=withdrawn&&source&&previous&&previous.decisions.some(row=>row.gameId===gameId&&row.lockedAt===null)?captureNbaWithdrawalAuthority({packet:source.packet,source:source.frame,
       currentObservations:live.observations,collectorFindings:live.findings,previous,candidate:lifecycle.snapshot}):undefined;
-    await commit(lifecycle.snapshot,publicationNow,source,withdrawalAuthority);
+    lifecycle.snapshot=await commit(lifecycle.snapshot,publicationNow,source,withdrawalAuthority);
     candidate=lifecycle.snapshot;
     return lifecycle;
   };
@@ -453,12 +484,24 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     const lastObservation=new Map<string,{packetHash:string;reviewHash:string|null;lookupAvailable:boolean}>();
     const observe=(packet:GamePacket,review:AcceptedGameReview|null,lookupAvailable:boolean):Promise<void>=>{
       const work=publicationQueue.then(async()=>{
+        if(publicationWriteFailed)throw publicationWriteFailure;
         const gameId=packet.sourceGameId??packet.gameId;
         if(packet.sourceInputRelease!==PROPS_AI_NBA_CURRENT_SOURCE_RELEASE||!Array.isArray(packet.executionQuotes)
           ||!games.some(game=>game.gameId===gameId&&Date.parse(game.scheduledStart)===Date.parse(packet.start))
           ||Date.parse(packet.lock)!==Date.parse(packet.start)-NBA_PLAYER_PROPS_LOCK_LEAD_MINUTES*60000)throw new Error("NBA publication source identity or complete execution authority unavailable");
+        if(!lookupAvailable){
+          // Unknown lookup is recoverable by a later known read/review, unlike
+          // an unknown write ACK. Never capture native/first-lock authority or
+          // write this game from an absence that has not been established.
+          unresolvedReviewAuthority.add(gameId);
+          return;
+        }
         const packetHash=digest(packet),reviewHash=review?digest(review):null,last=lastObservation.get(gameId);
-        if(last?.packetHash===packetHash&&last.reviewHash===reviewHash&&last.lookupAvailable===lookupAvailable)return;
+        if(last?.packetHash===packetHash&&last.reviewHash===reviewHash&&last.lookupAvailable){
+          // This exact source/review already has a successful canonical ACK.
+          unresolvedReviewAuthority.delete(gameId);
+          return;
+        }
         const sourceFrame=observeNbaSourceAuthority(packet,review,lookupAvailable);
         lockFrames.push(sourceFrame);
         // Sample when this game actually leaves the queue. Callback arrival or
@@ -491,11 +534,12 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
           inputRows:aiBaseline.diagnostics.inputRows});
         await persist(observedAt,{packet,frame:sourceFrame});
         unreadyGames.delete(gameId);
+        unresolvedReviewAuthority.delete(gameId);
         lastObservation.set(gameId,{packetHash,reviewHash,lookupAvailable});
       });
       // Runtime reports callback errors as operational fallback. Keep a sticky
       // failure so its later return cannot claim a successful final write.
-      publicationQueue=work.catch(error=>{publicationFailure??=error;});
+      publicationQueue=work.catch(error=>{if(!publicationFailed){publicationFailed=true;publicationFailure=error;}});
       return work;
     };
     const contexts=await args.client.from("lab_response_snapshots").select("payload,generated_at").eq("sport","nba").like("snapshot_key","%current-only::live-copy%").order("generated_at",{ascending:false}).limit(4);
@@ -508,9 +552,22 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       onReviewObserved:(packet,review,lookupAvailable)=>observe(packet,review,lookupAvailable),
       onReviewReady:(packet,review)=>observe(packet,review,true)});
   }
+  if(aiReviewOutcome)for(const gameId of propsAiFinalSourceHolds(aiReviewOutcome,games.map(game=>game.gameId)))unresolvedReviewAuthority.add(gameId);
   await publicationQueue;
-  if(publicationFailure)throw publicationFailure;
+  if(publicationFailed)throw publicationFailure;
   if(unreadyGames.size)throw new Error(`NBA current source has no ready forecast; last-known-good preserved:${[...unreadyGames].sort().join(",")}`);
+  if(unresolvedReviewAuthority.size){
+    // Retained healthy games can still advance through the normal first-lock
+    // checkpoint, but the generic tail must not reintroduce fresh native rows
+    // for games whose review authority was never established.
+    const acknowledged=previous;
+    if(!acknowledged||!acknowledged.decisions.some(row=>row.lockedAt!==null||!unresolvedReviewAuthority.has(row.gameId))){
+      throw new Error(`NBA review publication authority unavailable; last-known-good preserved:${[...unresolvedReviewAuthority].sort().join(",")}`);
+    }
+    candidate=acknowledged;
+    if(aiReviewOutcome)aiReviewOutcome={...aiReviewOutcome,findings:[...new Set([...aiReviewOutcome.findings,
+      ...[...unresolvedReviewAuthority].map(gameId=>`lock_prior_authority_unavailable:${gameId}`)])]};
+  }
   const publicationNow=integrated?new Date().toISOString():now;
   const lifecycle=await persist(publicationNow);
   const settlement = args.fullRefresh && currentState

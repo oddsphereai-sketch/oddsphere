@@ -34,7 +34,8 @@ export async function GET(request: Request) {
       // The canonical row/index may already have committed. Do not use this
       // invocation's cached/LKG authority for more tracking or member writes.
       // The next ordinary leased invocation reads persisted sources afresh.
-      if (error instanceof Error && error.name === "MlbPropsPublicationUncertainError") {
+      const reviewAuthorityUnavailable = error instanceof Error && error.name === "MlbPropsReviewAuthorityUnavailableError";
+      if (error instanceof Error && (error.name === "MlbPropsPublicationUncertainError" || reviewAuthorityUnavailable)) {
         return {
           partial: true,
           error_message: error.message,
@@ -43,9 +44,10 @@ export async function GET(request: Request) {
             refreshMode,
             published: false,
             refreshFailed: true,
-            publicationAuthorityUncertain: true,
-            publicationAcknowledgement: "unavailable",
-            publicationCommit: "unknown",
+            publicationAuthorityUncertain: !reviewAuthorityUnavailable,
+            ...(reviewAuthorityUnavailable ? { reviewAuthorityUnavailable: true } : {}),
+            publicationAcknowledgement: reviewAuthorityUnavailable ? "not_inferred_from_review_lookup" : "unavailable",
+            publicationCommit: reviewAuthorityUnavailable ? "not_inferred_from_review_lookup" : "unknown",
             databaseWriteCount: "unknown",
             providerCallCount: "unknown",
             lockFallbackAttempted: false,

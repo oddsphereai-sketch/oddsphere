@@ -1,7 +1,7 @@
 ## November 14 player-prop complete evidence, exact confidence and private process health R38
 
 Future shared NBA/NFL/MLB generation is `player_props_ai_2026_11_14_r38_exact_confidence_and_evidence`.
-NBA writer R24, NFL decision R13 and native MLB R44 remain unchanged.
+Future NBA writer is `nba_player_props_private_writer_2026_11_14_r25_review_authority`; NFL decision R13 and native MLB R44 remain unchanged.
 Future law R3 (`player_props_ai_law_2026_11_14_r3_exact_paired_confidence`),
 selection R8 and grade R5 qualify the existing confidence Lean rule with exact
 integer/rational comparisons, including paired hold, non-push mass and the 55% floor.
@@ -32,6 +32,15 @@ a known-empty inventory. No-game, already-locked, next-day and intentionally dis
 cases retain their original classification. No extra request or deadline is added.
 NBA rescue R3 retains the same private AI health and canonical-write counts under the
 existing pending-slot/absolute-deadline route. No new writer, review or timer is added.
+All three sport writers preserve acknowledged review authority when its lookup is
+unavailable. Unknown lookup cannot authorize native withdrawal, advance a new lock
+or escape through a final generic write. Known later authority for that same game
+can recover without replaying a review; uncertain write acknowledgement keeps its
+separate sticky fence. New publication preserves original acknowledged sources and already locked rows.
+Held or unobserved unlocked games cannot be recopied under a newer source clock;
+they remain unavailable until known same-game authority returns. Timely known games
+can publish without inventing native replacements for an unrelated unknown game. Existing known
+source changes, genuine empty/withdrawn offers and participation blocks remain strict.
 MLB handoff R2 (`mlb_props_ai_handoff_2026_11_14_r2_unknown_ack_fence`) stops
 later same-invocation publications after an uncertain append/index acknowledgement.
 The cron skips stale fallback writes; the next ordinary invocation reads persisted
@@ -72,6 +81,17 @@ Conflicting tied legacy sources remain unknown rather than selecting an arbitrar
 replacement. Both shared accepted-review lookups distinguish a verified empty array
 from unavailable authority; trusted local completions and known prior reviews remain
 usable without inventing native withdrawal authority.
+Whole-board member caches must represent every newly observed locked game;
+an empty or partial cache cannot bypass an entire game's original lock. Scoped
+player/research payloads retain their narrower contract. Current-source reload
+failure reaches the writer as unavailable authority before any sibling can advance
+the header; a cached packet is not audited as a fresh successful source. Actual
+timely acknowledgements followed by postlock reload failure remain separate.
+Prospective source-head and cutoff queries use exact PostgreSQL microsecond clocks
+and actual BIGSERIAL ordering before their existing bounds. Two serialized acknowledged
+publications at one clock cannot silently select an earlier source. Missing or
+malformed equal-clock identity remains unknown. Original immutable by-ID sources and
+already stored locks are never reordered or replaced.
 Future member-contract policy R1 (`player_props_ai_member_contract_2026_11_14_r1_nba_ou_execution`)
 aligns priced-tail admission with the existing NBA ordinary Over/Under adapter.
 NBA Yes/milestone offers remain complete archived/read market context, not execution
