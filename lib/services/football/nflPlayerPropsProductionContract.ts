@@ -20,9 +20,9 @@ import { selectNflPlayerPropsCanonicalLines } from "./nflPlayerPropsCanonicalLin
 import { withoutUnresolvedNflPlayerAliasDuplicates } from "./nflPlayerPropsMemberAliasIdentity";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_11_10_r60_current_execution_authority" as const;
+  "nfl_player_props_member_2026_11_15_r61_canonical_lock_precedence" as const;
 export const NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE =
-  "nfl_player_props_member_lifecycle_2026_11_10_r42_current_execution_authority" as const;
+  "nfl_player_props_member_lifecycle_2026_11_15_r43_canonical_lock_precedence" as const;
 const NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE =
   "nfl_player_props_decision_2026_10_27_r38_passing_yards_direction" as const;
 export const NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET = 2 as const;
@@ -97,12 +97,20 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
   // Stored public locks are protected before optional forward metadata is read.
   const storedLocks=[...(originalPrevious?.board.decisions??[]),...(originalPrevious?.memberDecisions??[])].filter(row=>row.state==="locked");
   const storedScopes=new Set(storedLocks.map(outcomeScopeKey));
-  const currentUnlocked=args.nextBoard.decisions.filter(row=>!storedScopes.has(outcomeScopeKey(row)));
+  const storedCanonicalScopes=new Set(storedLocks.map(canonicalLockedOutcomeScopeKey).filter((key):key is string=>key!==null));
+  // This guards prospective rows only. Stored locks retain their exact names,
+  // fields, ordering and multiplicity, including legacy records without IDs.
+  const alreadyLocked=(row:NflPlayerPropsRuntimeDecision)=>{
+    if(storedScopes.has(outcomeScopeKey(row)))return true;
+    const key=canonicalLockedOutcomeScopeKey(row);
+    return key!==null&&storedCanonicalScopes.has(key);
+  };
+  const currentUnlocked=args.nextBoard.decisions.filter(row=>!alreadyLocked(row));
   const fullyProtectedGames=new Set(storedLocks.map(row=>row.gameId).filter(game=>!currentUnlocked.some(row=>row.gameId===game)));
   const actorKey=(row:NflPlayerPropsRuntimeDecision)=>JSON.stringify([row.gameId,row.providerPlayerId]);
   const fullyProtectedActors=new Set(storedLocks.filter(row=>row.providerPlayerId!==null).map(actorKey).filter(key=>!currentUnlocked.some(row=>actorKey(row)===key)));
   const irrelevant=(game:string,actorId?:string)=>fullyProtectedGames.has(game)||Boolean(actorId&&fullyProtectedActors.has(JSON.stringify([game,actorId.replace(/^nfl-bdl-player:/,"")])));
-  const effective=args.lockHandoff?{...args.lockHandoff,authorities:args.lockHandoff.authorities.filter(a=>!irrelevant(a.gameId,a.actorId)),nativeRows:args.lockHandoff.nativeRows.filter(row=>!storedScopes.has(outcomeScopeKey(row))),nativeProofs:args.lockHandoff.nativeProofs.filter(p=>!irrelevant(p.gameId,p.actorId)),candidateProofs:args.lockHandoff.candidateProofs.filter(p=>!irrelevant(p.gameId,p.actorId)),sourceFrames:(args.lockHandoff.sourceFrames??[]).filter(f=>!fullyProtectedGames.has(f.gameId)),executionAuthorities:(args.lockHandoff.executionAuthorities??[]).filter(f=>!fullyProtectedGames.has(f.gameId))}:undefined;
+  const effective=args.lockHandoff?{...args.lockHandoff,authorities:args.lockHandoff.authorities.filter(a=>!irrelevant(a.gameId,a.actorId)),nativeRows:args.lockHandoff.nativeRows.filter(row=>!alreadyLocked(row)),nativeProofs:args.lockHandoff.nativeProofs.filter(p=>!irrelevant(p.gameId,p.actorId)),candidateProofs:args.lockHandoff.candidateProofs.filter(p=>!irrelevant(p.gameId,p.actorId)),sourceFrames:(args.lockHandoff.sourceFrames??[]).filter(f=>!fullyProtectedGames.has(f.gameId)),executionAuthorities:(args.lockHandoff.executionAuthorities??[]).filter(f=>!fullyProtectedGames.has(f.gameId))}:undefined;
   const handoff=effective?prepareNflLockHandoff({...effective,nextRows:currentUnlocked,previousRows:originalPrevious?.board.decisions??[],previousGeneratedAt:originalPrevious?.generatedAt,now:args.evaluatedAt}):null;
   const maySuppress=(row:NflPlayerPropsRuntimeDecision)=>!storedScopes.has(outcomeScopeKey(row))&&Boolean(handoff?.suppressPrevious(row));
   const previous=handoff&&originalPrevious?{...originalPrevious,board:{...originalPrevious.board,decisions:originalPrevious.board.decisions.filter(row=>!maySuppress(row))},memberDecisions:originalPrevious.memberDecisions.filter(row=>!maySuppress(row))}:originalPrevious;
@@ -129,7 +137,7 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
   // Preserve every legacy locked book and its original field values/order.
   const decisions:NflPlayerPropsRuntimeDecision[]=[...priorLocked];
   for(const next of nextBoard.decisions){
-    if(protectedScopes.has(outcomeScopeKey(next))||!canRetainUnlocked(next))continue;
+    if(alreadyLocked(next)||!canRetainUnlocked(next))continue;
     if(evaluatedAt>=Date.parse(next.lockAt)){
       const candidates=(priorAi.get(quoteScopeKey(next))??[]).filter(row=>
         (row.providerPlayerId!==null&&next.providerPlayerId!==null
@@ -144,8 +152,13 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
   }
   const nextKeys = new Set(decisions.map(offerKey));
   const nextOutcomeScopes = new Set(nextBoard.decisions.map(outcomeScopeKey));
+  const nextCanonicalScopes=new Set(nextBoard.decisions.map(canonicalLockedOutcomeScopeKey).filter((key):key is string=>key!==null));
   for (const prior of priorRows) {
-    if(prior.state==="locked"||protectedScopes.has(outcomeScopeKey(prior))||!canRetainUnlocked(prior))continue;
+    if(prior.state==="locked"||alreadyLocked(prior)||!canRetainUnlocked(prior))continue;
+    const canonicalScope=canonicalLockedOutcomeScopeKey(prior);
+    // Current exact-ID event authority also wins when the old spelling was
+    // unlocked before this first-lock transition. Never alter old stored locks.
+    if(canonicalScope!==null&&nextCanonicalScopes.has(canonicalScope))continue;
     if (!nextKeys.has(offerKey(prior)) && evaluatedAt >= Date.parse(prior.lockAt)
       && isFreshAtLock(prior)) {
       decisions.push({ ...prior, state: "locked" as const });
@@ -186,12 +199,12 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
   };
   const derivedMemberDecisions = deriveNflPlayerPropsMemberDecisions(board);
   const canonicalCurrentDecisions = selectNflPlayerPropsCanonicalLines(
-    derivedMemberDecisions.filter(row=>!protectedScopes.has(outcomeScopeKey(row))),
+    derivedMemberDecisions.filter(row=>!alreadyLocked(row)),
   );
   const selectedMemberKeys=new Set(canonicalCurrentDecisions.map(decisionKey));
   const lockHandoffEvidence={...(originalPrevious?.lockHandoffEvidence??{})};
   if(effective){
-    const games=new Set([...capturedDecisions.filter(row=>row.state==="locked"&&!protectedScopes.has(outcomeScopeKey(row))).map(row=>row.gameId),...(effective.sourceFrames??[]).filter(f=>Date.parse(f.lockAt)<=evaluatedAt).map(f=>f.gameId)]);
+    const games=new Set([...capturedDecisions.filter(row=>row.state==="locked"&&!alreadyLocked(row)).map(row=>row.gameId),...(effective.sourceFrames??[]).filter(f=>Date.parse(f.lockAt)<=evaluatedAt).map(f=>f.gameId)]);
     const capture:Omit<NflLockHandoff,"nativeRows">={authorities:effective.authorities.filter(a=>games.has(a.gameId)),nativeProofs:effective.nativeProofs.filter(p=>games.has(p.gameId)),candidateProofs:effective.candidateProofs.filter(p=>games.has(p.gameId)),sourceFrames:(effective.sourceFrames??[]).filter(f=>games.has(f.gameId)),executionAuthorities:(effective.executionAuthorities??[]).filter(f=>games.has(f.gameId))};
     if(capture.sourceFrames?.length){const record={release:"nfl_props_lock_authority_2026_11_10_r2_current_execution",at:args.evaluatedAt,capture};lockHandoffEvidence[digest(record)]??=record;}
   }
@@ -204,7 +217,7 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
     // Internal alternate ladders and operational exceptions remain auditable
     // on the stored board. The member DTO selects one main line for every new
     // scope while preserving every previously locked member row exactly.
-    memberDecisions: [...priorLockedMembers,...derivedMemberDecisions.filter(row=>!protectedScopes.has(outcomeScopeKey(row))&&selectedMemberKeys.has(decisionKey(row)))],
+    memberDecisions: [...priorLockedMembers,...derivedMemberDecisions.filter(row=>!alreadyLocked(row)&&selectedMemberKeys.has(decisionKey(row)))],
     lifecycle: { recomputedUnlocked, retainedStillFreshUnlocked, frozenAtLock, retainedPreviouslyLocked,...(handoff?{reviewAuthority:{qualifiedAi:handoff.diagnostics.filter(d=>d.kind==="qualified_ai").length,nativeBaseline:handoff.diagnostics.filter(d=>d.kind==="native_baseline").length,unavailable:handoff.diagnostics.filter(d=>d.kind==="unavailable").length}}:{}) },
   };
 }
@@ -354,6 +367,17 @@ function quoteScopeKey(row:NflPlayerPropsRuntimeDecision):string{
 function decisionKey(row: NflPlayerPropsRuntimeDecision): string {
   return [row.gameId, row.playerName.toLowerCase().replace(/[^a-z0-9]/g, ""), row.market, row.line, row.side].join("|");
 }
+/** An exact stored ID/event can protect a new spelling; never infer legacy IDs. */
+function canonicalLockedOutcomeScopeKey(row:NflPlayerPropsRuntimeDecision):string|null{
+  const id=row.providerPlayerId;
+  const start=Date.parse(row.scheduledStart),lock=Date.parse(row.lockAt);
+  const team=typeof row.team==="string"?propsTeam(row.team.trim()):"";
+  const opponent=typeof row.opponent==="string"?propsTeam(row.opponent.trim()):"";
+  if(typeof id!=="string"||!id.trim()||(typeof row.gameId!=="string"||!row.gameId.trim())||!team||!opponent
+    ||!Number.isFinite(start)||!Number.isFinite(lock))return null;
+  return JSON.stringify([row.gameId,id,team,opponent,start,lock,row.market,row.side]);
+}
+
 function outcomeScopeKey(row: NflPlayerPropsRuntimeDecision): string {
   return [row.gameId, row.playerName.toLowerCase().replace(/[^a-z0-9]/g, ""), row.market, row.side].join("|");
 }

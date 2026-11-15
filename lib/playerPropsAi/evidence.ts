@@ -46,6 +46,7 @@ export function validatePacket(packet: GamePacket) {
   if(packet.sourceIdentityRelease!==undefined||packet.sourceIdentityAvailableAt!==undefined){
     invariant(packet.sport==="nfl"&&typeof packet.sourceIdentityRelease==="string"&&packet.sourceIdentityRelease.length>0&&typeof packet.sourceIdentityAvailableAt==="string"&&instant(packet.sourceIdentityAvailableAt)<=cutoff,"NFL player identity source unavailable at this cutoff");
   }
+  if(packet.sourceAliasRelease!==undefined)invariant(packet.sport==="nfl"&&typeof packet.sourceAliasRelease==="string"&&packet.sourceAliasRelease.length>0&&typeof packet.sourceIdentityRelease==="string"&&typeof packet.sourceIdentityAvailableAt==="string","NFL alias catalog lacks bound identity source");
   invariant(cutoff < instant(packet.lock) && instant(packet.lock) <= instant(packet.start), "Review must precede lock/start");
   invariant(etDate(packet.cutoff) === etDate(packet.start), "Only game-day reviews permitted");
   invariant(packet.players.length > 0, "No players");
