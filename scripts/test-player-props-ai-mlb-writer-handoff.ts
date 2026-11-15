@@ -157,7 +157,7 @@ async function main(){
  for(const mode of ['timely','timely-opaque-locked','timely-native-withdrawal','already-locked','held-B','unindexed','late-index','missing-original'] as const){
    for(const table of Object.values(tables))table.length=0;serial=0;tick=at;canonical.revalidateMlbPropsBoardCache();
    const original={...sourceAtLock,snapshotId:'restart-original-'+mode,asOfTimestamp:at,data:live.buildDashboardData({slateDate:'2030-06-01',asOfTimestamp:at,games:twoGames,probablePitchers:[],props:mode==='held-B'?[sourceAtLock.data.props[0],oldB]:sourceAtLock.data.props,sourceOdds:[],environmentErrors:[]})};
-   if(mode==='timely-opaque-locked')original.data.props=original.data.props.map(row=>({...row,lockStatus:{status:'locked' as const,lockedAt:'opaque-original-stored-clock'}}));
+   if(mode==='timely-opaque-locked')original.data.props=original.data.props.map((row:typeof native)=>({...row,lockStatus:{status:'locked' as const,lockedAt:'opaque-original-stored-clock'}}));
    await canonical.publishMlbPropsBoardSnapshot(original);
    let previousOriginal=original;
    if(mode==='held-B'){
@@ -176,7 +176,7 @@ async function main(){
    }
    const lockBytesBefore=await canonical.loadMlbPropsGameLocks('2030-06-01');
    const fresh={...snapshot,asOfTimestamp:tick,snapshotId:'restart-private-'+mode,data:live.buildDashboardData({slateDate:'2030-06-01',asOfTimestamp:tick,games:twoGames,probablePitchers:[],props:[nativeRows[0],nativeB],sourceOdds:[],environmentErrors:[]})};
-   let runtimeCalls=0;const beforeChecks=inventoryCheckpoints;
+   let runtimeCalls=0;const beforeChecks:number=inventoryCheckpoints;
    const restartModules={...modules,snapshot:fresh,previous:previousOriginal,games:mode==='held-B'?twoGames:games,expandedDecisionProps:mode==='held-B'?[nativeRows[0],nativeB]:nativeRows,asOfTimestamp:tick,aiReviewRuntime:undefined,reviewPropsForSite:async()=>{runtimeCalls++;return{status:'active',games:[],findings:[],newlyCompletedReviews:0};}};
    if(mode==='missing-original')await assert.rejects(async()=>{await vm.runInNewContext(js,restartModules);},handoffs.MlbPropsReviewAuthorityUnavailableError);
    else await vm.runInNewContext(js,restartModules);
