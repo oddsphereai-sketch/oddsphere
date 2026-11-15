@@ -1,5 +1,6 @@
 import {createHash} from "node:crypto";
 import {OriginalPartActorAdmission,type ActorAdmissionProposal} from "./actorAdmission";
+import {completeDiagnosticCorrection} from './completeCorrectionFeedback';
 import {namedSourceCorrection} from "./sourceConstraintCards";
 import {acceptedResponseEvidence} from "./responseEvidence";
 import {physicalLawFindings} from "./physicalDiagnostics";
@@ -142,8 +143,8 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
           try{draft=structuredAiText(response);parsed=parseJointReview(part.packet,draft);}
           catch(error){reason=(error as Error).message;}
           let correctionUnavailable=false;
-          if(phase===1&&!parsed&&draft!==undefined&&part.packet.sport==="nba"){
-            try{const next=namedSourceCorrection(part.packet,draft);
+          if(phase===1&&!parsed&&draft!==undefined){
+            try{const next=part.packet.sport==="nba"?namedSourceCorrection(part.packet,draft):completeDiagnosticCorrection(part.packet,draft);
               if(next.status==="ready"&&next.affectedActorIds.length)feedbackTexts.set(index,next.text);
               else if(next.status==="unavailable"&&["feedback_exceeds_cushion","diagnostic_unavailable"].includes(next.reason))correctionUnavailable=true;
             }catch{correctionUnavailable=true;}
