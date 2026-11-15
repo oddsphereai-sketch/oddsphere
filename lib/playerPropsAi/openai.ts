@@ -1,5 +1,5 @@
 import { invariant } from "./evidence";
-import type { PropsAiModel } from "./releases";
+import {PROPS_AI_PRIMARY_MODEL, PROPS_AI_STRONG_MODEL, type PropsAiModel} from "./releases";
 import {requireRealPropsAiPermission} from "./siteConfig";
 export type AiUsage = { input_tokens: number; output_tokens: number; input_tokens_details?: { cache_write_tokens?: number; cache_write_tokens_details?: { ttl_12h_tokens?: number } }; output_tokens_details?: { reasoning_tokens?: number } };
 export type AiTransportDiagnostics={unrecognizedErrorFields?:("code"|"type")[];status:number;code:string|null;type:string|null;requestId:string|null;retryAfter:string|null;rateLimits:Record<string,string>};
@@ -13,6 +13,17 @@ export class AiRequestNotStartedError extends Error {
   constructor(){super("generation_window_closed_before_http");}
 }
 const safeCode=(v:unknown)=>typeof v==="string"&&/^[A-Za-z0-9_.:-]{1,128}$/.test(v)&&!/sk-|bearer/i.test(v)?v:null;
+export const PROPS_AI_RESPONSE_MODEL_IDENTITY_RELEASE="player_props_ai_response_model_2026_11_15_r1_exact_requested_identity" as const;
+/** Only explicitly configured model IDs establish the requested billing identity.
+ * Unknown aliases/snapshots are unavailable authority, not inferred family matches.
+ */
+export function responseModelIdentity(requestedModel:PropsAiModel, observedModel:unknown){
+ const responseModel=safeCode(observedModel);
+ const verified=(requestedModel===PROPS_AI_PRIMARY_MODEL||requestedModel===PROPS_AI_STRONG_MODEL)&&observedModel===requestedModel;
+ return {release:PROPS_AI_RESPONSE_MODEL_IDENTITY_RELEASE,
+  status:verified?"verified" as const:responseModel===null?"unavailable" as const:"mismatch" as const,
+  requestedModel,responseModel};
+}
 const rateHeaders=["x-ratelimit-limit-requests","x-ratelimit-limit-tokens","x-ratelimit-remaining-requests","x-ratelimit-remaining-tokens","x-ratelimit-reset-requests","x-ratelimit-reset-tokens","x-ratelimit-limit-project-tokens","x-ratelimit-remaining-project-tokens","x-ratelimit-reset-project-tokens"];
 function transportDiagnostics(response:Response,code:string|null=null,type:string|null=null):AiTransportDiagnostics{
  const rateLimits=Object.fromEntries(rateHeaders.flatMap(name=>{const value=response.headers.get(name);const valid=name.includes("-reset-")?/^(?:\d+(?:\.\d+)?(?:ms|s|m|h|d))+$/.test(value??""):/^\d{1,20}$/.test(value??"");return value&&value.length<=96&&valid?[[name,value]]:[];}));

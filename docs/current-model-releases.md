@@ -1,10 +1,45 @@
+## November 15 shared player-prop response identity R39
+
+Shared NBA/NFL/MLB generation is `player_props_ai_2026_11_15_r39_verified_response_model`.
+Receipt identity policy is `player_props_ai_response_model_2026_11_15_r1_exact_requested_identity`.
+The combined release includes NFL props writer R99, history reader R2 and full-game
+writer R118 below. Law R3, grade R5, selection R8, wire R5, NFL decision R13,
+NBA writer R25 and native MLB R44 remain unchanged.
+
+Before usage pricing, structured parsing or actor admission, every newly returned
+response must identify the exact configured requested model (`gpt-6-luna` or
+`gpt-6.1-terra`). Unknown, absent, malformed or contradictory identities cannot
+establish a known bill or a forecast. Their bounded identity/usage diagnostics and
+original failed request/draft evidence are recorded with a null actual charge;
+the existing unknown-charge reservation remains held. This is terminal for that
+part: launched siblings settle normally, with no new correction or later paid wave
+purchased for the unprovable result. Valid configured-model responses retain their
+existing arithmetic, service-tier pricing and ordinary bounded correction policy.
+Known response receipts carry the explicit verified identity marker for later audit.
+No model-prefix or unlisted-snapshot equivalence is invented. Supported identity
+changes require a deliberate versioned policy update.
+
+This corrects an independently reproduced mocked-response defect, not a demonstrated
+production wrong-model incident. Existing accepted R38 and older reviews, their
+original receipt limitations, laws, locks and results retain exact release authority;
+no old charge is repriced and no closed job is replayed. R38 execution-contract and
+source-audit membership remain explicit after the current-generation bump. Request
+meaning and source/wire/numerical content remain unchanged, so ambiguous historical
+failed request bytes cannot establish a new original generation from timing.
+
+No model choice, price table, provider request, review slot, output limit, deadline,
+lease, budget limit or live tracking/result exposure changes. Two new consecutive
+fresh three-reviewer all-clear rounds and all protected release/live-proof gates
+are required. See `model-audits/2026-11-15-player-props-response-identity.md`.
+
 ## November 15 NFL verified-history context retention R99
 
 NFL props writer is `nfl_player_props_writer_2026_11_15_r99_streamed_context_history`;
 the shared history reader is `nfl_forward_evidence_read_2026_11_15_r2_streamed_context_history`.
 The full-game writer is `nfl_forward_evidence_writer_2026_11_15_r118_resource_diagnostics`.
-Shared generation R38, law R3, grade R5, selection R8, NFL decision R13, NBA writer R25
-and native MLB R44 are unchanged. No forecast formula, input selection rule, provider
+The memory optimization preserves law R3, grade R5, selection R8, NFL decision R13,
+NBA writer R25 and native MLB R44. The combined release also includes the separately
+versioned R39 receipt-identity guard described above. No forecast formula, input selection rule, provider
 request, slot, cap, deadline, lease, budget or locked-record behavior changes.
 
 The props context read visits every original ordered row and verifies every checksum,

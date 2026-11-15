@@ -55,7 +55,7 @@ function response(part:GamePacket,model:string,tier:string,id:string){
   const players=Object.fromEntries(part.players.map(p=>[p.id,verifiedReaderFixture(part,p.id,{assessment:"Conditional forecast using the supplied performance sample.",priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[p.id][area].status,factIds:facts[p.id][area].facts.slice(0,1).map(f=>f.id),effect:facts[p.id][area].status==="missing"?"unavailable":"uncertain",observation:area==="recent_form"&&facts[p.id][area].limitations.some(l=>l.includes("old_game_history"))?"The supplied history is dated and cannot establish current workload.":"The supplied sample requires contextual caution."}])),evidenceIds:[...aliases].filter(([,value])=>value===p.evidence[0].id).map(([alias])=>alias),gaps:[],law:encodeCanonicalScenarioLaw(part.sport,p,{weights:Array(16).fill(1),outcomes:{points:Array(16).fill(20),rebounds:Array(16).fill(4),assists:Array(16).fill(3),threes:Array(16).fill(2)}}),confidence:[1],exceptions:[null]})]));
   return {id,model,status:"completed",service_tier:tier,usage:{input_tokens:1000,output_tokens:100},output:[{content:[{type:"output_text",text:JSON.stringify({wireRelease:PROPS_AI_WIRE_RELEASE,players})}]}]};
 }
-async function run(id:string,stage:"early"|"final",failure:"none"|"capacity"|"timeout"|"invalid"|"semantic"|"physical"|"capacityalias"|"physicalformat"|"rate"|"quota"|"missingusage"|"invalidusage"="none",strong=false){
+async function run(id:string,stage:"early"|"final",failure:"none"|"capacity"|"timeout"|"invalid"|"semantic"|"physical"|"capacityalias"|"physicalformat"|"rate"|"quota"|"missingusage"|"invalidusage"|"wrongmodel"="none",strong=false){
   const reviewNow=stage==="early"?"2026-11-07T21:00:00Z":clock();
   await db.query("UPDATE test_clock SET at=$1",[reviewNow]);
   const p={...packet(id,stage),cutoff:reviewNow},parts=p.players.map(player=>({packet:playerSubset(p,[player.id]),inputTokens:1000})),calls:{player:string;model:string;tier:string}[]=[];
@@ -71,6 +71,7 @@ async function run(id:string,stage:"early"|"final",failure:"none"|"capacity"|"ti
     if(player==="b"&&seen.get(player)===2&&failure==="physical")assert.match(request.instructions,/coordinates|units/);
     if(player==="b"&&seen.get(player)===2&&failure==="semantic")assert.match(request.instructions,/mean|points/);
     if(player==="b"&&seen.get(player)===1){
+      if(failure==="wrongmodel")return Response.json(response(parts[1].packet,"gpt-6.1-terra",request.service_tier,"contradictory-model"));
       if(failure==="rate"||failure==="quota")return Response.json({error:{code:failure==="rate"?"rate_limit_exceeded":"insufficient_quota"}},{status:429,headers:{"x-request-id":"req_synthetic","retry-after":"60","x-ratelimit-limit-tokens":"1000000"}});
       if(failure==="missingusage"||failure==="invalidusage"){const value=response(parts[1].packet,request.model,request.service_tier,"unknown-usage");return Response.json({...value,usage:failure==="missingusage"?undefined:{input_tokens:-1,output_tokens:100}});}
       if(failure==="physical"||failure==="physicalformat"){const value=response(parts[1].packet,request.model,request.service_tier,"physical-paid");const bad=JSON.parse(value.output[0].content[0].text);bad.players.b.law.outcomes.points_excluding_made_threes=Array(16).fill(-1);if(failure==="physicalformat")bad.players.b.assessment="This source explanation is clipped";value.output[0].content[0].text=JSON.stringify(bad);return Response.json(value);}
@@ -195,6 +196,20 @@ try{
   const alias=await run("g13","early","capacityalias");assert.equal(alias.result.status,"failed");assert.equal(alias.calls.length,2);assert.ok(alias.calls.every(c=>c.tier==="default"));
   const standardCapacity=(await db.query("SELECT * FROM player_props_ai_attempts WHERE job_key=$1 AND phase=1 AND part=2",[keys("g13")[0]])).rows[0];assert.equal(standardCapacity.actual_micro,null);assert.equal(standardCapacity.state,"unknown");assert.equal(standardCapacity.usage.kind,"unknown_transport_outcome");assert.equal(standardCapacity.usage.transport.code,"flex_unavailable");assert.equal(standardCapacity.usage.transport.type,"resource_unavailable");assert.equal((await run("g13","early")).calls.length,0,"closed failed slot cannot replay");
   await runRetained("g15");await runRetained("g16","unknown");await runRetained("g17","invalid");await diagnosticStopsPaidCorrection();
+  const beforeWrongModel=Number((await budget()).consumed_micro);
+  const wrongModel=await run("g19","early","wrongmodel");assert.equal(wrongModel.result.status,"failed");assert.equal(wrongModel.calls.length,2);
+  const wrongModelJob=await job(keys("g19")[0]);assert.equal(wrongModelJob.result,null);
+  const wrongModelAttempts=(await db.query("SELECT * FROM player_props_ai_attempts WHERE job_key=$1 ORDER BY part",[keys("g19")[0]])).rows;
+  assert.equal(wrongModelAttempts.length,2);assert.equal(wrongModelAttempts[0].state,"completed");
+  assert.equal(wrongModelAttempts[1].state,"unknown");assert.equal(wrongModelAttempts[1].actual_micro,null);
+  assert.equal(wrongModelAttempts[1].response_id,"contradictory-model");
+  assert.equal(wrongModelAttempts[1].usage.kind,"response_model_identity_mismatch");
+  assert.equal(wrongModelAttempts[1].usage.response_model_identity.requestedModel,"gpt-6-luna");
+  assert.equal(wrongModelAttempts[1].usage.response_model_identity.responseModel,"gpt-6.1-terra");
+  assert.equal(Number((await budget()).consumed_micro)-beforeWrongModel,
+    Number(wrongModelAttempts[0].actual_micro)+Number(wrongModelAttempts[1].reserved_micro),
+    "known sibling settles while the contradictory receipt retains its original unknown-charge hold");
+  assert.equal((await run("g19","early")).calls.length,0,"closed wrong-identity slot cannot replay");
   const strong=await runRetained("g2","correct",true);assert.equal(strong.result.status,"completed");assert.equal(strong.attempts[0].model,"gpt-6.1-terra");assert.equal(strong.attempts[1].model,"gpt-6-luna");
   assert.equal(((await job(keys("g2")[1])).result as {model:string}).model,"mixed_recorded_per_part");
   assert.equal((await run("g3","final","none",true)).calls[0].model,"gpt-6.1-terra");assert.equal((await run("g4","final","none",true)).calls[0].model,"gpt-6-luna");
