@@ -8,7 +8,8 @@ import * as runtimeHealth from '../lib/playerPropsAi/runtimeHealth';
 import {syntheticNflIdentityFailureArgs} from './test-player-props-ai-nfl-identity-failure-evidence';
 import type {runNflPlayerPropsProductionWriter} from '../lib/services/football/nflPlayerPropsProductionWriter';
 import type {reviewPropsForSite} from '../lib/playerPropsAi/siteRuntime';
-import {digest} from '../lib/playerPropsAi/evidence';
+import {digest,etDate} from '../lib/playerPropsAi/evidence';
+import {mergeNflHandoffs} from '../lib/playerPropsAi/nflLockAuthority';
 
 globalThis.fetch=async()=>{throw Error('Actual-writer integration proof forbids HTTP');};
 type Mode='identity'|'unrelated'|'construction'|'append_refused'|'deadline'|'no_owner'|'disabled'|'success';
@@ -31,11 +32,11 @@ async function run(mode:Mode){
   return{abortSignal:async(signal:AbortSignal)=>{assert(signal instanceof AbortSignal);return{data:{status:mode==='append_refused'?'unavailable':'stored'},error:null};}};
  }};
  const modules:Record<string,Record<string,unknown>>={
-  evidence:{digest},
+  evidence:{digest,etDate},
   runtimeHealth,
   nflIdentityFailureEvidence:{...evidence,buildNflIdentityFailureEvidence:(args:Parameters<typeof evidence.buildNflIdentityFailureEvidence>[0])=>{builds++;if(mode==='construction')throw Error('synthetic archive construction failure');return evidence.buildNflIdentityFailureEvidence(args);}},
   publication:{siteAiDecisions:()=>[]},
-  nflLockAuthority:{captureNflHandoffBundle:()=>({}),observeNflSourceAuthority:()=>({}),mergeNflHandoffs:()=>({frames:[]})},
+  nflLockAuthority:{captureNflHandoffBundle:()=>({}),observeNflSourceAuthority:()=>({}),mergeNflHandoffs},
   siteConfig:{propsAiSiteConfig:()=>({integrated:true})},
   siteRuntime:{reviewPropsForSite:async(args:ReviewArgs)=>{
    reviews++;

@@ -194,6 +194,9 @@ async function loadIndexedMlbPropsBoardSnapshot(slateDate: string): Promise<MlbP
   const indexed = matching.filter(
     (row) => isRecord(row.after_state) && parseMlbPropsReleaseOrder(indexedReleaseId(row.after_state)),
   );
+  if (indexed.length && matching[0] && !parseMlbPropsReleaseOrder(indexedReleaseId(matching[0].after_state))) {
+    throw new Error("MLB props current index release authority unavailable.");
+  }
   indexed.sort((left, right) => {
     const leftState = isRecord(left.after_state) ? left.after_state : {};
     const rightState = isRecord(right.after_state) ? right.after_state : {};
@@ -206,13 +209,9 @@ async function loadIndexedMlbPropsBoardSnapshot(slateDate: string): Promise<MlbP
   });
   const index = indexed[0] ?? matching[0];
   if (!index?.target_id) return null;
-  const { data, error } = await supabase
-    .from("prop_scoring_runs")
-    .select("metadata_json")
-    .eq("id", index.target_id)
-    .single();
-  if (error) throw new Error("MLB props current source read unavailable.");
-  return decodeMlbPropsBoardSnapshot(data?.metadata_json) ?? null;
+  const source = await loadBoundIndexedMlbPropsSource(supabase, index, slateDate, true);
+  if (!source) throw new Error("MLB props current source binding unavailable.");
+  return source;
 }
 
 export async function loadHighestIndexedMlbPropsReleaseHead(
@@ -246,20 +245,20 @@ async function loadHighestIndexedMlbPropsReleaseHeadUncached(
     .order("id", { ascending: false })
     .limit(100);
   if (error || !Array.isArray(data) || data.length > 100) throw new Error("MLB props release-head inventory unavailable.");
-  const candidates = data.flatMap((row) => {
+  const ordered = data.filter(row=>isRecord(row.after_state)&&row.after_state.slate_date===slateDate).sort(compareStoredSourceOrder);
+  if(ordered[0]&&!parseMlbPropsReleaseOrder(indexedReleaseId(ordered[0].after_state))
+    &&ordered.some(row=>parseMlbPropsReleaseOrder(indexedReleaseId(row.after_state)))) {
+    throw new Error("MLB props release-head index authority unavailable.");
+  }
+  const candidates = ordered.flatMap((row) => {
     if (!isRecord(row.after_state)) return [];
     const releaseId = indexedReleaseId(row.after_state);
-    const snapshotId = typeof row.after_state.snapshot_id === "string" ? row.after_state.snapshot_id : null;
-    const asOfTimestamp = typeof row.after_state.as_of_timestamp === "string"
-      ? row.after_state.as_of_timestamp
-      : null;
-    if (!parseMlbPropsReleaseOrder(releaseId) || !snapshotId || !asOfTimestamp) return [];
+    if (!parseMlbPropsReleaseOrder(releaseId)) return [];
     return [{
+      originalIndex: row,
       indexId: row.id,
       runId: String(row.target_id),
-      snapshotId,
       releaseId: releaseId as string,
-      asOfTimestamp,
       createdAt: String(row.created_at ?? ""),
     }];
   });
@@ -269,11 +268,18 @@ async function loadHighestIndexedMlbPropsReleaseHeadUncached(
     return compareStoredSourceOrder({id:left.indexId,created_at:left.createdAt},{id:right.indexId,created_at:right.createdAt});
   });
   const selected = candidates[0];
-  return selected ? {
+  if (!selected && ordered[0] && !await loadBoundIndexedMlbPropsSource(getSupabase(),ordered[0],slateDate,false)) {
+    throw new Error("MLB props legacy release-head source binding unavailable.");
+  }
+  const source = selected ? await loadBoundIndexedMlbPropsSource(getSupabase(), selected.originalIndex, slateDate, true) : null;
+  if (selected && !source) {
+    throw new Error("MLB props release-head source binding unavailable.");
+  }
+  return selected && source ? {
     runId: selected.runId,
-    snapshotId: selected.snapshotId,
+    snapshotId: source.snapshotId,
     releaseId: selected.releaseId,
-    asOfTimestamp: selected.asOfTimestamp,
+    asOfTimestamp: source.asOfTimestamp,
   } : null;
 }
 
@@ -292,6 +298,54 @@ function sourceRunId(value: unknown): string | null {
   if (typeof value === "string" && value.length > 0 && value.length <= 256) return value;
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? String(value) : null;
 }
+/** A lightweight index is a pointer, never independent full-source authority.
+ * Current heads require the full published header. Immutable legacy by-ID reads
+ * retain genuine optional field absence, but a supplied contradiction cannot
+ * point at another original source or reinterpret its payload. */
+function indexedSourceIdentityMatches(
+  row: CutoffSourceRow,
+  snapshot: MlbPropsBoardSnapshot,
+  index: PublicationIndexRow,
+  slateDate: string,
+  strictHeader: boolean,
+): boolean {
+  const state = index.after_state, envelope = row.metadata_json;
+  if (!isRecord(state) || !isRecord(envelope) || snapshot.schemaVersion !== 1
+    || snapshot.slateDate !== slateDate || state.snapshot_id !== snapshot.snapshotId || state.slate_date !== slateDate
+    || sourceRunId(row.id) === null || index.target_id !== sourceRunId(row.id)
+    || envelope.snapshot_id !== snapshot.snapshotId || envelope.slate_date !== slateDate
+    || envelope.as_of_timestamp !== snapshot.asOfTimestamp) return false;
+  const indexedCutoff = needsIndexedCutoff(snapshot);
+  if (indexedCutoff && !parseMlbPropsReleaseOrder(snapshot.modelContext?.modelReleaseId)) return false;
+  if ((strictHeader || indexedCutoff) && trackingRefInstant(snapshot.asOfTimestamp) === null) return false;
+  if ((strictHeader || indexedCutoff)
+    && (!isRecord(snapshot.data) || snapshot.data.date !== slateDate || !Array.isArray(snapshot.data.props))) return false;
+  const has = (key: string) => Object.prototype.hasOwnProperty.call(state, key);
+  if ((strictHeader || has("as_of_timestamp")) && state.as_of_timestamp !== snapshot.asOfTimestamp) return false;
+  if ((strictHeader || has("model_release_id"))
+    && state.model_release_id !== (snapshot.modelContext?.modelReleaseId ?? null)) return false;
+  if (has("payload_checksum") && state.payload_checksum !== envelope.checksum) return false;
+  const created = trackingRefInstant(row.created_at), indexed = trackingRefInstant(index.created_at);
+  if (created === null || indexed === null || created > indexed) return false;
+  return !indexedCutoff || indexedSourceMatches(row, snapshot, index);
+}
+
+async function loadBoundIndexedMlbPropsSource(
+  supabase: ReturnType<typeof getSupabase>,
+  index: PublicationIndexRow,
+  slateDate: string,
+  strictHeader: boolean,
+): Promise<MlbPropsBoardSnapshot | null> {
+  const runId = sourceRunId(index.target_id);
+  if (runId === null) throw new Error("MLB props indexed source identity unavailable.");
+  const { data, error } = await supabase.from("prop_scoring_runs")
+    .select("id,created_at,metadata_json").eq("id", runId).maybeSingle();
+  if (error) throw new Error("MLB props indexed source read unavailable.");
+  if (!data) return null;
+  const snapshot = decodeMlbPropsBoardSnapshot(data.metadata_json);
+  return snapshot && indexedSourceIdentityMatches(data, snapshot, index, slateDate, strictHeader) ? snapshot : null;
+}
+
 /** Future R2 alone requires the actual index that makes its source readable by
  * immutable ID. Neither a raw append nor a later index attests pre-lock publication. */
 function indexedSourceMatches(row: CutoffSourceRow, snapshot: MlbPropsBoardSnapshot,
@@ -840,17 +894,7 @@ async function loadExactMlbPropsBoardSnapshotById(slateDate: string, snapshotId:
   if (!isRecord(ref.after_state) || ref.after_state.slate_date !== slateDate || ref.after_state.snapshot_id !== snapshotId) {
     throw new Error("MLB props locked source index identity unavailable.");
   }
-  const runId = sourceRunId(ref.target_id);
-  if (runId === null) throw new Error("MLB props locked source index identity unavailable.");
-  const { data, error } = await supabase.from("prop_scoring_runs").select("id,created_at,metadata_json").eq("id", runId).maybeSingle();
-  if (error) throw new Error("MLB props locked source read unavailable.");
-  if (!data) return null;
-  const snapshot = decodeMlbPropsBoardSnapshot(data.metadata_json);
-  const envelope = data.metadata_json;
-  if (!snapshot || !isRecord(envelope) || snapshot.snapshotId !== snapshotId || snapshot.slateDate !== slateDate ||
-    envelope.snapshot_id !== snapshotId || envelope.slate_date !== slateDate || envelope.as_of_timestamp !== snapshot.asOfTimestamp) return null;
-  if (needsIndexedCutoff(snapshot) && !indexedSourceMatches(data, snapshot, ref)) return null;
-  return snapshot;
+  return loadBoundIndexedMlbPropsSource(supabase,ref,slateDate,false);
 }
 
 function summarizeDisplayProps(data: PlayerPropsDashboardData, props: PlayerPropPreviewRow[]): PlayerPropsDashboardData["summary"] {

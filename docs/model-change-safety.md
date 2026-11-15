@@ -1,7 +1,7 @@
 ## November 14 player-prop complete evidence, exact confidence and private process health R38
 
 Future shared NBA/NFL/MLB generation is `player_props_ai_2026_11_14_r38_exact_confidence_and_evidence`.
-NBA writer R24, NFL decision R13 and native MLB R44 remain unchanged.
+Future NBA writer is `nba_player_props_private_writer_2026_11_14_r25_review_authority`; NFL decision R13 and native MLB R44 remain unchanged.
 Future law R3 (`player_props_ai_law_2026_11_14_r3_exact_paired_confidence`),
 selection R8 and grade R5 qualify the existing confidence Lean rule with exact
 integer/rational comparisons, including paired hold, non-push mass and the 55% floor.

@@ -73,8 +73,8 @@ async function runScenario(mode:Mode){
  type ReviewArgs=Parameters<typeof reviewPropsForSite>[0];
  const provider={getClient:()=>({getRequestCount:()=>{providerCalls++;return 0;}})};
  const modules:any={snapshot,aiReviewRuntime:undefined,summarizePropsAiRuntimeHealth,propsAiFinalSourceHolds,args:{persist:true,writerRunId:'synthetic-lease-owner',slateDate:'2030-06-01'},asOfTimestamp:at,games,probablePitchers:[],expandedDecisionProps:nativeRows,boardSourceOdds:[],openingOdds:[],environment:{errors:[]},previous:null,mappedOdds:[{}],providerCoverage:undefined,playerGameIdentityConflictRows:0,probablePitcherResolution:{fallbackAssignments:[],findings:[]},oddsClient:provider,researchClient:provider,lineupResult:{balldontlieCalls:0},
-  createPropsAiDbClient:()=>client,propsAiSiteConfig:()=>({integrated:true}),createMlbPrelockHandoff:handoffs.createMlbPrelockHandoff,MLB_PROPS_AI_HANDOFF_RELEASE:handoffs.MLB_PROPS_AI_HANDOFF_RELEASE,
-  Date:Clock,randomUUID:crypto.randomUUID,process:{env},buildDashboardData:live.buildDashboardData,compareMlbPropsBoardMovement:live.compareMlbPropsBoardMovement,resolveMlbStatsTeamId,
+  createPropsAiDbClient:()=>client,propsAiSiteConfig:()=>({integrated:true}),createMlbPrelockHandoff:handoffs.createMlbPrelockHandoff,MLB_PROPS_AI_HANDOFF_RELEASE:handoffs.MLB_PROPS_AI_HANDOFF_RELEASE,applyMlbStoredLockAuthority:handoffs.applyMlbStoredLockAuthority,MlbPropsPublicationUncertainError:handoffs.MlbPropsPublicationUncertainError,MlbPropsReviewAuthorityUnavailableError:handoffs.MlbPropsReviewAuthorityUnavailableError,applyMlbPropsDisplayLocks:canonical.applyMlbPropsDisplayLocks,loadMlbPropsLockedGameTimes:canonical.loadMlbPropsLockedGameTimes,
+  propsAiEvidenceDigest:digest,Date:Clock,randomUUID:crypto.randomUUID,process:{env},buildDashboardData:live.buildDashboardData,compareMlbPropsBoardMovement:live.compareMlbPropsBoardMovement,resolveMlbStatsTeamId,
   validateMlbPropsBoardData:(args:any)=>{const validation=live.validateMlbPropsBoardData({...args,sourceRows:1});assert(validation.publishable,validation.errors.join('|'));return validation;},
   enforceSnapshotPayloadLimits:(s:MlbPropsBoardSnapshot)=>canonical.assertSnapshotSizeWithinLimits(canonical.measureMlbPropsBoardSnapshot(s)),
   publishMlbPropsBoardSnapshot:async(s:MlbPropsBoardSnapshot)=>{if(genericFailure&&s.asOfTimestamp===tick&&Date.parse(tick)>Date.parse(lock))faultNext=mode.includes('index')?'admin_audit_log':'prop_scoring_runs';return canonical.publishMlbPropsBoardSnapshot(s);},ensureMlbPropsGameLocks:tracking.ensureMlbPropsGameLocks,
@@ -126,7 +126,7 @@ async function runScenario(mode:Mode){
  // A new ordinary invocation may read original persisted source and run the
  // existing cutoff lock writer. It cannot invent a missing publication index.
  tick=new Date(Date.parse(lock)+4000).toISOString();
- const locks=await tracking.ensureMlbPropsGameLocks(snapshot,tick);assert.equal(locks.created,1);
+ const locks=await tracking.ensureMlbPropsGameLocks(snapshot,tick);assert.equal(locks.created,handoffFailed?1:0,'Only an unfenced ordinary checkpoint may already have created the original first lock');
  const firstLock=locks.locks.find((l:any)=>l.external_game_id===packet.gameId);assert(firstLock);assert.equal(firstLock.board_snapshot_id,cutoff.snapshotId);
  const lockBytes=digest((await canonical.loadMlbPropsGameLocks('2030-06-01')).find((l:any)=>l.external_game_id===packet.gameId)),sourceBytes=digest(aRow(cutoff));
  const rawSource=()=>tables.prop_scoring_runs.map(r=>canonical.decodeMlbPropsBoardSnapshot(r.metadata_json)).find(s=>s?.snapshotId===cutoff.snapshotId);

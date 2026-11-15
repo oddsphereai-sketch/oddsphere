@@ -109,6 +109,12 @@ and actual BIGSERIAL ordering before their existing bounds. Two serialized ackno
 publications at one clock cannot silently select an earlier source. Missing or
 malformed equal-clock identity remains unknown. Original immutable by-ID sources and
 already stored locks are never reordered or replaced.
+A selected publication index must bind its actual raw source before either the
+current board or advisory head can authorize it. The existing head TTL cache adds
+one bounded internal raw-row read, with no provider/model request or history scan.
+Ordinary postlock MLB refresh reuses existing first-lock eligibility and original
+locked-display authority; a valid acknowledged prelock source remains usable after
+restart, while a missing or late original source never gains a reconstructed lock.
 Future member-contract policy R1 (`player_props_ai_member_contract_2026_11_14_r1_nba_ou_execution`)
 aligns priced-tail admission with the existing NBA ordinary Over/Under adapter.
 NBA Yes/milestone offers remain complete archived/read market context, not execution

@@ -32,6 +32,43 @@ export class MlbPropsReviewAuthorityUnavailableError extends MlbPropsPublication
 }
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const actor = (row: Row) => row.providerIds?.mlbStatsPlayerId ?? `bdl:${row.providerIds?.bdlPlayerId}`;
+/** Trust boundary: only the existing writer may supply this pair after reading
+ * the actual stored lock inventory and exact original display sources. Clocks
+ * or a caller-supplied row flag alone cannot construct this authority. */
+export type MlbStoredLockAuthority = Readonly<{lockTimes: readonly (readonly [string,string])[]; rows: readonly Row[]; rowDigests: readonly string[]}>;
+export function applyMlbStoredLockAuthority(current: readonly Row[], authority: MlbStoredLockAuthority): Row[] {
+  const locks = new Map<string,string>();
+  for (const [id,at] of authority.lockTimes) {
+    assert(typeof id === "string" && id && typeof at === "string" && Number.isFinite(instant(at)), "MLB stored lock identity unavailable");
+    assert(!locks.has(id) || instant(locks.get(id)!) === instant(at), "MLB stored lock clocks conflict");
+    locks.set(id,at);
+  }
+  const originals = new Map<string,Row[]>();
+  assert(authority.rows.length === authority.rowDigests.length, "MLB original stored lock inventory unavailable");
+  for (const [index,row] of authority.rows.entries()) {
+    const id = row.providerIds?.gameId;
+    // The existing reader preserves an already-locked opaque legacy clock.
+    // Bind its exact original row instead of reinterpreting that public field.
+    assert(id && locks.has(id) && row.lockStatus?.status === "locked"
+      && digest(row) === authority.rowDigests[index], "MLB stored lock row binding unavailable");
+    originals.set(id,[...(originals.get(id) ?? []),clone(row)]);
+  }
+  for (const id of locks.keys()) assert(originals.get(id)?.length, "MLB original stored lock rows unavailable");
+  const replacements = new Map<string,Row[]>();
+  for (const [id,incoming] of originals) {
+    const old = current.filter(row => row.providerIds?.gameId === id && row.lockStatus?.status === "locked");
+    const received = new Map<string,number>(); for (const row of incoming) received.set(digest(row),(received.get(digest(row)) ?? 0)+1);
+    const kept = new Map<string,number>(); for (const row of old) {const hash=digest(row);assert(received.has(hash),"MLB stored locked payload conflicts");kept.set(hash,(kept.get(hash) ?? 0)+1);}
+    const replacement = clone(old);
+    for (const row of incoming) {const hash=digest(row),n=kept.get(hash) ?? 0;if(n){kept.set(hash,n-1);}else replacement.push(row);}
+    replacements.set(id,replacement);
+  }
+  const inserted = new Set<string>();
+  const result = current.flatMap(row => {const id=row.providerIds?.gameId;if(!id||!replacements.has(id))return[clone(row)];if(inserted.has(id))return[];inserted.add(id);return clone(replacements.get(id)!);});
+  for (const [id,rows] of replacements) if(!inserted.has(id))result.push(...clone(rows));
+  return result;
+}
+
 
 function create(nativeRows: readonly Row[], publish: Publisher, clock: () => string, options?: MlbPrelockHandoffOptions) {
   const baseline = clone([...nativeRows]);
@@ -74,6 +111,12 @@ function create(nativeRows: readonly Row[], publish: Publisher, clock: () => str
   return {
     rows: () => { assertPublicationAvailable(); const state = authority(); if (state.heldGameIds.length) throw new MlbPropsReviewAuthorityUnavailableError(state); return clone(publishableRows(rows,known)); },
     authority: () => authority(),
+    adoptStoredLocks: (original: MlbStoredLockAuthority) => {
+      assertPublicationAvailable();
+      const adopted=applyMlbStoredLockAuthority(rows,original);
+      rows=adopted;
+      for(const [id] of original.lockTimes) if(windows.has(id)) known.add(id);
+    },
     holdSources: (gameIds: readonly string[]) => { for (const id of gameIds) if (windows.has(id)) known.delete(id); },
     observe(packet: GamePacket, review: AcceptedGameReview | null, lookupAvailable: boolean): Promise<void> {
       // Own immutable inputs at the callback boundary. Numeric readiness is

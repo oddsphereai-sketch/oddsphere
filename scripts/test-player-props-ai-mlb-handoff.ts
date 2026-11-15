@@ -2,7 +2,7 @@
  * writer. Publication is an explicit awaited local fixture, never real I/O. */
 import assert from 'node:assert/strict';
 import {digest} from '../lib/playerPropsAi/evidence';
-import {testMlbPrelockHandoff,MlbPropsReviewAuthorityUnavailableError} from '../lib/playerPropsAi/mlbPrelockHandoff';
+import {testMlbPrelockHandoff,applyMlbStoredLockAuthority,MlbPropsReviewAuthorityUnavailableError} from '../lib/playerPropsAi/mlbPrelockHandoff';
 import {gzipSync} from 'node:zlib';
 import {criticalContextHashes} from '../lib/playerPropsAi/criticalContext';
 import {readerCanonicalContextHash} from '../lib/playerPropsAi/readerContext';
@@ -95,6 +95,23 @@ async function main(){
  await lockedOther.observe({...packet,cutoff:tick},review,true);assert.equal(lockedWrites[0].filter(row=>digest(row)===frozenBytes).length,2,'Original locked duplicates survive partial writes');assert.equal(lockedOther.rows().filter(row=>digest(row)===frozenBytes).length,2);
  const freshWrites:PlayerPropPreviewRow[][]=[];const fresh=testMlbPrelockHandoff([native,nativeB],async rows=>{freshWrites.push(rows);},()=>tick);assert.throws(()=>fresh.rows(),MlbPropsReviewAuthorityUnavailableError);await fresh.observe({...packet,cutoff:tick},review,true);assert.equal(freshWrites[0].length,1,'No prior ACK B remains unpublished while A completes');assert.throws(()=>fresh.rows(),MlbPropsReviewAuthorityUnavailableError);await fresh.observe({...packetB,cutoff:tick},null,true);assert.equal(fresh.rows().length,2,'Verified empty B permits its current native positive');fresh.holdSources([packetB.gameId]);assert.throws(()=>fresh.rows(),MlbPropsReviewAuthorityUnavailableError);await fresh.observe({...packetB,cutoff:tick},reviewB,true);assert(fresh.rows().find(row=>row.providerIds?.gameId===packetB.gameId)?.aiReview);
  assert.throws(()=>testMlbPrelockHandoff([native],async()=>{},()=>tick,{slateDate:'2030-06-01',games:[{gameId:packet.gameId,start}],previousSnapshot:{slateDate:'2030-05-31',snapshotId:'foreign',asOfTimestamp:at,data:{props:[native]}}}),MlbPropsReviewAuthorityUnavailableError);
+ // Only the exact stored-inventory/original-row pair may advance a held
+ // postlock game. The pure helper cannot authenticate a database; its caller
+ // supplies that real authority, while every binding below still fails closed.
+ const originalLocked={...acknowledgedB,lockStatus:{status:'locked' as const,lockedAt:lock}},originalLockedBytes=digest(originalLocked);
+ const authority={lockTimes:[[packetB.gameId,lock] as const],rows:[originalLocked,originalLocked],rowDigests:[originalLockedBytes,originalLockedBytes]};
+ const restartUnknown=testMlbPrelockHandoff([nativeB],async()=>{throw Error('No new publication at postlock');},()=>new Date(Date.parse(lock)+1).toISOString(),{slateDate:'2030-06-01',games:[{gameId:packetB.gameId,start}],previousSnapshot:{slateDate:'2030-06-01',snapshotId:'actual-unlocked-source-ack',asOfTimestamp:at,data:{props:[acknowledgedB]}}});
+ assert.throws(()=>restartUnknown.rows(),MlbPropsReviewAuthorityUnavailableError);
+ assert.throws(()=>restartUnknown.adoptStoredLocks({lockTimes:[['unverified-other-game',lock]],rows:[originalLocked],rowDigests:[originalLockedBytes]}),/binding/);
+ assert.throws(()=>restartUnknown.rows(),MlbPropsReviewAuthorityUnavailableError,'Rejected binding cannot silently mark source known');
+ assert.throws(()=>restartUnknown.adoptStoredLocks({lockTimes:[[packetB.gameId,'invalid']],rows:[originalLocked],rowDigests:[originalLockedBytes]}),/Invalid zoned timestamp/);
+ assert.throws(()=>restartUnknown.adoptStoredLocks({lockTimes:[[packetB.gameId,lock]],rows:[],rowDigests:[]}),/original stored lock rows/);
+ restartUnknown.adoptStoredLocks(authority);assert.equal(restartUnknown.rows().length,2);assert(restartUnknown.rows().every(r=>digest(r)===originalLockedBytes));
+ assert.throws(()=>restartUnknown.adoptStoredLocks({lockTimes:[[packetB.gameId,lock]],rows:[{...originalLocked,projection:999}],rowDigests:[originalLockedBytes]}),/binding/);
+ assert.equal(restartUnknown.rows().length,2,'Failed adoption does not mutate original duplicates');
+ const opaqueLegacy={...originalLocked,lockStatus:{...originalLocked.lockStatus,lockedAt:'opaque-original-legacy-clock'}} as PlayerPropPreviewRow;const opaqueHash=digest(opaqueLegacy);const opaqueAdopted=applyMlbStoredLockAuthority([],{lockTimes:[[packetB.gameId,lock]],rows:[opaqueLegacy],rowDigests:[opaqueHash]});assert.equal(digest(opaqueAdopted[0]),opaqueHash,'Actual stored legacy lock clock remains opaque and exact');
+ const maxDuplicates=applyMlbStoredLockAuthority([originalLocked,originalLocked,originalLocked],authority);assert.equal(maxDuplicates.length,3);assert(maxDuplicates.every(r=>digest(r)===originalLockedBytes),'Exact maximum locked multiplicity is retained');
+ assert.equal(digest(originalLocked),originalLockedBytes);
  console.log('MLB unknown-authority controls passed: no native withdrawal, same-game read recovery, sticky uncertain writes, two-game partial source omission, known positive return, same-day ACK restart and exact duplicate locked rows.');
  console.log('MLB native participation impact: two retained rows; actionable1→0 for explicit absence,0→1 after posted return; exact conditional numbers/prices and stored lock.');
  console.log('MLB handoff boundary passed: awaited serialized actual-ready publication, duplicate observation collapse, exact milestone execution, withdrawal/return recovery, write-failure honesty, lookup fallback, clock refusal and immutable locks. No HTTP/DB/paid calls.');
