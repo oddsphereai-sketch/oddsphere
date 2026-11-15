@@ -1,9 +1,10 @@
 /** Prospective source-event qualification, separate from the immutable mathematical law. */
+import {assertNflExecutionContracts,PROPS_AI_NFL_EXECUTION_CONTRACT_RELEASE} from './nflExecutionContracts';
 import type {GamePacket,Player,Quote} from "./evidenceContract";
 export const PROPS_AI_SOURCE_EVENT_RELEASE="player_props_source_event_2026_11_09_r1_interception_contract" as const;
 export const PROPS_AI_NFL_EVENT_SOURCE_RELEASE="player_props_ai_nfl_source_2026_11_09_r3_event_qualification" as const;
 export const UNRESOLVED_INTERCEPTION_EVENT="Source interception event is unresolved; passing and defensive contracts cannot be interchanged.";
-export type SourceEventQualification={release:typeof PROPS_AI_SOURCE_EVENT_RELEASE;providerMarket:string|null;observationId:string|null;status:"verified"|"unresolved";statistic:"interceptions"|null;reason:string;rosterPosition:string|null};
+export type SourceEventQualification={release:typeof PROPS_AI_SOURCE_EVENT_RELEASE|typeof PROPS_AI_NFL_EXECUTION_CONTRACT_RELEASE;providerMarket:string|null;observationId:string|null;status:"verified"|"unresolved";statistic:"interceptions"|null;reason:string;rosterPosition:string|null;threshold?:number;normalizedOfferType?:string|null};
 export type MarketEventQualification={release:typeof PROPS_AI_SOURCE_EVENT_RELEASE;status:"verified"|"unresolved";statistic:"interceptions"|null;contracts:(SourceEventQualification&{provider:string;book:string})[]};
 const defense=new Set(["CB","S","FS","SS","DB","LB","ILB","OLB","MLB","DE","DT","DL","NT","EDGE"]);
 export function qualifyNflSourceEvent(args:{market:string;provider:string;providerMarket:string|null;rosterPosition:string|null;observationId?:string|null}):SourceEventQualification|undefined{
@@ -33,6 +34,11 @@ export function sourceEventSummary(quotes:readonly Quote[]):MarketEventQualifica
 }
 /** Only the new source contract requires this field; legacy archives retain absence. */
 export function assertSourceEventQualifications(packet:GamePacket){
+ assertNflExecutionContracts(packet);
+ if(packet.sourceExecutionContractRelease!==undefined&&(
+   packet.sport!=="nfl"||packet.sourceInputRelease!==PROPS_AI_NFL_EVENT_SOURCE_RELEASE
+   ||typeof packet.sourceIdentityRelease!=="string"||!packet.sourceIdentityRelease
+   ||typeof packet.sourceIdentityAvailableAt!=="string"))throw Error("NFL player identity source unavailable for execution contract");
  if(packet.sourceInputRelease!==PROPS_AI_NFL_EVENT_SOURCE_RELEASE)return;
  for(const p of packet.players)if(p.markets.includes("interceptions")){
   const e=p.sourceEventContracts?.interceptions;
