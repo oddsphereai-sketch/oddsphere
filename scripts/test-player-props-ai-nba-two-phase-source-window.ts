@@ -30,7 +30,7 @@ const outcome=async()=>({status:'active',games:[],findings:[]});
 const knownNativeOutcome=(h:ProbeHarness)=>async(args:ReviewArgs)=>{for(const packet of h.packets)await args.onSourceReady?.(packet,null,packet.cutoff,true);return outcome();};
 async function main(){
  Object.assign(process.env,{NODE_ENV:"test"});
- assert.equal(propsAiTwoPhaseCompletionWindowMs(1),240000);assert.equal(propsAiTwoPhaseCompletionWindowMs(16),420000);
+ assert.equal(propsAiTwoPhaseCompletionWindowMs(1),240000);assert.equal(propsAiTwoPhaseCompletionWindowMs(16),240000);
  let calls=0;const signals:AbortSignal[]=[];
  context.fetch=async(_url:unknown,init?:RequestInit)=>{calls++;signals.push(init!.signal!);return Response.json({fixture:true});};
  const good=harness({aiDeadline:initial+480000,reserveReviewWindow:true,onSourceFetch:async(fetchSource:typeof fetch)=>{const own=new AbortController();await fetchSource('https://synthetic.invalid/source',{signal:own.signal});assert.notEqual(signals.at(-1),own.signal);own.abort();assert(signals.at(-1)!.aborted,'Source deadline composes with rather than replaces original source cancellation');}});
@@ -43,6 +43,6 @@ async function main(){
  // A non-due native/lock sweep keeps the same absolute bound without reserving
  // a paid review that was never due. It still runs after 339s of normal DE work.
  const native=harness({aiDeadline:initial+480000,reserveReviewWindow:false});native.setTick(new Date(initial+339000).toISOString());await native.run(knownNativeOutcome(native));assert(native.counts().writes>0);
- console.log('Actual NBA writer source window passed: derived 480−240s due preparation bound, original provider cancellation retained, no fetch/publication after slow source or DB preparation, and late non-due native lifecycle retained. Full 16-part420s capacity still requires preparation/counts <60s; no live latency claim.');
+ console.log('Actual NBA writer source window passed: derived 480−240s due preparation bound, original provider cancellation retained, no fetch/publication after slow source or DB preparation, and late non-due native lifecycle retained. Full16-part240s capacity retains both phases inside the existing global16pool; no live latency claim.');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

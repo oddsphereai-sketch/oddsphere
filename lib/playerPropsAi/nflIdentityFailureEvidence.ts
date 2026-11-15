@@ -11,7 +11,7 @@ import type {PropsAiJob} from './budget';
 import {CATALOG} from './evidenceContract';
 import {stable,invariant} from './evidence';
 import {PROPS_AI_RELEASE} from './releases';
-import {resolveNflPropSourcePlayer,PROPS_AI_NFL_IDENTITY_RELEASE,PROPS_AI_NFL_SOURCE_RELEASE} from './nflPlayerIdentity';
+import {createNflPacketActorResolver,PROPS_AI_NFL_IDENTITY_RELEASE,PROPS_AI_NFL_SOURCE_RELEASE} from './nflPlayerIdentity';
 
 export const LEGACY_NFL_IDENTITY_FAILURE_EVIDENCE_RELEASE='player_props_ai_nfl_source_failure_2026_11_10_r1_private_exact_input' as const;
 export const NFL_IDENTITY_FAILURE_EVIDENCE_RELEASE='player_props_ai_nfl_source_failure_2026_11_14_r2_bounded_semantic_archive' as const;
@@ -94,9 +94,10 @@ export function buildNflIdentityFailureEvidence(args:NflIdentityFailureArgs):Nfl
       providerPlayerId:row.providerPlayerId??null,playerName:row.playerName,team:row.team,opponent:row.opponent,market:row.market,observedAt:row.observedAt,featureAsOf:row.forecastContext?.featureAsOf??null}}]:[]);
     const contexts=args.context.games.flatMap((game,index)=>game.canonicalGameId===args.game.id?[{index,game:copy(game)}]:[]);
     counts.nativeRows=native.length;counts.memberRows=member.length;counts.contexts=contexts.length;
+    const resolveActor=createNflPacketActorResolver({rows:args.snapshot.board.decisions,observations:candidates.map(c=>c.row),context:args.context,game:args.game,
+      cutoff:args.window.cutoff,observationsAvailableAt:args.observations.generatedAt,storedAvailableAt:args.snapshot.generatedAt});
     const outcomes=candidates.map(({index,row})=>{
-      try{const identity=resolveNflPropSourcePlayer({row,rows:args.snapshot.board.decisions,observations:candidates.map(c=>c.row),context:args.context,game:args.game,
-        cutoff:args.window.cutoff,observationsAvailableAt:args.observations.generatedAt,storedAvailableAt:args.snapshot.generatedAt});
+      try{const identity=resolveActor(row);
         return{index,code:identity?'resolved':'unresolved',identity};
       }catch(error){return{index,code:conflictCode(error instanceof Error?error.message:''),identity:null};}
     });

@@ -25,8 +25,8 @@ async function main() {
  assert.throws(()=>parsePropsAiCoverage('{"format":"props_ai_coverage_table_v1","coverages":[],"payload":{"aiReview":{"coverage":{"$propsAiCoverage":0}}}}'),/Invalid AI coverage reference/);
  const inline={aiReview:{coverage:{...coverage,$propsAiCoverage:99}}};
  assert.deepEqual(parsePropsAiCoverage(JSON.stringify({format:"props_ai_coverage_table_v1",coverages:[],payload:inline})),inline,"inline stored evidence takes precedence over a reference-like extra field");
- assert.equal(propsAiCompletionWindowMs(5),120_000);assert.equal(propsAiCompletionWindowMs(16),210_000);
- assert.equal(propsAiTwoPhaseCompletionWindowMs(5),240_000);assert.equal(propsAiTwoPhaseCompletionWindowMs(16),420_000);
+ assert.equal(propsAiCompletionWindowMs(5),120_000);assert.equal(propsAiCompletionWindowMs(16),120_000);
+ assert.equal(propsAiTwoPhaseCompletionWindowMs(5),240_000);assert.equal(propsAiTwoPhaseCompletionWindowMs(16),240_000);
  const slot=propsAiGenerationPool(16);let active=0,peak=0,completed=0;
  await Promise.all(Array.from({length:16},()=>Promise.all(Array.from({length:5},()=>slot(async()=>{active++;peak=Math.max(peak,active);await new Promise(resolve=>setImmediate(resolve));active--;completed++;})))));
  assert.equal(peak,16);assert.equal(completed,80);assert.equal(active,0);
