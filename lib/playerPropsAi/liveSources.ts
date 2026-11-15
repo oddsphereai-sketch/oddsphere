@@ -1,5 +1,5 @@
 import {qualifyNflSourceEvent,sourceEventSummary,qualifyConflictingSourceObservations} from "./sourceEvents";
-import {resolveNflPropSourcePlayer,sameNflPropActorName,PROPS_AI_NFL_SOURCE_RELEASE,PROPS_AI_NFL_IDENTITY_RELEASE} from "./nflPlayerIdentity";
+import {createNflPacketActorResolver,sameNflPropActorName,PROPS_AI_NFL_SOURCE_RELEASE,PROPS_AI_NFL_IDENTITY_RELEASE} from "./nflPlayerIdentity";
 /** Complete captured collector inputs. Pure: no provider, database or inference calls. */
 import type {NbaPlayerPropsCurrentState} from "../services/nba/nbaPlayerPropsCurrentState";
 import type {NbaPlayerPropsMemberSnapshot} from "../services/nba/nbaPlayerPropsProductContract";
@@ -104,8 +104,9 @@ export function liveNflPacket(args:{game:LivePropsGame;window:CapturedReviewWind
   const players=new Map<string,Player>(),quotes:Quote[]=[];let unresolved=0;
   const native=args.observations.observations.filter(q=>q.canonicalGameId===args.game.id&&(CATALOG.nfl.required as readonly string[]).includes(q.market));
   const currentNative=native.filter(q=>!q.isOpening&&!q.isLive&&q.receivedAt&&instant(q.receivedAt)<=instant(at)&&instant(q.observedAt)<=instant(q.receivedAt));
+  const resolveActor=createNflPacketActorResolver({rows:args.snapshot.board.decisions,observations:currentNative,context:args.context,game:args.game,cutoff:at,observationsAvailableAt:args.observations.generatedAt,storedAvailableAt:args.snapshot.generatedAt});
   for(const q of currentNative){
-    const identity=resolveNflPropSourcePlayer({row:q,rows:args.snapshot.board.decisions,observations:currentNative,context:args.context,game:args.game,cutoff:at,observationsAvailableAt:args.observations.generatedAt,storedAvailableAt:args.snapshot.generatedAt});
+    const identity=resolveActor(q);
     if(!identity){unresolved++;continue;}
     let player=players.get(identity.id);
     if(!player){
@@ -128,7 +129,7 @@ export function liveNflPacket(args:{game:LivePropsGame;window:CapturedReviewWind
   // Historical openings supplement a verified current actor; they cannot create
   // an additional offered actor or block a currently complete game.
   for(const q of native.filter(q=>q.isOpening&&!q.isLive&&q.receivedAt&&instant(q.receivedAt)<=instant(at)&&instant(q.observedAt)<=instant(q.receivedAt))){
-    let identity;try{identity=resolveNflPropSourcePlayer({row:q,rows:args.snapshot.board.decisions,observations:currentNative,context:args.context,game:args.game,cutoff:at,observationsAvailableAt:args.observations.generatedAt,storedAvailableAt:args.snapshot.generatedAt});}catch{continue;}
+    let identity;try{identity=resolveActor(q);}catch{continue;}
     const player=identity?players.get(identity.id):undefined;if(!identity||!player||!player.markets.includes(q.market))continue;
     const sourceEvent=qualifyNflSourceEvent({market:q.market,provider:q.provider,providerMarket:q.providerMarket,observationId:q.providerObservationId,rosterPosition:identity.rosterPosition});
     const value={...(sourceEvent?{sourceEvent}:{}),playerId:identity.id,market:q.market,provider:q.provider,book:q.sportsbook,line:q.line,side:q.side,american:q.americanPrice,observedAt:q.observedAt,receivedAt:q.receivedAt!,receivedAtProvenance:"provider_response" as const,opening:true,live:false};quotes.push({...value,id:digest(value)});

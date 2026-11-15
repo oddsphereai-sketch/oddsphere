@@ -1,3 +1,33 @@
+## November 15 NFL packet-scoped identity work R101
+
+NFL props writer is `nfl_player_props_writer_2026_11_15_r101_packet_identity_scope`.
+It supersedes R100 below; full-game writer R119 remains current. Generation R39,
+NFL event-source R2 and identity R1, law R3, grade R5, selection R8, NFL decision
+R13, NBA writer R25 and native MLB R44 are unchanged.
+
+A synchronous NFL packet construction now prepares its immutable captured identity
+facts once, instead of rebuilding native/roster/stored facts for every quote.
+Normalized target-name matches and selected-ID facts are reused only inside that
+packet. Every original fact, duplicate/conflict, namespace, team, roster, schedule,
+availability clock, stored-header guard and exact target label remains authoritative.
+Preparation and selected-player position validation remain lazy in the original
+error order. Each independent direct call retains a fresh scope; source, cutoff,
+game or request changes cannot reuse one. Current and opening rows share only their
+original same-packet captured sources, never invented provider identities or heads.
+A separate private failure-capture invocation likewise prepares its own immutable
+candidate scope once; original R2 diagnostic values, raw archives and hashes stay exact.
+
+The actual R100 normal request still hit 540 seconds while repeatedly preparing
+source packets; append, member and full-game tracking had already settled. The
+identity hot path showed quadratic repeated work in offline source-tuple fixtures.
+This version removes that demonstrated cost without changing the two-phase reserve,
+part/global concurrency, stage boundaries, output caps, providers, slots, budgets,
+lease drainage or original first locks. Exact complete packet bytes and original
+refusals must remain identical under fixed captured inputs/clocks. A faster identity
+lookup is not a guarantee of every game's remaining partition/time capacity or a
+complete production cure. Normal scheduled proof remains required; no extra paid
+proof or closed-slot replay is authorized. See the R101 model audit.
+
 ## November 15 NFL finalization work R100 / R119
 
 NFL props writer is `nfl_player_props_writer_2026_11_15_r100_finalization_stages`;
