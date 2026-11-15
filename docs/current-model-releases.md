@@ -44,6 +44,19 @@ lease, budget limit or live tracking/result exposure changes. Two new consecutiv
 fresh three-reviewer all-clear rounds and all protected release/live-proof gates
 are required. See `model-audits/2026-11-15-player-props-response-identity.md`.
 
+Response reference ownership is enforced across all parts/phases in the reviewer
+and atomically across games, sports and restarts by V73's existing wallet-locked
+receipt RPC. A reference already reported by another known or unknown attempt
+cannot establish another known bill. The new RPC signature and service-only ACL
+remain unchanged; original rows and all other wallet/lease functions are untouched.
+A rejected or unacknowledged known receipt attempts to retain its exact original
+evidence as unknown, then fails the review; an already committed known receipt is
+immutable and cannot be replaced by this fallback. All launched siblings settle;
+no additional inference or unknown-charge release is authorized. V73 must be
+installed from the exact reviewed published source before the R39 release.
+This corrects the Round51 mocked duplicate-ID admission, not a proven production
+collision. Two fresh all-three clear rounds must follow this correction.
+
 ## November 15 NFL verified-history context retention R99
 
 NFL props writer is `nfl_player_props_writer_2026_11_15_r99_streamed_context_history`;

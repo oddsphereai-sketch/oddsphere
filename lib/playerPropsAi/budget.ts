@@ -30,8 +30,22 @@ export class PropsAiStore {
   send(key: string, token: string, phase: number, part: number) {
     return this.rpc<{ id: string; reserved_micro: number; model:PropsAiModel; requested_tier:"default"|"flex" }>("player_props_ai_send", { p_key: key, p_token: token, p_phase: phase, p_part: part });
   }
-  receipt(id: string, token: string, actual: number | null, responseId: string | null, usage: unknown) {
-    return this.rpc<void>("player_props_ai_receipt", { p_id: id, p_token: token, p_actual: actual, p_response: responseId, p_usage: usage });
+  async receipt(id: string, token: string, actual: number | null, responseId: string | null, usage: unknown) {
+    try {
+      return await this.rpc<void>("player_props_ai_receipt", { p_id: id, p_token: token, p_actual: actual, p_response: responseId, p_usage: usage });
+    } catch(error) {
+      if(actual!==null){
+        // A rejected/unacknowledged known receipt cannot authorize a forecast.
+        // Preserve its exact evidence under the existing unknown hold if the
+        // first write did not commit. An ACK-lost known receipt is immutable:
+        // the fallback must fail harmlessly rather than overwrite it.
+        const original=usage&&typeof usage==="object"&&!Array.isArray(usage)?usage as Record<string,unknown>:{reported_usage:usage};
+        const unavailable={...original,kind:"known_receipt_acknowledgement_unavailable",actorAdmissionUnavailable:true,
+          ...(original.actorAdmissionEvidence?{actorAdmissionEvidence:{release:(original.actorAdmissionEvidence as Record<string,unknown>).release,disposition:"unavailable",reason:"known_receipt_acknowledgement_unavailable"}}:{})};
+        try { await this.rpc<void>("player_props_ai_receipt",{p_id:id,p_token:token,p_actual:null,p_response:responseId,p_usage:unavailable}); } catch { /* Preserve the first immutable receipt or reservation. */ }
+      }
+      throw error;
+    }
   }
   fallback(key: string, token: string, parts: number[], reason: string) { return this.rpc<boolean>("player_props_ai_fallback", { p_key: key, p_token: token, p_parts: parts, p_reason: reason }); }
   finish(key: string, token: string, result: unknown, error: string | null) {

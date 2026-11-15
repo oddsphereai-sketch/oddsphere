@@ -75,13 +75,13 @@ async function run(id:string,stage:"early"|"final",failure:"none"|"capacity"|"ti
       if(failure==="wrongtier")return Response.json(response(parts[1].packet,request.model,"priority","unsupported-tier"));
       if(failure==="emptyid")return Response.json(response(parts[1].packet,request.model,request.service_tier,""));
       if(failure==="rate"||failure==="quota")return Response.json({error:{code:failure==="rate"?"rate_limit_exceeded":"insufficient_quota"}},{status:429,headers:{"x-request-id":"req_synthetic","retry-after":"60","x-ratelimit-limit-tokens":"1000000"}});
-      if(failure==="missingusage"||failure==="invalidusage"){const value=response(parts[1].packet,request.model,request.service_tier,"unknown-usage");return Response.json({...value,usage:failure==="missingusage"?undefined:{input_tokens:-1,output_tokens:100}});}
-      if(failure==="physical"||failure==="physicalformat"){const value=response(parts[1].packet,request.model,request.service_tier,"physical-paid");const bad=JSON.parse(value.output[0].content[0].text);bad.players.b.law.outcomes.points_excluding_made_threes=Array(16).fill(-1);if(failure==="physicalformat")bad.players.b.assessment="This source explanation is clipped";value.output[0].content[0].text=JSON.stringify(bad);return Response.json(value);}
+      if(failure==="missingusage"||failure==="invalidusage"){const value=response(parts[1].packet,request.model,request.service_tier,`unknown-usage-${id}-${stage}`);return Response.json({...value,usage:failure==="missingusage"?undefined:{input_tokens:-1,output_tokens:100}});}
+      if(failure==="physical"||failure==="physicalformat"){const value=response(parts[1].packet,request.model,request.service_tier,`physical-paid-${id}-${stage}`);const bad=JSON.parse(value.output[0].content[0].text);bad.players.b.law.outcomes.points_excluding_made_threes=Array(16).fill(-1);if(failure==="physicalformat")bad.players.b.assessment="This source explanation is clipped";value.output[0].content[0].text=JSON.stringify(bad);return Response.json(value);}
       if(failure==="timeout")throw new Error("synthetic_transport_unknown");
       if(failure==="capacityalias")return Response.json({error:{code:"flex_unavailable",type:"resource_unavailable"}},{status:429,headers:{"retry-after":"300"}});
       if(failure==="capacity")return Response.json({error:{code:"resource_unavailable"}},{status:429});
-      if(failure==="semantic"){const value=response(parts[1].packet,request.model,request.service_tier,"semantic-paid");const bad=JSON.parse(value.output[0].content[0].text);bad.players.b.law.outcomes.points_excluding_made_threes=Array(16).fill(94);value.output[0].content[0].text=JSON.stringify(bad);return Response.json(value);}
-      if(failure==="invalid"){const value=response(parts[1].packet,request.model,request.service_tier,"invalid-paid");value.output[0].content[0].text="{}";return Response.json(value);}
+      if(failure==="semantic"){const value=response(parts[1].packet,request.model,request.service_tier,`semantic-paid-${id}-${stage}`);const bad=JSON.parse(value.output[0].content[0].text);bad.players.b.law.outcomes.points_excluding_made_threes=Array(16).fill(94);value.output[0].content[0].text=JSON.stringify(bad);return Response.json(value);}
+      if(failure==="invalid"){const value=response(parts[1].packet,request.model,request.service_tier,`invalid-paid-${id}-${stage}`);value.output[0].content[0].text="{}";return Response.json(value);}
     }
     return Response.json(response(parts.find(part=>part.packet.players[0].id===player)!.packet,request.model,request.service_tier,`r-${id}-${player}-${seen.get(player)}`));
   }) as typeof fetch;
@@ -145,6 +145,11 @@ try{
   await db.query(readFileSync("lib/db/schema-migration-v66-player-props-ai-slate-capacity.sql","utf8"));
   await db.query(readFileSync("lib/db/schema-migration-v68-player-props-ai-standard-primary-escrow.sql","utf8"));
   await db.query(readFileSync("lib/db/schema-migration-v70-player-props-ai-calendar-lifecycle.sql","utf8"));
+  const referenceMigration=readFileSync("lib/db/schema-migration-v73-player-props-ai-response-reference.sql","utf8");
+  const protectedFunctions=(await db.query("SELECT proname,md5(prosrc) body,proacl::text acl FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname IN ('player_props_ai_plan_v3','player_props_ai_claim','player_props_ai_send','player_props_ai_finish','player_props_ai_reap') ORDER BY proname")).rows;
+  await db.query(referenceMigration);await db.query(referenceMigration);
+  assert.deepEqual((await db.query("SELECT proname,md5(prosrc) body,proacl::text acl FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname IN ('player_props_ai_plan_v3','player_props_ai_claim','player_props_ai_send','player_props_ai_finish','player_props_ai_reap') ORDER BY proname")).rows,protectedFunctions);
+  const receiptAcl=(await db.query("SELECT has_function_privilege('anon','public.player_props_ai_receipt(uuid,uuid,bigint,text,jsonb)','EXECUTE') anon,has_function_privilege('authenticated','public.player_props_ai_receipt(uuid,uuid,bigint,text,jsonb)','EXECUTE') auth,has_function_privilege('service_role','public.player_props_ai_receipt(uuid,uuid,bigint,text,jsonb)','EXECUTE') service")).rows[0];assert.deepEqual(receiptAcl,{anon:false,auth:false,service:true});
   await db.query("UPDATE player_props_ai_control SET paid_enabled=true");
   await db.query("CREATE TABLE test_clock(at timestamptz); INSERT INTO test_clock VALUES('2026-11-07T21:40:00Z'); CREATE FUNCTION props_ai_test_clock() RETURNS timestamptz LANGUAGE sql VOLATILE AS 'SELECT at FROM test_clock'");
   const functions=await db.query("SELECT pg_get_functiondef(oid) body FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname LIKE 'player_props_ai_%'");
@@ -372,6 +377,27 @@ try{
       assert.equal(Number((await db.query("SELECT consumed_micro FROM player_props_ai_budgets WHERE month_key=$1",[month])).rows[0].consumed_micro),consumedBefore);
       const replay=await runPropsReview({...args,job:await job(lateKey)});assert.equal(replay.status,"skipped");assert.equal(httpCalls,0);assert.equal(sends,1,"Closed jobs never reset or replay");
     }finally{Date.now=originalNow;}
+  }
+  // Cross-job/restart ownership is enforced atomically by the real receipt RPC,
+  // not only by one review's in-memory reference set. Every HTTP here is mocked.
+  {
+    const now="2032-11-07T21:40:00Z",month="2032-11",refGame=(id:string)=>({sport:"nba" as const,id,start:"2032-11-07T23:00:00Z",lock:"2032-11-07T22:00:00Z"}),games=Array.from({length:6},(_,i)=>refGame(`ref-${i}`));
+    await db.query("UPDATE test_clock SET at=$1",[now]);await db.query("UPDATE cron_job_leases SET lease_expires_at='2033-01-01T00:00:00Z'");
+    const env=[{input_tokens:1000,max_output_tokens:7000}],p=makePropsWalletPlan({month,now,games,bounds:Object.fromEntries(games.map(g=>[`nba|${g.id}`,env])),sources});assert.equal((await wallet.plan(p)).funded,true);
+    const claims=[];for(const g of games){const key=reviewSlots(g)[1].key,c=await wallet.claim(key,"synthetic-reference",env.map(x=>({...x,strong_input_tokens:null})),false,"synthetic-owner");assert(c.claimed);const a=await wallet.send(key,c.token!,1,1);claims.push({key,token:c.token!,a});await wallet.finish(key,c.token!,null,"synthetic_stop_before_late_receipt");}
+    const [a,b,c,d,e,f]=claims;
+    const race=await Promise.allSettled([wallet.receipt(a.a.id,a.token,60,"opaque-cross-job",{original:"a"}),wallet2.receipt(b.a.id,b.token,60,"opaque-cross-job",{original:"b"})]);assert.equal(race.filter(x=>x.status==="fulfilled").length,1);assert.equal(race.filter(x=>x.status==="rejected").length,1);
+    const rows=(await db.query("SELECT * FROM player_props_ai_attempts WHERE id=ANY($1::uuid[]) ORDER BY state",[[a.a.id,b.a.id]])).rows;assert.equal(rows.filter((x:{actual_micro:unknown})=>x.actual_micro!==null).length,1);const unknown=rows.find((x:{actual_micro:unknown})=>x.actual_micro===null);assert.equal(unknown.state,"unknown");assert.equal(unknown.usage.kind,"known_receipt_acknowledgement_unavailable");assert.equal(unknown.response_id,"opaque-cross-job");
+    await assert.rejects(wallet2.receipt(unknown.id,unknown.id===a.a.id?a.token:b.token,60,null,{nullReferenceBypass:true}),/response_reference_reused/);
+    const known=rows.find((x:{actual_micro:unknown})=>x.actual_micro!==null),knownBefore=JSON.stringify(known);await assert.rejects(wallet.receipt(known.id,known.id===a.a.id?a.token:b.token,61,"opaque-cross-job",{changed:true}),/immutable_usage_receipt_conflict/);assert.equal(JSON.stringify((await db.query("SELECT * FROM player_props_ai_attempts WHERE id=$1",[known.id])).rows[0]),knownBefore);
+    await wallet.receipt(c.a.id,c.token,null,"unknown-first-reference",{original:"unknown"});await assert.rejects(wallet2.receipt(d.a.id,d.token,60,"unknown-first-reference",{original:"different-request"}),/response_reference_reused/);assert.equal((await db.query("SELECT state FROM player_props_ai_attempts WHERE id=$1",[d.a.id])).rows[0].state,"unknown");
+    const ackStore=(afterCommit:boolean)=>{let first=true;return new PropsAiStore({rpc:async(name:string,args:Record<string,unknown>)=>{if(first&&args.p_actual!==null){first=false;if(afterCommit)await wallet.rpc(name,args);throw Error("synthetic_receipt_ack_lost");}return{data:await wallet.rpc(name,args),error:null};}} as unknown as SupabaseClient);};
+    await assert.rejects(ackStore(true).receipt(e.a.id,e.token,60,"ack-lost-known",{original:"exact"}),/synthetic_receipt_ack_lost/);const ackKnown=(await db.query("SELECT * FROM player_props_ai_attempts WHERE id=$1",[e.a.id])).rows[0];assert.equal(ackKnown.state,"completed");assert.equal(Number(ackKnown.actual_micro),60);assert.deepEqual(ackKnown.usage,{original:"exact"});
+    await wallet.receipt(e.a.id,e.token,60,"ack-lost-known",{original:"exact"});
+    const raw={failureEvidence:{request:{sha256:"original-request"},draft:{sha256:"original-draft"}},actorAdmissionEvidence:{release:"synthetic",disposition:"eligible_after_known_receipt"}};
+    await assert.rejects(ackStore(false).receipt(f.a.id,f.token,60,"ack-not-committed",raw),/synthetic_receipt_ack_lost/);const held=(await db.query("SELECT * FROM player_props_ai_attempts WHERE id=$1",[f.a.id])).rows[0];assert.equal(held.state,"unknown");assert.equal(held.actual_micro,null);assert.deepEqual(held.usage.failureEvidence,raw.failureEvidence);assert.equal(held.usage.actorAdmissionEvidence.disposition,"unavailable");
+    const total=(await db.query("SELECT consumed_micro FROM player_props_ai_budgets WHERE month_key=$1",[month])).rows[0];assert.equal(Number(total.consumed_micro),120+4*3805,"Only two uniquely evidenced charges settle; four original unknown holds stay reserved");
+    console.log("V73 actual PostgreSQL proof passed: concurrent cross-job duplicate, unknown-first ownership, immutable/idempotent known receipt, lost ACK before/after commit, exact raw evidence and unknown holds; unchanged protected functions and service-only ACL.");
   }
   console.log("Native delayed-send proof passed: after-lock/deadline and reaper-before-ack start zero HTTP, exact zero unsent receipts, unchanged unrelated unknown holds, no closed-slot replay.");
   console.log("Native slate capacity proof passed: up to sixteen funded games claim atomically; the seventeenth is deferred; no generation or added spending.");

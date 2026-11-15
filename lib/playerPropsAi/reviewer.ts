@@ -59,6 +59,7 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
   const claimed = await args.store.claim(args.job.job_key, inputHash, requests, preferStronger,args.writerRunId);
   if (!claimed.claimed) return { status: "skipped", reason: claimed.reason };
   const job = claimed.job!, token = claimed.token!;
+  const responseReferences=new Set<string>();
   const accepted=new Map<number,ReturnType<typeof parseJointReview>>(),provenance=new Map<number,PartProvenance>();
   let phase=1, pending=parts.map((_,i)=>i), failure="unknown_review_failure";
   const feedback=new Map<number,string>(),feedbackTexts=new Map<number,string>();
@@ -108,10 +109,15 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
           const identity=responseModelIdentity(attempt.model,response.model);
           const tierIdentity=responseTierIdentity(attempt.requested_tier,response.service_tier);
           const referenceIdentity=responseReferenceIdentity(response.id);
+          // Reserve the opaque identity synchronously, before any await or actor
+          // parsing, across every part and both phases of this logical review.
+          const repeatedReference=referenceIdentity.status==="verified"&&responseReferences.has(referenceIdentity.responseId!);
+          if(referenceIdentity.status==="verified")responseReferences.add(referenceIdentity.responseId!);
           const responseIdentity={response_model_identity:identity,response_tier_identity:tierIdentity,response_reference_identity:referenceIdentity};
           const terminalReceipt=["completed","incomplete","failed","cancelled"].includes(response.status);
           const identityFailure=identity.status!=="verified"?`response_model_identity_${identity.status}`
             :referenceIdentity.status!=="verified"?"response_reference_identity_unavailable"
+            :repeatedReference?"response_reference_reused"
             :tierIdentity.status!=="verified"?`response_tier_identity_${tierIdentity.status}`
             :!terminalReceipt?"response_receipt_not_terminal":null;
           if(identityFailure){

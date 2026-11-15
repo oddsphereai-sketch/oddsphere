@@ -41,3 +41,16 @@ This guard does not establish the cause of the separate ordinary NFL memory kill
 The paired history-retention mitigation and private process diagnostics have their
 own evidence and limitations. Deployment and schema/count checks alone cannot prove
 all-player coverage, live publication, locked-record retention or predictive accuracy.
+
+Response reference ownership is enforced across all parts/phases in the reviewer
+and atomically across games, sports and restarts by V73's existing wallet-locked
+receipt RPC. A reference already reported by another known or unknown attempt
+cannot establish another known bill. The new RPC signature and service-only ACL
+remain unchanged; original rows and all other wallet/lease functions are untouched.
+A rejected or unacknowledged known receipt attempts to retain its exact original
+evidence as unknown, then fails the review; an already committed known receipt is
+immutable and cannot be replaced by this fallback. All launched siblings settle;
+no additional inference or unknown-charge release is authorized. V73 must be
+installed from the exact reviewed published source before the R39 release.
+This corrects the Round51 mocked duplicate-ID admission, not a proven production
+collision. Two fresh all-three clear rounds must follow this correction.
