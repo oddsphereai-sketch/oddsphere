@@ -175,6 +175,25 @@ const protectedResult=await exercise({name:'existing public locks first',previou
 // A complete current collector observation owns future execution availability,
 // independently of whether its accepted final is newer than the prior board.
 const ready:NflPlayerPropsRuntimeBoard=applyNflSiteAi(base,currentPacket,siteAiDecisions(currentPacket,final,finalAt),finalAt);
+// R100: only the exact current-game native baseline is materialized. Foreign
+// actors with the same provider ID/name cannot qualify this game's AI rows.
+{
+ const capture=testNflHandoffCapture(()=>finalAt),own=base.decisions;
+ const foreign=own.map(row=>({...structuredClone(row),gameId:'foreign-game'}));
+ const before=digest(JSON.parse(JSON.stringify(own))),expected=capture(ready.decisions,currentPacket,final,'ai',own);
+ assert(expected.candidateProofs.length>0,'positive actual accepted-law proof required');
+ const mixed=capture(ready.decisions,currentPacket,final,'ai',[...foreign,...own,...foreign]);
+ assert.deepEqual(mixed,expected);assert.equal(digest(JSON.parse(JSON.stringify(own))),before);
+ assert.equal(capture(ready.decisions,currentPacket,final,'ai',foreign).candidateProofs.length,0,'Foreign baseline cannot substitute for the original native context');
+ let materialized=0;
+ const tracked=foreign.map(row=>new Proxy(row,{get(target,key,receiver){if(key==='toJSON')materialized++;return Reflect.get(target,key,receiver);}}));
+ assert.deepEqual(capture(ready.decisions,currentPacket,final,'ai',[...tracked,...own]),expected);
+ assert.equal(materialized,0,'Unrelated baseline rows must not be serialized');
+ const nativeCapture=capture(base.decisions,currentPacket,final,'native');
+ assert.deepEqual(capture(base.decisions,currentPacket,final,'native',tracked),nativeCapture);
+ assert.equal(materialized,0,'Native capture never reads the unused AI baseline');
+}
+
 const priorReady:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:finalAt,nextBoard:ready});
 const lockedReady:NflPlayerPropsProductionSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:9,evaluatedAt:lock,nextBoard:ready,previous:priorReady});
 const changedAt='2026-11-09T21:59:59Z';

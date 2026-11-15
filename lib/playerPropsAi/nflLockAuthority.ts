@@ -171,7 +171,9 @@ function captureBundle(rows:Row[],packet:GamePacket,review:AcceptedGameReview|nu
  // Native fallback owns its separate qualification. An AI proof must validate
  // the already materialized publication exactly, never repair its grade here.
  const frozen:Row[]=freeze(JSON.parse(JSON.stringify(kind==='native'?qualifyNflSourceParticipation(gameRows,source,readyAt):gameRows)));
- const originalNative=nativeRows?freeze(JSON.parse(JSON.stringify(nativeRows))) as Row[]:undefined;
+ // Only this exact game's baseline can qualify its actors. Avoid serializing
+ // the rest of the week's board; no global cache or caller-supplied proof.
+ const originalNative=kind==='ai'&&nativeRows?freeze(JSON.parse(JSON.stringify(nativeRows.filter(row=>row.gameId===gameId)))) as Row[]:undefined;
  const proofs=captureRowProofs(frozen,source,kind,readyAt,review,originalNative);
  return{authorities:[],nativeRows:kind==='native'?frozen:[],nativeProofs:kind==='native'?proofs:[],candidateProofs:kind==='ai'?proofs:[],sourceFrames:[{gameId,kind,sourcePacketHash:digest(source),cutoff:source.cutoff,readyAt,lockAt:source.lock}]};
 }
