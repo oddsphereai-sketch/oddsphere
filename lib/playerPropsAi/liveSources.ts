@@ -1,3 +1,4 @@
+import {qualifyNflExecutionContracts,qualifyUnsupportedNflAnytime} from './nflExecutionContracts';
 import {qualifyNflSourceEvent,sourceEventSummary,qualifyConflictingSourceObservations} from "./sourceEvents";
 import {createNflPacketActorResolver,sameNflPropActorName,PROPS_AI_NFL_SOURCE_RELEASE,PROPS_AI_NFL_IDENTITY_RELEASE,PROPS_AI_NFL_ALIAS_RELEASE} from "./nflPlayerIdentity";
 /** Complete captured collector inputs. Pure: no provider, database or inference calls. */
@@ -122,7 +123,7 @@ export function liveNflPacket(args:{game:LivePropsGame;window:CapturedReviewWind
     if(!player.markets.includes(q.market))player.markets.push(q.market);
     const received=q.receivedAt;
     if(!received||q.isLive||instant(received)>instant(at)||instant(q.observedAt)>instant(received))continue;
-    const sourceEvent=qualifyNflSourceEvent({market:q.market,provider:q.provider,providerMarket:q.providerMarket,observationId:q.providerObservationId,rosterPosition:identity.rosterPosition});
+    const sourceEvent=qualifyNflSourceEvent({market:q.market,provider:q.provider,providerMarket:q.providerMarket,observationId:q.providerObservationId,rosterPosition:identity.rosterPosition})??qualifyUnsupportedNflAnytime({market:q.market,line:q.line,providerMarket:q.providerMarket,normalizedOfferType:q.offerType,observationId:q.providerObservationId});
     const value={...(sourceEvent?{sourceEvent}:{}),playerId:identity.id,market:q.market,provider:q.provider,book:q.sportsbook,line:q.line,side:q.side,american:q.americanPrice,observedAt:q.observedAt,receivedAt:received,receivedAtProvenance:"provider_response" as const,opening:q.isOpening,live:false};
     quotes.push({...value,id:digest(value)});
   }
@@ -131,7 +132,7 @@ export function liveNflPacket(args:{game:LivePropsGame;window:CapturedReviewWind
   for(const q of native.filter(q=>q.isOpening&&!q.isLive&&q.receivedAt&&instant(q.receivedAt)<=instant(at)&&instant(q.observedAt)<=instant(q.receivedAt))){
     let identity;try{identity=resolveActor(q);}catch{continue;}
     const player=identity?players.get(identity.id):undefined;if(!identity||!player||!player.markets.includes(q.market))continue;
-    const sourceEvent=qualifyNflSourceEvent({market:q.market,provider:q.provider,providerMarket:q.providerMarket,observationId:q.providerObservationId,rosterPosition:identity.rosterPosition});
+    const sourceEvent=qualifyNflSourceEvent({market:q.market,provider:q.provider,providerMarket:q.providerMarket,observationId:q.providerObservationId,rosterPosition:identity.rosterPosition})??qualifyUnsupportedNflAnytime({market:q.market,line:q.line,providerMarket:q.providerMarket,normalizedOfferType:q.offerType,observationId:q.providerObservationId});
     const value={...(sourceEvent?{sourceEvent}:{}),playerId:identity.id,market:q.market,provider:q.provider,book:q.sportsbook,line:q.line,side:q.side,american:q.americanPrice,observedAt:q.observedAt,receivedAt:q.receivedAt!,receivedAtProvenance:"provider_response" as const,opening:true,live:false};quotes.push({...value,id:digest(value)});
   }
   // Never silently omit a book-offered player with an unresolved identity.
@@ -176,7 +177,11 @@ export function liveNflPacket(args:{game:LivePropsGame;window:CapturedReviewWind
   const enriched=enrichCachedPacket(current,source);
   const contexts:ReaderGameContext[]=args.context.games.map(g=>({id:`live:${g.canonicalGameId}`,gameId:g.canonicalGameId,start:g.scheduledStart,awayTeam:g.awayTeam,homeTeam:g.homeTeam,availableAt:args.context.capturedAt,source:"existing exact-game NFL collector",injuries:json(g.injuries),depth:json({away:g.awayDepth,home:g.homeDepth}),weather:json(g.weather??null)}));
   const contextual=attachGameReaderContext(enriched,contexts);
-  return finish(args.marketHistory?attachNflReaderMarkets(contextual,args.marketHistory):contextual,at,quotes);
+  const sourced=args.marketHistory?attachNflReaderMarkets(contextual,args.marketHistory):contextual;
+  // Complete current execution authority is qualified before compiling market
+  // readings. Retained history cannot turn an unsupported binary line into a bet.
+  const qualified=qualifyNflExecutionContracts({...sourced,executionQuotes:latestExecutionQuotes(quotes,at)});
+  return finish(qualified,at,qualified.executionQuotes!);
 }
 export function liveMlbPacket(args:{game:LivePropsGame;window:CapturedReviewWindow;snapshot:MlbPropsBoardSnapshot;currentOdds:readonly PropOddsSnapshot[];openingOdds:readonly PropOddsSnapshot[]}):GamePacket{
   const at=args.window.cutoff,source=emptyCapturedSource(at);

@@ -64,6 +64,8 @@ export type GamePacket = {
   /** Independent identity chronology contract; absence on stored legacy inputs remains exact. */
   sourceIdentityRelease?:string;
   sourceAliasRelease?:string;
+  /** Prospective canonical execution-event qualification; legacy inputs retain absence. */
+  sourceExecutionContractRelease?:string;
   /** Original post-enrichment collector completion, not a price receipt or a reconstructed cutoff. */
   sourceIdentityAvailableAt?:string;
   sharedGameContext?: Json;
