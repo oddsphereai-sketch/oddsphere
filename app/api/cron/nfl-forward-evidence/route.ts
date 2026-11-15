@@ -1,3 +1,4 @@
+import {nflPlayerPropsRefreshFailure} from "@/lib/cron/playerPropsRefreshTelemetry";
 import {hasDuePropsAiReview} from "@/lib/playerPropsAi/dueReview";
 import { cronHandler } from "@/lib/cron/runCron";
 import { supabase } from "@/lib/db/supabase";
@@ -148,9 +149,11 @@ export async function GET(request: Request): Promise<Response> {
       const {playerProps, playerPropsError, playerPropsCadence, playerPropsCadenceError} = await playerPropsWork;
       const playerPropsCriticalHealth = playerProps?.healthFindings.filter((finding) =>
         finding === "NFL_PLAYER_PROPS_SOURCE_AWARE_REFERENCE_OFFERS_UNAVAILABLE"
+        || finding.startsWith("NFL_PLAYER_PROPS_AI_")
         || finding === "NFL_PLAYER_PROPS_REFERENCE_OFFER_CACHE_FAILED"
         || finding === "NFL_PLAYER_PROPS_PRIVATE_TRACKING_CAPTURE_FAILED"
         || finding.startsWith("NFL_PLAYER_PROPS_SETTLEMENT_IDENTITY_UNRESOLVED:")) ?? [];
+      const playerPropsReviewError=playerProps?nflPlayerPropsRefreshFailure(playerProps):null;
       const marketBrainDetails = marketBrainCaptureRequested || marketBrainConfigurationError !== null
         ? {
             market_brain_capture_requested: marketBrainCaptureRequested,
@@ -173,11 +176,11 @@ export async function GET(request: Request): Promise<Response> {
           || result.marketBrainPersistenceError !== null
           || result.marketBrainCaptureFailures > 0
           || marketBrainConfigurationError !== null
-          || playerPropsError !== null || playerPropsCriticalHealth.length > 0,
+          || playerPropsError !== null || playerPropsReviewError !== null || playerPropsCriticalHealth.length > 0,
         error_message: [result.healthHolds.join(","), result.memberSnapshotError,
           result.marketBrainPersistenceError, ...result.marketBrainCaptureFailureReasons,
           marketBrainConfigurationError,
-          playerPropsError, playerPropsCriticalHealth.join(",")]
+          playerPropsError, playerPropsReviewError, playerPropsCriticalHealth.join(",")]
           .filter(Boolean).join(",") || null,
         details: {
           writer_release: result.writerRelease,
@@ -215,6 +218,7 @@ export async function GET(request: Request): Promise<Response> {
           player_props_cadence_error: playerPropsCadenceError,
           player_props: playerProps,
           player_props_error: playerPropsError,
+          player_props_review_error: playerPropsReviewError,
           player_props_critical_health: playerPropsCriticalHealth,
         },
       };

@@ -1,5 +1,7 @@
 "use client";
 
+import {MLB_PROPS_LOCKED_SOURCE_READER_RELEASE} from "@/lib/mlb/props/aiPublicationPolicy";
+
 import {AiPropReader} from "@/app/player-props/components/AiPropReader";
 import {PropsAiEvidence} from "@/app/player-props/components/PropsAiEvidence";
 import {needsLegacyLockedAiReader} from "@/lib/playerPropsAi/publicationContract";
@@ -287,7 +289,13 @@ const MARKET_FAMILY_FILTERS: Array<{ id: MarketFamilyFilter; label: string }> = 
 
 export function PlayerPropsDashboard({ data: initialData, mode = "preview", initialSelectedId = null, presentation = "current" }: { data: PlayerPropsDashboardData; mode?: DashboardMode; initialSelectedId?: string | null; presentation?: "current" | "candidate" }) {
   const [fullData, setFullData] = useState<PlayerPropsDashboardData | null>(null);
-  const data = fullData ?? initialData;
+  const [firstLockedData, setFirstLockedData] = useState(initialData);
+  const expandedData = useMemo(() => fullData?.date === initialData.date
+    ? mergeInitialLockedBoardData(fullData, initialData) : initialData, [fullData, initialData]);
+  const data = useMemo(() => preserveFirstClientLocks(firstLockedData, expandedData), [firstLockedData, expandedData]);
+  // Adjust only when a new first lock/date is observed. React retries this
+  // render before committing effects; an effect-based mirror would lag a render.
+  if (!sameFirstClientAuthority(firstLockedData, data)) setFirstLockedData(data);
   const [search, setSearch] = useState("");
   const [selectedGame, setSelectedGame] = useState("all");
   const [grade, setGrade] = useState<PropGrade | "all">("all");
@@ -306,14 +314,14 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
   const [lineMode, setLineMode] = useState<LineMode>("main");
   const [hideResearch, setHideResearch] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
-  const [loadedResearch, setLoadedResearch] = useState<NonNullable<PlayerPropsDashboardData["research"]>>({});
+  const [loadedResearch, setLoadedResearch] = useState<LoadedPlayerResearch>({});
   const [researchLoadingPlayerId, setResearchLoadingPlayerId] = useState<string | null>(null);
   const [boardScopeLoading, setBoardScopeLoading] = useState(false);
-  const requestedResearchPlayers = useRef(new Set<string>());
+  const requestedResearchPlayers = useRef(new Map<string, AbortController>());
   const requestedBoardScopes = useRef(new Set<string>());
   const userTimeZone = useUserTimeZone();
 
-  const availableResearch = useMemo(() => ({ ...(data.research ?? {}), ...loadedResearch }), [data.research, loadedResearch]);
+  const availableResearch = useMemo(() => availableClientResearch(data, loadedResearch), [data, loadedResearch]);
   const hydratedProps = useMemo(() => data.props.map((row) => enforcePreviewIntegrity(hydrateResearchEvidence(row, availableResearch))), [availableResearch, data.props]);
   const displayProps = useMemo(() => hydratedProps.filter((row) => mode === "admin" || isMemberVisibleMarket(row)), [hydratedProps, mode]);
   const displayData = useMemo(() => ({ ...data, summary: summarizeRows(displayProps), props: displayProps }), [data, displayProps]);
@@ -372,7 +380,8 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
   }, [book, confidence, displayProps, edgeRange, evRange, grade, hideResearch, lineMode, marketFamilyFilter, marketFilter, oddsFilterActive, oddsRange, priceMode, search, selectedGame, sort, startRange, team, userTimeZone]);
 
   const selected = selectedId ? displayProps.find((row) => row.id === selectedId) ?? null : null;
-  const selectedResearchPending = Boolean(selected?.researchKey && !availableResearch[selected.researchKey]);
+  const selectedResearchPending = Boolean(selected?.researchKey && researchLoadingPlayerId
+    && !hasClientResearch(selected, availableResearch));
   const selectedPlayer = players.find((player) => player.toLowerCase() === search.trim().toLowerCase()) ?? null;
   const isSearching = search.trim().length > 0;
   const activeFilterCount = [selectedGame, grade, marketFamilyFilter, marketFilter, book, team, confidence, evRange, edgeRange, startRange]
@@ -437,7 +446,7 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
       })
       .then((payload) => {
         if (!payload.board) throw new Error("Player prop board response did not contain a board.");
-        setFullData((current) => mergeScopedBoardData(current ?? data, payload.board!, { family, market, gameId }));
+        setFullData((current) => mergeScopedBoardData(current?.date === data.date ? current : data, payload.board!, { family, market, gameId }));
       })
       .catch(() => {
         requestedBoardScopes.current.delete(scopeKey);
@@ -454,12 +463,18 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
       : selectedPlayer
         ? data.props.find((item) => item.player === selectedPlayer)
         : null;
-    if (!row?.researchKey || availableResearch[row.researchKey]) return;
+    if (!row?.researchKey || hasClientResearch(row, availableResearch)) return;
+    const requestKey = clientResearchRequestKey(data.date, row);
+    if (!requestKey) return;
     const playerId = row.providerIds?.mlbStatsPlayerId ?? row.providerIds?.bdlPlayerId?.toString() ?? row.id;
-    if (requestedResearchPlayers.current.has(playerId)) return;
-    requestedResearchPlayers.current.add(playerId);
+    if (requestedResearchPlayers.current.has(requestKey)) return;
     const controller = new AbortController();
-    setResearchLoadingPlayerId(playerId);
+    requestedResearchPlayers.current.set(requestKey, controller);
+    let settled = false;
+    const releaseRequest = () => {
+      if (requestedResearchPlayers.current.get(requestKey) === controller) requestedResearchPlayers.current.delete(requestKey);
+    };
+    setResearchLoadingPlayerId(requestKey);
     // Player research is repaired independently from the immutable board. Do
     // not reuse an older private response after a shard republish.
     fetch(`/api/mlb/props/player/${encodeURIComponent(playerId)}${candidatePresentation ? "?preview=1" : ""}`, {
@@ -471,36 +486,26 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
         return response.json() as Promise<{ props?: PlayerPropsDashboardData["props"]; research?: PlayerPropsDashboardData["research"] }>;
       })
       .then((payload) => {
-        if (payload.research) setLoadedResearch((current) => ({ ...current, ...payload.research }));
+        if (controller.signal.aborted) return;
+        payload = boundLockedPlayerPayload(row, payload);
+        settled = true;
+        if (isClientLockedRow(row) && !payload.props?.length) { releaseRequest(); return; }
+        if (payload.research) setLoadedResearch((current) => cachePlayerResearch(current, payload, data.date));
         if (payload.props?.length) {
-          setFullData((current) => {
-            const base = current ?? data;
-            const props = new Map(base.props.map((item) => [item.id, item]));
-            for (const item of payload.props ?? []) {
-              const existing = props.get(item.id);
-              const incomingUpdatedAt = Date.parse(item.lastUpdated);
-              const existingUpdatedAt = existing ? Date.parse(existing.lastUpdated) : Number.NaN;
-              // Full player shards intentionally refresh less often than the
-              // compact board. Never let an older shard roll a current price,
-              // projection, grade, or lock state backward when the reader opens.
-              if (
-                !existing
-                || !Number.isFinite(existingUpdatedAt)
-                || (Number.isFinite(incomingUpdatedAt) && incomingUpdatedAt > existingUpdatedAt)
-              ) {
-                props.set(item.id, item);
-              }
-            }
-            return { ...base, props: [...props.values()] };
-          });
+          setFullData((current) => mergePlayerResponseData(current?.date === data.date ? current : data, payload));
         }
       })
       .catch(() => {
-        requestedResearchPlayers.current.delete(playerId);
+        settled = true;
+        releaseRequest();
       })
-      .finally(() => setResearchLoadingPlayerId((current) => current === playerId ? null : current));
-    return () => controller.abort();
-  }, [availableResearch, data, mode, selectedId, selectedPlayer]);
+      .finally(() => {
+        const owner = requestedResearchPlayers.current.get(requestKey);
+        if (owner && owner !== controller) return;
+        setResearchLoadingPlayerId((current) => current === requestKey ? null : current);
+      });
+    return () => { controller.abort(); if (!settled) releaseRequest(); };
+  }, [availableResearch, candidatePresentation, data, mode, selectedId, selectedPlayer]);
 
   if (displayProps.length === 0) {
     return <PendingPropsState data={data} mode={mode} matchups={matchups} candidatePresentation={candidatePresentation} />;
@@ -1596,27 +1601,101 @@ function mergeScopedBoardData(
   incoming: PlayerPropsDashboardData,
   scope: { family: MarketFamilyFilter | null; market: string | null; gameId: string | null },
 ): PlayerPropsDashboardData {
-  const currentUpdatedAt = Date.parse(current.lastUpdated);
-  const incomingUpdatedAt = Date.parse(incoming.lastUpdated);
-  if (Number.isFinite(currentUpdatedAt) && Number.isFinite(incomingUpdatedAt) && incomingUpdatedAt < currentUpdatedAt) return current;
+  if (current.date !== incoming.date) return incoming;
+  const currentUpdatedAt = Date.parse(current.lastUpdated), incomingUpdatedAt = Date.parse(incoming.lastUpdated);
+  const older = Number.isFinite(currentUpdatedAt) && Number.isFinite(incomingUpdatedAt) && incomingUpdatedAt < currentUpdatedAt;
+  const matchesScope = (row: PlayerPropPreviewRow) => (!scope.family || row.marketFamily === scope.family)
+    && (!scope.market || row.market === scope.market) && (!scope.gameId || row.providerIds?.gameId === scope.gameId);
+  const accepted = older ? incoming.props.filter(isClientLockedRow) : incoming.props;
+  const props = mergeClientPropRows(current.props, accepted, (row) => older || !matchesScope(row));
+  return {...current, ...(older ? {} : {lastUpdated:incoming.lastUpdated,slate:incoming.slate ?? current.slate,providerStatus:incoming.providerStatus}),
+    props, research:mergeClientBoardResearch(current, {...incoming,props:accepted,
+      research:older?researchForClientRows(incoming.research,accepted):incoming.research}, props)};
+}
 
-  const matchesScope = (row: PlayerPropPreviewRow) => (
-    (!scope.family || row.marketFamily === scope.family)
-    && (!scope.market || row.market === scope.market)
-    && (!scope.gameId || row.providerIds?.gameId === scope.gameId)
-  );
-  const props = new Map<string, PlayerPropPreviewRow>();
-  for (const row of current.props) {
-    if (!matchesScope(row)) props.set(row.id, row);
+function mergeInitialLockedBoardData(current: PlayerPropsDashboardData, initial: PlayerPropsDashboardData): PlayerPropsDashboardData {
+  const locked = initial.props.filter(isClientLockedRow);
+  if (!locked.length) return current;
+  const incoming = {...initial,props:locked,research:researchForClientRows(initial.research,locked)}, props = mergeClientPropRows(current.props, locked, () => true);
+  return {...current,props,research:mergeClientBoardResearch(current,incoming,props)};
+}
+
+/** Initial server props may update without any lazy/full-data request. Keep
+ * each first observed same-slate lock even through that no-fetch path. */
+function preserveFirstClientLocks(current:PlayerPropsDashboardData,incoming:PlayerPropsDashboardData):PlayerPropsDashboardData {
+  if(current===incoming||current.date!==incoming.date)return incoming;
+  const locked=current.props.filter(isClientLockedRow);
+  if(!locked.length)return incoming;
+  const original={...current,props:locked,research:researchForClientRows(current.research,locked)};
+  const props=mergeClientPropRows(locked,incoming.props,()=>false),research=mergeClientBoardResearch(original,incoming,props);
+  const sameRows=props.length===incoming.props.length&&props.every((row,index)=>row===incoming.props[index]);
+  const keys=Object.keys(research),incomingKeys=Object.keys(incoming.research??{});
+  if(sameRows&&keys.length===incomingKeys.length&&keys.every(key=>incoming.research&&Object.hasOwn(incoming.research,key)&&Object.is(research[key],incoming.research[key])))return incoming;
+  return {...incoming,props,research};
+}
+function sameFirstClientAuthority(a:PlayerPropsDashboardData,b:PlayerPropsDashboardData):boolean {
+  if(a.date!==b.date)return false;
+  const left=a.props.filter(isClientLockedRow),right=b.props.filter(isClientLockedRow);
+  if(left.length!==right.length||left.some((row,index)=>row!==right[index]))return false;
+  const keys=new Set(left.flatMap(row=>{const key=clientResearchLookupKey(row);return key===null?[]:[key];}));
+  return [...keys].every(key=>{
+    const ah=Boolean(a.research&&Object.hasOwn(a.research,key)),bh=Boolean(b.research&&Object.hasOwn(b.research,key));
+    return ah===bh&&(!ah||Object.is(a.research![key],b.research![key]));
+  });
+}
+
+function researchForClientRows(research:PlayerPropsDashboardData["research"],rows:PlayerPropPreviewRow[]) {
+  const keys=new Set(rows.flatMap(row=>{const key=clientResearchLookupKey(row);return key===null?[]:[key];}));
+  return Object.fromEntries(Object.entries(research??{}).filter(([key])=>keys.has(key)));
+}
+
+function mergePlayerResponseData(current: PlayerPropsDashboardData,
+  payload: {props?:PlayerPropPreviewRow[];research?:PlayerPropsDashboardData["research"]}): PlayerPropsDashboardData {
+  const accepted = (payload.props ?? []).filter((row) => {
+    if (isClientLockedRow(row)) return true;
+    const existing = current.props.find((candidate) => candidate.id === row.id);
+    return !existing || !Number.isFinite(Date.parse(existing.lastUpdated))
+      || Number.isFinite(Date.parse(row.lastUpdated)) && Date.parse(row.lastUpdated) > Date.parse(existing.lastUpdated);
+  });
+  const incomingIds = new Set(accepted.map((row) => row.id)), props=mergeClientPropRows(current.props,accepted,(row)=>!incomingIds.has(row.id));
+  // A lazy response is a separate bound cache, never canonical board research.
+  return {...current,props};
+}
+
+function mergeClientPropRows(current: PlayerPropPreviewRow[], incoming: PlayerPropPreviewRow[], keep: (row:PlayerPropPreviewRow)=>boolean) {
+  const original = current.filter(isClientLockedRow), originalIds = new Set(original.map((row)=>row.id));
+  const lockedGames = new Set([...original,...incoming.filter(isClientLockedRow)].flatMap((row)=>row.providerIds?.gameId?[row.providerIds.gameId]:[]));
+  const props = [...original], unlocked = new Map<string,PlayerPropPreviewRow>();
+  const originalCounts = new Map<string,number>(), incomingCounts = new Map<string,number>();
+  for (const row of original) { const binding=lockedClientRowBinding(row);if(binding)originalCounts.set(binding,(originalCounts.get(binding)??0)+1); }
+  for (const row of current) if (!isClientLockedRow(row) && keep(row) && !originalIds.has(row.id) && !lockedGames.has(row.providerIds?.gameId ?? "")) unlocked.set(row.id,row);
+  for (const row of incoming) {
+    if (!isClientLockedRow(row)) {if(!originalIds.has(row.id)&&!lockedGames.has(row.providerIds?.gameId??""))unlocked.set(row.id,row);continue;}
+    const sameGame = original.filter((old)=>old.providerIds?.gameId && old.providerIds.gameId===row.providerIds?.gameId);
+    if (sameGame.some((old)=>old.lockStatus?.lockedAt!==row.lockStatus?.lockedAt)) continue;
+    const binding=lockedClientRowBinding(row);
+    if (originalIds.has(row.id)) {
+      if(!binding||!original.some((old)=>old.id===row.id&&lockedClientRowBinding(old)===binding))continue;
+      const count=(incomingCounts.get(binding)??0)+1;incomingCounts.set(binding,count);
+      if(count<=(originalCounts.get(binding)??0))continue;
+    }
+    props.push(row);
   }
-  for (const row of incoming.props) props.set(row.id, row);
-  return {
-    ...current,
-    lastUpdated: incoming.lastUpdated,
-    slate: incoming.slate ?? current.slate,
-    providerStatus: incoming.providerStatus,
-    props: [...props.values()],
-  };
+  return [...props,...unlocked.values()];
+}
+
+function mergeClientBoardResearch(current: PlayerPropsDashboardData,incoming: PlayerPropsDashboardData,props:PlayerPropPreviewRow[]) {
+  const research = {...(current.research??{}),...(incoming.research??{})};
+  const keys=new Set(props.filter(isClientLockedRow).flatMap(row=>{const key=clientResearchLookupKey(row);return key===null?[]:[key];}));
+  for(const key of keys){
+    const old=current.props.filter(row=>isClientLockedRow(row)&&clientResearchLookupKey(row)===key);
+    // The first locked dictionary owns presence AND absence. A later board
+    // cannot fill an absent original module merely by repeating the old row.
+    const original=old.length?current.research:incoming.research;
+    Reflect.deleteProperty(research,key);
+    if(original&&Object.hasOwn(original,key))Object.defineProperty(research,key,{value:original[key],enumerable:true,configurable:true,writable:true});
+  }
+  return research;
 }
 
 function deriveMatchups(rows: PlayerPropPreviewRow[]): SlateMatchup[] {
@@ -1972,6 +2051,7 @@ function isProjectionSideCoherent(row: PlayerPropPreviewRow): boolean {
 }
 
 function enforcePreviewIntegrity(row: PlayerPropPreviewRow): PlayerPropPreviewRow {
+  if (isClientLockedRow(row)) return row;
   const price = assessPropPrice(row.odds);
   if (!price.signalEligible) {
     return {
@@ -1999,12 +2079,88 @@ function enforcePreviewIntegrity(row: PlayerPropPreviewRow): PlayerPropPreviewRo
   };
 }
 
-function hydrateResearchEvidence(
-  row: PlayerPropPreviewRow,
-  research: PlayerPropsDashboardData["research"],
-): PlayerPropPreviewRow {
-  const evidence = row.researchKey ? research?.[row.researchKey] : null;
-  return evidence ? { ...row, ...evidence } : row;
+const CLIENT_RESEARCH_MODULES = ["recentForm","opponentProfile","pitchArsenal","pitchMatchup","matchupHistory","environment"] as const;
+type ClientResearchMap = NonNullable<PlayerPropsDashboardData["research"]>;
+type LoadedPlayerResearch = Record<string,{value:ClientResearchMap[string];sourceRows:PlayerPropPreviewRow[];date:string}>;
+function isClientLockedRow(row: PlayerPropPreviewRow) { return row.lockStatus?.status === "locked"; }
+/** Dictionary lookup only: opaque stored key types and their exact rows stay
+ * untouched. Only null/undefined mean no reference; falsy keys still reserve
+ * their original dictionary presence or absence. This grants no fetch binding. */
+function clientResearchLookupKey(row:Pick<PlayerPropPreviewRow,"researchKey">):string|null {
+  const value:unknown=row.researchKey;
+  return value===null||value===undefined?null:String(value);
+}
+
+/** Exact original public row identity, excluding only the six separately stored
+ * heavy research modules. This never hashes/reconstructs a forecast or changes it. */
+function lockedClientRowBinding(row: PlayerPropPreviewRow): string|null {
+  if(!isClientLockedRow(row)||typeof row.researchKey!=="string"||!row.researchKey||!row.providerIds?.gameId
+    ||typeof row.lockStatus?.lockedAt!=="string"||!Number.isFinite(Date.parse(row.lockStatus.lockedAt)))return null;
+  try {
+    const core={...row};for(const key of CLIENT_RESEARCH_MODULES)Reflect.deleteProperty(core,key);
+    return JSON.stringify([MLB_PROPS_LOCKED_SOURCE_READER_RELEASE,core],(_key,value:unknown)=>{
+      if(typeof value==="number"&&!Number.isFinite(value))throw Error("Unsupported original research binding");
+      if(value&&typeof value==="object"&&!Array.isArray(value))return Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b)));
+      return value;
+    });
+  }catch{return null;}
+}
+function availableClientResearch(data:PlayerPropsDashboardData,loaded:LoadedPlayerResearch):PlayerPropsDashboardData["research"] {
+  const available={...(data.research??{})};
+  for(const [key,entry] of Object.entries(loaded)){
+    if(entry.date!==data.date)continue;
+    const locked=data.props.filter(row=>isClientLockedRow(row)&&clientResearchLookupKey(row)===key);
+    if(locked.length){
+      if(Object.hasOwn(available,key))continue;
+      if(!lockedResearchSourcesMatch(locked,entry.sourceRows,key))continue;
+    }
+    Object.defineProperty(available,key,{value:entry.value,enumerable:true,configurable:true,writable:true});
+  }
+  return available;
+}
+/** An extra conflicting or foreign row cannot launder research merely by
+ * appearing beside one correctly bound original row. */
+function lockedResearchSourcesMatch(locked:PlayerPropPreviewRow[],sources:PlayerPropPreviewRow[],key:string):boolean {
+  if(!locked.length||!Array.isArray(sources))return false;
+  const original=locked[0]!, candidates=sources.filter(row=>row&&clientResearchLookupKey(row)===key);
+  if(!candidates.length)return false;
+  const samePlayer=(row:PlayerPropPreviewRow)=>row.providerIds?.mlbStatsPlayerId===original.providerIds?.mlbStatsPlayerId
+    &&row.providerIds?.bdlPlayerId===original.providerIds?.bdlPlayerId&&row.player===original.player;
+  if(candidates.some(row=>!isClientLockedRow(row)||!samePlayer(row)||row.providerIds?.gameId!==original.providerIds?.gameId
+    ||row.lockStatus?.lockedAt!==original.lockStatus?.lockedAt||lockedClientRowBinding(row)===null
+    ||locked.some(old=>old.id===row.id)&&!locked.some(old=>lockedClientRowBinding(old)===lockedClientRowBinding(row))))return false;
+  return locked.every(row=>{const binding=lockedClientRowBinding(row);return binding!==null&&candidates.some(source=>lockedClientRowBinding(source)===binding);});
+}
+function boundLockedPlayerPayload(row:PlayerPropPreviewRow,
+  payload:{props?:PlayerPropPreviewRow[];research?:PlayerPropsDashboardData["research"]}) {
+  if(!isClientLockedRow(row))return payload;
+  const key=clientResearchLookupKey(row);
+  if(key===null||!lockedResearchSourcesMatch([row],payload.props??[],key))return {};
+  return {...payload,props:(payload.props??[]).filter(source=>isClientLockedRow(source)
+    &&source.providerIds?.gameId===row.providerIds?.gameId&&source.lockStatus?.lockedAt===row.lockStatus?.lockedAt
+    &&source.providerIds?.mlbStatsPlayerId===row.providerIds?.mlbStatsPlayerId
+    &&source.providerIds?.bdlPlayerId===row.providerIds?.bdlPlayerId&&source.player===row.player)};
+}
+function hasClientResearch(row:PlayerPropPreviewRow,research:PlayerPropsDashboardData["research"]){
+  const key=clientResearchLookupKey(row);
+  if(key===null||!research)return false;
+  return Object.hasOwn(research,key) && (isClientLockedRow(row) || Boolean(research[key]));
+}
+function clientResearchRequestKey(date:string,row:PlayerPropPreviewRow):string|null {
+  const player=row.providerIds?.mlbStatsPlayerId??row.providerIds?.bdlPlayerId?.toString()??row.id;
+  if(isClientLockedRow(row)&&!lockedClientRowBinding(row))return null;
+  return JSON.stringify([date,player,row.providerIds?.gameId??null,row.researchKey,isClientLockedRow(row)?row.lockStatus?.lockedAt:"unlocked"]);
+}
+function cachePlayerResearch(current:LoadedPlayerResearch,payload:{props?:PlayerPropPreviewRow[];research?:PlayerPropsDashboardData["research"]},date:string):LoadedPlayerResearch {
+  const next={...current};for(const [key,value] of Object.entries(payload.research??{}))Object.defineProperty(next,key,{value:{value,sourceRows:payload.props??[],date},enumerable:true,configurable:true,writable:true});return next;
+}
+function hydrateResearchEvidence(row:PlayerPropPreviewRow,research:PlayerPropsDashboardData["research"]):PlayerPropPreviewRow {
+  const key=clientResearchLookupKey(row);
+  const evidence=key!==null&&research&&Object.hasOwn(research,key)?research[key]:null;
+  if(!evidence||typeof evidence!=="object"||Array.isArray(evidence))return row;
+  const next={...row};
+  for(const key of CLIENT_RESEARCH_MODULES)if(Object.hasOwn(evidence,key)&&(!isClientLockedRow(row)||!Object.hasOwn(row,key)))Object.defineProperty(next,key,{value:evidence[key],enumerable:true,configurable:true,writable:true});
+  return next;
 }
 
 function money(value: number | null): string {

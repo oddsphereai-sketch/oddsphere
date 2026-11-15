@@ -1,0 +1,139 @@
+{
+  "small": {
+    "kind": "ready",
+    "writerRunId": "synthetic-owner",
+    "record": {
+      "release": "player_props_ai_nfl_source_failure_2026_11_10_r1_private_exact_input",
+      "identityRelease": "player_props_ai_nfl_identity_2026_11_10_r1_cutoff_exact_id",
+      "eventSourceRelease": "player_props_ai_nfl_source_2026_11_09_r3_event_qualification",
+      "purpose": "scheduled_review",
+      "writerRelease": "synthetic-writer",
+      "writerRunId": "synthetic-owner",
+      "failureCode": "nfl_offered_player_identity_incomplete",
+      "generationRelease": "player_props_ai_2026_11_11_r36_urgent_slot_cohorts",
+      "jobKey": "nfl-synthetic-early",
+      "fundedGameId": "funded-synthetic",
+      "nativeGameId": "native-synthetic",
+      "stage": "early",
+      "start": "2026-11-09T23:00:00.000Z",
+      "lock": "2026-11-09T22:00:00.000Z",
+      "observedAt": "2026-11-09T20:00:00.000Z",
+      "observedAtMeaning": "requested_source_cutoff",
+      "capturedAt": "2026-11-09T20:00:00.000Z",
+      "captureAfterLock": false,
+      "status": "captured",
+      "semanticCanonical": "{\"eventSourceRelease\":\"player_props_ai_nfl_source_2026_11_09_r3_event_qualification\",\"failureCode\":\"nfl_offered_player_identity_incomplete\",\"fundedGameId\":\"funded-synthetic\",\"generationRelease\":\"player_props_ai_2026_11_11_r36_urgent_slot_cohorts\",\"identityRelease\":\"player_props_ai_nfl_identity_2026_11_10_r1_cutoff_exact_id\",\"jobKey\":\"nfl-synthetic-early\",\"lock\":\"2026-11-09T22:00:00.000Z\",\"nativeGameId\":\"native-synthetic\",\"purpose\":\"scheduled_review\",\"release\":\"player_props_ai_nfl_source_failure_2026_11_10_r1_private_exact_input\",\"stage\":\"early\",\"start\":\"2026-11-09T23:00:00.000Z\",\"state\":{\"contextIdentities\":[{\"awayTeam\":\"TB\",\"canonicalGameId\":\"native-synthetic\",\"homeTeam\":\"CHI\",\"scheduledStart\":\"2026-11-09T23:00:00.000Z\"}],\"failureCode\":\"nfl_offered_player_identity_incomplete\",\"game\":{\"away\":\"TB\",\"home\":\"CHI\",\"id\":\"native-synthetic\",\"start\":\"2026-11-09T23:00:00.000Z\"},\"memberStored\":[],\"offered\":[{\"eligibility\":{\"exactGame\":true,\"exactStart\":true,\"fetchedByReceipt\":true,\"live\":false,\"observedByReceipt\":true,\"opening\":false,\"receiptByCutoff\":true,\"receiptBySource\":true,\"sourceByCutoff\":true},\"identity\":{\"canonicalGameId\":\"native-synthetic\",\"market\":\"receptions\",\"playerName\":\"Kenny Gainwell\",\"playerTeam\":\"CHI\",\"provider\":\"balldontlie\",\"providerEventId\":\"native-synthetic\",\"providerMarket\":\"receptions\",\"providerPlayerId\":\"12\",\"scheduledStart\":\"2026-11-09T23:00:00.000Z\"}},{\"eligibility\":{\"exactGame\":true,\"exactStart\":true,\"fetchedByReceipt\":true,\"live\":false,\"observedByReceipt\":true,\"opening\":false,\"receiptByCutoff\":true,\"receiptBySource\":true,\"sourceByCutoff\":true},\"identity\":{\"canonicalGameId\":\"native-synthetic\",\"market\":\"receptions\",\"playerName\":\"Kenny Gainwell\",\"playerTeam\":\"TB\",\"provider\":\"balldontlie\",\"providerEventId\":\"native-synthetic\",\"providerMarket\":\"receptions\",\"providerPlayerId\":\"12\",\"scheduledStart\":\"2026-11-09T23:00:00.000Z\"}},{\"eligibility\":{\"exactGame\":true,\"exactStart\":true,\"fetchedByReceipt\":true,\"live\":false,\"observedByReceipt\":true,\"opening\":false,\"receiptByCutoff\":true,\"receiptBySource\":true,\"sourceByCutoff\":true},\"identity\":{\"canonicalGameId\":\"native-synthetic\",\"market\":\"receptions\",\"playerName\":\"Unknown Synthetic\",\"playerTeam\":null,\"provider\":\"balldontlie\",\"providerEventId\":\"native-synthetic\",\"providerMarket\":\"receptions\",\"providerPlayerId\":\"999\",\"scheduledStart\":\"2026-11-09T23:00:00.000Z\"}}],\"outcomes\":[{\"code\":\"team_conflict\",\"identity\":{\"canonicalGameId\":\"native-synthetic\",\"market\":\"receptions\",\"playerName\":\"Kenny Gainwell\",\"playerTeam\":\"CHI\",\"provider\":\"balldontlie\",\"providerEventId\":\"native-synthetic\",\"providerMarket\":\"receptions\",\"providerPlayerId\":\"12\",\"scheduledStart\":\"2026-11-09T23:00:00.000Z\"}},{\"code\":\"team_conflict\",\"identity\":{\"canonicalGameId\":\"native-synthetic\",\"market\":\"receptions\",\"playerName\":\"Kenny Gainwell\",\"playerTeam\":\"TB\",\"provider\":\"balldontlie\",\"providerEventId\":\"native-synthetic\",\"providerMarket\":\"receptions\",\"providerPlayerId\":\"12\",\"scheduledStart\":\"2026-11-09T23:00:00.000Z\"}},{\"code\":\"unresolved\",\"identity\":{\"canonicalGameId\":\"native-synthetic\",\"market\":\"receptions\",\"playerName\":\"Unknown Synthetic\",\"playerTeam\":null,\"provider\":\"balldontlie\",\"providerEventId\":\"native-synthetic\",\"providerMarket\":\"receptions\",\"providerPlayerId\":\"999\",\"scheduledStart\":\"2026-11-09T23:00:00.000Z\"}}],\"rosters\":[{\"eligible\":true,\"rows\":[],\"team\":\"CHI\"},{\"eligible\":true,\"rows\":[{\"name\":\"Kenny Gainwell\",\"playerId\":\"12\",\"position\":\"RB\"}],\"team\":\"TB\"}],\"sourceClasses\":{\"collectionComplete\":true,\"contextByCutoff\":true,\"contextCount\":1,\"observationsByCutoff\":true,\"storedByCutoff\":true},\"stored\":[{\"eligible\":true,\"gameId\":\"native-synthetic\",\"playerName\":\"Kenny Gainwell\",\"providerPlayerId\":\"12\",\"scheduledStart\":\"2026-11-09T23:00:00.000Z\",\"team\":\"TB\"}]},\"writerRelease\":\"synthetic-writer\"}",
+      "semanticSha256": "c952fbe3d26b9c260db441c4528990abda5a269c3ba2a30d10ff09a61256cfde",
+      "counts": {
+        "sourceRows": 3,
+        "relevantRows": 3,
+        "candidateRows": 3,
+        "failedRows": 3,
+        "nativeRows": 1,
+        "memberRows": 0,
+        "contexts": 1
+      },
+      "sourceHashes": {
+        "observations": "3683e197ba0c90b73f85c3b21f4de3cfe65193079e227de920a6f0900d273f70",
+        "nativeSnapshot": "f251e6fdb52d7a6d4ce15aaadf7ad632571c30a4ae7924d1224c6c86635fa55f",
+        "context": "618127e027b68ad176b9b8785c90cb03b717fef146e8cb20b2e83ddb121978cb",
+        "identityInput": "6d3ec5b977a92ab20072db7a0f33701ebbd869afcbefbdb954cb972c05bd3683"
+      },
+      "archive": {
+        "encoding": "gzip-base64",
+        "bytes": 11674,
+        "sha256": "6d3ec5b977a92ab20072db7a0f33701ebbd869afcbefbdb954cb972c05bd3683",
+        "gzipBytes": 2480,
+        "gzipSha256": "e62621574e2fffbf37c18f2a513ab48e0509ad5a31538f208021112fd3d94c3b",
+        "data": "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"
+      },
+      "archiveUnavailable": null
+    }
+  },
+  "semanticBound": {
+    "kind": "ready",
+    "writerRunId": "synthetic-owner",
+    "record": {
+      "release": "player_props_ai_nfl_source_failure_2026_11_10_r1_private_exact_input",
+      "identityRelease": "player_props_ai_nfl_identity_2026_11_10_r1_cutoff_exact_id",
+      "eventSourceRelease": "player_props_ai_nfl_source_2026_11_09_r3_event_qualification",
+      "purpose": "scheduled_review",
+      "writerRelease": "synthetic-writer",
+      "writerRunId": "synthetic-owner",
+      "failureCode": "nfl_offered_player_identity_incomplete",
+      "generationRelease": "player_props_ai_2026_11_11_r36_urgent_slot_cohorts",
+      "jobKey": "nfl-synthetic-early",
+      "fundedGameId": "funded-synthetic",
+      "nativeGameId": "native-synthetic",
+      "stage": "early",
+      "start": "2026-11-09T23:00:00.000Z",
+      "lock": "2026-11-09T22:00:00.000Z",
+      "observedAt": "2026-11-09T20:00:00.000Z",
+      "observedAtMeaning": "requested_source_cutoff",
+      "capturedAt": "2026-11-09T20:00:00.000Z",
+      "captureAfterLock": false,
+      "status": "archive_unavailable",
+      "semanticCanonical": "{\"eventSourceRelease\":\"player_props_ai_nfl_source_2026_11_09_r3_event_qualification\",\"failureCode\":\"nfl_offered_player_identity_incomplete\",\"fundedGameId\":\"funded-synthetic\",\"generationRelease\":\"player_props_ai_2026_11_11_r36_urgent_slot_cohorts\",\"identityRelease\":\"player_props_ai_nfl_identity_2026_11_10_r1_cutoff_exact_id\",\"jobKey\":\"nfl-synthetic-early\",\"lock\":\"2026-11-09T22:00:00.000Z\",\"nativeGameId\":\"native-synthetic\",\"purpose\":\"scheduled_review\",\"release\":\"player_props_ai_nfl_source_failure_2026_11_10_r1_private_exact_input\",\"stage\":\"early\",\"start\":\"2026-11-09T23:00:00.000Z\",\"state\":{\"bytes\":149471,\"sha256\":\"c3d323cece6fb65d3c17f6cc76db372d41be4d69ce431793936e3f60de8c4b97\",\"unavailable\":\"semantic_bound\"},\"writerRelease\":\"synthetic-writer\"}",
+      "semanticSha256": "666c180370d1a5e1d3cdb31e53ff9a31ddf9a298c8038797521a55fda55e7f39",
+      "counts": {
+        "sourceRows": 180,
+        "relevantRows": 180,
+        "candidateRows": 180,
+        "failedRows": 180,
+        "nativeRows": 1,
+        "memberRows": 0,
+        "contexts": 1
+      },
+      "sourceHashes": {
+        "observations": "08bafcc05c9d8e77405f40ab952689f0eb0ec7278b892c51d234621ce9a882ec",
+        "nativeSnapshot": "f251e6fdb52d7a6d4ce15aaadf7ad632571c30a4ae7924d1224c6c86635fa55f",
+        "context": "618127e027b68ad176b9b8785c90cb03b717fef146e8cb20b2e83ddb121978cb"
+      },
+      "archive": null,
+      "archiveUnavailable": "semantic_bound"
+    }
+  },
+  "scale": {
+    "kind": "ready",
+    "writerRunId": "synthetic-owner",
+    "record": {
+      "release": "player_props_ai_nfl_source_failure_2026_11_10_r1_private_exact_input",
+      "identityRelease": "player_props_ai_nfl_identity_2026_11_10_r1_cutoff_exact_id",
+      "eventSourceRelease": "player_props_ai_nfl_source_2026_11_09_r3_event_qualification",
+      "purpose": "scheduled_review",
+      "writerRelease": "synthetic-writer",
+      "writerRunId": "synthetic-owner",
+      "failureCode": "nfl_offered_player_identity_incomplete",
+      "generationRelease": "player_props_ai_2026_11_11_r36_urgent_slot_cohorts",
+      "jobKey": "nfl-synthetic-early",
+      "fundedGameId": "funded-synthetic",
+      "nativeGameId": "native-synthetic",
+      "stage": "early",
+      "start": "2026-11-09T23:00:00.000Z",
+      "lock": "2026-11-09T22:00:00.000Z",
+      "observedAt": "2026-11-09T20:00:00.000Z",
+      "observedAtMeaning": "requested_source_cutoff",
+      "capturedAt": "2026-11-09T20:00:00.000Z",
+      "captureAfterLock": false,
+      "status": "archive_unavailable",
+      "semanticCanonical": "{\"eventSourceRelease\":\"player_props_ai_nfl_source_2026_11_09_r3_event_qualification\",\"failureCode\":\"nfl_offered_player_identity_incomplete\",\"fundedGameId\":\"funded-synthetic\",\"generationRelease\":\"player_props_ai_2026_11_11_r36_urgent_slot_cohorts\",\"identityRelease\":\"player_props_ai_nfl_identity_2026_11_10_r1_cutoff_exact_id\",\"jobKey\":\"nfl-synthetic-early\",\"lock\":\"2026-11-09T22:00:00.000Z\",\"nativeGameId\":\"native-synthetic\",\"purpose\":\"scheduled_review\",\"release\":\"player_props_ai_nfl_source_failure_2026_11_10_r1_private_exact_input\",\"stage\":\"early\",\"start\":\"2026-11-09T23:00:00.000Z\",\"state\":{\"bytes\":872135,\"sha256\":\"2636068c1bbbddca1364a4a83d56138c0bcc82b9ba02926e580bad39132a5a58\",\"unavailable\":\"semantic_bound\"},\"writerRelease\":\"synthetic-writer\"}",
+      "semanticSha256": "64dad0ad2f8cd380a1ba994f2715a9873a2ecced639fd607a955f35f0a8d8bde",
+      "counts": {
+        "sourceRows": 52739,
+        "relevantRows": 4418,
+        "candidateRows": 2104,
+        "failedRows": 8,
+        "nativeRows": 264,
+        "memberRows": 120,
+        "contexts": 1
+      },
+      "sourceHashes": {
+        "observations": "1cf9cc9357f9f5ea6a9b572149ec02672478da7d7c1e466608d33919b4704491",
+        "nativeSnapshot": "8dc18b404b3ad5ac34a95901daa33c1953e9d2ed8a13ba31ed98aa63e61909a0",
+        "context": "6500c750a763ccd5a53093d5a937da4e157205a48e25a9e184bdb81eab7c65fe"
+      },
+      "archive": null,
+      "archiveUnavailable": "semantic_bound"
+    }
+  }
+}

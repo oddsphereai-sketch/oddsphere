@@ -37,7 +37,7 @@ globalThis.fetch = async (input) => {
   }
   if (url.pathname.endsWith("/odds/player_props/opening")) {
     const gameId = Number(url.searchParams.get("game_id"));
-    return json([{
+    const props = [{
       id: gameId * 1000,
       game_id: gameId,
       player_id: gameId * 100,
@@ -46,7 +46,10 @@ globalThis.fetch = async (input) => {
       line_value: "0.5",
       market: { type: "over_under", over_odds: -115, under_odds: -105 },
       opened_at: "2026-07-16T12:00:00.000Z",
-    }]);
+    }];
+    // Match the documented single-response props example; research endpoints
+    // retain their generic page-size metadata through json's default below.
+    return json(props, props.length);
   }
   return new Response(JSON.stringify({ data: [] }), { status: 404 });
 };
@@ -108,8 +111,8 @@ function pitchRow(playerId: number, pitcher: boolean) {
   };
 }
 
-function json(data: unknown): Response {
-  return new Response(JSON.stringify({ data, meta: { next_cursor: null, per_page: 100 } }), {
+function json(data: unknown, perPage = 100): Response {
+  return new Response(JSON.stringify({ data, meta: { next_cursor: null, per_page: perPage } }), {
     status: 200,
     headers: { "content-type": "application/json" },
   });

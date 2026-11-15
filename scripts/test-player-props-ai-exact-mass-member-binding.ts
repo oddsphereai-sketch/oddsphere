@@ -1,7 +1,7 @@
 /** Exact future decision-pricing evidence; all laws/sources synthetic and offline. */
 import assert from 'node:assert/strict';
 import {PRODUCT_RELEASE,type GamePacket,type Quote} from '../lib/playerPropsAi/evidenceContract';
-import {PROPS_AI_RELEASE,PROPS_AI_READER_CLAIMS_RELEASE,LEGACY_PROPS_AI_LAW_RELEASE,LEGACY_PROPS_AI_GRADE_RELEASE,LEGACY_PROPS_AI_SELECTION_RELEASE,PROPS_AI_GRADE_RELEASE} from '../lib/playerPropsAi/releases';
+import {PROPS_AI_RELEASE,PROPS_AI_READER_CLAIMS_RELEASE,LEGACY_PROPS_AI_LAW_RELEASE,LEGACY_PROPS_AI_GRADE_RELEASE,LEGACY_PROPS_AI_SELECTION_RELEASE,PROPS_AI_GRADE_RELEASE,PRIOR_PROPS_AI_LAW_RELEASE,PRIOR_PROPS_AI_GRADE_RELEASE,PRIOR_PROPS_AI_SELECTION_RELEASE} from '../lib/playerPropsAi/releases';
 import {readerAvailabilityContextHash} from '../lib/playerPropsAi/readerClaimFreshness';
 import {readerCanonicalContextHash,PROPS_AI_READER_CONTEXT_RELEASE} from '../lib/playerPropsAi/readerContext';
 import {criticalContextHashes} from '../lib/playerPropsAi/criticalContext';
@@ -41,15 +41,17 @@ for(const sport of ['nba','nfl','mlb'] as const){
  const outcomes:Record<string,number[]>=sport==='nba'?{points:[1,0,...zero().slice(2)],rebounds:zero(),assists:zero(),threes:zero()}
   :sport==='nfl'?{receptions:[1,0,...zero().slice(2)]}
   :{batter_singles:[1,0,...zero().slice(2)],batter_doubles:zero(),batter_triples:zero(),batter_home_runs:zero(),batter_walks:zero(),batter_strikeouts:zero(),batter_rbis:zero(),batter_runs_scored:zero(),batter_stolen_bases:zero()};
- for(const legacy of [false,true]){
+ for(const era of ['current','prior','legacy'] as const){
+  const legacy=era==='legacy';
   const f=fixture(sport,[market],outcomes,[5,2,...zero().slice(2)]);
   if(legacy){const body={release:LEGACY_PROPS_AI_LAW_RELEASE,weights:[...f.law.weights],outcomes:structuredClone(f.law.outcomes)};f.review.players[0].law={...body,hash:digest(body)};f.review.release='player_props_ai_2026_11_11_r35_terminal_wave_guard';}
+  if(era==='prior'){const body={release:PRIOR_PROPS_AI_LAW_RELEASE,weights:[...f.law.weights],integerWeights:[...f.law.integerWeights!],outcomes:structuredClone(f.law.outcomes)};f.review.players[0].law={...body,hash:digest(body)};f.review.release='player_props_ai_2026_11_11_r36_urgent_slot_cohorts';}
   const originalLaw=JSON.stringify(f.review.players[0].law);
   f.packet.quotes=quotes(f.id,market,.5);for(const q of f.packet.quotes)q.american=q.side==='over'?-250:200;
   const choices=siteAiDecisions(f.packet,f.review,at);assert.equal(choices.length,1);const choice=choices[0];
-  assert.equal(choice.evidence.gradeRelease,legacy?LEGACY_PROPS_AI_GRADE_RELEASE:PROPS_AI_GRADE_RELEASE);
+  assert.equal(choice.evidence.gradeRelease,legacy?LEGACY_PROPS_AI_GRADE_RELEASE:era==='prior'?PRIOR_PROPS_AI_GRADE_RELEASE:PROPS_AI_GRADE_RELEASE);
   if(legacy){assert.equal(choice.evidence.selectionRelease,LEGACY_PROPS_AI_SELECTION_RELEASE);assert(choice.expectedValue>0);assert.equal(choice.grade,'Best Angle');assert(!choice.exactEventMass);}
-  else{assert.equal(choice.expectedValue,0);assert.notEqual(choice.grade,'Best Angle');assert(choice.exactEventMass);}
+  else{if(era==='prior')assert.equal(choice.evidence.selectionRelease,PRIOR_PROPS_AI_SELECTION_RELEASE);assert.equal(choice.expectedValue,0);assert.notEqual(choice.grade,'Best Angle');assert(choice.exactEventMass);}
   if(sport==='nba'){
    const baseline=buildNbaPlayerPropsMemberSnapshot({mode:'private_forward_candidate',generatedAt:at,slateDate:'2026-11-10',games:[{gameId:f.packet.gameId,scheduledStart:start,awayTeam:'BOS',homeTeam:'NYK'}],decisions:[],inputRows:2});
    const applied=applyNbaSiteAi(baseline,f.packet,choices,at);assert.equal(applied.decisions.length,1);assert.equal(applied.decisions[0].expectedValue,choice.expectedValue);assert.equal(applied.decisions[0].grade,choice.grade);
@@ -99,9 +101,11 @@ for(const [lower,higher] of [[200,201],[-111,-110],[9007199254740893,90071992547
  const native={...f.row(),playerId:id,playerName:'Current Name',sportsbook:'native-unavailable'},baseline=f.snapshot([native]),state=nbaPlayedStateFixture('2026-11-10T22:20:00Z',[1],[14,18,20],[4,6,8]);
  const packet=liveNbaPacket({game,window:{gameId:'g',stage:'final',cutoff:clock,lock:f.packet.lock},snapshot:baseline,market,prior:state,current:state,currentObservations:current});
  validatePacket(packet);assert.equal(packet.executionQuotes?.length,4);
- for(const legacy of [false,true]){
+ for(const era of ['current','prior','legacy'] as const){
+  const legacy=era==='legacy';
   const review=nbaAuthorityReview(packet,[1,1,...Array<number>(14).fill(0)]);
   if(legacy){const law=review.players[0].law!;const body={release:LEGACY_PROPS_AI_LAW_RELEASE,weights:[...law.weights],outcomes:structuredClone(law.outcomes)};review.players[0].law={...body,hash:digest(body)};review.release='player_props_ai_2026_11_11_r35_terminal_wave_guard';}
+  if(era==='prior'){const law=review.players[0].law!,body={release:PRIOR_PROPS_AI_LAW_RELEASE,weights:[...law.weights],integerWeights:[...law.integerWeights!],outcomes:structuredClone(law.outcomes)};review.players[0].law={...body,hash:digest(body)};review.release='player_props_ai_2026_11_11_r36_urgent_slot_cohorts';}
   const before=JSON.stringify(review),choices=siteAiDecisions(packet,review,clock);assert.equal(choices.length,2);assert(choices.every(c=>c.probability===.5));
   const law=review.players[0].law!;
   const direct:NonNullable<ReturnType<typeof priceAiLaw>>=priceAiLaw({law,market:'points',quotes:packet.executionQuotes!.map(q=>({id:q.id,book:q.book,provider:q.provider,line:q.line,side:q.side,american:q.american,availableAt:q.receivedAt,confirmedAt:q.receivedAt,current:true,actionRule:'qualifying_participation'})),now:clock,maxAgeMs:900000,confidence:2,exception:null})!;

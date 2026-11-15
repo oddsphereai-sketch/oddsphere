@@ -1,8 +1,17 @@
 /** Actual siteRuntime/reviewer/parser/binding/lifecycle; every I/O mocked. */
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {createRequire} from 'node:module';
+import {resolve} from 'node:path';
+import vm from 'node:vm';
+import ts from 'typescript';
+import type {GamePacket} from '../lib/playerPropsAi/evidenceContract';
+import type {NbaPlayerPropsMemberSnapshot} from '../lib/services/nba/nbaPlayerPropsProductContract';
 import type {SupabaseClient} from '@supabase/supabase-js';
 import type {AcceptedGameReview} from '../lib/playerPropsAi/reviewer';
 import type {PropsAiJob} from '../lib/playerPropsAi/budget';
+import {nbaPlayerPropsRefreshFailure} from '../lib/cron/playerPropsRefreshTelemetry';
+import {summarizePropsAiRuntimeHealth} from '../lib/playerPropsAi/runtimeHealth';
 import {reviewPropsForSite} from '../lib/playerPropsAi/siteRuntime';
 import {PROPS_AI_CONTROL_RELEASE} from '../lib/playerPropsAi/siteConfig';
 import {PROPS_AI_CALENDAR_RELEASE,type PropsCalendar} from '../lib/playerPropsAi/calendar';
@@ -12,18 +21,19 @@ import {capturedReviewSlots} from '../lib/playerPropsAi/liveWindow';
 import {advanceNbaPlayerPropsCandidateLifecycle} from '../lib/services/nba/nbaPlayerPropsLifecycle';
 import {mergeNbaHandoffs,testNbaSourceAuthority,testNbaHandoffCapture,type NbaLockHandoff} from '../lib/playerPropsAi/nbaLockAuthority';
 import {nbaAuthorityFixture,nbaAuthorityDraft} from './test-player-props-ai-nba-lock-authority';
+import {digest} from '../lib/playerPropsAi/evidence';
 globalThis.fetch=async()=>{throw Error('NBA runtime proof forbids real HTTP');};
-async function exercise(failedFinalRead:boolean){
+async function exercise(failedFinalRead:boolean,readyMode:'success'|'absent'|'reject'|'ack_after_lock'|'prelock_reload'='success'){
  const initial='2026-11-10T22:24:00Z',completed='2026-11-10T22:26:00Z',after='2026-11-10T22:30:01Z';let tick=initial,reads=0,generations=0,counts=0,receipts=0,claimHash='';
  const f=nbaAuthorityFixture(initial),baseline=f.snapshot([f.row('a'),f.row('a','rebounds')]);let candidate=baseline,stored:AcceptedGameReview|null=null;
- const frames:NbaLockHandoff[]=[],callbackOrder:string[]=[],sourcePurposes:string[]=[];
+ const frames:NbaLockHandoff[]=[],callbackOrder:string[]=[],sourcePurposes:string[]=[],authorityCallbacks:boolean[]=[];let authorityHeld=false,writeAcknowledgementUncertain=false;const originalBaselineHash=digest(baseline);
  const calendar:PropsCalendar={release:PROPS_AI_CALENDAR_RELEASE,month:'2026-11',capturedAt:initial,games:[{sport:'nba',id:'espn:nba:synthetic',confirmed:true,start:f.packet.start,lock:f.packet.lock,away:'BOS',home:'NYK'}],sources:{nba:{complete:true,source:'synthetic complete schedule'},nfl:{complete:true,source:'synthetic empty schedule'},mlb:{complete:true,source:'synthetic empty schedule'}}};
  const job={job_key:'props-ai|nba|espn:nba:synthetic|2026-11-10|final',sport:'nba',game_id:'espn:nba:synthetic',game_day:'2026-11-10',stage:'final',scheduled_start:f.packet.start,lock_at:f.packet.lock,due_at:'2026-11-10T22:05:00Z',billing_month:'2026-11',state:'pending'}as PropsAiJob;
  type DbResult={data:unknown;error:{code:string}|null};
  const client={from(table:string){let selection='';const query={select(value:string){selection=value;return query;},eq(){return query;},gte(){return query;},lte(){return query;},gt(){return query;},in(){return query;},order(){return query;},limit(){return query;},
   single:async()=>{assert.equal(table,'player_props_ai_control');return{data:{release:PROPS_AI_CONTROL_RELEASE,paid_enabled:true},error:null};},
   maybeSingle:async()=>{assert.equal(table,'player_props_ai_calendars');return{data:{release:PROPS_AI_CALENDAR_RELEASE,captured_at:initial,payload:calendar},error:null};},
-  then(resolve:(result:DbResult)=>unknown,reject:(error:unknown)=>unknown){assert.equal(table,'player_props_ai_reviews');if(selection==='*')return Promise.resolve({data:job.state==='pending'?[job]:[],error:null}).then(resolve,reject);reads++;if(reads===1)return Promise.resolve({data:[],error:null}).then(resolve,reject);tick=after;callbackOrder.push('final_review_get_crossed_lock');return Promise.resolve(failedFinalRead?{data:null,error:{code:'synthetic_read_unavailable'}}:{data:stored?[{result:stored}]:[],error:null}).then(resolve,reject);},
+  then(resolve:(result:DbResult)=>unknown,reject:(error:unknown)=>unknown){assert.equal(table,'player_props_ai_reviews');if(selection==='*')return Promise.resolve({data:job.state==='pending'?[job]:[],error:null}).then(resolve,reject);reads++;if(reads===1)return Promise.resolve({data:[],error:null}).then(resolve,reject);tick=readyMode==='prelock_reload'?completed:after;callbackOrder.push('final_review_get_crossed_lock');return Promise.resolve(failedFinalRead?{data:null,error:{code:'synthetic_read_unavailable'}}:{data:stored?[{result:stored}]:[],error:null}).then(resolve,reject);},
  };return query;},rpc:async(name:string,args:Record<string,unknown>={})=>{
   if(name==='player_props_ai_plan_v4')return{data:{funded:true,budget:{}},error:null};if(name==='player_props_ai_reap')return{data:0,error:null};
   if(name==='player_props_ai_claim'){assert.equal(job.state,'pending');claimHash=String(args.p_hash);job.state='running';return{data:{claimed:true,token:'synthetic-token',job:{...job,parts:1,model:'gpt-6-luna',requested_tier:'default'}},error:null};}
@@ -33,24 +43,80 @@ async function exercise(failedFinalRead:boolean){
   throw Error('Unexpected mocked RPC '+name);
  }}as unknown as SupabaseClient;
  const observe=(packet:typeof f.packet,review:AcceptedGameReview|null,lookupAvailable:boolean)=>{
-  frames.push(testNbaSourceAuthority(()=>tick)(packet,review,lookupAvailable));
+  authorityCallbacks.push(lookupAvailable);
+  if(!lookupAvailable){authorityHeld=true;return;}
+  if(writeAcknowledgementUncertain)return;
   if(Date.parse(tick)>=Date.parse(packet.lock))return;
+  authorityHeld=false;
+  frames.push(testNbaSourceAuthority(()=>tick)(packet,review,true));
   candidate=restoreNbaNativeGame(candidate,baseline,packet,tick);
   if(review)candidate=applyNbaSiteAi(candidate,packet,siteAiDecisions(packet,review,tick),tick);
   frames.push(testNbaHandoffCapture(()=>tick)(candidate.decisions,packet,review,'ai'));
  };
  const result=await reviewPropsForSite({client,sport:'nba',writerRunId:'synthetic-nba-lease-owner',games:[{id:'g',start:f.packet.start,away:'BOS',home:'NYK'}],deadline:Date.now()+450000,clock:()=>tick,
-  load:(_game,window,context)=>{sourcePurposes.push(context?.purpose??'missing');capturedReviewSlots({gameId:'g',start:f.packet.start,lock:f.packet.lock},window,()=>[]);return{...structuredClone(f.packet),cutoff:window.cutoff,stage:window.stage};},
-  onSourceReady:(packet,review,_at,lookupAvailable)=>{callbackOrder.push('source_ready');frames.push(testNbaHandoffCapture(()=>tick)(baseline.decisions,packet,review,'native'));observe(packet,review,lookupAvailable);},
+  load:(_game,window,context)=>{sourcePurposes.push(context?.purpose??'missing');if(context?.purpose==='member_publication'&&readyMode==='prelock_reload')throw Error('synthetic_current_source_fault');capturedReviewSlots({gameId:'g',start:f.packet.start,lock:f.packet.lock},window,()=>[]);return{...structuredClone(f.packet),cutoff:window.cutoff,stage:window.stage};},
+  onSourceReady:(packet,review,_at,lookupAvailable)=>{callbackOrder.push('source_ready');if(lookupAvailable)frames.push(testNbaHandoffCapture(()=>tick)(baseline.decisions,packet,review,'native'));observe(packet,review,lookupAvailable);},
   onReviewObserved:(packet,review,lookupAvailable)=>{callbackOrder.push('review_observed');observe(packet,review,lookupAvailable);},
-  onReviewReady:(packet,review)=>{callbackOrder.push('review_ready');observe(packet,review,true);},
+  ...(readyMode==='absent'?{}:{onReviewReady:(packet:typeof f.packet,review:AcceptedGameReview)=>{callbackOrder.push('review_ready');observe(packet,review,true);if(readyMode==='reject'){writeAcknowledgementUncertain=true;throw Error('synthetic_unknown_handoff_ack');}if(readyMode==='ack_after_lock'){tick=after;writeAcknowledgementUncertain=true;}}}),
   fetchImpl:async(url,options)=>{if(String(url).endsWith('/input_tokens')){counts++;return Response.json({input_tokens:1000});}assert.equal(String(url),'https://api.openai.com/v1/responses');generations++;const request=JSON.parse(String(options?.body));assert.equal(request.model,'gpt-6-luna');assert.equal(request.max_output_tokens,7000);tick=completed;return Response.json({id:'synthetic-nba-response',model:'gpt-6-luna',service_tier:'default',status:'completed',usage:{input_tokens:1000,output_tokens:200},output:[{content:[{type:'output_text',text:JSON.stringify(nbaAuthorityDraft({...f.packet,gameId:job.game_id,sourceGameId:'g'},[1,4,5,...Array(13).fill(0)]))}]}]});},
  });
- assert.equal(generations,1);assert.equal(counts,1);assert.equal(receipts,1);assert.equal(job.state,'completed');assert(stored);assert(callbackOrder.indexOf('review_ready')<callbackOrder.indexOf('final_review_get_crossed_lock'),'Actual completed review is materialized before the later GET');
- assert.deepEqual(sourcePurposes,['scheduled_review','member_publication'],'The exact scheduled input supplies the source authority before the same single paid review');assert(result.findings.some(f=>f.startsWith('current_source_unavailable:')));assert.equal(result.games.length,1);assert.equal(result.games[0].decisions.length,0,'A postlock public reprice is not fabricated');
- const locked=advanceNbaPlayerPropsCandidateLifecycle({now:tick,previous:baseline,candidate,lockHandoff:mergeNbaHandoffs(frames)});
- assert.equal(locked.snapshot.decisions.length,3,'The final covers both actors and all three markets, including an AI-only scope with no native predecessor');assert(locked.snapshot.decisions.every(r=>r.aiReview?.inputHash===claimHash&&Date.parse(r.lockedAt!)===Date.parse(f.packet.lock)));
- const accepted=result.games[0].authorityReview;assert(accepted);assert.equal(accepted.players.length,2);assert.equal(Object.values(accepted.marketScopes).flat().length,3);assert(locked.snapshot.decisions.every(r=>r.projection===candidate.decisions.find(c=>c.playerId===r.playerId&&c.market===r.market)!.projection));
+ assert.equal(generations,1);assert.equal(counts,1);assert.equal(receipts,1);assert.equal(job.state,'completed');assert(stored);assert(readyMode==='absent'||callbackOrder.indexOf('review_ready')<callbackOrder.indexOf('final_review_get_crossed_lock'),'Actual completed review is materialized before the later GET');
+ assert.deepEqual(sourcePurposes,['scheduled_review','member_publication'],'The exact scheduled input supplies the source authority before the same single paid review');assert(result.findings.some(f=>f.startsWith(readyMode==='success'?'current_source_reload_unavailable_after_ready_lock:':'current_source_unavailable:')));
+ const processFailure=nbaPlayerPropsRefreshFailure({status:'published_private',aiReviewRuntime:{...summarizePropsAiRuntimeHealth(result,tick),findings:[...result.findings]}});
+ assert.equal(processFailure===null,readyMode==='success','Only an actually awaited wholly-prelock ready handoff distinguishes a later postlock reload; incomplete or unknown handoff stays visible');assert.equal(result.games.length,1);assert.equal(result.games[0].decisions.length,0,'A postlock public reprice is not fabricated');
+ const accepted=result.games[0].authorityReview;assert(accepted);assert.equal(accepted.players.length,2);assert.equal(Object.values(accepted.marketScopes).flat().length,3,'SQL completion and exact reviewed scope remain separate from publication authority');
+ assert.equal(digest(baseline),originalBaselineHash,'Neither unavailable publication nor a fresh review rewrites the original acknowledged native source');
+ tick=after;
+ if(readyMode==='success'){
+  assert(!authorityHeld&&!writeAcknowledgementUncertain);assert(authorityCallbacks.every(Boolean));
+  const locked=advanceNbaPlayerPropsCandidateLifecycle({now:tick,previous:baseline,candidate,lockHandoff:mergeNbaHandoffs(frames)});
+  assert.equal(locked.snapshot.decisions.length,3,'The trusted wholly-prelock final covers both actors and all three markets, including an AI-only scope with no native predecessor');
+  assert.equal(locked.snapshot.decisions.filter(r=>r.aiReview?.inputHash===claimHash).length,3,'Nonvacuous full AI publication');
+  assert(locked.snapshot.decisions.every(r=>Date.parse(r.lockedAt!)===Date.parse(f.packet.lock)&&r.projection===candidate.decisions.find(c=>c.playerId===r.playerId&&c.market===r.market)!.projection));
+ }else{
+  assert(authorityHeld||writeAcknowledgementUncertain,'Unavailable current source or absent/rejected/late readiness cannot be treated as a trusted publication');assert(authorityCallbacks.includes(false));
+  assert.equal(candidate.decisions.filter(r=>r.aiReview?.inputHash===claimHash).length,3,'The model did produce all three valid rows before publication authority became unavailable');
+  // The actual writer/store/codec control below checks this held boundary
+  // from nonempty acknowledged rows rather than inventing an empty lifecycle.
+ }
+
 }
-async function main(){const keys=['NODE_ENV','PLAYER_PROPS_AI_SITE_ENABLED','PLAYER_PROPS_AI_PAID_RUNS_ENABLED','PLAYER_PROPS_AI_OPENAI_API_KEY']as const,previous=Object.fromEntries(keys.map(k=>[k,process.env[k]]));Object.assign(process.env,{NODE_ENV:'test',PLAYER_PROPS_AI_SITE_ENABLED:'true',PLAYER_PROPS_AI_PAID_RUNS_ENABLED:'true',PLAYER_PROPS_AI_OPENAI_API_KEY:'synthetic-never-real'});try{await exercise(false);await exercise(true);console.log('Actual NBA siteRuntime handoff passed: one mocked normal final/count/receipt, immediate complete actor/scope overlay before later GET/source cross-lock, local trusted completion after failed GET, exact final locks and AI-only scope recovery. No real SQL, HTTP, provider, cron or paid test calls.');}finally{for(const key of keys){if(previous[key]===undefined)delete process.env[key];else Object.assign(process.env,{[key]:previous[key]});}}}
+type ReviewArgs=Parameters<typeof reviewPropsForSite>[0];
+type PublicationHarness={packets:GamePacket[];previous:NbaPlayerPropsMemberSnapshot;run:(callback:(args:ReviewArgs)=>Promise<unknown>)=>Promise<unknown>;read:()=>Promise<NbaPlayerPropsMemberSnapshot>;review:(packet:GamePacket)=>AcceptedGameReview;setTick:(at:string)=>void;counts:()=>{writes:number;rpcs:number};};
+async function actualHeldPublicationBoundary(){
+ const path='scripts/test-player-props-ai-nba-durable-publication.ts';
+ const source=readFileSync(path,'utf8').split('async function main(){')[0]+'\nexport {harness,ready,outcome};';
+ const exports:Record<string,unknown>={};
+ const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
+ vm.runInNewContext(code,{module:{exports},exports,require:createRequire(resolve(path)),process,Date,Buffer,console,Response,AbortSignal,structuredClone},{filename:'actual-held-nba-runtime-writer-proof.cjs'});
+ const harness=exports.harness as (options:{games:number;staggered:boolean})=>PublicationHarness;
+ const ready=exports.ready as (args:ReviewArgs,packet:GamePacket,review:AcceptedGameReview)=>Promise<void>;
+ const outcome=exports.outcome as {status:string;games:unknown[];findings:string[]};
+ const h=harness({games:2,staggered:true}),[a,b]=h.packets,originalPrevious=digest(h.previous);
+ let acknowledged:NbaPlayerPropsMemberSnapshot|undefined,acknowledgedHash='';
+ h.setTick('2026-11-10T22:26:00Z');
+ await h.run(async args=>{
+  await ready(args,a,h.review(a));acknowledged=await h.read();acknowledgedHash=digest(acknowledged);
+  assert.equal(acknowledged.decisions.filter(row=>row.gameId===a.gameId&&row.aiReview).length,3,'Actual timely ACK contains all three AI rows');
+  assert(acknowledged.decisions.every(row=>row.lockedAt===null));
+  const beforeFalse=h.counts();await args.onReviewObserved?.(a,null,false);
+  assert.deepEqual(h.counts(),beforeFalse,'Unavailable source observation cannot itself publish or lock');
+  assert.equal(digest(await h.read()),acknowledgedHash,'Unknown current source preserves the exact prior stored ACK');
+  h.setTick('2026-11-10T22:30:01Z');await ready(args,b,h.review(b));
+  return{...outcome,findings:[`current_source_unavailable:${a.gameId}:synthetic`]};
+ });
+ const progressed=await h.read();
+ assert(!progressed.decisions.some(row=>row.gameId===a.gameId),'A held unlocked game cannot join a later new-source frame or first lock');
+ const bRows=progressed.decisions.filter(row=>row.gameId===b.gameId);
+ assert.equal(bRows.length,3);assert(bRows.every(row=>row.aiReview&&row.lockedAt===null),'Independent known B still publishes all three valid rows');
+ assert.equal(digest(acknowledged),acknowledgedHash,'Historical acknowledged A bytes are not mutated');
+ assert.equal(digest(h.previous),originalPrevious,'Original native source bytes are not mutated');
+ assert(h.counts().writes>=2,'Both actual positive ACKs occurred, so held omission is nonvacuous');
+ h.setTick('2026-11-11T00:31:00Z');
+ await h.run(async()=>outcome);const restarted=await h.read();
+ assert(!restarted.decisions.some(row=>row.gameId===a.gameId),'A restarted sweep cannot reconstruct the omitted held game');
+ const restartedB=restarted.decisions.filter(row=>row.gameId===b.gameId);assert.equal(restartedB.length,3);
+ for(const row of restartedB){const before=bRows.find(prior=>prior.decisionKey===row.decisionKey);assert(before);const{lockedAt,...actual}=row;const{lockedAt:priorLock,...original}=before;assert.equal(priorLock,null);assert.equal(Date.parse(lockedAt!),Date.parse(b.lock));assert.deepEqual(actual,original,'Only the existing normal first-lock field may advance for known B');}
+}
+async function main(){const keys=['NODE_ENV','PLAYER_PROPS_AI_SITE_ENABLED','PLAYER_PROPS_AI_PAID_RUNS_ENABLED','PLAYER_PROPS_AI_OPENAI_API_KEY']as const,previous=Object.fromEntries(keys.map(k=>[k,process.env[k]]));Object.assign(process.env,{NODE_ENV:'test',PLAYER_PROPS_AI_SITE_ENABLED:'true',PLAYER_PROPS_AI_PAID_RUNS_ENABLED:'true',PLAYER_PROPS_AI_OPENAI_API_KEY:'synthetic-never-real'});try{await exercise(false);await exercise(true);for(const mode of ['absent','reject','ack_after_lock','prelock_reload'] as const)await exercise(false,mode);await actualHeldPublicationBoundary();console.log('Actual NBA siteRuntime handoff passed: one mocked normal final/count/receipt, immediate complete actor/scope overlay before later GET/source cross-lock, local trusted completion after failed GET, exact trusted final locks and AI-only scope recovery, and nonvacuous unavailable-current/no-ACK first-lock refusal. No real SQL, HTTP, provider, cron or paid test calls.');}finally{for(const key of keys){if(previous[key]===undefined)delete process.env[key];else Object.assign(process.env,{[key]:previous[key]});}}}
 void main().catch(error=>{console.error(error);process.exitCode=1;});

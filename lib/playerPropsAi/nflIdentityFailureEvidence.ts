@@ -13,7 +13,8 @@ import {stable,invariant} from './evidence';
 import {PROPS_AI_RELEASE} from './releases';
 import {resolveNflPropSourcePlayer,PROPS_AI_NFL_IDENTITY_RELEASE,PROPS_AI_NFL_SOURCE_RELEASE} from './nflPlayerIdentity';
 
-export const NFL_IDENTITY_FAILURE_EVIDENCE_RELEASE='player_props_ai_nfl_source_failure_2026_11_10_r1_private_exact_input' as const;
+export const LEGACY_NFL_IDENTITY_FAILURE_EVIDENCE_RELEASE='player_props_ai_nfl_source_failure_2026_11_10_r1_private_exact_input' as const;
+export const NFL_IDENTITY_FAILURE_EVIDENCE_RELEASE='player_props_ai_nfl_source_failure_2026_11_14_r2_bounded_semantic_archive' as const;
 export const NFL_IDENTITY_FAILURE_RAW_LIMIT=8_000_000;
 export const NFL_IDENTITY_FAILURE_GZIP_LIMIT=262_144;
 export const NFL_IDENTITY_FAILURE_SEMANTIC_LIMIT=128_000;
@@ -28,7 +29,7 @@ export type NflIdentityFailureArgs={
 };
 export type NflIdentityFailureArchive={encoding:'gzip-base64';bytes:number;sha256:string;gzipBytes:number;gzipSha256:string;data:string};
 export type NflIdentityFailureRecord={
-  release:typeof NFL_IDENTITY_FAILURE_EVIDENCE_RELEASE;identityRelease:typeof PROPS_AI_NFL_IDENTITY_RELEASE;eventSourceRelease:typeof PROPS_AI_NFL_SOURCE_RELEASE;purpose:'scheduled_review';
+  release:typeof NFL_IDENTITY_FAILURE_EVIDENCE_RELEASE|typeof LEGACY_NFL_IDENTITY_FAILURE_EVIDENCE_RELEASE;identityRelease:typeof PROPS_AI_NFL_IDENTITY_RELEASE;eventSourceRelease:typeof PROPS_AI_NFL_SOURCE_RELEASE;purpose:'scheduled_review';
   writerRelease:string;writerRunId:string;generationRelease:string;failureCode:string;jobKey:string;fundedGameId:string;nativeGameId:string;stage:'early'|'final';
   start:string;lock:string;observedAt:string;observedAtMeaning:'requested_source_cutoff';capturedAt:string;captureAfterLock:boolean;status:'captured'|'archive_unavailable';
   semanticCanonical:string;semanticSha256:string;counts:{sourceRows:number;relevantRows:number;candidateRows:number;failedRows:number;nativeRows:number;memberRows:number;contexts:number};
@@ -111,15 +112,19 @@ export function buildNflIdentityFailureEvidence(args:NflIdentityFailureArgs):Nfl
       rosters:distinct(contexts.flatMap(({game})=>[game.awayDepth,game.homeDepth].map(depth=>({team:depth.team,eligible:finiteBefore(depth.capturedAt,observed)&&finiteBefore(depth.capturedAt,at(args.context.capturedAt)),
         rows:distinct(depth.roster.map(player=>({playerId:player.playerId,name:player.name,position:player.position??null})))})))),
       outcomes:distinct(outcomes.map(outcome=>({identity:rawIdentity(candidates.find(row=>row.index===outcome.index)!.row),code:outcome.code}))) };
-    semanticCanonical=semanticText(base,state);
-    if(Buffer.byteLength(semanticCanonical)>NFL_IDENTITY_FAILURE_SEMANTIC_LIMIT){const bytes=Buffer.byteLength(semanticCanonical),digest=sha(semanticCanonical);semanticCanonical=semanticText(base,{unavailable:'semantic_bound',bytes,sha256:digest});return{kind:'ready',writerRunId:args.writerRunId,record:{...base,status:'archive_unavailable',semanticCanonical,semanticSha256:sha(semanticCanonical),counts,sourceHashes,archive:null,archiveUnavailable:'semantic_bound'}};}
+    const fullSemanticCanonical=semanticText(base,state);
+    // Dedup retains a bounded digest/length of the complete semantic state.
+    // Unlike R1, semantic overflow alone must not discard bounded exact input.
+    semanticCanonical=Buffer.byteLength(fullSemanticCanonical)>NFL_IDENTITY_FAILURE_SEMANTIC_LIMIT
+      ?semanticText(base,{unavailable:'semantic_bound',bytes:Buffer.byteLength(fullSemanticCanonical),sha256:sha(fullSemanticCanonical)})
+      :fullSemanticCanonical;
     const {observations:ignoredObservations,...observationHeader}=args.observations;void ignoredObservations;
     const {games:ignoredGames,...contextHeader}=args.context;void ignoredGames;
     const input={release:base.release,identityRelease:base.identityRelease,binding:base,job:copy(args.job),game:copy(args.game),window:copy(args.window),writerRunId:args.writerRunId,
       observationsHeader:copy(observationHeader),relevantObservations:relevant,candidateSourceIndices:candidates.map(c=>c.index),
       nativeHeader:{release:args.snapshot.release,season:args.snapshot.season,week:args.snapshot.week,generatedAt:args.snapshot.generatedAt,writerLeaseGroup:args.snapshot.writerLeaseGroup,
         boardRelease:args.snapshot.board.release,boardGeneratedAt:args.snapshot.board.generatedAt,boardEvaluatedAt:args.snapshot.board.evaluatedAt},nativeIdentityRows:native,memberIdentityRows:member,
-      contextHeader:copy(contextHeader),contexts,sourceHashes,outcomes,semanticCanonical,callerIdentityFailure:{code:args.failureCode,independentlyReplayed:false},
+      contextHeader:copy(contextHeader),contexts,sourceHashes,outcomes,semanticCanonical:fullSemanticCanonical,callerIdentityFailure:{code:args.failureCode,independentlyReplayed:false},
       meaning:'Exact normalized relevant collector rows and declared native identity projection; not raw HTTP or all numerical model inputs. observedAt is the requested source cutoff, not an independent receipt or failure-occurrence time. capturedAt is the actual writer failure-capture time; captureAfterLock explicitly identifies late diagnostic capture. Clock/hash metadata are writer assertions, not independent attestations. Outcomes replay the identity resolver only. Later cached-member ambiguity is caller-reported with complete member identity inputs, not a separately invented per-row verdict. All outcomes are diagnostic only; any failure still blocks the game.'};
     const text=JSON.stringify(input),raw=Buffer.from(text),rawHash=sha(raw);
     if(raw.length>NFL_IDENTITY_FAILURE_RAW_LIMIT)return{kind:'ready',writerRunId:args.writerRunId,record:{...base,status:'archive_unavailable',semanticCanonical,semanticSha256:sha(semanticCanonical),counts,sourceHashes:{...sourceHashes,identityInput:rawHash},archive:null,archiveUnavailable:'raw_input_bound'}};
@@ -133,7 +138,7 @@ export function buildNflIdentityFailureEvidence(args:NflIdentityFailureArgs):Nfl
 }
 /** Private observer primitive; fails before decompressing an unbounded payload. */
 export function decodeNflIdentityFailureArchive(record:NflIdentityFailureRecord):unknown{
-  invariant(record.release===NFL_IDENTITY_FAILURE_EVIDENCE_RELEASE&&record.identityRelease===PROPS_AI_NFL_IDENTITY_RELEASE,'Unknown NFL source failure evidence release');
+  invariant((record.release===NFL_IDENTITY_FAILURE_EVIDENCE_RELEASE||record.release===LEGACY_NFL_IDENTITY_FAILURE_EVIDENCE_RELEASE)&&record.identityRelease===PROPS_AI_NFL_IDENTITY_RELEASE,'Unknown NFL source failure evidence release');
   invariant(Buffer.byteLength(record.semanticCanonical)<=NFL_IDENTITY_FAILURE_SEMANTIC_LIMIT&&sha(record.semanticCanonical)===record.semanticSha256,'NFL source semantic hash mismatch');
   const archive=record.archive;invariant(record.status==='captured'&&archive?.encoding==='gzip-base64','NFL source archive unavailable');
   invariant(Number.isSafeInteger(archive.bytes)&&archive.bytes>0&&archive.bytes<=NFL_IDENTITY_FAILURE_RAW_LIMIT&&Number.isSafeInteger(archive.gzipBytes)&&archive.gzipBytes>0&&archive.gzipBytes<=NFL_IDENTITY_FAILURE_GZIP_LIMIT,'NFL source archive bounds invalid');
@@ -141,14 +146,27 @@ export function decodeNflIdentityFailureArchive(record:NflIdentityFailureRecord)
   const gzip=Buffer.from(archive.data,'base64');invariant(gzip.length===archive.gzipBytes&&sha(gzip)===archive.gzipSha256,'NFL source compressed hash mismatch');
   const raw=gunzipSync(gzip,{maxOutputLength:NFL_IDENTITY_FAILURE_RAW_LIMIT});invariant(raw.length===archive.bytes&&sha(raw)===archive.sha256&&record.sourceHashes.identityInput===archive.sha256,'NFL source raw hash mismatch');
   const parsed=JSON.parse(raw.toString()) as {binding:unknown;semanticCanonical:string};
-  invariant(stable(parsed.binding)===stable({release:record.release,identityRelease:record.identityRelease,eventSourceRelease:record.eventSourceRelease,purpose:record.purpose,writerRelease:record.writerRelease,writerRunId:record.writerRunId,generationRelease:record.generationRelease,failureCode:record.failureCode,jobKey:record.jobKey,fundedGameId:record.fundedGameId,nativeGameId:record.nativeGameId,stage:record.stage,start:record.start,lock:record.lock,observedAt:record.observedAt,observedAtMeaning:record.observedAtMeaning,capturedAt:record.capturedAt,captureAfterLock:record.captureAfterLock})&&parsed.semanticCanonical===record.semanticCanonical,'NFL source archive binding mismatch');
+  const binding={release:record.release,identityRelease:record.identityRelease,eventSourceRelease:record.eventSourceRelease,purpose:record.purpose,writerRelease:record.writerRelease,writerRunId:record.writerRunId,generationRelease:record.generationRelease,failureCode:record.failureCode,jobKey:record.jobKey,fundedGameId:record.fundedGameId,nativeGameId:record.nativeGameId,stage:record.stage,start:record.start,lock:record.lock,observedAt:record.observedAt,observedAtMeaning:record.observedAtMeaning,capturedAt:record.capturedAt,captureAfterLock:record.captureAfterLock};
+  invariant(stable(parsed.binding)===stable(binding),'NFL source archive binding mismatch');
+  if(record.release===LEGACY_NFL_IDENTITY_FAILURE_EVIDENCE_RELEASE){
+    // R1 exact archives retain their original semantic-equality contract.
+    invariant(parsed.semanticCanonical===record.semanticCanonical,'NFL source archive binding mismatch');
+  }else{
+    invariant(typeof parsed.semanticCanonical==='string','NFL source semantic archive missing');
+    const full=parsed.semanticCanonical,semantic=JSON.parse(full) as {state?:unknown};
+    invariant(semantic!==null&&typeof semantic==='object'&&!Array.isArray(semantic)&&semantic.state!==null&&typeof semantic.state==='object'&&!Array.isArray(semantic.state)
+      &&full===semanticText(binding,semantic.state),'NFL source full semantic binding mismatch');
+    const bounded=Buffer.byteLength(full)>NFL_IDENTITY_FAILURE_SEMANTIC_LIMIT
+      ?semanticText(binding,{unavailable:'semantic_bound',bytes:Buffer.byteLength(full),sha256:sha(full)}):full;
+    invariant(record.semanticCanonical===bounded,'NFL source bounded semantic binding mismatch');
+  }
   return parsed;
 }
 /** One bounded DB append, never a retry or an AI request. Raw records stay private. */
 export async function appendNflIdentityFailureEvidence(client:Pick<SupabaseClient,'rpc'>,capture:NflIdentityFailureCapture):Promise<{status:string;reason?:string}>{
   if(capture.kind!=='ready')return{status:'skipped',reason:capture.reason};
   try{
-    const record=capture.record;invariant(record.writerRunId===capture.writerRunId&&Buffer.byteLength(JSON.stringify(record))<=NFL_IDENTITY_FAILURE_RECORD_LIMIT&&record.release===NFL_IDENTITY_FAILURE_EVIDENCE_RELEASE&&sha(record.semanticCanonical)===record.semanticSha256,'Invalid bounded NFL failure capture');
+    const record=capture.record;invariant(record.writerRunId===capture.writerRunId&&Buffer.byteLength(JSON.stringify(record))<=NFL_IDENTITY_FAILURE_RECORD_LIMIT&&(record.release===NFL_IDENTITY_FAILURE_EVIDENCE_RELEASE||record.release===LEGACY_NFL_IDENTITY_FAILURE_EVIDENCE_RELEASE)&&sha(record.semanticCanonical)===record.semanticSha256,'Invalid bounded NFL failure capture');
     if(record.status==='captured')decodeNflIdentityFailureArchive(record);
     const {data,error}=await client.rpc('player_props_ai_append_source_failure_v1',{p_writer_run:capture.writerRunId,p_capture:record}).abortSignal(AbortSignal.timeout(5000));
     if(error)return{status:'unavailable',reason:'source_failure_storage_unavailable'};

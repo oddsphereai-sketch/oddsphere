@@ -24,6 +24,46 @@ export type PropsAiSourceLoadContext={purpose:"scheduled_review";job:PropsAiJob}
 export type SiteReviewResult={game:LivePropsGame;packet:GamePacket;decisions:SiteAiDecision[];authorityReview:AcceptedGameReview|null;observedAt:string};
 type SiteCoverage={participationBlockedScopes:number;unresolvedSourceScopes:number;unresolvedExecutionContracts:number;gameId:string;players:number;withdrawalContextPlayers:number;reviewedPlayers:number;contextChangedPlayers:number;unreviewedScopes:number;eligiblePlayers:number;pricedPlayers:number;qualifiedLawPlayers:number;sourceDeclinedScopes:number;unqualifiedTailScopes:number;currentExecutionContracts:number;pricedExecutionContracts:number;unpricedExecutionContracts:number};
 export type SiteReviewOutcome={status:string;games:SiteReviewResult[];findings:string[];coverage?:SiteCoverage[];newlyCompletedReviews?:number;sourceContextAudits?:ReturnType<typeof buildPropsSourceContextAuditSlate>};
+const ACCEPTED_REVIEW_READ_LIMIT=256;
+const record=(value:unknown):value is Record<string,unknown>=>value!==null&&typeof value==='object'&&!Array.isArray(value);
+/** Storage availability is distinct from review qualification. Preserve original
+ * accepted values verbatim; never reparse an old law under current semantics.
+ * A full bounded page cannot prove there is no omitted row; preserve unknown
+ * authority rather than add a query or silently truncate. Unknown/malformed/
+ * unsupported rows likewise cannot attest an empty review inventory. */
+function acceptedReviewInventory(data:unknown,error:unknown):AcceptedGameReview[]|null{
+  if(error!==null&&error!==undefined||!Array.isArray(data)||data.length>=ACCEPTED_REVIEW_READ_LIMIT)return null;
+  const text=(value:unknown)=>typeof value==='string'&&value.length>0;
+  const time=(value:unknown)=>typeof value==='string'&&Number.isFinite(Date.parse(value));
+  const strings=(value:unknown)=>Array.isArray(value)&&value.every(item=>typeof item==='string');
+  const reviews:AcceptedGameReview[]=[];
+  for(const row of data){
+    if(!record(row)||!record(row.result))return null;
+    const review=row.result,evidence=review.inputEvidence;
+    if(typeof review.release!=='string'||!(PROPS_AI_ACCEPTED_RELEASES as readonly string[]).includes(review.release)
+      ||!text(review.gameId)||review.sourceGameId!==undefined&&!text(review.sourceGameId)
+      ||!time(review.start)||!time(review.lock)||!time(review.cutoff)||review.issuedAt!==undefined&&!time(review.issuedAt)
+      ||review.stage!=='early'&&review.stage!=='final'||!text(review.model)
+      ||review.inputHash!==undefined&&!text(review.inputHash)
+      ||!record(evidence)||evidence.encoding!=='gzip-base64'||!text(evidence.digest)
+      ||!Number.isSafeInteger(evidence.bytes)||Number(evidence.bytes)<0||typeof evidence.data!=='string'
+      ||!record(review.criticalContextHashes)||!Object.values(review.criticalContextHashes).every(value=>typeof value==='string')
+      ||!record(review.marketScopes)||!Object.values(review.marketScopes).every(strings)
+      ||!Array.isArray(review.partProvenance)||!review.partProvenance.every(record)
+      ||!Array.isArray(review.players)||!review.players.every(player=>{
+        if(!record(player)||!text(player.playerId))return false;
+        const scopes=(review.marketScopes as Record<string,unknown>)[String(player.playerId)];
+        return Array.isArray(scopes)&&Array.isArray(player.confidence)&&player.confidence.length===scopes.length
+          &&player.confidence.every(value=>value===0||value===1||value===2)
+          &&Array.isArray(player.exceptions)&&player.exceptions.length===scopes.length
+          &&player.exceptions.every(value=>value===null||typeof value==='string')
+          &&typeof player.assessment==='string'&&record(player.coverage)
+          &&(player.law===null||record(player.law));
+      }))return null;
+    reviews.push(review as unknown as AcceptedGameReview);
+  }
+  return reviews;
+}
 export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport;games:LivePropsGame[];writerRunId?:string;load:(game:LivePropsGame,window:CapturedReviewWindow,context?:PropsAiSourceLoadContext)=>Promise<GamePacket>|GamePacket;fetchImpl?:typeof fetch;clock?:()=>string;deadline?:number;onSourceAudit?:(audit:PropsSourceContextAudit)=>void|Promise<void>;onSourceReady?:(packet:GamePacket,review:AcceptedGameReview|null,observedAt:string,lookupAvailable:boolean)=>void|Promise<void>;onReviewObserved?:(packet:GamePacket,review:AcceptedGameReview|null,lookupAvailable:boolean)=>void|Promise<void>;onReviewReady?:(packet:GamePacket,review:AcceptedGameReview)=>void|Promise<void>}):Promise<SiteReviewOutcome>{
   const config=propsAiSiteConfig();
   // Counterfactual gate: zero database, calendar, provider, token-count or generation I/O.
@@ -31,6 +71,10 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
   const clock=args.clock??(()=>new Date().toISOString()),now=clock(),deadline=args.deadline??Date.now()+250000,findings:string[]=[],results:SiteReviewResult[]=[];
   const coverage:SiteCoverage[]=[];
   let newlyCompletedReviews=0;
+  // Private process classification only. A completed SQL job/count is not a
+  // successful source handoff. Record only a callback actually awaited wholly
+  // before its exact lock; this is not independent transaction-commit proof.
+  const readyHandoffBeforeLock=new Map<string,number>();
   const sourceAudits=new Map<string,PropsSourceContextAudit>();
   const auditSource=async(packet:GamePacket,review:AcceptedGameReview|null,observedAt:string,lookupAvailable:boolean)=>{
     if(!args.onSourceAudit)return;
@@ -53,6 +97,13 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
       const plan=await store.plan(calendarWalletPlan(calendar,clock()),calendar);
       if(!plan.funded){findings.push(`ai_unavailable:${plan.reason??"month_not_funded"}`);calendar=null;}
       await store.reap();
+    }else if(paid){
+      const checkedAt=clock();
+      if(args.games.some(g=>etDate(g.start)===etDate(checkedAt)&&instant(g.start)-3600000>instant(checkedAt))){
+        // Inventory was not read. Do not infer no due slots from native/source
+        // success, or invent a known failed review. This adds no request.
+        findings.push("review_deferred_writer_inventory_deadline");
+      }
     }
     const generationSlot=propsAiGenerationPool(16),gameAdmission=propsAiGameAdmission(16);
     const active=args.games.filter(g=>etDate(g.start)===etDate(now)&&instant(g.start)-3600000>instant(clock()));
@@ -63,9 +114,10 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
     const localCompleted=new Map<string,{packet:GamePacket;review:AcceptedGameReview}>();
     let priorAccepted:AcceptedGameReview[]=[],initialLookupSucceeded=false;
     if(args.onSourceReady){
-      const initial=await args.client.from("player_props_ai_reviews").select("result").eq("sport",args.sport).eq("state","completed").gte("scheduled_start",now.slice(0,10)).order("completed_at",{ascending:false}).limit(256);
-      if(initial.error)findings.push("lock_prior_authority_unavailable");
-      priorAccepted=(initial.error?[]:initial.data??[]).map(r=>r.result as AcceptedGameReview).filter(r=>r&&PROPS_AI_ACCEPTED_RELEASES.includes(r.release));initialLookupSucceeded=!initial.error;
+      const initial=await args.client.from("player_props_ai_reviews").select("result").eq("sport",args.sport).eq("state","completed").gte("scheduled_start",now.slice(0,10)).order("completed_at",{ascending:false}).limit(ACCEPTED_REVIEW_READ_LIMIT);
+      const original=acceptedReviewInventory(initial.data,initial.error);
+      if(original===null)findings.push("lock_prior_authority_unavailable");
+      priorAccepted=original??[];initialLookupSucceeded=original!==null;
     }
     const nativeByFundedId=new Map<string,LivePropsGame>();
     if(calendar)for(const g of active){try{nativeByFundedId.set(matchPropsCalendarGame(calendar,args.sport,g).id,g);}catch{findings.push(`calendar_identity_unavailable:${g.id}`);}}
@@ -178,17 +230,21 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
           const {job,native,packet,fundedPacket,parts}=preparedGame;
           try{
             const result=await runPropsReview({packet:fundedPacket,job,store,key:config.key,writerRunId:args.writerRunId!,generationSlot,gameAdmission,prepare:async()=>parts,preferStronger:job.stage==="final"&&packet.players.some(p=>p.missing.length>0),fetchImpl:args.fetchImpl,clock,deadline});
-            if(result.status==="completed"&&"review" in result&&result.review){newlyCompletedReviews++;localCompleted.set(native.id,{packet,review:result.review});await auditSource(packet,result.review,clock(),true);await args.onReviewObserved?.(packet,result.review,true);await args.onReviewReady?.(packet,result.review);}
+            if(result.status==="completed"&&"review" in result&&result.review){newlyCompletedReviews++;localCompleted.set(native.id,{packet,review:result.review});await auditSource(packet,result.review,clock(),true);await args.onReviewObserved?.(packet,result.review,true);if(args.onReviewReady){const before=instant(clock());await args.onReviewReady(packet,result.review);const acknowledged=instant(clock()),lockAt=instant(packet.lock);if(before<lockAt&&acknowledged<lockAt)readyHandoffBeforeLock.set(native.id,lockAt);}}
             if(result.status!=="completed")findings.push(`review_unavailable:${native.id}:${"reason" in result?result.reason:result.status}`);
           }catch(error){findings.push(`source_or_review_unavailable:${native.id}:${propsAiFailureCode(error)}`);}
         }));
     }
     // Native source identity is stored in each accepted result; avoids fragile cross-provider IDs in readers.
-    const rows=await args.client.from("player_props_ai_reviews").select("result").eq("sport",args.sport).eq("state","completed").gte("scheduled_start",now.slice(0,10)).order("completed_at",{ascending:false}).limit(256);
-    if(rows.error)findings.push("accepted_review_read_failed_use_trusted_local");
-    const loaded=rows.error?priorAccepted:(rows.data??[]).map(r=>r.result as AcceptedGameReview).filter(r=>r&&PROPS_AI_ACCEPTED_RELEASES.includes(r.release));
+    const rows=await args.client.from("player_props_ai_reviews").select("result").eq("sport",args.sport).eq("state","completed").gte("scheduled_start",now.slice(0,10)).order("completed_at",{ascending:false}).limit(ACCEPTED_REVIEW_READ_LIMIT);
+    const original=acceptedReviewInventory(rows.data,rows.error);
+    if(original===null){
+      findings.push("accepted_review_read_failed_use_trusted_local");
+      if(!initialLookupSucceeded&&active.some(game=>!localCompleted.has(game.id))&&!findings.includes("lock_prior_authority_unavailable"))findings.push("lock_prior_authority_unavailable");
+    }
+    const loaded=original??priorAccepted;
     const accepted=[...new Map([...loaded,...[...localCompleted.values()].map(v=>v.review)].map(r=>[`${r.sourceGameId??r.gameId}|${r.stage}|${r.inputHash??r.inputEvidence.digest}`,r])).values()];
-    const lookupAvailable=(gameId:string)=>!rows.error||initialLookupSucceeded||localCompleted.has(gameId);
+    const lookupAvailable=(gameId:string)=>original!==null||initialLookupSucceeded||localCompleted.has(gameId);
     for(const game of active){
       try{
         const packet=await args.load(game,{gameId:game.id,stage:"final",cutoff:clock(),lock:new Date(instant(game.start)-3600000).toISOString()},{purpose:"member_publication"});
@@ -204,7 +260,15 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
           eligiblePlayers:packet.sourceOfferSetStatus==='empty'?0:players.filter(p=>p.markets.length>0).length,pricedPlayers:new Set(decisions.map(c=>c.playerId)).size,
           ...siteReviewQualification(packet,latest,clock(),15*60000,decisions)});
         results.push({game,packet,decisions,authorityReview:latest,observedAt});
-      }catch(error){findings.push(`current_source_unavailable:${game.id}:${propsAiFailureCode(error)}`);const packet=localCompleted.get(game.id)?.packet??capturedPackets.get(game.id);if(packet){const observedAt=clock(),latest=latestForPacket(packet,accepted,observedAt);await auditSource(packet,latest,observedAt,lookupAvailable(game.id));await args.onReviewObserved?.(packet,latest,lookupAvailable(game.id));results.push({game,packet,decisions:[],authorityReview:latest,observedAt});}}
+      }catch(error){const lockAt=instant(game.start)-3600000;
+        const postlockReady=instant(clock())>=lockAt&&readyHandoffBeforeLock.get(game.id)===lockAt;
+        findings.push(`${postlockReady?'current_source_reload_unavailable_after_ready_lock':'current_source_unavailable'}:${game.id}:${propsAiFailureCode(error)}`);const packet=localCompleted.get(game.id)?.packet??capturedPackets.get(game.id);if(packet){const observedAt=clock(),latest=latestForPacket(packet,accepted,observedAt);
+          // A captured packet is not a successful current reload. Unknown
+          // prelock source authority must reach the writer before a sibling
+          // advances the common header; it may not publish native or AI fallback.
+          if(postlockReady)await auditSource(packet,latest,observedAt,lookupAvailable(game.id));
+          await args.onReviewObserved?.(packet,latest,postlockReady&&lookupAvailable(game.id));
+          results.push({game,packet,decisions:[],authorityReview:latest,observedAt});}}
 
     }
     return finish({status:paid?(pendingInventoryAvailable?"active":"unavailable"):"paid_disabled",games:results,findings,coverage});

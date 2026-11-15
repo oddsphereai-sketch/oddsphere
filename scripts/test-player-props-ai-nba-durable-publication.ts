@@ -1,3 +1,4 @@
+import * as runtimeHealth from '../lib/playerPropsAi/runtimeHealth';
 import * as completionWindow from '../lib/playerPropsAi/completionWindow';
 /** Actual shipped NBA writer + canonical codec/reader + lock/tracking, mocked I/O.
  * No environment files, provider HTTP, real SQL or paid calls are permitted. */
@@ -49,6 +50,7 @@ function harness(options:{games?:number;staggered?:boolean;emptyLive?:boolean;em
  const state={games:Array(100).fill({}),boxes:Array(500).fill({}),advanced:[],players:packets.flatMap(p=>p.players.map(a=>({playerId:Number(a.id.split(':').at(-1)),playerName:a.name,latestTeamId:1})))};
  let runtime:(args:ReviewArgs)=>Promise<unknown>=async()=>outcome;
  let delayWrite:(record:RecordRow)=>Promise<void>=async()=>{};
+ let afterWrite:(record:RecordRow)=>Promise<void>=async()=>{};
  let delayTrackingRead:()=>Promise<void>=async()=>{};
  const client={from(table:string){assert.equal(table,'lab_response_snapshots');let key:string|null=null;const q={select(){return q;},eq(field:string,value:string){if(field==='snapshot_key')key=value;return q;},like(){return q;},order(){return q;},limit:async()=>({data:[],error:null}),maybeSingle:async()=>{if(key?.includes("player-props-private-tracking"))await delayTrackingRead();return{data:key?records.get(key)??null:null,error:null};},upsert:async(row:RecordRow)=>{records.set(row.snapshot_key,structuredClone(row));return{error:null};}};return q;},async rpc(name:string,args:{p_record:RecordRow;p_expected_checksum:string|null;p_admit_before:string|null;p_source_cutoff:string|null;p_writer_run:string}){
   assert.equal(name,'publish_nba_player_props_private_snapshot_v1');assert.equal(args.p_writer_run,'synthetic-lease-owner');rpcs++;
@@ -60,10 +62,11 @@ function harness(options:{games?:number;staggered?:boolean;emptyLive?:boolean;em
    if(args.p_admit_before&&Date.parse(tick)>=Date.parse(args.p_admit_before))return{data:{written:false,status:'publication_window_closed'},error:null};
    records.set(args.p_record.snapshot_key,structuredClone(args.p_record));writes++;
    const snapshot=store.decodeNbaPlayerPropsPrivatePayload<Snapshot>(args.p_record.payload,'candidate_snapshot');assert(snapshot);persisted.push(snapshot);
+   await afterWrite(args.p_record);
    return{data:{written:true,status:'written',checksum:(args.p_record.payload as {checksum:string}).checksum,server_admitted_at:admitted,server_write_completed_at:tick},error:null};
   }finally{activeWrites--;}
  }};
- const modules:Record<string,unknown>={completionWindow,sourceContextAudit,
+ const modules:Record<string,unknown>={runtimeHealth,completionWindow,sourceContextAudit,
   nbaSourceIdentity,evidence,siteBindings:bindings,publication,nbaPlayerPropsLifecycle:lifecycle,nbaPlayerPropsProductContract:product,
   nbaLockAuthority:{...authority,observeNbaSourceAuthority:authority.testNbaSourceAuthority(()=>tick),captureNbaHandoffBundle:authority.testNbaHandoffCapture(()=>tick)},
   siteConfig:{propsAiSiteConfig:()=>({integrated:true})},espnNbaInjuries:{canonicalNbaAbbreviation:(s:string)=>s,fetchEspnNbaGameInjuries:async(id:string|number)=>options.allOut?{eventId:String(id),teams:new Map([['BOS',[{name:'Synthetic a',status:'out',reported_at:null},{name:'Synthetic b',status:'out',reported_at:null}]],['NYK',[]]])}:null},nbaPlayerPropsSettlementStore:{},
@@ -84,13 +87,60 @@ function harness(options:{games?:number;staggered?:boolean;emptyLive?:boolean;em
  const writer=(exports as {refreshNbaPlayerPropsPrivateCandidate:typeof refreshNbaPlayerPropsPrivateCandidate}).refreshNbaPlayerPropsPrivateCandidate;
  const run=(review:(args:ReviewArgs)=>Promise<unknown>)=>{runtime=review;return writer({client:client as unknown as Parameters<typeof writer>[0]['client'],writerRunId:'synthetic-lease-owner',slateDate,season:2026,schedule:packets.map((p,i)=>({id:`schedule-${i}`,externalId:i+1,gameStartAt:p.start,slateDate,status:'STATUS_SCHEDULED',homeTeam:'NYK',homeTeamDisplayName:'New York',homeTeamLogo:'',awayTeam:'BOS',awayTeamDisplayName:'Boston',awayTeamLogo:'',venue:null})),ballDontLieApiKey:'synthetic-not-real',fullRefresh:false,now:tick,fetchImpl:globalThis.fetch});};
  const read=async()=>{const snapshot=await store.readNbaPlayerPropsPrivateSnapshot({client:client as unknown as Parameters<typeof store.readNbaPlayerPropsPrivateSnapshot>[0]['client'],slateDate});assert(snapshot);return snapshot;};
- return{run,read,packets,baseline,previous,records,persisted,client,setEmptyLive:(value:boolean)=>{emptyLive=value;},setTick:(value:string)=>{tick=value;},delay:(fn:typeof delayWrite)=>{delayWrite=fn;},delayTracking:(fn:()=>Promise<void>)=>{delayTrackingRead=fn;},counts:()=>({writes,rpcs,maxActiveWrites}),refreshSource:(at:string)=>{for(const packet of packets){packet.cutoff=at;for(const q of [...packet.quotes,...packet.executionQuotes!]){q.observedAt=at;q.receivedAt=at;}}for(const q of observations){q.observedAt=at;q.receivedAt=at;q.fetchedAt=at;}},review:(packet:GamePacket=packets[0],values=weights)=>nbaAuthorityReview(packet,values,tick)};
+ return{run,read,packets,baseline,previous,records,persisted,client,setEmptyLive:(value:boolean)=>{emptyLive=value;},setTick:(value:string)=>{tick=value;},delay:(fn:typeof delayWrite)=>{delayWrite=fn;},afterWrite:(fn:typeof afterWrite)=>{afterWrite=fn;},delayTracking:(fn:()=>Promise<void>)=>{delayTrackingRead=fn;},counts:()=>({writes,rpcs,maxActiveWrites}),refreshSource:(at:string)=>{for(const packet of packets){packet.cutoff=at;for(const q of [...packet.quotes,...packet.executionQuotes!]){q.observedAt=at;q.receivedAt=at;}}for(const q of observations){q.observedAt=at;q.receivedAt=at;q.fetchedAt=at;}},review:(packet:GamePacket=packets[0],values=weights)=>nbaAuthorityReview(packet,values,tick)};
 }
 async function ready(args:ReviewArgs,packet:GamePacket,review:AcceptedGameReview){await args.onReviewObserved?.(packet,review,true);await args.onReviewReady?.(packet,review);}
 const empty=(packet:GamePacket,at=completed):GamePacket=>({...structuredClone(packet),cutoff:at,sourceOfferSetStatus:'empty',executionQuotes:[]});
 async function main(){
  const beforeEnv=process.env.NODE_ENV;Object.assign(process.env,{NODE_ENV:'test'});
  try{
+  // Unknown review reads cannot withdraw a known AI row or authorize a new
+  // native first lock. Counts and exact original rows are asserted positively.
+  const priorAi=(games=1,staggered=false)=>harness({games,staggered,previous:(base,packets)=>packets.reduce((snapshot,packet)=>bindings.applyNbaSiteAi(snapshot,packet,publication.siteAiDecisions(packet,nbaAuthorityReview(packet),initial),initial),base)});
+  for(const prior of [false,true]){
+    const held=prior?priorAi():harness(),before=await held.read();
+    if(prior)assert.equal(before.decisions.filter(row=>row.aiReview).length,3);
+    await assert.rejects(held.run(async args=>{await args.onSourceReady?.(held.packets[0],null,initial,false);await args.onReviewObserved?.(held.packets[0],null,false);return{...outcome,findings:['lock_prior_authority_unavailable']};}),/review publication authority unavailable/);
+    assert.equal(held.counts().writes,0);assert.deepEqual(await held.read(),before);
+  }
+  const readyThenUnknown=harness();let acknowledged:Snapshot|undefined;
+  await assert.rejects(readyThenUnknown.run(async args=>{readyThenUnknown.setTick(completed);await ready(args,readyThenUnknown.packets[0],readyThenUnknown.review());acknowledged=await readyThenUnknown.read();assert.equal(acknowledged.decisions.filter(row=>row.aiReview).length,3);await args.onReviewObserved?.(readyThenUnknown.packets[0],null,false);return outcome;}),/review publication authority unavailable/);
+  assert.equal(readyThenUnknown.counts().writes,1);assert.deepEqual(await readyThenUnknown.read(),acknowledged);
+  // A read uncertainty is recoverable. A write ACK failure remains handled by
+  // the separate existing sticky publication queue failure below.
+  for(const order of ['unknown_then_known','known_unknown_known'] as const){
+    const recovered=priorAi();recovered.setTick(completed);
+    await recovered.run(async args=>{const packet=recovered.packets[0],review=recovered.review();if(order==='known_unknown_known')await ready(args,packet,review);await args.onReviewObserved?.(packet,null,false);await ready(args,packet,review);return outcome;});
+    const rows=(await recovered.read()).decisions;assert.equal(rows.length,3);assert(rows.every(row=>row.aiReview));assert(!rows.some(row=>row.lockedAt!==null));
+  }
+  const queuedRecovery=priorAi();queuedRecovery.setTick(completed);await queuedRecovery.run(async args=>{const packet=queuedRecovery.packets[0];await Promise.all([args.onSourceReady!(packet,null,completed,false),ready(args,packet,queuedRecovery.review())]);return outcome;});assert.equal((await queuedRecovery.read()).decisions.filter(row=>row.aiReview).length,3);
+  // The new header for known A omits unresolved/unobserved unlocked B. It
+  // cannot relabel B's old price as a fresh source for a later first lock.
+  for(const callback of ['unknown','unobserved','late_unknown'] as const){
+    const mixed=priorAi(2,true),original=mixed.previous;let expectedA:Snapshot['decisions']=[];
+    mixed.setTick(completed);const result=await mixed.run(async args=>{await ready(args,mixed.packets[0],mixed.review(mixed.packets[0]));expectedA=(await mixed.read()).decisions.filter(row=>row.gameId==='nba-bdl:1');assert.equal(expectedA.length,3);assert(!(await mixed.read()).decisions.some(row=>row.gameId==='nba-bdl:2'));if(callback!=='unobserved'){if(callback==='late_unknown')mixed.setTick('2026-11-10T22:31:00Z');await args.onReviewObserved?.(mixed.packets[1],null,false);}return outcome;});
+    const stored=await mixed.read();assert.equal(stored.decisions.filter(row=>row.gameId==='nba-bdl:1').length,3);assert(!stored.decisions.some(row=>row.gameId==='nba-bdl:2'));assert(result.aiReviewRuntime?.findings.some(f=>f==='lock_prior_authority_unavailable:nba-bdl:2'));assert.equal(original.decisions.filter(row=>row.gameId==='nba-bdl:2'&&row.aiReview).length,3,'Original stored-source fixture is unchanged');
+    mixed.setTick('2026-11-11T00:31:00Z');await mixed.run(async()=>outcome);const restarted=await mixed.read();assert(!restarted.decisions.some(row=>row.gameId==='nba-bdl:2'),'A later invocation cannot reconstruct missing B at/after its lock');assertFirstHeldA(restarted.decisions,expectedA);
+  }
+  function assertFirstHeldA(rows:Snapshot['decisions'],original:Snapshot['decisions']){const a=rows.filter(row=>row.gameId==='nba-bdl:1');assert.equal(a.length,3);for(const row of a){const old=original.find(value=>value.playerId===row.playerId&&value.market===row.market)!;assert(old);assert.deepEqual({...row,lockedAt:old.lockedAt},old);assert(row.lockedAt);}}
+  // A final current-source failure before another game crosses a lock must
+  // not become a native/first-lock frame merely because the old packet exists.
+  const failedMidLoop=priorAi(2,true);failedMidLoop.setTick(completed);await failedMidLoop.run(async args=>{await args.onReviewObserved?.(failedMidLoop.packets[0],null,false);failedMidLoop.setTick('2026-11-10T22:31:00Z');await ready(args,failedMidLoop.packets[1],failedMidLoop.review(failedMidLoop.packets[1]));return{...outcome,findings:['current_source_unavailable:nba-bdl:1:synthetic']};});assert(!(await failedMidLoop.read()).decisions.some(row=>row.gameId==='nba-bdl:1'));assert.equal((await failedMidLoop.read()).decisions.filter(row=>row.gameId==='nba-bdl:2'&&row.aiReview).length,3);
+  // A committed row followed by a lost write ACK is not a recoverable read.
+  // Error, null and undefined rejections all fence every later paid callback.
+  for(const rejection of [new Error('synthetic_commit_then_lost_ack'),null,undefined]){
+    const uncertain=priorAi(2,true);uncertain.setTick(completed);let rejected=false;uncertain.afterWrite(async()=>{if(!rejected){rejected=true;throw rejection;}});
+    const result=await Promise.allSettled([uncertain.run(async args=>{const first=await Promise.allSettled([ready(args,uncertain.packets[0],uncertain.review(uncertain.packets[0]))]);assert.equal(first[0].status,'rejected');const writes=uncertain.counts().writes;const next=await Promise.allSettled([ready(args,uncertain.packets[1],uncertain.review(uncertain.packets[1]))]);assert.equal(next[0].status,'rejected');assert.equal(uncertain.counts().writes,writes,'No later callback may send after an unknown ACK');return outcome;})]);
+    assert.equal(result[0].status,'rejected');assert.equal(uncertain.counts().writes,1);assert.equal((await uncertain.read()).decisions.filter(row=>row.gameId==='nba-bdl:1'&&row.aiReview).length,3);
+  }
+  const recoveredOther=priorAi(2,true);recoveredOther.setTick(completed);await recoveredOther.run(async args=>{await ready(args,recoveredOther.packets[0],recoveredOther.review(recoveredOther.packets[0]));await args.onReviewObserved?.(recoveredOther.packets[1],null,false);await ready(args,recoveredOther.packets[1],recoveredOther.review(recoveredOther.packets[1]));return outcome;});assert.equal((await recoveredOther.read()).decisions.filter(row=>row.aiReview).length,6,'A later known B restores actual valid B without another review call');
+  // A final source reload failure is not known native authority. The source
+  // health exception after an actual timely ready callback remains separate.
+  const finalSource=priorAi(2,true);finalSource.setTick(completed);const finalSourceResult=await finalSource.run(async args=>{await ready(args,finalSource.packets[0],finalSource.review(finalSource.packets[0]));await ready(args,finalSource.packets[1],finalSource.review(finalSource.packets[1]));return{...outcome,findings:['current_source_unavailable:nba-bdl:2:synthetic']};});assert.equal((await finalSource.read()).decisions.filter(row=>row.gameId==='nba-bdl:1'&&row.aiReview).length,3);assert(!(await finalSource.read()).decisions.some(row=>row.gameId==='nba-bdl:2'));assert(finalSourceResult.aiReviewRuntime?.findings.includes('current_source_unavailable:nba-bdl:2:synthetic'));
+  const readyPostlock=priorAi();readyPostlock.setTick(completed);await readyPostlock.run(async args=>{await ready(args,readyPostlock.packets[0],readyPostlock.review());readyPostlock.setTick(after);return{...outcome,findings:['current_source_reload_unavailable_after_ready_lock:nba-bdl:1:synthetic']};});assert.equal((await readyPostlock.read()).decisions.filter(row=>row.aiReview&&row.lockedAt!==null).length,3,'A timely actual ready ACK keeps its distinct postlock reload classification');
+  const lockedHeld=harness({games:2,staggered:true,previous:(base,packets)=>{const ai=packets.reduce((snapshot,packet)=>bindings.applyNbaSiteAi(snapshot,packet,publication.siteAiDecisions(packet,nbaAuthorityReview(packet),initial),initial),base);return product.buildNbaPlayerPropsMemberSnapshot({...ai,decisions:ai.decisions.map(row=>row.gameId==='nba-bdl:2'?{...row,lockedAt:'2026-11-10T21:00:00Z'}:row),inputRows:6});}});const lockedHeldOriginal=lockedHeld.previous.decisions.filter(row=>row.gameId==='nba-bdl:2');assert.equal(lockedHeldOriginal.length,3);lockedHeld.setTick(completed);await lockedHeld.run(async args=>{await args.onReviewObserved?.(lockedHeld.packets[1],null,false);await ready(args,lockedHeld.packets[0],lockedHeld.review(lockedHeld.packets[0]));return outcome;});assert.deepEqual((await lockedHeld.read()).decisions.filter(row=>row.gameId==='nba-bdl:2'),lockedHeldOriginal,'Already stored locked rows remain exact even when their lookup is unknown');
+  const lateUnknown=priorAi();let lateAcknowledged:Snapshot|undefined;lateUnknown.setTick(completed);await assert.rejects(lateUnknown.run(async args=>{await ready(args,lateUnknown.packets[0],lateUnknown.review());lateAcknowledged=await lateUnknown.read();lateUnknown.setTick(after);await args.onReviewObserved?.(lateUnknown.packets[0],null,false);return outcome;}),/review publication authority unavailable/);assert.deepEqual(await lateUnknown.read(),lateAcknowledged,'A delayed unknown callback cannot manufacture a first lock or refresh the canonical clock');assert((await lateUnknown.read()).decisions.every(row=>row.lockedAt===null));
+  console.log(JSON.stringify({nbaReviewAuthority:true,newActualScenarios:18,unknownReadNeverNativeWithdrawal:true,heldOtherGameNotNewFirstLock:true,knownSameGameRecovery:true,writeAckUncertaintyStickyForErrorNullUndefined:true,originalStoredLocksExact:true,allNetworkAndSQLMocked:true}));
   // Negative prefix proof is separately frozen at /private/tmp before editing.
   // Fault after ready: canonical row values must already exist when sibling dies.
   const fault=harness();await assert.rejects(fault.run(async args=>{fault.setTick(completed);const review=fault.review();await ready(args,fault.packets[0],review);assert.equal((await fault.read()).decisions.filter(r=>r.aiReview).length,3);fail();}),/injected_unrelated/);
@@ -131,7 +181,7 @@ async function main(){
   }
   // A true prelock source withdrawal stays absent after another game advances
   // the slate header; neither the original baseline nor due sweep revives it.
-  const staggeredWithdrawal=harness({games:2,staggered:true,emptyGameIds:['nba-bdl:1']});await assert.rejects(staggeredWithdrawal.run(async args=>{staggeredWithdrawal.setTick('2026-11-10T22:28:00.000Z');await args.onSourceReady?.(empty(staggeredWithdrawal.packets[0],'2026-11-10T22:28:00.000Z'),null,'2026-11-10T22:28:00.000Z',true);staggeredWithdrawal.setTick('2026-11-10T22:31:00.000Z');await ready(args,staggeredWithdrawal.packets[1],staggeredWithdrawal.review(staggeredWithdrawal.packets[1]));assert(!(await staggeredWithdrawal.read()).decisions.some(row=>row.gameId==='nba-bdl:1'));fail();}),/injected_unrelated/);
+  const staggeredWithdrawal=harness({games:2,staggered:true,emptyGameIds:['nba-bdl:1']});await assert.rejects(staggeredWithdrawal.run(async args=>{staggeredWithdrawal.setTick('2026-11-10T22:28:00.000Z');await args.onSourceReady?.(staggeredWithdrawal.packets[1],null,'2026-11-10T22:28:00.000Z',true);await args.onSourceReady?.(empty(staggeredWithdrawal.packets[0],'2026-11-10T22:28:00.000Z'),null,'2026-11-10T22:28:00.000Z',true);staggeredWithdrawal.setTick('2026-11-10T22:31:00.000Z');await ready(args,staggeredWithdrawal.packets[1],staggeredWithdrawal.review(staggeredWithdrawal.packets[1]));assert(!(await staggeredWithdrawal.read()).decisions.some(row=>row.gameId==='nba-bdl:1'));fail();}),/injected_unrelated/);
   // New genuinely prelock unavailable context revokes the old AI at lock. The
   // zero-row intermediate cannot prevent independently complete B publication.
   const blockedEarlier=harness({games:2,staggered:true,previous:(base,packets)=>{const ai=bindings.applyNbaSiteAi(base,packets[0],publication.siteAiDecisions(packets[0],nbaAuthorityReview(packets[0]),initial),initial);return product.buildNbaPlayerPropsMemberSnapshot({...base,decisions:ai.decisions.filter(row=>row.gameId===packets[0].gameId),inputRows:6});}});
@@ -170,7 +220,7 @@ async function main(){
     if(mode==='declined'){unavailable.setTick(completed);const review=unavailable.review(packet);review.players=review.players.map(player=>({...player,law:null,sourceDeclinedMarkets:review.marketScopes[player.playerId]}));await ready(args,packet,review);assert.equal(unavailable.counts().writes,0);}
     else{unavailable.setTick(after);await args.onReviewObserved?.(packet,null,mode!=='lookup_failed');}
     return outcome;
-   }),/no ready forecast/);
+   }),mode==='lookup_failed'?/review publication authority unavailable/:/no ready forecast/);
    assert.equal(unavailable.counts().writes,0);assert.deepEqual(await unavailable.read(),unavailable.previous);assert((await unavailable.read()).decisions.every(row=>row.lockedAt===null));
   }
   // Whole-game empty-source authority can withdraw the final unlocked game.

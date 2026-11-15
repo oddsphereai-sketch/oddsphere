@@ -1,3 +1,4 @@
+import * as runtimeHealth from '../lib/playerPropsAi/runtimeHealth';
 import * as completionWindow from '../lib/playerPropsAi/completionWindow';
 /** Actual production writer wiring, real parser/bindings/lock authority, mocked I/O. */
 import assert from 'node:assert/strict';
@@ -32,7 +33,7 @@ async function main(){
  const observations=packet.quotes.map(q=>({canonicalGameId:gameId,canonicalPlayerId:q.playerId,providerPlayerId:q.playerId.slice(-1),playerName:packet.players.find(p=>p.id===q.playerId)!.name,playerTeam:'1',market:q.market,line:q.line,side:q.side,sportsbook:q.book,americanPrice:q.american,observedAt:q.observedAt,receivedAt:q.receivedAt,provider:q.provider,isOpening:false,isLive:false}));
  type ReviewArgs=Parameters<typeof reviewPropsForSite>[0];
  let published:product.NbaPlayerPropsMemberSnapshot|null=null;
- const modules:Record<string,Record<string,unknown>>={completionWindow,sourceContextAudit:await import('../lib/playerPropsAi/sourceContextAudit'),
+ const modules:Record<string,Record<string,unknown>>={runtimeHealth,completionWindow,sourceContextAudit:await import('../lib/playerPropsAi/sourceContextAudit'),
   nbaSourceIdentity,evidence,siteBindings:bindings,publication,nbaPlayerPropsLifecycle:lifecycle,nbaPlayerPropsProductContract:product,
   nbaLockAuthority:{...authority,observeNbaSourceAuthority:authority.testNbaSourceAuthority(()=>tick),captureNbaHandoffBundle:authority.testNbaHandoffCapture(()=>tick)},
   siteConfig:{propsAiSiteConfig:()=>({integrated:true})},

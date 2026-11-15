@@ -2,8 +2,11 @@
 import assert from 'node:assert/strict';
 import {readFileSync,realpathSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
+import {createHash} from 'node:crypto';
+import {stable} from '../lib/playerPropsAi/evidence';
 import {syntheticNflIdentityFailureArgs} from './test-player-props-ai-nfl-identity-failure-evidence';
-import {buildNflIdentityFailureEvidence,type NflIdentityFailureRecord,type NflIdentityFailureArgs} from '../lib/playerPropsAi/nflIdentityFailureEvidence';
+import {buildNflIdentityFailureEvidence,decodeNflIdentityFailureArchive,type NflIdentityFailureRecord,type NflIdentityFailureArgs} from '../lib/playerPropsAi/nflIdentityFailureEvidence';
+import {syntheticNflIdentityFailureScaleArgs,syntheticLegacyNflFailureRecord} from './test-player-props-ai-nfl-source-failure-r2';
 globalThis.fetch=async()=>{throw Error('Disposable source-failure PostgreSQL proof forbids HTTP');};
 async function main(){
  const modulePath=process.argv[2],ci=process.env.GITHUB_ACTIONS==='true'&&process.env.MARKET_BRAIN_POSTGRES_PROOF_DISPOSABLE==='YES'&&process.argv[3]==='--ci-disposable';
@@ -27,13 +30,30 @@ async function main(){
    if(closed){const lock=new Date(now-(tooLate?11*60000:2*60000)).toISOString();args.window.lock=lock;args.job.lock_at=lock;args.job.state='expired';}
    args.capturedAt=new Date(tooLate?now-10*60000:now-1000).toISOString();return args;
   };
-  const fixtures=[make('normal'),make('closed',true),make('late',true,true),make('race'),make('final')];fixtures[4].job.stage='final';fixtures[4].window.stage='final';
+  const fixtures=[make('normal'),make('closed',true),make('late',true,true),make('race'),make('final'),make('legacy-before'),make('legacy-after'),make('semantic-scale')];fixtures[4].job.stage='final';fixtures[4].window.stage='final';
   for(const args of fixtures)await db.query('INSERT INTO player_props_ai_reviews(job_key,sport,game_id,game_day,stage,scheduled_start,lock_at,due_at,billing_month,state,reserved_micro) VALUES($1,\'nfl\',$2,\'2026-11-09\',$3,$4,$5,$6,\'2026-11\',$7,0)',[args.job.job_key,args.job.game_id,args.job.stage,args.job.scheduled_start,args.job.lock_at,args.job.due_at,args.job.state]);
   const record=(args:NflIdentityFailureArgs)=>{const c=buildNflIdentityFailureEvidence(args);if(c.kind!=='ready')throw Error(c.reason);return c.record;};
   const original=record(fixtures[0]),archiveBefore=JSON.stringify(original.archive);
   const snapshot=async()=>JSON.stringify((await db.query("SELECT (SELECT jsonb_agg(to_jsonb(b) ORDER BY month_key) FROM player_props_ai_budgets b) budgets,(SELECT jsonb_agg(to_jsonb(j) ORDER BY job_key) FROM player_props_ai_reviews j) jobs,(SELECT jsonb_agg(to_jsonb(a) ORDER BY id) FROM player_props_ai_attempts a) attempts")).rows[0]);
   const protectedBefore=await snapshot();
   const append=async(c:NflIdentityFailureRecord,owner='synthetic-owner',conn=db)=>{const result=await conn.query('SELECT public.player_props_ai_append_source_failure_v1($1,$2::jsonb) AS v',[owner,JSON.stringify(c)]);return result.rows[0].v as {status:string;id?:string};};
+  // Rolling cutover: original R1 writes remain accepted before/after V72.
+  await db.query('SET ROLE service_role');
+  assert.equal((await append(original)).status,'unavailable','V69 refuses unknown R2 until the explicit V72 cutover');
+  const legacyBefore=syntheticLegacyNflFailureRecord(fixtures[5]);assert.equal((await append(legacyBefore)).status,'stored');
+  await db.query('RESET ROLE');
+  const immutableLegacy=(await db.query("SELECT capture FROM player_props_ai_nfl_source_failures WHERE job_key='legacy-before'")).rows[0].capture;
+  for(let i=0;i<2;i++)await db.query(readFileSync('lib/db/schema-migration-v72-player-props-ai-source-failure-r2.sql','utf8'));
+  assert.deepEqual((await db.query("SELECT capture FROM player_props_ai_nfl_source_failures WHERE job_key='legacy-before'")).rows[0].capture,immutableLegacy,'V72 never rewrites original R1 evidence');
+  decodeNflIdentityFailureArchive(immutableLegacy);
+  await db.query('SET ROLE service_role');assert.equal((await append(syntheticLegacyNflFailureRecord(fixtures[6]))).status,'stored');
+  const scaleArgs=syntheticNflIdentityFailureScaleArgs(fixtures[7].observedAt);scaleArgs.job=fixtures[7].job;scaleArgs.window=fixtures[7].window;scaleArgs.capturedAt=fixtures[7].capturedAt;
+  const scale=record(scaleArgs);decodeNflIdentityFailureArchive(scale);assert.equal(scale.status,'captured');assert.equal(JSON.parse(scale.semanticCanonical).state.unavailable,'semantic_bound');
+  const badStub=structuredClone(scale),stub=JSON.parse(badStub.semanticCanonical);stub.state.bytes=128000;badStub.semanticCanonical=stable(stub);badStub.semanticSha256=createHash('sha256').update(badStub.semanticCanonical).digest('hex');
+  assert.equal((await append(badStub)).status,'unavailable','R2 bound stubs require a genuinely oversized complete semantic state');
+  assert.equal((await append(scale)).status,'stored');assert.equal((await append(scale)).status,'duplicate');
+  assert.deepEqual((await db.query("SELECT capture FROM player_props_ai_nfl_source_failures WHERE job_key='semantic-scale'")).rows[0].capture.archive,scale.archive);
+  await db.query('RESET ROLE');
   for(const role of ['anon','authenticated']){
    await db.query(`SET ROLE ${role}`);await assert.rejects(db.query('SELECT * FROM player_props_ai_nfl_source_failures'),/permission denied/);await assert.rejects(append(original),/permission denied/);await db.query('RESET ROLE');
   }
@@ -58,7 +78,7 @@ async function main(){
   await db.query('SET ROLE service_role');await other.query('SET ROLE service_role');const race=record(fixtures[3]),races=await Promise.all([append(race),append(race,'synthetic-owner',other)]);assert(races.some(r=>r.status==='stored'));assert.equal((await db.query("SELECT count(*)::integer n FROM player_props_ai_nfl_source_failures WHERE job_key='race'")).rows[0].n,1);assert.equal((await append(race)).status,'duplicate','Lost acknowledgement/retry is idempotent');await db.query('RESET ROLE');await other.query('RESET ROLE');
   await assert.rejects(db.query("UPDATE player_props_ai_nfl_source_failures SET capture='{}'"),/append_only/);await assert.rejects(db.query('DELETE FROM player_props_ai_nfl_source_failures'),/append_only/);await assert.rejects(db.query('TRUNCATE player_props_ai_nfl_source_failures'),/append_only/);
   assert.equal(await snapshot(),protectedBefore,'Appending diagnostics never mutates funded jobs, budgets or paid attempts');
-  console.log('Disposable NFL source-failure SQL proof passed: force-RLS/ACL, exact lease/owner and due/closed windows, immutable first archive, idempotent dedup, four states plus one overflow, bounded invalid body refusal and unchanged funded jobs/budgets/attempts. No HTTP or paid calls.');
+  console.log('Disposable NFL source-failure SQL proof passed: V69-to-V72 R1/R2 rolling compatibility, immutable R1 archives, production-scale bounded R2 semantics,  force-RLS/ACL, exact lease/owner and due/closed windows, immutable first archive, idempotent dedup, four states plus one overflow, bounded invalid body refusal and unchanged funded jobs/budgets/attempts. No HTTP or paid calls.');
  }finally{await other.end();await db.end();await admin.query(`DROP DATABASE ${database} WITH (FORCE)`);await admin.end();}
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

@@ -3,7 +3,7 @@ import type {GamePacket,Player} from "./evidenceContract";
 import {primitives,validateLaw,type PlayerLaw} from "./law";
 import {validateScenarioOpportunities} from "./forecastSanity";
 import {invariant} from "./evidence";
-import {PROPS_AI_SCENARIOS} from "./releases";
+import {PROPS_AI_SCENARIOS,propsReviewHasMemberExecutionContracts} from "./releases";
 export const GENERATIVE_WIRE_RELEASE="props_scenario_named_2026_11_09_r4_generative_components" as const;
 type Scope=Pick<Player,"markets"|"sourceEventContracts">;
 const object=(v:unknown):Record<string,unknown>|null=>v!==null&&typeof v==="object"&&!Array.isArray(v)?v as Record<string,unknown>:null;
@@ -19,6 +19,10 @@ function coordinate(sport:GamePacket["sport"],key:string){
 export function generativeStatistics(sport:GamePacket["sport"],player:Scope){return primitives(sport,player).map(k=>coordinate(sport,k));}
 export function signedGenerativeStatistic(key:string){return key.endsWith("yards")||key==="passing_yards_if_completion";}
 export const GENERATIVE_MEANING="All arrays share sixteen scenario indices. Non-three points plus three times made threes give total points. Non-touchdown completions plus passing TDs give completions; completions plus interceptions and other incomplete passes give attempts. passing_yards_if_completion is potential TOTAL net passing yards for that scenario if any completion occurs, NOT yards per completion; canonical passing yards are zero when completions are zero, otherwise that signed potential total. Unused potential values are not game observations. MLB non-home-run runs/RBIs plus home runs give total runs/RBIs. Other coordinates are named canonical statistics. Backend derives these definitions before all source checks, projections and prices.";
+/** Prospective contract purpose; preserve every older request meaning verbatim. */
+export function generativeMeaningForRelease(release:string){
+ return GENERATIVE_MEANING+(propsReviewHasMemberExecutionContracts(release)?" NBA Yes/milestone quotes remain market references to read, not executable member targets; ordinary Over/Under are the NBA execution contracts. All supplied independent-prior tails, source-supported means and joint-dependence checks still apply. Retain every listed source scope; do not fabricate tails or source facts.":"");
+}
 export function decodeGenerativeScenarioLaw(sport:GamePacket["sport"],player:Scope,value:unknown):PlayerLaw{
  const row=object(value),outcomes=object(row?.outcomes),keys=generativeStatistics(sport,player);
  invariant(row&&Object.keys(row).sort().join("|")==="outcomes|weights"&&outcomes,"Generative law fields mismatch");
