@@ -10,7 +10,7 @@ http.get = http.request = https.get = https.request = deny;
 net.connect = net.createConnection = tls.connect = deny;
 
 async function main(){
-process.env.NODE_ENV="test";
+Object.assign(process.env,{NODE_ENV:"test"});
 
 const currentLock = await import('../lib/playerPropsAi/nflLockAuthority');
 
