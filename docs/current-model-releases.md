@@ -1,3 +1,93 @@
+## November 15 shared player-prop response identity R39
+
+Shared NBA/NFL/MLB generation is `player_props_ai_2026_11_15_r39_verified_response_model`.
+Receipt identity policy is `player_props_ai_response_model_2026_11_15_r1_exact_requested_identity`.
+The combined release includes NFL props writer R99, history reader R2 and full-game
+writer R118 below. Law R3, grade R5, selection R8, wire R5, NFL decision R13,
+NBA writer R25 and native MLB R44 remain unchanged.
+
+Before usage pricing, structured parsing or actor admission, every newly returned
+response must identify the exact configured requested model (`gpt-6-luna` or
+`gpt-6.1-terra`). Unknown, absent, malformed or contradictory identities cannot
+establish a known bill or a forecast. Their bounded identity/usage diagnostics and
+original failed request/draft evidence are recorded with a null actual charge;
+the existing unknown-charge reservation remains held. This is terminal for that
+part: launched siblings settle normally, with no new correction or later paid wave
+purchased for the unprovable result. Valid configured-model responses retain their
+existing arithmetic, service-tier pricing and ordinary bounded correction policy.
+Known response receipts carry the explicit verified identity marker for later audit.
+
+Receipt validation also requires a bounded nonempty original response reference and
+an explicit supported actual service tier. The actual tier may legitimately differ
+from the requested one: both Default and Flex retain their correct rates. Priority,
+Fast, Scale, Auto, missing and malformed returned modes cannot be silently priced
+as Standard. Nonterminal queued/in-progress responses cannot establish final usage.
+All these unavailable cases retain unknown-charge holds and stop further purchases.
+`verifiedUsageMicroUsd` settles only configured models and supported actual tiers;
+`usageMicroUsd` retains its original conservative planning/legacy upper-bound behavior.
+No old receipt is repriced. Known generated receipts carry model, tier and reference
+identity markers; zero-charge pre-generation rejections retain their original evidence.
+
+No model-prefix or unlisted-snapshot equivalence is invented. Supported identity
+changes require a deliberate versioned policy update.
+
+This corrects an independently reproduced mocked-response defect, not a demonstrated
+production wrong-model incident. Existing accepted R38 and older reviews, their
+original receipt limitations, laws, locks and results retain exact release authority;
+no old charge is repriced and no closed job is replayed. R38 execution-contract and
+source-audit membership remain explicit after the current-generation bump. Request
+meaning and source/wire/numerical content remain unchanged, so ambiguous historical
+failed request bytes cannot establish a new original generation from timing.
+
+No model choice, price table, provider request, review slot, output limit, deadline,
+lease, budget limit or live tracking/result exposure changes. Two new consecutive
+fresh three-reviewer all-clear rounds and all protected release/live-proof gates
+are required. See `model-audits/2026-11-15-player-props-response-identity.md`.
+
+Response reference ownership is enforced across all parts/phases in the reviewer
+and atomically across games, sports and restarts by V73's existing wallet-locked
+receipt RPC. A reference already reported by another known or unknown attempt
+cannot establish another known bill. The new RPC signature and service-only ACL
+remain unchanged; original rows and all other wallet/lease functions are untouched.
+A rejected or unacknowledged known receipt attempts to retain its exact original
+evidence as unknown, then fails the review; an already committed known receipt is
+immutable and cannot be replaced by this fallback. All launched siblings settle;
+no additional inference or unknown-charge release is authorized. V73 must be
+installed from the exact reviewed published source before the R39 release.
+This corrects the Round51 mocked duplicate-ID admission, not a proven production
+collision. Two fresh all-three clear rounds must follow this correction.
+
+## November 15 NFL verified-history context retention R99
+
+NFL props writer is `nfl_player_props_writer_2026_11_15_r99_streamed_context_history`;
+the shared history reader is `nfl_forward_evidence_read_2026_11_15_r2_streamed_context_history`.
+The full-game writer is `nfl_forward_evidence_writer_2026_11_15_r118_resource_diagnostics`.
+The memory optimization preserves law R3, grade R5, selection R8, NFL decision R13,
+NBA writer R25 and native MLB R44. The combined release also includes the separately
+versioned R39 receipt-identity guard described above. No forecast formula, input selection rule, provider
+request, slot, cap, deadline, lease, budget or locked-record behavior changes.
+
+The props context read visits every original ordered row and verifies every checksum,
+identity and original row/hot/compressed/decode bound, including terminal and late errors.
+It retains only the same latest and latest-with-injuries rows for the current collector's
+games. The original timestamp/stage comparison and first equal-rank tie remain exact;
+all original source IDs, clocks, hashes and resulting context bytes retain authority.
+It runs at the existing later props read point, preserving access to newly appended
+same-cycle full-game evidence. It does not share an earlier history read or skip history.
+The full-game reader continues retaining complete chronology. Synchronous visitation
+cannot publish a partial selection: the whole read must finish before context returns.
+
+This addresses demonstrated unnecessary retained memory after an ordinary NFL runtime
+hit its 2 GB limit before any AI claim. Exact 5,117-row offline replay showed substantial
+retained-memory reduction with identical context winners, but did not reproduce the
+entire live 2 GB failure. Private phase/resource diagnostics contain only release, stage,
+elapsed time and process byte counts, never player/source/price data or member fields.
+Actual normal-cycle completion, all submitted player/market coverage, evidence validity,
+member publication and locks still require live verification. Do not claim the OOM is
+fully cured, or predictive accuracy guaranteed, from the optimization or offline tests.
+No closed job is replayed and no historical payload is changed.
+See `model-audits/2026-11-15-nfl-context-history-retention.md`.
+
 ## November 14 player-prop complete evidence, exact confidence and private process health R38
 
 Future shared NBA/NFL/MLB generation is `player_props_ai_2026_11_14_r38_exact_confidence_and_evidence`.
@@ -10,9 +100,9 @@ qualification. Original law R2 keeps grade R4/selection R7 and its original pair
 floating arithmetic; original R1 keeps grade R3/selection R6. Their hashes, values,
 repricing semantics and locked-reader precedence remain exact. The shared Daily Edge
 confidence helper and all native models remain unchanged.
-NFL props writer is `nfl_player_props_writer_2026_11_14_r98_complete_history_health`;
-full-game evidence writer is `nfl_forward_evidence_writer_2026_11_14_r117_complete_bounded_history`.
-The shared history reader is `nfl_forward_evidence_read_2026_11_14_r1_lossless_bounded_history`.
+NFL props writer is `nfl_player_props_writer_2026_11_15_r99_streamed_context_history`;
+full-game evidence writer is `nfl_forward_evidence_writer_2026_11_15_r118_resource_diagnostics`.
+The shared history reader is `nfl_forward_evidence_read_2026_11_15_r2_streamed_context_history`.
 It verifies original hashes and retains every ordered observation, with explicit row,
 compressed-byte, hot-JSON and decoded-cache bounds instead of an incomplete 5,000-row read.
 Exact-boundary reads use a terminal overflow probe; excess fails closed. No history is dropped.
@@ -1909,7 +1999,7 @@ refresh start; a clock failure retains the previous stored board.
 Only the publication family advances:
 
 - `nfl_forward_member_snapshot_2026_11_06_r73_publication_clock`
-- `nfl_forward_evidence_writer_2026_11_14_r117_complete_bounded_history`
+- `nfl_forward_evidence_writer_2026_11_15_r118_resource_diagnostics`
 
 Collector R37/model R57/calibration R56/decision-grade R66/member R64/fixture R80
 and all numerical market methods remain unchanged. There is no new source

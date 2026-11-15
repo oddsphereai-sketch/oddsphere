@@ -1,0 +1,56 @@
+# Player-prop response model identity — November 15, 2026
+
+An independent whole-product reviewer supplied a mocked successful response naming
+Terra after the application requested Luna. The prior reviewer accepted the output,
+recorded Luna provenance and applied the Luna usage rate. This demonstrates an
+identity-validation defect, not an actual provider charge or production occurrence.
+
+R39 validates the exact configured response identity before pricing, structured
+parsing or actor retention across NBA/NFL/MLB. Unknown identity records a null actual
+charge and preserves its existing reservation as an unknown-charge hold. The
+original failed request/draft evidence remains archived; no guessed higher/lower
+model price becomes known spend. No correction or later paid wave is purchased for
+this unknown result. Already launched siblings retain independent settlement.
+Valid Luna and Terra replies preserve the ordinary numerical and retry policy.
+Bounded verified model, actual-tier and original-reference markers bind known receipts.
+The next independent round also reproduced explicit Priority priced as Standard and
+empty IDs accepted in full-part provenance. R39 refuses unsupported/missing actual
+tiers, invalid original references, and nonterminal usage. Supported Default/Flex
+responses can differ from the requested tier and keep their correct rates.
+The new strict settlement helper preserves the original planning/legacy estimator.
+Original R38 and all earlier review/receipt/law/lock authority remains unchanged.
+
+The OpenAI Responses reference defines the response model as its generation model;
+the configured model pages list the accepted IDs. Unknown prefixes, suffixes and
+unlisted snapshots are held instead of silently assumed equivalent:
+- https://developers.openai.com/api/reference/python/resources/responses/methods/create
+- https://developers.openai.com/api/docs/models/gpt-6-luna
+- https://developers.openai.com/api/docs/models/gpt-6.1-terra
+
+Offline controls exercise actual reviewer success/rejection for both configured
+models, JSON and event-stream responses, missing/malformed/contradictory identities,
+all requested/actual Default/Flex pairs, unsupported tiers, invalid/empty/oversized
+references, nonterminal receipts,
+all three sports, the correction phase, and suppression of later paid waves.
+They retain exact failed request/draft hashes, unknown charge state and old R38
+policy membership. Existing wallet tests with real disposable PostgreSQL and ALL
+AI HTTP mocked, shared numerical/member/locked-record controls and protected CI
+remain required. No real inference, paid proof or historical mutation is authorized.
+
+This guard does not establish the cause of the separate ordinary NFL memory kill.
+The paired history-retention mitigation and private process diagnostics have their
+own evidence and limitations. Deployment and schema/count checks alone cannot prove
+all-player coverage, live publication, locked-record retention or predictive accuracy.
+
+Response reference ownership is enforced across all parts/phases in the reviewer
+and atomically across games, sports and restarts by V73's existing wallet-locked
+receipt RPC. A reference already reported by another known or unknown attempt
+cannot establish another known bill. The new RPC signature and service-only ACL
+remain unchanged; original rows and all other wallet/lease functions are untouched.
+A rejected or unacknowledged known receipt attempts to retain its exact original
+evidence as unknown, then fails the review; an already committed known receipt is
+immutable and cannot be replaced by this fallback. All launched siblings settle;
+no additional inference or unknown-charge release is authorized. V73 must be
+installed from the exact reviewed published source before the R39 release.
+This corrects the Round51 mocked duplicate-ID admission, not a proven production
+collision. Two fresh all-three clear rounds must follow this correction.
