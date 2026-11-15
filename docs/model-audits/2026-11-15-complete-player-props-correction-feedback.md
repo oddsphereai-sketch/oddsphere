@@ -31,3 +31,5 @@ full model/focused/type/lint/build/real all-AI-mocked PostgreSQL and hosted proo
 Two consecutive fresh three-reviewer clear rounds, fresh main/integration/protection/
 exact tree/expected-head merge, actual Ready-www source and only normal scheduled
 production evidence remain release gates. No additional paid proof or replay.
+
+Known coordinate diagnostics use the historical 32-character encoding. Match that code to exactly one supported full coordinate; unknown or ambiguous encodings remain unavailable. Offline controls exercise the existing funded correction for fractional NFL passing-yard coordinates without modifying the legacy inspector or integer guards.

@@ -10,6 +10,12 @@ type Result={status:'ready';text:string;bytes:number;affectedActorIds:string[]}|
 const object=(v:unknown):Record<string,unknown>|null=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:null;
 const codes=new Set(['forecast_mean_outside_supplied_support','forecast_numeric_support_unavailable','nonpositive_yardage_contradicts_source','combo_dependence_erases_source_variation','unsupported_zero_probability_tail','unsupported_priced_event_certainty']);
 const unavailable=(reason:Extract<Result,{status:'unavailable'}>['reason'],affectedActorIds:string[]=[],bytes=0):Result=>({status:'unavailable',reason,bytes,affectedActorIds});
+/** Match the legacy bounded code to exactly one supported full coordinate. */
+export function completeCorrectionCoordinate(code:string,statistics:readonly string[]):string|null{
+ const kind=code.split(':')[0];if(kind!=='units'&&kind!=='bound')return null;
+ const matches=statistics.filter(stat=>`${kind}:${stat}`===code||`${kind}:${stat}`.slice(0,32)===code);
+ return matches.length===1?`${kind}:${matches[0]}`:null;
+}
 /** Every known actor/stat example is retained or the whole correction is refused.
  * Only validator-generated ASCII examples and fixed categories enter instructions;
  * player names, IDs, provider prose and raw exception details remain input data. */
@@ -32,7 +38,7 @@ export function completeDiagnosticCorrection(packet:GamePacket,draft:unknown):Re
   for(const finding of coordinates){
    if(finding.code==='source_claims')entries.push('verified source reading selections: reselect required actor-local claim IDs');
    else if(['weights','named_keys','fields_or_identity'].includes(finding.code))entries.push(`coordinates ${finding.code}`);
-   else{const [kind,stat,...rest]=finding.code.split(':');if(rest.length||!['units','bound'].includes(kind)||!generativeStatistics(packet.sport,player).includes(stat))return unavailable('diagnostic_unavailable',packet.players.map(p=>p.id));entries.push(`coordinates ${kind}:${stat}`);}
+   else{const coordinate=completeCorrectionCoordinate(finding.code,generativeStatistics(packet.sport,player));if(!coordinate)return unavailable('diagnostic_unavailable',packet.players.map(p=>p.id));entries.push(`coordinates ${coordinate}`);}
   }
   for(const finding of format){if(finding.field!=='assessment'&&!/^reader[0-7]$/.test(finding.field))return unavailable('diagnostic_unavailable',packet.players.map(p=>p.id));entries.push(`verified ${finding.field} claim rendering`);}
   lines.push(`P${index}: ${[...new Set(entries)].join('; ')}.`);

@@ -5,7 +5,7 @@ import {digest} from '../lib/playerPropsAi/evidence';
 import {primitives} from '../lib/playerPropsAi/law';
 import {encodeCanonicalScenarioLaw} from '../lib/playerPropsAi/generativeCoordinates';
 import {inspectGenerativeDraft} from '../lib/playerPropsAi/generativeAdmission';
-import {completeDiagnosticCorrection,COMPLETE_CORRECTION_MAX_BYTES} from '../lib/playerPropsAi/completeCorrectionFeedback';
+import {completeDiagnosticCorrection,completeCorrectionCoordinate,COMPLETE_CORRECTION_MAX_BYTES} from '../lib/playerPropsAi/completeCorrectionFeedback';
 import {PROPS_AI_WIRE_RELEASE} from '../lib/playerPropsAi/scenarioCoordinates';
 import {PROPS_AI_RELEASE,PROPS_AI_PRIMARY_MODEL,propsReviewHasMemberExecutionContracts,propsReviewHasVerifiedReaderClaims} from '../lib/playerPropsAi/releases';
 import {jointReviewRequest,parseJointReview} from '../lib/playerPropsAi/request';
@@ -25,6 +25,15 @@ function draft(p:GamePacket,valid=false){const aliases=new Map([...evidenceAlias
  const outcomes=Object.fromEntries(primitives(p.sport,player).map(stat=>[stat,p.sport==='nfl'?(stat==='receptions'?valid?[3,4,...v(4).slice(2)]:v(2):valid?[29,30,...v(30).slice(2)]:v(27)):valid?(['batter_singles','batter_runs_scored'].includes(stat)?[1,2,...v(1).slice(2)]:v(0)):v(4)]));
  return[player.id,verifiedReaderFixture(p,player.id,{priorRead:Object.fromEntries(independentPriorEvents(player).map(e=>[aliases.get(e.sourceId)!,e.preferredOutcome])),evidenceIds:[aliases.get(player.evidence[0].id)!],gaps:[],confidence:player.markets.map(()=>1),exceptions:player.markets.map(()=>null as string|null),law:encodeCanonicalScenarioLaw(p.sport,player,{weights:v(1),outcomes})})];
  }))};}
+function qbPacket():GamePacket{
+ const p=packet('nfl');p.players[0].markets=['passing_yards'];p.players[0].evidence=[...([180,200].map((yards,i)=>({id:`qb-log-${i}`,kind:'recent_games' as const,source:'Synthetic QB played game',availableAt:at,value:{game:{startTime:`2030-05-${28+i}T23:00:00Z`,awayTeam:'A',homeTeam:'B'},box:{passing_yards:yards,passing_attempts:30,passing_completions:20}}}))),{id:'qb-prior',kind:'independent_model',source:'Synthetic same-unit prior',availableAt:at,value:{market:'passing_yards',independentProjection:190,line:190.5,independentOver:.5,independentUnder:.5}}];return p;
+}
+function qbDraft(p:GamePacket,valid:boolean){
+ const player=p.players[0],aliases=new Map([...evidenceAliases(p)].map(([alias,id])=>[id,alias]));
+ const outcomes={passing_attempts:v(30),passing_completions:v(20),passing_yards:[180,200,...v(190).slice(2)],passing_tds:v(0),interceptions:v(0)};
+ const law=encodeCanonicalScenarioLaw('nfl',player,{weights:v(1),outcomes});if(!valid)law.outcomes.passing_yards_if_completion[0]=180.5;
+ return{wireRelease:PROPS_AI_WIRE_RELEASE,players:{p0:verifiedReaderFixture(p,player.id,{priorRead:Object.fromEntries(independentPriorEvents(player).map(e=>[aliases.get(e.sourceId)!,e.preferredOutcome])),evidenceIds:[aliases.get(player.evidence[0].id)!],gaps:[],confidence:[1],exceptions:[null],law})}};
+}
 let controls=0;
 for(const sport of ['nfl','mlb'] as const){const p=packet(sport),bad=draft(p),before=digest({p,bad}),inspection=inspectGenerativeDraft(p,bad),examples=inspection.source.flatMap(s=>s.unhandled.flatMap(f=>f.example?[f.example]:[]));assert(examples.length>=2);const correction=completeDiagnosticCorrection(p,bad);assert.equal(correction.status,'ready');if(correction.status!=='ready')throw Error('Expected complete bounded feedback');for(const example of examples)assert(correction.text.includes(example),'Every known per-stat condition must reach the actual corrective request');assert(correction.bytes<=COMPLETE_CORRECTION_MAX_BYTES);assert(/^[\x00-\x7f]*$/.test(correction.text));assert(correction.text.includes('confidence zero alone is not an exception'));const request=jointReviewRequest(p,PROPS_AI_PRIMARY_MODEL,7000,inspection.summary!,correction.text);assert(request.instructions.endsWith(correction.text));assert(request.instructions.includes(`Review generation ${PROPS_AI_RELEASE}.`));assert.equal(request.input,jointReviewRequest(p,PROPS_AI_PRIMARY_MODEL,7000).input,'Correction repeats exact original source, not a new input or evidence vote');assert.throws(()=>parseJointReview(p,bad));assert.equal(digest({p,bad}),before);controls+=examples.length+8;
  if(sport==='nfl'){assert(!inspection.summary!.includes(examples[1]),'Frozen legacy short summary still demonstrates the original omitted second constraint');assert(correction.text.includes('receptions mean=2'));assert(correction.text.includes('receiving_yards mean=27'));const declined=structuredClone(bad);declined.players.p0.exceptions=['forecast_declined','forecast_declined'];assert.deepEqual(parseJointReview(p,declined).players[0].sourceDeclinedMarkets,p.players[0].markets,'Only an explicit reviewer decline can qualify abstention');assert.equal(completeDiagnosticCorrection(p,draft(p,true)).status,'unavailable');controls+=5;}
@@ -33,11 +42,20 @@ for(const sport of ['nfl','mlb'] as const){const p=packet(sport),bad=draft(p),be
 }
 const large=packet('nfl',40),over=completeDiagnosticCorrection(large,draft(large));assert.equal(over.status,'unavailable');if(over.status==='unavailable'){assert.equal(over.reason,'feedback_exceeds_cushion');assert(over.bytes>1984);assert.equal(over.affectedActorIds.length,40);assert(!('text'in over),'Never return a truncated partial correction');}controls+=4;
 for(const release of ['player_props_ai_2026_11_15_r39_verified_response_model',PROPS_AI_RELEASE]){assert(propsReviewHasMemberExecutionContracts(release));assert(propsReviewHasVerifiedReaderClaims(release));controls+=2;}
+const qb=qbPacket(),fractional=qbDraft(qb,false),coordinate=inspectGenerativeDraft(qb,fractional).coordinates[0].code;
+assert.equal(coordinate,'units:passing_yards_if_completio');
+const qbFeedback=completeDiagnosticCorrection(qb,fractional);assert.equal(qbFeedback.status,'ready');if(qbFeedback.status==='ready')assert(qbFeedback.text.includes('coordinates units:passing_yards_if_completion'));
+assert.doesNotThrow(()=>parseJointReview(qb,qbDraft(qb,true)));
+assert.equal(completeCorrectionCoordinate('units:unknown',['passing_yards_if_completion']),null);
+assert.equal(completeCorrectionCoordinate('units:pass',['passing_yards_if_completion']),null);
+assert.equal(completeCorrectionCoordinate('units:'+'x'.repeat(26),['x'.repeat(27)+'a','x'.repeat(27)+'b']),null,'Ambiguous bounded mappings stay unavailable');
+for(const stat of ['passing_yards_if_completion','batter_non_home_run_runs','batter_non_home_run_rbis','receiving_yards'])for(const kind of ['units','bound'])assert.equal(completeCorrectionCoordinate(`${kind}:${stat}`.slice(0,32),[stat]),`${kind}:${stat}`);
+controls+=14;
 console.log(JSON.stringify({completeCorrectionFeedback:true,controls,allKnownActorStatExamplesRetained:true,existing1984AsciiBound:true,overflowExplicitNotTruncated:true,sourceLawAndGuardsUnchanged:true,explicitDeclineOnly:true,oldR39ContractMembershipPreserved:true,noNetworkOrProviderOrPaidCalls:true}));
 
-async function actualReviewer(sport:'nfl'|'mlb'='nfl',count=1){
+async function actualReviewer(sport:'nfl'|'mlb'='nfl',count=1,qb=false){
  const {runPropsReview}=await import('../lib/playerPropsAi/reviewer');
- const p=packet(sport,count),bad=draft(p),good=draft(p,true),before=digest({p,bad,good}),requests:ReturnType<typeof jointReviewRequest>[]=[],receipts:Record<string,unknown>[]=[],finishes:unknown[]=[];
+ const p=qb?qbPacket():packet(sport,count),bad=qb?qbDraft(p,false):draft(p),good=qb?qbDraft(p,true):draft(p,true),before=digest({p,bad,good}),requests:ReturnType<typeof jointReviewRequest>[]=[],receipts:Record<string,unknown>[]=[],finishes:unknown[]=[];
  let phase=1,fallbacks=0,sends=0;
  const job={job_key:'synthetic-complete-correction',sport,game_id:p.gameId,game_day:'2030-06-01',stage:'final' as const,scheduled_start:p.start,lock_at:p.lock,state:'pending',model:PROPS_AI_PRIMARY_MODEL,requested_tier:'default' as const} as import('../lib/playerPropsAi/budget').PropsAiJob;
  const store={claim:async()=>({claimed:true,token:'synthetic',job}),send:async(_key:string,_token:string,nextPhase:number)=>{phase=nextPhase;sends++;return{id:`synthetic-phase-${phase}`,model:PROPS_AI_PRIMARY_MODEL,requested_tier:'default',reserved_micro:100000};},receipt:async(_id:string,_token:string,actual:number|null,_responseId:string|null,usage:Record<string,unknown>)=>{assert(actual!==null&&actual>0);receipts.push(usage);},fallback:async()=>{fallbacks++;return true;},finish:async(_key:string,_token:string,result:unknown,error:unknown)=>{if(count===1){assert(result,`Expected synthetic ${sport} completion: ${String(error)}; requests=${requests.length} fallbacks=${fallbacks} correction=${String(receipts[0]?.nextCorrectionText)} unavailable=${String(receipts[0]?.correctionFeedbackUnavailable)}`);assert.equal(error,null);}else{assert.equal(result,null);assert.equal(typeof error,'string');}finishes.push(result);return{...job,state:count===1?'completed':'failed',result,error_code:error};}} as unknown as import('../lib/playerPropsAi/budget').PropsAiReviewStore;
@@ -48,6 +66,6 @@ async function actualReviewer(sport:'nfl'|'mlb'='nfl',count=1){
  assert.equal(requests[0].input,requests[1].input);assert(!requests[0].instructions.includes('Backend findings:\n'));
  for(const example of inspectGenerativeDraft(p,bad).source.flatMap(row=>row.unhandled.map(f=>f.example!)))assert(requests[1].instructions.includes(example),'Actual phase two must contain every original statistical finding');
  const text=receipts[0].nextCorrectionText;assert.equal(typeof text,'string');assert(requests[1].instructions.endsWith(text as string));assert(Buffer.byteLength(text as string)<=1984);assert.equal(digest({p,bad,good}),before);
- console.log(JSON.stringify({actualReviewerCompleteFeedback:true,sport,primaryRequests:1,correctionRequests:1,allKnownFindingsActuallySent:true,exactOriginalInputRetained:true,bothKnownReceiptsSettled:true,noAdditionalAttempt:true,networkAndPaidCalls:0}));
+ console.log(JSON.stringify({actualReviewerCompleteFeedback:true,sport,qbKnownBoundedCoordinate:qb,primaryRequests:1,correctionRequests:1,allKnownFindingsActuallySent:true,exactOriginalInputRetained:true,bothKnownReceiptsSettled:true,noAdditionalAttempt:true,networkAndPaidCalls:0}));
 }
-void (async()=>{await actualReviewer('nfl');await actualReviewer('mlb');await actualReviewer('nfl',40);})().catch(error=>{console.error(error);process.exitCode=1;});
+void (async()=>{await actualReviewer('nfl');await actualReviewer('mlb');await actualReviewer('nfl',40);await actualReviewer('nfl',1,true);})().catch(error=>{console.error(error);process.exitCode=1;});

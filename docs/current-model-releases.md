@@ -13,7 +13,9 @@ Independent replay found omitted second constraints even when all examples fit t
 existing bound. Future NFL/MLB corrective requests now include every known actor/stat
 example and fixed coordinate/reader category, or refuse the correction explicitly
 when a complete diagnostic is unavailable or exceeds the existing 1,984-byte ASCII
-correction limit. NBA retains its existing complete named correction cards. No raw
+correction limit. NBA retains its existing complete named correction cards. Historical 32-character
+coordinate diagnostic codes resolve only to one unambiguous supported full
+coordinate; unknown or ambiguous codes remain unavailable. No raw
 provider/player prose enters instructions. Confidence zero alone remains distinct
 from an explicit supported exception or reviewer abstention.
 
