@@ -55,7 +55,7 @@ const failure=(packet:GamePacket,correction?:string)=>{
  const caught=(api:typeof RequestModule)=>{try{api.jointReviewRequest(packet,PROPS_AI_PRIMARY_MODEL,7000,'source_or_tail_failure',correction);return null;}catch(e){return(e as Error).message;}};
  const original=caught(old.api),current=caught(next.api);assert(original);assert.equal(current,original,'Invalid source/correction guards keep their exact failure contract');
 };
-failure(nba,'x'.repeat(1985));failure(nba,'non-ASCII \u00e9');failure(minimal('nfl'),'NBA-only named correction');
+failure(nba,'x'.repeat(1985));failure(nba,'non-ASCII \u00e9');compare(minimal('nfl'),PROPS_AI_PRIMARY_MODEL,7000,'source_or_tail_failure','Use every original named source constraint.');compare(minimal('mlb'),PROPS_AI_PRIMARY_MODEL,7000,'source_or_tail_failure','Use every original named source constraint.');
 const empty=structuredClone(nba);empty.players[0].evidence=[];failure(empty);
 const future=structuredClone(nba);future.players[0].evidence[0].availableAt=new Date(Date.parse(nba.cutoff)+1000).toISOString();failure(future);
 const afterLock=structuredClone(nba);afterLock.cutoff=afterLock.start;failure(afterLock);

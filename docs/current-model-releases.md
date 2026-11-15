@@ -1,3 +1,38 @@
+## November 15 complete corrective evidence R40
+
+Shared NBA/NFL/MLB generation is
+`player_props_ai_2026_11_15_r40_complete_correction_feedback`. Correction navigation
+is `player_props_correction_feedback_2026_11_15_r1_complete_actor_constraints`.
+This supersedes generation R39 for future normal reviews only. All R39 and older
+accepted releases retain their original execution, source, reader and law contracts.
+Law R3, grade R5, selection R8, NFL decision R13, source R3, identity R1, NBA writer
+R25, NFL writer R101, full-game R119, schedule R4 and native MLB R44 remain unchanged.
+
+The legacy short diagnostic summary retains only one numeric example per actor.
+Independent replay found omitted second constraints even when all examples fit the
+existing bound. Future NFL/MLB corrective requests now include every known actor/stat
+example and fixed coordinate/reader category, or refuse the correction explicitly
+when a complete diagnostic is unavailable or exceeds the existing 1,984-byte ASCII
+correction limit. NBA retains its existing complete named correction cards. No raw
+provider/player prose enters instructions. Confidence zero alone remains distinct
+from an explicit supported exception or reviewer abstention.
+
+Each new initial/corrective request carries its exact generation stamp, separating
+future original requests from historically byte-identical R38/R39 requests. The
+original source input, validation, bounds, probabilities, projections, grades and
+old locked fields are not repaired or clamped. Complete feedback is navigation of
+known findings, not new evidence or a guarantee of model compliance. Existing
+partial summaries and historical request/draft/receipt bytes remain exact under
+their original pins; no old result or failed job is relabeled or replayed.
+
+No added phase/request, model, output cap, input bound, provider budget, full-game
+admission weight/global concurrency, writer deadline, calendar slot, lease, schema
+or $50/$60 limit change. The existing 2,048-token correction escrow remains the
+bound. Future correction overflow is an explicit hold, never a truncated message
+or permission for another attempt. Two new consecutive three-reviewer clear rounds,
+all required offline/hosted checks, protected release and ordinary live proof are
+required; deployment alone does not prove coverage or predictive accuracy.
+
 ## November 15 shared full-wave review admission R4
 
 Shared NBA/NFL/MLB scheduling and execution admission is
