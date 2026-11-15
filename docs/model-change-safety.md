@@ -3,6 +3,14 @@
 Shared player-prop generation is
 `player_props_ai_2026_11_15_r41_verified_nfl_aliases`; NFL writer is
 `nfl_player_props_writer_2026_11_15_r102_verified_official_aliases`.
+
+Member/lifecycle are `nfl_player_props_member_2026_11_15_r61_canonical_lock_precedence` /
+`nfl_player_props_member_lifecycle_2026_11_15_r43_canonical_lock_precedence`.
+An existing exact nonempty canonical player ID, game, team/opponent, start/lock,
+market and side protects against a newly accepted spelling appending a second
+lock. Legacy name guards and every stored locked byte, order and duplicate
+multiplicity remain authoritative. Null/unknown IDs are never inferred. Old
+snapshot releases remain decoded without relabeling their locked records.
 The explicit name-data catalog is
 `player_props_ai_nfl_alias_catalog_2026_11_15_r1_official_names`, recorded as
 `sourceAliasRelease` in new immutable NFL packets. The existing cutoff/exact-ID,
