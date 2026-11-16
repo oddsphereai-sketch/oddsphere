@@ -1,0 +1,34 @@
+{
+  "schema": "nfl_published_deadline_tracking_20261116_r1",
+  "status": "preimplementation_not_deployed",
+  "base": "592bd038b06002e2980308638df8c236f42c2fd7",
+  "observedFailure": {
+    "sundayGames": 12,
+    "trackedSundayGames": 10,
+    "missing": [
+      "1392358 MIA@IND",
+      "1392362 LAR@ARI"
+    ],
+    "cause": "T60 re-evaluation rejected unmatched QB history and saved failed unlocked attempts. Previously published pre-cutoff forecasts remained on member cards but had no immutable tracking lock. Integrity audit scanned only successful T60 captures, missing both games entirely."
+  },
+  "scope": "One existing prediction_pipeline:nfl writer, copy-only member-record locking and tracking. No probability, score, model fit, grade rule, market input, source timestamp, paid AI call, schedule or stake change. Preserve all old source payloads and locks exactly.",
+  "futurePolicy": "At the existing T60 window, only after a failed normal final capture, freeze the exact current already-published pre-cutoff member card and its matching original approved source. Retain original quote/probability/grade/evaluation clocks. Record actual freeze time and source checksum in a separately versioned publication-lock receipt; never stamp an earlier model evaluation as newly run. Three markets append atomically through the sole writer; previous locks always win. Do not auto-recover already-started/missed games.",
+  "forecastOnly": "A previously published source with original outcomeConfidence but no evaluated wagers retains No Play, null price/EV and original forecast evidence. Missing-input operational exceptions stay explicitly identified and outside current-model performance; public calendar history can retain the actual original forecast record. No actionable promotion is created.",
+  "integrity": "Compare the independently published full NFL slate with all three tracking markets, including No Plays, so a game without any T60 row cannot silently escape the audit. Preserve terminal fixture state when seeding only missing tracking identities.",
+  "versions": {
+    "model": "unchanged original source identity",
+    "calibration": "unchanged original source identity",
+    "newLockReceipt": "nfl_published_deadline_lock_2026_11_16_r1",
+    "writer": "nfl_forward_evidence_writer_2026_11_16_r120_published_deadline_tracking",
+    "tracking": "nfl_official_tracking_record_2026_11_16_r17_published_deadline_tracking",
+    "integrityAudit": "tracking_integrity_audit_2026_11_16_r2_complete_published_nfl_slate"
+  },
+  "impact": "Copy original labels without promotions or demotions. Report newly retained market counts separately. Existing records are untouched. Historical missing-game recovery requires separate explicit owner approval and exact original source/failed-attempt hashes; actual recovery time, never a fabricated T60 clock.",
+  "verification": [
+    "Real frozen two-game replay with original hashes and exact public card/tuple precedence",
+    "Future window, late denial, no-provider-call path, partial/duplicate/old-lock refusal, operational No Play separation and atomic three-market writes",
+    "NFL writer, member/lock, tracking, grading, alternate-line and integrity focused tests",
+    "npm run verify:model-change, types, fresh-main integration and protected PR",
+    "Production commit plus natural writer/reader/coverage and next-cycle verification"
+  ]
+}

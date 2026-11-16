@@ -34,6 +34,51 @@ request correction, not calibration, historical review replay or a predictive
 accuracy guarantee. Validation and rollback are documented in
 `docs/model-audits/2026-11-16-props-numeric-source-continuation.md`.
 
+## November 16 full-game NFL known-starter prior and complete tracking
+
+Full-game releases are model `nfl_v1_daily_edge_model_2026_11_16_r58_known_starter_prior`,
+calibration `nfl_v1_daily_edge_calibration_2026_11_16_r57_known_starter_prior`,
+decision/policy `nfl_v1_daily_edge_decision_2026_11_16_r67_known_starter_prior` /
+`nfl_v1_grade_policy_2026_11_16_r67_known_starter_prior`, member
+`nfl_v1_member_release_2026_11_16_r65_known_starter_prior`, fixture
+`nfl_weekly_member_fixture_2026_11_16_r81_known_starter_prior`, snapshot
+`nfl_forward_member_snapshot_2026_11_16_r74_known_starter_prior`, writer
+`nfl_forward_evidence_writer_2026_11_16_r120_published_deadline_tracking`,
+and record `nfl_official_tracking_record_2026_11_16_r17_published_deadline_tracking`.
+The explicit input policy is `nfl_known_starter_prior_2026_11_16_r1`.
+The fitted R6 artifact, independent score coefficients and score law remain unchanged;
+new full-game identifiers distinguish the eligibility cohort, not a refitted accuracy claim.
+
+A known, available, exact roster QB without prior passing history can use the existing
+training QbState zero-experience prior only with a complete, pregame season-state census.
+History stays unmatched and is explicitly recorded as `known_starter_prior`; unknown
+identity, missing roster, wrong team, unavailable starter or incomplete/future census
+cannot acquire that authority. Strict legacy shadow calls retain their original guard.
+No quote, market qualification, grade threshold, stake or props behavior changes.
+Ordinary known-history numeric output must remain exact. Newly eligible cards require
+normal market evaluation; no historical grade is recalculated using this policy.
+
+Healthy final inference runs first. After a failed final attempt, the same leased writer
+can freeze the exact already-published pre-cutoff card/source before kickoff, with its
+actual freeze time and receipt `nfl_published_deadline_lock_2026_11_16_r1`. It preserves
+original model, quote, grade and source clocks; it does not claim a successful T-60 run.
+Three tracking markets append in one request. Existing public locks and canonical final
+fixture state always win. Whole-slate audit `tracking_integrity_audit_2026_11_16_r2_complete_published_nfl_slate`
+checks every started published NFL game, including games with no final source at all.
+Tracking publication is `tracking_refresh_publication_2026_11_16_r5_complete_nfl_slate`.
+Operational forecast-only records keep No Play and null wager price/EV, retain underlying
+raw quote evidence, and stay outside current-model performance. Calendar history preserves
+the recorded forecasts. No postgame forecast rerun, extra timer or paid AI call is added.
+
+The two missed November 15 games require the separately reviewed owner recovery receipt;
+this future rule does not authorize retrospective corrections. All previous source payloads,
+failed attempts, locked snapshots and grades remain immutable under their original contracts.
+Required proof includes prior numerical parity, invalid-source refusals, original lock reader
+precedence, append-only atomic/idempotent writer behavior, complete-slate census, focused
+NFL/tracking tests, full model-change checks, clean fresh-main protected PR and ordinary
+production release/lease/coverage/member/next-cycle verification. Failed qualification
+remains offline. See the November 16 predeclarations and verification artifacts.
+
 ## November 15 supported NFL binary execution contracts R42
 
 Shared generation is `player_props_ai_2026_11_15_r42_supported_nfl_binary_events`;

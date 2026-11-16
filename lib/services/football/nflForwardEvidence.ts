@@ -255,7 +255,8 @@ export type NflForwardEvidencePayload = {
       | "nfl_v1_member_release_2026_11_05_r61_source_reaction_health"
       | "nfl_v1_member_release_2026_11_05_r62_outcome_value_separation"
       | "nfl_v1_member_release_2026_11_06_r63_quarterback_regime_continuity"
-      | "nfl_v1_member_release_2026_11_06_r64_exact_player_availability_continuity";
+      | "nfl_v1_member_release_2026_11_06_r64_exact_player_availability_continuity"
+      | "nfl_v1_member_release_2026_11_16_r65_known_starter_prior";
     publicationEnabled: boolean;
     /** True only after the authoritative regular/postseason T-60 boundary validates the complete tuple. */
     trackingEnabled: boolean;

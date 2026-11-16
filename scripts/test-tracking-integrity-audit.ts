@@ -94,11 +94,13 @@ async function main() {
  const cbbGrade=gradeStoredTrackingRecord(cbbRecord,cbbGame);cbbGrade.prediction_record_id=901;
  const cbbManifest={snapshot_key:'cbb::member-game::903',slate_date:null,generated_at:'2026-11-08T01:00:00Z',id:'903',locked:'2026-11-08T01:00:00Z',starts:'2026-11-08T02:00:00Z',rows:[{market:'moneyline',grade:'Best Angle'}]};
  let cbbLedger=[cbbRecord];
+ let nflManifest:unknown[]=[];let nflManifestError=false;
  const cbbClauses:Array<[string,string,unknown]>=[];
- const cbbClient={from(table:string){let like=false,census=false;const q={select(){return q;},order(){return q;},range(){return q;},eq(){return q;},not(){return q;},in(key:string){if(key==='sport')census=true;return q;},like(){like=true;return q;},gte(key:string,value:unknown){if(table==='lab_response_snapshots'&&like)cbbClauses.push(['gte',key,value]);return q;},lte(key:string,value:unknown){if(table==='lab_response_snapshots'&&like)cbbClauses.push(['lte',key,value]);return q;},abortSignal(){return q;},then(resolve:any){let data:unknown[]=[];
+ const cbbClient={from(table:string){let like=false,nflLike=false,census=false;const q={select(){return q;},order(){return q;},range(){return q;},eq(){return q;},not(){return q;},in(key:string){if(key==='sport')census=true;return q;},like(_key:string,pattern:string){like=pattern.startsWith('cbb::');nflLike=pattern.startsWith('nfl::');return q;},gte(key:string,value:unknown){if(table==='lab_response_snapshots'&&like)cbbClauses.push(['gte',key,value]);return q;},lte(key:string,value:unknown){if(table==='lab_response_snapshots'&&like)cbbClauses.push(['lte',key,value]);return q;},abortSignal(){return q;},then(resolve:any){let data:unknown[]=[];
   if(table==='prediction_records_tracking_projection')data=cbbLedger;
   else if(table==='games'&&!census)data=[cbbGame];
   else if(table==='prediction_grades')data=[cbbGrade];
+  else if(table==='lab_response_snapshots'&&nflLike){if(nflManifestError)return Promise.resolve({data:null,error:{message:'manifest unavailable'}}).then(resolve);data=nflManifest;}
   else if(table==='lab_response_snapshots'&&like){data=[cbbManifest];for(const [op,key,value]of cbbClauses)data=data.filter((r:any)=>r[key]!==null&&(op==='gte'?r[key]>=value!:r[key]<=value!));}
   return Promise.resolve({data,error:null}).then(resolve);}};return q;}} as unknown as SupabaseClient;
  const cbbReport=await runTrackingIntegrityAudit({client:cbbClient,now:'2026-11-08T14:00:00Z',from:'2026-11-07'});
@@ -110,6 +112,12 @@ async function main() {
  cbbManifest.starts='2026-11-08T02:00:00Z';cbbLedger=[];
  const missingWholeCbb=await runTrackingIntegrityAudit({client:cbbClient,now:'2026-11-08T14:00:00Z',from:'2026-11-07'});
  assert.equal(missingWholeCbb.sports.cbb.publishedActionableLocks,1);assert(missingWholeCbb.findings.some(f=>f.kind==='published_lock_missing_tracking'),'detect an entirely missing tracked CBB game from its independent member source');
+ const nflCard=(id:number,start:string,best=false)=>({external_id:id,gameStartAt:start,lockedAt:'2026-11-07T17:00:00Z',markets:{moneyline:{verdict:{label:'No Play'}},first_inning:{verdict:{label:'No Play'}},total:{verdict:{label:best?'Best Angle':'No Play'}}}});
+ nflManifest=[{snapshot_key:'nfl::daily-edge::mock',games:[nflCard(1392358,'2026-11-07T18:00:00Z',true),nflCard(1392362,'2026-11-07T21:05:00Z'),{...nflCard(1392365,'2026-11-09T01:15:00Z'),lockedAt:null}]}];
+ const nflReport=await runTrackingIntegrityAudit({client:cbbClient,now:'2026-11-08T14:00:00Z',from:'2026-11-07'});
+ assert.equal(nflReport.findings.filter(f=>f.kind==='published_nfl_game_missing_tracking').length,6,'entirely absent games, including operational No Plays, cannot evade the real published slate reader');
+ assert.equal(nflReport.sports.nfl.publishedActionableLocks,1,'public-card Best Angle remains independently checked without any successful T60 source');
+ nflManifestError=true;await assert.rejects(runTrackingIntegrityAudit({client:cbbClient,now:'2026-11-08T14:00:00Z',from:'2026-11-07'}),/NFL published-slate read failed/);
  const cron = readFileSync(new URL("../app/api/cron/tracking-refresh/route.ts", import.meta.url), "utf8");
  assert(cron.includes("sport === sports.at(-1)")); assert(cron.includes("tracking_integrity_errors:"));
  const endpoint = readFileSync(new URL("../app/api/internal/tracking-integrity-audit/route.ts", import.meta.url), "utf8");
