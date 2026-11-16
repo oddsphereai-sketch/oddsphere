@@ -1,3 +1,21 @@
+## November 16 CBB same-contract execution policy
+
+Execution policy R1, outer decision R14, grade R13, publisher R57, adapter R39
+and tracking R41 end in `same_contract_execution`. Numerical model/covariance/
+evidence R7 and the interpreted grading policy retain their existing identities.
+After forecasting, the leased writer may select a strictly better verified
+payout at the same game, market, line and final-law side from the four existing
+preferred retail books. Ranking uses payout and retains the complete observed
+pair; equal payouts retain the baseline. Existing execution proofs, moneyline
+caps, confidence, model sensitivity and professional resistance still apply.
+
+Original R13-decision/R12-grade records and all older families retain exact
+reader, locked DTO and tracking precedence. No stored locked field is upgraded.
+The original target and substitution trace are saved for future decisions.
+No additional provider request, model fit, calibration, paid inference, writer
+or schedule is introduced. Activation requires the protected release checks and
+ordinary production writer/reader verification.
+
 ## November 16 exact event support and cross-sport actor retention R46
 
 Shared generation is `player_props_ai_2026_11_16_r46_event_support_and_actor_retention`;

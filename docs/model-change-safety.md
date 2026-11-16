@@ -6177,3 +6177,16 @@ full model-change tests, latest-main integration safety, protected PR checks, an
 r32 releases, complete state, one sport lease, one writer, lock precedence, and reader coherence.
 
 Prospective R36/R2 NBA member fallback compares original integer event EV fractions through final quote selection; rounded display EV cannot decide the winner. R1 member order, true-tie book ordering, original law hashes and all existing locks remain exact. Regression coverage passes actual provider normalization, complete current-wire admission and both native-fallback/new-member paths at ordinary and extreme admitted safe-integer prices.
+
+
+## November 16 CBB same-contract execution policy
+
+Decision R14/grade R13/publisher R57/adapter R39/tracking R41 version an execution
+policy only; numerical R7 model and calibration identities remain unchanged.
+Choose a strictly better payout only for the same game, market, exact line and
+final-law side, from a complete current pair passing existing execution proof.
+Ties, missing/invalid baselines, domain holds and old locked records retain their
+original behavior. Never select an offer by its grade or historical outcome.
+Preserve source, clock, orientation, same-law probability/push and lock-precedence
+controls. Full model/focused/type/lint/build, fresh-base protected publication and
+ordinary live writer/reader verification remain required.

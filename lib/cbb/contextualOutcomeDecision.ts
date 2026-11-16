@@ -7,15 +7,17 @@ import {assertCbbContextualForecastCalibrationBinding,cbbContextualForecastObjec
 import {buildCbbInterpretedDecision} from "./contextualInterpretedDecision";
 import type {CbbContextualFeatureInput} from "./contextualForecastFeatures";
 import type {CbbScoreLawNumerics} from "./contextualScoreLawResearch";
+import {createCbbContextualScoreLaw} from "./contextualScoreLawResearch";
+import {selectCbbSameContractExecution} from "./sameContractExecution";
 import type {CbbQuote} from "./types";
-export const CBB_OUTCOME_DECISION_RELEASE="cbb_outcome_decision_2026_11_06_r13_moneyline_wager_price_boundaries" as const;
+export const CBB_OUTCOME_DECISION_RELEASE="cbb_outcome_decision_2026_11_16_r14_same_contract_execution" as const;
 function canonical(v:unknown):unknown{if(Array.isArray(v))return v.map(canonical);if(v&&typeof v==="object")return Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>[k,canonical(x)]));return v;}
 export function cbbOutcomeIndependentInputSha256(independent:CbbContextualFeatureInput["independent"]){
  return createHash("sha256").update(JSON.stringify(canonical({gameId:independent.gameId,asOf:independent.asOf,release:independent.release,inputStatus:independent.inputStatus,
   margin:independent.margin,total:independent.total,homeWinProbability:independent.homeWinProbability??null,uncertainty:independent.uncertainty??null}))).digest("hex");
 }
 export function forecastCbbOutcomeDecision(args:{artifact:CbbCompositeOutcomeArtifact;input:CbbContextualFeatureInput;calibration:CbbContextualForecastCalibrationBinding;
- targets:readonly (CbbQuote&{orientationVerified?:boolean})[];mode:"future"|"retrospective_development";numerics?:CbbScoreLawNumerics;fixtureIdentity?:{homeId:number;awayId:number}}){
+ targets:readonly (CbbQuote&{orientationVerified?:boolean})[];executionCandidates?:readonly (CbbQuote&{orientationVerified?:boolean})[];mode:"future"|"retrospective_development";numerics?:CbbScoreLawNumerics;fixtureIdentity?:{homeId:number;awayId:number}}){
  const fixture=args.fixtureIdentity;
  if(args.mode==="future"&&!fixture||fixture&&(!Number.isSafeInteger(fixture.homeId)||!Number.isSafeInteger(fixture.awayId)||fixture.homeId<=0||fixture.awayId<=0||fixture.homeId===fixture.awayId))throw Error("CBB contextual decision requires original oriented fixture identity for publication");
  const {artifact,input,calibration}=args;assertCbbContextualForecastCalibrationBinding({...args,asOf:input.asOf});
@@ -25,7 +27,9 @@ export function forecastCbbOutcomeDecision(args:{artifact:CbbCompositeOutcomeArt
  const recommendationRisk={calibrationGames:artifact.trainingGameIds.length,
   marginLocationSd:Math.sqrt(forecast.margin.varianceComponents.sourceLocation+forecast.margin.varianceComponents.functionPosterior)*Math.exp(calibration.parameters.logMarginScale),
   totalLocationSd:Math.sqrt(forecast.total.varianceComponents.trendPosterior+forecast.total.varianceComponents.functionPosterior)*Math.exp(calibration.parameters.logTotalScale)};
- const decision=buildCbbInterpretedDecision({input,interpretation:forecast.receipt,latent,targets:args.targets,numerics:args.numerics,recommendationRisk});
+ const execution=selectCbbSameContractExecution({input,interpretation:forecast.receipt,law:createCbbContextualScoreLaw(latent,args.numerics),
+  targets:args.targets,candidates:args.executionCandidates??args.targets});
+ const decision=buildCbbInterpretedDecision({input,interpretation:forecast.receipt,latent,targets:execution.targets,numerics:args.numerics,recommendationRisk});
  return{release:CBB_OUTCOME_DECISION_RELEASE,authority:"offline_research_only" as const,mode:args.mode,gameId:decision.gameId,asOf:decision.asOf,
   artifact:{release:artifact.release,methodSha256:artifact.methodSha256,trainingRowsSha256:artifact.trainingRowsSha256,availableBy:artifact.availableBy,
    objectSha256:cbbContextualForecastObjectSha256(artifact),legacyMarginObjectSha256:artifact.componentHashes.legacyMarginModelObjectSha256,directTotalObjectSha256:artifact.componentHashes.directTotalModelObjectSha256},
@@ -35,6 +39,7 @@ export function forecastCbbOutcomeDecision(args:{artifact:CbbCompositeOutcomeArt
    probability:Math.max(decision.finalScore.homeWinProbability,1-decision.finalScore.homeWinProbability)},
   marketDecisions:decision.marketDecisions,gradePolicy:decision.policy,
   numericalTrace:{workingLatentLocations,finalLatentDistribution:latent,law:decision.lawNumerics,reference:decision.sourceReferenceNumerics,
+   executionSelection:{release:execution.release,originalTargets:structuredClone(args.targets),changes:execution.changes},
    ...(forecast.outcomeInputs.contextTraces.length?{wholeMarketContext:forecast.outcomeInputs.contextTraces}:{})},
   interpretationMeaning:"Retained R1 raw Margin and an economic Total residual learner supply one freshly calibrated joint score law. Total uses an explicit observed economic coordinate plus an unbounded learned residual, with original independent evidence and no forecast source allocation. Exact-price probabilities and grades follow the same law.",
   limits:"Working probabilistic inference conditional on empirical parameters. It does not identify bettor identities, guarantee accuracy, certify all possible signals, or turn unavailable quotes into verified current offers."};
