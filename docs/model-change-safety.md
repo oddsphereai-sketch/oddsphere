@@ -1,3 +1,17 @@
+## November 16 prospective props source-contract continuation
+
+R43 generation / NFL writer R104 add exact existing numeric source envelopes to
+NFL/MLB requests and preserve valid source-unavailable declines in bounded phase
+two navigation. No admission range, law, grade, selection, stake, cadence, lease,
+provider request or spending policy changes. Feedback still fails closed above
+1,984 ASCII bytes, within the existing 2,048-token correction cushion. Every actor
+and market remains explicit; useful supported scopes have positive recovery
+controls paired with unsupported-scope declines. Historical laws and locked
+payloads keep original release-specific reader precedence. See
+`docs/model-audits/2026-11-16-props-numeric-source-continuation.md` and the current
+release registry. Offline and hosted tests use only mocked AI HTTP; actual
+coverage/publication proof must come from normal scheduled reviews.
+
 ## November 15 supported NFL binary execution contracts R42
 
 Shared generation is `player_props_ai_2026_11_15_r42_supported_nfl_binary_events`;
