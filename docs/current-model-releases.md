@@ -1,3 +1,39 @@
+## November 16 canonical source navigation and correction continuation R43
+
+Shared generation is `player_props_ai_2026_11_16_r43_numeric_source_continuation`;
+NFL writer is `nfl_player_props_writer_2026_11_16_r104_numeric_source_continuation`.
+Request navigation is `player_props_numeric_source_navigation_2026_11_16_r1_canonical_mean_contract`;
+non-NBA corrective navigation is `player_props_correction_feedback_2026_11_16_r2_supported_scope_continuation`.
+All R42 and earlier accepted releases retain their explicit original readers.
+NBA writer R25, NFL source R3/identity R1/alias R1/execution qualifier R1,
+law R3/grade R5/selection R8/member R61/lifecycle R43 and native MLB R44 remain unchanged.
+
+NFL and MLB requests now expose the exact existing per-market numeric admission
+envelopes with canonical/component coordinate identities. These are navigation
+for the same sources, not additional model heads, targets or scenario tail caps.
+The request explicitly distinguishes actor production from a team opportunity
+and requires an honest explicit decline when numeric source support is absent.
+Canonical component envelopes identify every affected offered scope: an active
+combo total cannot hide missing required signed-component support. Structural
+dependencies without a mean gate are distinguished explicitly. A prose role
+adjustment cannot bypass the actual compiled envelope. Corrections
+carry previously valid explicit declines for still numerically unavailable
+scopes, including valid null-law siblings, along with every unhandled
+actor/statistic constraint; supported markets
+remain eligible. The existing complete 1,984-ASCII-byte feedback limit and
+2,048-token correction cushion are unchanged; overflow refuses the correction
+rather than truncating findings or buying a third phase. Original actors, market
+inventory, source data and quote/context hashes remain intact.
+
+No law, grade, selection, stake, provider request, model, output cap, slot,
+lease, spending limit or historical locked record changes. Actual weighted
+means and all source/physical/tail checks still independently admit or reject
+the model response. Tests pair unsupported-scope abstention with supported-scope
+recovery in the real reviewer using only mocked AI HTTP. This is a prospective
+request correction, not calibration, historical review replay or a predictive
+accuracy guarantee. Validation and rollback are documented in
+`docs/model-audits/2026-11-16-props-numeric-source-continuation.md`.
+
 ## November 16 full-game NFL known-starter prior and complete tracking
 
 Full-game releases are model `nfl_v1_daily_edge_model_2026_11_16_r58_known_starter_prior`,
