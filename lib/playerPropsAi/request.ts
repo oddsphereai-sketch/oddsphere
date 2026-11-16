@@ -80,7 +80,15 @@ function parseCanonicalPlayerReview(packet:GamePacket,id:string,row:PlayerReview
   invariant(/[.!?]$/.test(checked.assessment.trim()),"Assessment must be a complete sentence, not clipped prose");
   invariant(!hasUnsupportedCertainty(checked.assessment),"Unsupported individual assessment certainty");
   if(checked.law)validateScenarioOpportunities(packet.sport,checked.law);
-  const sourceDeclinedMarkets=checked.law?validateSourceForecast(packet,player,checked.law,checked.exceptions):player.markets;
+  const numericalDeclines=checked.law?validateSourceForecast(packet,player,checked.law,checked.exceptions):player.markets;
+  // A numerically admissible law does not override the reviewer's explicit
+  // abstention for one of its offered markets. Use the original aligned token,
+  // not rendered prose or a shared source/availability caveat. This is admission
+  // for NEW responses only; stored generations retain their original metadata.
+  const exceptionTokens=checked.sourceReadProofs?.exceptions;
+  invariant(Array.isArray(exceptionTokens)&&exceptionTokens.length===player.markets.length,"Missing aligned source exception proof");
+  const reviewerDeclines=player.markets.filter((_,index)=>exceptionTokens[index]==="forecast_declined");
+  const sourceDeclinedMarkets=[...new Set([...numericalDeclines,...reviewerDeclines])];
   return {...checked,sourceDeclinedMarkets};
 }
 /** Same admission as the full parser, with original actor indices/aliases/facts. */

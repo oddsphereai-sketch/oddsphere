@@ -1,3 +1,25 @@
+## November 16 explicit reviewer abstention R45
+
+Shared generation is `player_props_ai_2026_11_16_r45_explicit_abstention`;
+NBA writer is `nba_player_props_private_writer_2026_11_16_r26_explicit_abstention`
+and NFL writer is `nfl_player_props_writer_2026_11_16_r106_explicit_abstention`.
+New response admission retains each exact aligned `forecast_declined` token in
+its declined market set even when the shared player law passes numerical checks.
+A valid law or high confidence cannot silently reopen an abstained scope.
+Supported siblings, conditional availability caveats and both actionable Over
+and Under recovery remain eligible under the unchanged rules. Every actor and
+market stays explicit; no automatic forecast clamp or blanket player decline.
+
+R44 and all earlier accepted reviews keep their original stored qualification,
+reader contracts and locked payloads. Law R3/grade R5/selection R8, NFL source
+R3/identity R1/alias R2, member R61/lifecycle R43 and native MLB R44 stay unchanged.
+No old law, public lock, result, closed job, schema, model, phase/output cap,
+provider budget, paired schedule, sport-scoped lease or $50/$60 limit changes.
+Two new consecutive rounds of three fresh whole-product reviewers and all
+mandatory protected release/live verification gates remain required. Offline
+checks preserve supported promotions and disclose exact synthetic board impact.
+See `docs/model-audits/2026-11-16-props-explicit-abstention.md`.
+
 ## November 16 exact Hibner NFL name catalog R44
 
 Shared generation is `player_props_ai_2026_11_16_r44_hibner_official_alias`;
