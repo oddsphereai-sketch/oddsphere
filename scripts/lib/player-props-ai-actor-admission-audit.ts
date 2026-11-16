@@ -14,7 +14,7 @@ import {PROPS_AI_WIRE_RELEASE} from "../../lib/playerPropsAi/scenarioCoordinates
 import {usageMicroUsd} from "../../lib/playerPropsAi/budget";
 import {failureEvidence,PROPS_AI_FAILURE_EVIDENCE_RELEASE} from "../../lib/playerPropsAi/failureEvidence";
 import {physicalLawFindings} from "../../lib/playerPropsAi/physicalDiagnostics";
-import {namedSourceCorrection} from "../../lib/playerPropsAi/sourceConstraintCards";
+import {reviewCorrectionFeedback} from "../../lib/playerPropsAi/reviewCorrectionFeedback";
 
 export type PersistedActorAttempt={id:string;part:number;phase:number;state:string;model:string;requested_tier:string;response_id:string|null;actual_micro:number|string|null;usage:unknown};
 type RawObject=Record<string,unknown>;
@@ -46,7 +46,7 @@ function evidenceFor(proposal:ActorAdmissionProposal){
  * convenient subset. An incomplete part may never supply accepted provenance.
  */
 export function auditPropsActorAdmissionPart(args:{packet:GamePacket;attempts:readonly PersistedActorAttempt[];provenance?:readonly unknown[]}){
-  invariant(args.packet.sport==="nba","Actor retention audit is NBA-only for this release");validatePacket(args.packet);
+  validatePacket(args.packet);
   invariant(args.attempts.length>=1&&args.attempts.length<=2,"Actor audit requires one or two bounded attempts");
   const attempts=[...args.attempts].sort((a,b)=>a.phase-b.phase),part=attempts[0].part;
   invariant(Number.isSafeInteger(part)&&part>0&&attempts.every(a=>a.part===part),"Actor audit mixed original parts");
@@ -95,7 +95,7 @@ export function auditPropsActorAdmissionPart(args:{packet:GamePacket;attempts:re
     same(failure.generativeDiagnostics,recomputedFailure.generativeDiagnostics,"Actor audit source diagnostics differ");
     if(attempt.phase===1){
       let expectedText:string|null=null,expectedUnavailable=false;
-      try{const next=namedSourceCorrection(args.packet,draft);if(next.status==="ready"&&next.affectedActorIds.length)expectedText=next.text;
+      try{const next=reviewCorrectionFeedback(args.packet,draft);if(next.status==="ready"&&next.affectedActorIds.length)expectedText=next.text;
         else if(next.status==="unavailable"&&["feedback_exceeds_cushion","diagnostic_unavailable"].includes(next.reason))expectedUnavailable=true;
       }catch{expectedUnavailable=true;}
       same(usage.nextCorrectionText??null,expectedText,"Actor audit named correction differs from original diagnostics");
