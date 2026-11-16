@@ -14,7 +14,9 @@ to NBA, NFL and MLB within the same two phases. A valid original actor cannot be
 replaced by a worse resampled correction. Every required actor/scope must still
 be admitted before whole-game completion; unknown charges, unavailable archives,
 malformed envelopes and lost acknowledgement remain fail-closed. The pure audit
-uses the same sport-specific feedback dispatch as runtime.
+uses the same sport-specific feedback dispatch and model/tier/reference/billing
+identity verifiers as runtime, with exact saved proofs and unique phase response
+references.
 
 R45 and every older accepted review retain exact stored qualification, original
 contracts and locked payload precedence. Law R3/grade R5/selection R8, NFL source

@@ -8,10 +8,10 @@ import type {GamePacket} from "../../lib/playerPropsAi/evidenceContract";
 import {digest,invariant,validatePacket} from "../../lib/playerPropsAi/evidence";
 import {OriginalPartActorAdmission,ACTOR_ADMISSION_RELEASE,type ActorAdmissionProposal} from "../../lib/playerPropsAi/actorAdmission";
 import {jointReviewRequest,parseJointReview} from "../../lib/playerPropsAi/request";
-import {serializeAiRequest} from "../../lib/playerPropsAi/openai";
+import {serializeAiRequest,responseModelIdentity,responseTierIdentity,responseReferenceIdentity} from "../../lib/playerPropsAi/openai";
 import {PROPS_AI_MAX_OUTPUT_PER_REQUEST,PROPS_AI_PRIMARY_MODEL,PROPS_AI_STRONG_MODEL,type PropsAiModel} from "../../lib/playerPropsAi/releases";
 import {PROPS_AI_WIRE_RELEASE} from "../../lib/playerPropsAi/scenarioCoordinates";
-import {usageMicroUsd} from "../../lib/playerPropsAi/budget";
+import {verifiedUsageMicroUsd} from "../../lib/playerPropsAi/budget";
 import {failureEvidence,PROPS_AI_FAILURE_EVIDENCE_RELEASE} from "../../lib/playerPropsAi/failureEvidence";
 import {physicalLawFindings} from "../../lib/playerPropsAi/physicalDiagnostics";
 import {reviewCorrectionFeedback} from "../../lib/playerPropsAi/reviewCorrectionFeedback";
@@ -52,6 +52,7 @@ export function auditPropsActorAdmissionPart(args:{packet:GamePacket;attempts:re
   invariant(Number.isSafeInteger(part)&&part>0&&attempts.every(a=>a.part===part),"Actor audit mixed original parts");
   invariant(attempts.every((a,index)=>a.phase===index+1)&&new Set(attempts.map(a=>a.id)).size===attempts.length,"Actor audit duplicate/missing/reordered phases");
   const session=new OriginalPartActorAdmission(args.packet),proposals:ActorAdmissionProposal[]=[],expectedProvenance:unknown[]=[];
+  const responseIds=new Set<string>();
   let knownUsageMicro=0,verifiedAttempts=0,blockedReason:string|null=null,firstReason:string|undefined,firstCorrectionText:string|undefined;
   for(const attempt of attempts){
     invariant(blockedReason===null,"A blocked/unknown actor receipt cannot authorize a later attempt");
@@ -72,8 +73,14 @@ export function auditPropsActorAdmissionPart(args:{packet:GamePacket;attempts:re
     invariant(usage.responseEvidence===undefined,"Partially consumed raw actor response cannot claim whole-response acceptance");
     invariant((usage.actorAdmissionUnavailable===true)===(metadata.disposition==="unavailable"),"Actor audit conflicting archive/admission availability flags");
     invariant(usage.response_status==="completed"&&typeof attempt.response_id==="string"&&attempt.response_id.length>0,"Actor audit response did not complete");
-    invariant(typeof usage.service_tier==="string","Actor audit missing actual service tier");
-    invariant(usageMicroUsd(attempt.model as PropsAiModel,usage as unknown as Parameters<typeof usageMicroUsd>[1],usage.service_tier)===actual,"Actor audit actual usage charge mismatch");
+    const modelIdentity=responseModelIdentity(attempt.model as PropsAiModel,usage.response_model),tierIdentity=responseTierIdentity(attempt.requested_tier,usage.service_tier),referenceIdentity=responseReferenceIdentity(attempt.response_id);
+    invariant(modelIdentity.status==="verified"&&tierIdentity.status==="verified"&&referenceIdentity.status==="verified","Actor audit response model/tier/reference is not verified");
+    invariant(typeof usage.service_tier==="string","Actor audit missing actual response tier");
+    same(usage.response_model_identity,modelIdentity,"Actor audit stored response model identity differs");
+    same(usage.response_tier_identity,tierIdentity,"Actor audit stored response tier identity differs");
+    same(usage.response_reference_identity,referenceIdentity,"Actor audit stored response reference identity differs");
+    invariant(!responseIds.has(referenceIdentity.responseId!),"Actor audit reused a response reference across phases");responseIds.add(referenceIdentity.responseId!);
+    invariant(verifiedUsageMicroUsd(attempt.model as PropsAiModel,usage as unknown as Parameters<typeof verifiedUsageMicroUsd>[1],usage.service_tier)===actual,"Actor audit actual usage charge mismatch");
     if(usage.actorAdmissionUnavailable===true||metadata.disposition==="unavailable"){
       blockedReason="exact_actor_archive_unavailable";continue;
     }

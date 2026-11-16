@@ -23,7 +23,10 @@ admitted actors with a durable known-charge receipt can be retained. A later
 answer cannot replace their original law or claims. Every actor and scope must
 still be admitted before the whole game completes. Unknown charges, lost receipt
 acknowledgements, unavailable archives and malformed envelopes remain blocking.
-Offline receipt reconstruction never authorizes a closed-job replay.
+Offline receipt reconstruction never authorizes a closed-job replay. The pure
+receipt auditor reuses the runtime model, actual-tier, reference and billing
+verifiers, requires exact saved identity proofs and rejects repeated response
+references across phases before retaining any actor.
 
 ## Scope and release
 
