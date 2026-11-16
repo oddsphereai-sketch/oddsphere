@@ -1,0 +1,154 @@
+{
+  "status": "qualified_focused_checks_pending_final_release_checks",
+  "base": "592bd038b06002e2980308638df8c236f42c2fd7",
+  "incident": {
+    "expectedSundayGames": 12,
+    "trackedSundayGames": 10,
+    "missingGames": [
+      "1392358 MIA@IND",
+      "1392362 LAR@ARI"
+    ],
+    "rawPricesWerePresent": true,
+    "cause": "Known new-starter identities without NFL passing history were rejected; absent final locks escaped a successful-lock-only census."
+  },
+  "ownerApproval": {
+    "date": "2026-11-16",
+    "instruction": "Restore both games; preserve originals",
+    "records": 6,
+    "wins": 5,
+    "losses": 1,
+    "originalsPreserved": true,
+    "review": [
+      {
+        "game": "1392358",
+        "matchup": "MIA at IND",
+        "date": "2026-11-15",
+        "sourceId": "3d815630-ef69-45ef-9cd2-8f765e74d1fa",
+        "sourceSha256": "91c35c4e41432c4b9a378a3c51a2c1051679e752e31bc3dc3ff41393f9d2685d",
+        "failedId": "9a5fc393-6062-4fd2-8330-f1e31b62901a",
+        "failedSha256": "fef1bafad0b09270516eb6ee5f2337db9f8d20f4b04b6e5aea6d3c725b28290d",
+        "sourceAt": "2026-11-15T16:53:39.503Z",
+        "operationalException": false,
+        "rawPricesPresent": true,
+        "originalsPreserved": true,
+        "onTimeT60Lock": false,
+        "records": [
+          {
+            "market": "moneyline",
+            "pick": "IND",
+            "line": null,
+            "price": -209,
+            "grade": "no_play",
+            "probability": 0.5939733335174375,
+            "originalModel": "nfl_v1_daily_edge_decision_2026_11_06_r66_exact_player_availability_continuity",
+            "result": "win"
+          },
+          {
+            "market": "spread",
+            "pick": "MIA",
+            "line": 4.5,
+            "price": -108,
+            "grade": "watchlist",
+            "probability": 0.5336805251339578,
+            "originalModel": "nfl_v1_daily_edge_decision_2026_11_06_r66_exact_player_availability_continuity",
+            "result": "win"
+          },
+          {
+            "market": "total",
+            "pick": "Over 37.5",
+            "line": 37.5,
+            "price": -108,
+            "grade": "best_angle",
+            "probability": 0.7275229506995459,
+            "originalModel": "nfl_v1_daily_edge_decision_2026_11_06_r66_exact_player_availability_continuity",
+            "result": "win"
+          }
+        ]
+      },
+      {
+        "game": "1392362",
+        "matchup": "LAR at ARI",
+        "date": "2026-11-15",
+        "sourceId": "a24ae1d1-3efa-43f2-9560-ab6dd19d0d2b",
+        "sourceSha256": "65968dfcd2103232a593e858e19adac4c9ea99d976e33c16bc1617879fbf11b2",
+        "failedId": "3122a655-4d3a-46c7-9949-8bd0b4e34c46",
+        "failedSha256": "6a40216e442ae59be8149adf986ddbcf644ece5867d8c1c647fee5a1afed570e",
+        "sourceAt": "2026-11-15T19:53:20.364Z",
+        "operationalException": true,
+        "rawPricesPresent": true,
+        "originalsPreserved": true,
+        "onTimeT60Lock": false,
+        "records": [
+          {
+            "market": "moneyline",
+            "pick": "LAR",
+            "line": null,
+            "price": null,
+            "grade": "no_play",
+            "probability": 0.8943799413991265,
+            "originalModel": "nfl_v1_daily_edge_decision_2026_11_16_r67_known_starter_prior",
+            "result": "win"
+          },
+          {
+            "market": "spread",
+            "pick": "LAR -9.5",
+            "line": -9.5,
+            "price": null,
+            "grade": "no_play",
+            "probability": 0.7122508725630914,
+            "originalModel": "nfl_v1_daily_edge_decision_2026_11_16_r67_known_starter_prior",
+            "result": "win"
+          },
+          {
+            "market": "total",
+            "pick": "Under 38.5",
+            "line": 38.5,
+            "price": null,
+            "grade": "no_play",
+            "probability": 0.5261326572083269,
+            "originalModel": "nfl_v1_daily_edge_decision_2026_11_16_r67_known_starter_prior",
+            "result": "loss"
+          }
+        ]
+      }
+    ]
+  },
+  "priorParity": {
+    "pythonTraining": "scripts/operator/build_nfl_pregame_features.py QbState defaults and export_nfl_r6_runtime_artifact.py quarterback_after_offseason(None)",
+    "epa": 0,
+    "cpoe": 0,
+    "sackRate": 0.07,
+    "turnoverRate": 0.022,
+    "dropbacks": 0,
+    "continuity": 0,
+    "sameStrictVsSupportedPriorProjection": true,
+    "sameKnownHistoryOutput": true,
+    "historyMatchInvented": false
+  },
+  "futureImpact": {
+    "gradeThresholdChanges": 0,
+    "demotionRules": 0,
+    "strictPriorBlockersRemoved": 2,
+    "frozenEligibilityReplayMarketsRestored": 6,
+    "replayAccuracyClaim": false,
+    "ordinaryKnownHistoryNumericChanges": 0,
+    "copyFallbackGradeChanges": 0,
+    "newTimerOrPaidAiRequest": 0
+  },
+  "verified": [
+    "Known-history equality, trained prior mathematical equality, wrong team/roster/clock/incomplete state refusal",
+    "Actual saved two-game hash/tuple replay: MIA three wins including Best Angle; LAR two wins one loss, No Play/null execution price",
+    "No healthy final inference preemption; real freeze time; past automatic recovery refusal; explicit owner and failed-source proof",
+    "Existing legacy member DTO precedence; partial/different record refusal; append-only/idempotent three-market writer; final fixture status preservation",
+    "Real integrity reader catches absent full-game markets, independently checks saved Best Angle and refuses failed reads",
+    "NFL writer, R6, official record, member fixture, publication-clock, snapshot, tracking and complete main verification gate",
+    "TypeScript and production webpack build"
+  ],
+  "remainingReleaseGates": [
+    "Final uninterrupted full verification",
+    "Fresh main and clean integration guard",
+    "Protected PR exact-tree checks and deployed SHA",
+    "Owner-approved scoped recovery, settlement and public cache verification",
+    "Natural writer release/lease/member and following-cycle proof"
+  ]
+}

@@ -14,6 +14,7 @@ import {
 
 export const NFL_R6_SHADOW_DECISION_SCHEMA_RELEASE =
   "nfl_shadow_exact_price_decision_tuple_2026_10_15_r2_current_season_qb_identity" as const;
+export const NFL_KNOWN_STARTER_PRIOR_RELEASE = "nfl_known_starter_prior_2026_11_16_r1" as const;
 export const NFL_R6_RUNTIME_ARTIFACT_RELEASE =
   "nfl_r6_moneyline_runtime_artifact_2026_08_22_r1" as const;
 export const NFL_R6_MONEYLINE_MODEL_RELEASE =
@@ -147,7 +148,7 @@ type QuarterbackState = {
   dropbacks: number;
 };
 
-type QuarterbackHistorySource = "frozen_artifact" | "current_season_completed_games" | "unmatched";
+type QuarterbackHistorySource = "frozen_artifact" | "current_season_completed_games" | "known_starter_prior" | "unmatched";
 
 type QuarterbackContext = QuarterbackState & {
   id: string | null;
@@ -230,6 +231,8 @@ export function buildNflR6ShadowMoneylineDecision(args: {
   t60LagMinutes: number | null;
   coverageHealthHolds: string[];
   currentSeasonState?: NflPlayerPropsCurrentSeasonState | null;
+  /** Current full-game release only; never asserts that missing history exists. */
+  knownStarterPrior?: typeof NFL_KNOWN_STARTER_PRIOR_RELEASE;
 }): NflR6ShadowMoneylineDecision {
   const evaluatedAt = isoTimestamp(args.capturedAt, "capturedAt");
   const startsAt = Date.parse(args.game.scheduledStart);
@@ -247,6 +250,7 @@ export function buildNflR6ShadowMoneylineDecision(args: {
     args.game.season,
     args.game.providerWeek,
     args.currentSeasonState ?? null,
+    args.knownStarterPrior === NFL_KNOWN_STARTER_PRIOR_RELEASE ? evaluatedAt : null,
   );
   const homeQb = quarterbackContext(
     adjustedHomeDepth,
@@ -254,6 +258,7 @@ export function buildNflR6ShadowMoneylineDecision(args: {
     args.game.season,
     args.game.providerWeek,
     args.currentSeasonState ?? null,
+    args.knownStarterPrior === NFL_KNOWN_STARTER_PRIOR_RELEASE ? evaluatedAt : null,
   );
   const qbContext = {
     away: { name: awayQb.name, historyMatched: awayQb.matched, historySource: awayQb.historySource, status: awayQb.status },
@@ -268,8 +273,8 @@ export function buildNflR6ShadowMoneylineDecision(args: {
   const quarterbackBlockingReasons = uniqueSorted([
     awayQb.name === null ? "away_expected_quarterback_unavailable" : null,
     homeQb.name === null ? "home_expected_quarterback_unavailable" : null,
-    awayQb.name !== null && !awayQb.matched ? "away_quarterback_history_unmatched" : null,
-    homeQb.name !== null && !homeQb.matched ? "home_quarterback_history_unmatched" : null,
+    awayQb.name !== null && !awayQb.matched && awayQb.historySource !== "known_starter_prior" ? "away_quarterback_history_unmatched" : null,
+    homeQb.name !== null && !homeQb.matched && homeQb.historySource !== "known_starter_prior" ? "home_quarterback_history_unmatched" : null,
   ]);
   const blockingReasons = uniqueSorted([
     ...args.coverageHealthHolds.filter((reason) => BLOCKING_COVERAGE_REASONS.has(reason)),
@@ -505,6 +510,7 @@ function quarterbackContext(
   predictionSeason: number,
   predictionWeek: number,
   currentSeasonState: NflPlayerPropsCurrentSeasonState | null,
+  knownStarterPriorAt: string | null,
 ): QuarterbackContext {
   const starter = depth.expectedStartingQuarterback;
   const name = starter?.name?.trim() || null;
@@ -519,6 +525,17 @@ function quarterbackContext(
     : [];
   const currentDropbacks = currentRows.reduce((sum, row) => sum + row.passing_attempts, 0);
   const currentSeasonMatched = currentDropbacks > 0;
+  // The training QbState starts at this zero-experience prior. It is not
+  // a history match. Require the actual available roster identity and a full
+  // pregame state census before admitting that same prior in production.
+  // The caller already resolves exact-game injury status and clearances;
+  // rechecking stale raw roster designations here would undo that authority.
+  const supportedPrior = !artifactId && !currentSeasonMatched && knownStarterPriorAt !== null &&
+    !!starter?.playerId && !!name && starter.position === "QB" && depth.starterStatus !== "unknown" &&
+    normalizeTeam(depth.team) === team &&
+    depth.roster.some(p => p.playerId === starter.playerId && p.name.trim() === name && p.position === "QB") &&
+    currentSeasonState?.season === predictionSeason && currentSeasonState.completeThroughWeek >= predictionWeek - 1 &&
+    Number.isFinite(Date.parse(currentSeasonState.updatedAt)) && Date.parse(currentSeasonState.updatedAt) <= Date.parse(knownStarterPriorAt);
   const id = artifactId ?? (currentSeasonMatched ? `current-season:${starter?.playerId}` : null);
   const state = artifactId ? artifact.quarterbackStates[artifactId] : null;
   const fallback = { epa: 0, cpoe: 0, sackRate: 0.07, turnoverRate: 0.022, dropbacks: 0 };
@@ -530,7 +547,7 @@ function quarterbackContext(
     matched: id !== null,
     historySource: artifactId
       ? "frozen_artifact"
-      : currentSeasonMatched ? "current_season_completed_games" : "unmatched",
+      : currentSeasonMatched ? "current_season_completed_games" : supportedPrior ? "known_starter_prior" : "unmatched",
     status: depth.starterStatus,
     continuity: Number(artifactId !== null && artifact.teamStates[team]?.lastQbId === artifactId),
     logDropbacks: Math.log1p(values.dropbacks),

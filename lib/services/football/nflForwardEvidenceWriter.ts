@@ -1,3 +1,4 @@
+import {planNflPublishedDeadlineLocks, readNflPublishedDeadlineLocks, withNflPublishedDeadlineLocks, buildNflPublishedDeadlineTrackingRecords, type NflPublishedLockProposal} from "./nflPublishedDeadlineTracking";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { reportNflWriterResourceStage } from "./nflWriterResourceHealth";
 import { nflForwardMarketView } from "./nflForwardMarketView";
@@ -63,6 +64,7 @@ import {
 import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
 import {
   buildNflR6ShadowMoneylineDecision,
+  NFL_KNOWN_STARTER_PRIOR_RELEASE,
   resolveNflAvailabilityAdjustedQuarterbackDepth,
 } from "./nflR6MoneylineShadow";
 import {
@@ -162,7 +164,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_15_r119_bounded_member_market" as const;
+  "nfl_forward_evidence_writer_2026_11_16_r120_published_deadline_tracking" as const;
 
 const NFL_REGULAR_MARKETS = ["moneyline", "spread", "total"] as const;
 const NFL_OWLS_COVERAGE_DIAGNOSTICS = new Set([
@@ -365,6 +367,16 @@ export async function runNflForwardEvidenceWriter(args: {
   const existing = await readNflForwardEvidence({ client: args.client, season: args.season, week: args.week });
   reportNflWriterResourceStage(NFL_FORWARD_WRITER_RELEASE, "history_ready", resourceStartedAt);
   const historicalExisting = existing;
+  // Keep the normal T-60 inference first. A copy of the prior public record
+  // is a fallback only after an explicit failed final capture, never a reason
+  // to skip fresh odds, availability or a healthy final forecast.
+  const priorPublished = args.apply ? await readNflForwardMemberSnapshot({
+    client: args.client, season: args.season, week: args.week, now: args.now,
+  }) : null;
+  const priorPublicLocks = args.apply
+    ? await readNflPublishedDeadlineLocks({client: args.client, rows: existing}) : [];
+  const frozenPublicIds = new Set(priorPublicLocks.map(p => p.receipt.providerGameId));
+
   const need = determineNflForwardCollectionNeed({
     existing,
     now: args.now,
@@ -413,7 +425,7 @@ export async function runNflForwardEvidenceWriter(args: {
     existing.some(row => row.providerGameId === plan.game.providerGameId && row.stage === "t60" &&
       !hasNflStoredLockedDecision(row)));
   const blockedFinalIds = new Set(legacyFinalSlotHolds.map(plan => plan.game.providerGameId));
-  const plans = plannedCaptures.filter(plan => !blockedFinalIds.has(plan.game.providerGameId));
+  const plans = plannedCaptures.filter(plan => !blockedFinalIds.has(plan.game.providerGameId) && !frozenPublicIds.has(plan.game.providerGameId));
   const marketBrainCanaryGames = new Set(marketBrainCaptureEnabled
     ? selectNflMarketBrainCanaryGames({
         games: uniquePlannedGames(plans.map((plan) => plan.game)),
@@ -835,6 +847,7 @@ export async function runNflForwardEvidenceWriter(args: {
       t60LagMinutes,
       coverageHealthHolds: collectedEvidenceHolds,
       currentSeasonState,
+      knownStarterPrior: NFL_KNOWN_STARTER_PRIOR_RELEASE,
     });
     const holds = [...new Set([
       ...collectedEvidenceHolds,
@@ -1459,6 +1472,35 @@ export async function runNflForwardEvidenceWriter(args: {
     apply: args.apply,
   });
   reportNflWriterResourceStage(NFL_FORWARD_WRITER_RELEASE, "append_ready", resourceStartedAt);
+  const tracking = await writeOfficialTrackingFromPayloads({
+    client: args.client,
+    payloads: [...currentT60Payloads(existing), ...authoritativePayloads.filter((payload) => payload.stage === "t60")],
+    apply: args.apply,
+  });
+  reportNflWriterResourceStage(NFL_FORWARD_WRITER_RELEASE, "tracking_ready", resourceStartedAt);
+  // A failed fallback for one card must not prevent any healthy T-60 lock or
+  // another game's tracking. Surface its exact private health finding.
+  let fallbackTracking: NflTrackingWriteResult = {
+    trackingAttempted:false,trackingRecordsProposed:0,trackingRecordsInserted:0,trackingRecordsExisting:0,
+  };
+  const failedFinalGameIds = new Set(authoritativePayloads
+    .filter(p => p.captureAttempt?.requestedStage === "t60" && p.captureAttempt.status === "failed")
+    .map(p => p.game.providerGameId));
+  for (const id of failedFinalGameIds) {
+    try {
+      const deadlineLocks = planNflPublishedDeadlineLocks({
+        rows:existing,previous:withNflPublishedDeadlineLocks(priorPublished,priorPublicLocks),
+        now:args.apply?new Date().toISOString():args.now,failedFinalGameIds:new Set([id]),
+      });
+      if (!deadlineLocks.length) {payloadBuildHolds.push(`game_${id}_public_lock_fallback_unavailable`);continue;}
+      const written = await writeOfficialTrackingFromPayloads({client:args.client,
+        payloads:deadlineLocks.map(p=>p.source.payload),apply:args.apply,publishedDeadlineLocks:deadlineLocks});
+      fallbackTracking = {trackingAttempted:fallbackTracking.trackingAttempted||written.trackingAttempted,
+        trackingRecordsProposed:fallbackTracking.trackingRecordsProposed+written.trackingRecordsProposed,
+        trackingRecordsInserted:fallbackTracking.trackingRecordsInserted+written.trackingRecordsInserted,
+        trackingRecordsExisting:fallbackTracking.trackingRecordsExisting+written.trackingRecordsExisting};
+    } catch(error) {payloadBuildHolds.push(`game_${id}_public_lock_fallback_failed_${error instanceof Error?error.message:"unknown"}`);}
+  }
   const memberSnapshot = await refreshCompactMemberSnapshot({
     client: args.client,
     existing: historicalExisting,
@@ -1469,12 +1511,7 @@ export async function runNflForwardEvidenceWriter(args: {
     apply: args.apply,
   });
   reportNflWriterResourceStage(NFL_FORWARD_WRITER_RELEASE, "member_ready", resourceStartedAt);
-  const tracking = await writeOfficialTrackingFromPayloads({
-    client: args.client,
-    payloads: [...currentT60Payloads(existing), ...authoritativePayloads.filter((payload) => payload.stage === "t60")],
-    apply: args.apply,
-  });
-  reportNflWriterResourceStage(NFL_FORWARD_WRITER_RELEASE, "tracking_ready", resourceStartedAt);
+
   let marketBrainWrite = {
     proposed: payloads.filter((payload) => payload.marketBrainShadow).length,
     inserted: 0,
@@ -1566,6 +1603,10 @@ export async function runNflForwardEvidenceWriter(args: {
     },
     ...memberSnapshot,
     ...tracking,
+    trackingAttempted: tracking.trackingAttempted || fallbackTracking.trackingAttempted,
+    trackingRecordsProposed: tracking.trackingRecordsProposed + fallbackTracking.trackingRecordsProposed,
+    trackingRecordsInserted: tracking.trackingRecordsInserted + fallbackTracking.trackingRecordsInserted,
+    trackingRecordsExisting: tracking.trackingRecordsExisting + fallbackTracking.trackingRecordsExisting,
   };
 }
 
@@ -2078,12 +2119,15 @@ export async function refreshCompactMemberSnapshot(args: {
     };
   }
   try {
-    const previousSnapshot = await readNflForwardMemberSnapshot({
+    const storedPreviousSnapshot = await readNflForwardMemberSnapshot({
       client: args.client,
       season: args.season,
       week: args.week,
       now: args.now,
     }).catch(() => null);
+    const publicLocks = await readNflPublishedDeadlineLocks({client:args.client,rows});
+    const previousSnapshot = withNflPublishedDeadlineLocks(storedPreviousSnapshot,publicLocks);
+
     if (!rows.some(row => row.payload.decisions.modelPromotionStatus === NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE &&
       row.payload.decisions.publicationEnabled && row.payload.decisions.evaluatedBets.length === 3)) {
       return { memberSnapshotAttempted: true, memberSnapshotUpdated: false, memberSnapshotKey: null,
@@ -2179,8 +2223,11 @@ export async function writeOfficialTrackingFromPayloads(args: {
   apply: boolean;
   /** Explicit operator recovery under the same prediction_pipeline:nfl lease. */
   publishedPregameRecovery?: { rows: NflForwardStoredEvidence[]; receipt: NflPublishedPregameRecovery };
+  publishedDeadlineLocks?: NflPublishedLockProposal[];
 }): Promise<NflTrackingWriteResult> {
   const recovery = args.publishedPregameRecovery;
+  const publicLockByGame=new Map((args.publishedDeadlineLocks??[]).map(p=>[p.receipt.providerGameId,p]));
+  if(recovery&&publicLockByGame.size)throw Error("NFL tracking cannot mix recovery authorities");
   const recoverySource = recovery ? selectNflPublishedPregameRecoverySource({
     rows: recovery.rows, recovery: recovery.receipt,
   }) : null;
@@ -2190,6 +2237,11 @@ export async function writeOfficialTrackingFromPayloads(args: {
   }
   const eligibleByGame = new Map<string, NflForwardEvidencePayload>();
   for (const payload of args.payloads) {
+    const publicLock=publicLockByGame.get(payload.game.providerGameId);
+    if(publicLock){
+      if(hashNflForwardEvidencePayload(payload)!==publicLock.source.payloadSha256)throw Error("NFL public lock payload differs");
+      eligibleByGame.set(payload.game.providerGameId,payload);continue;
+    }
     if (recoverySource) {
       eligibleByGame.set(payload.game.providerGameId, payload);
       continue;
@@ -2240,10 +2292,10 @@ export async function writeOfficialTrackingFromPayloads(args: {
     .from("prediction_records")
     .select(recovery
       ? "id,external_id,market,pick,line_value,odds_american,play_grade,model_probability,model_version,locked_at,snapshot_json"
-      : "id,external_id,market,locked_at")
+      : publicLockByGame.size ? "id,external_id,market,locked_at,public_source:snapshot_json->nfl_published_deadline_lock->>sourcePayloadSha256" : "id,external_id,market,locked_at")
     .eq("sport", "nfl")
     .in("external_id", externalIds);
-  if (!recovery) existingQuery = existingQuery.eq("model_version", decisionRelease);
+  if (!recovery && !publicLockByGame.size) existingQuery = existingQuery.eq("model_version", decisionRelease);
   const { data: existingData, error: existingError } = await existingQuery;
   const existingRows = existingData as unknown as PredictionRecordRow[] | null;
   if (existingError) throw new Error(`NFL tracking record read failed: ${existingError.message}`);
@@ -2264,6 +2316,11 @@ export async function writeOfficialTrackingFromPayloads(args: {
       }))) {
     throw new Error("NFL recovery refuses existing or partial tracking records from any release.");
   }
+  if(publicLockByGame.size){for(const [id,proposal] of publicLockByGame){
+    const own=(existingRows??[]).filter(r=>String(r.external_id)===id);
+    if(own.length&& (own.length!==3||new Set(own.map(r=>r.market)).size!==3||own.some(r=>!r.locked_at||(r as PredictionRecordRow&{public_source?:string}).public_source!==proposal.source.payloadSha256)))
+      throw Error("NFL public lock refuses a partial or different existing immutable record");
+  }}
   const existingKeys = buildMarketScopedFootballTrackingPlan(trackingGames, (existingRows ?? []) as Array<{
     external_id: number;
     market: string;
@@ -2278,6 +2335,7 @@ export async function writeOfficialTrackingFromPayloads(args: {
     };
   }
 
+  const pendingPayloads=payloads.filter(payload=>nflTrackingMarketsForPayload(payload).some(market=>!existingKeys.has(`${payload.game.providerGameId}:${market}`)));
   let gameIdByProviderId: Map<string, number>;
   if (recovery) {
     // Historical game scores/status must never be upserted from a pregame payload.
@@ -2299,13 +2357,21 @@ export async function writeOfficialTrackingFromPayloads(args: {
         new Map(teams.map(team => [team.external_id, team.id])), true);
     }
   } else {
-    const teamIdByProviderId = await upsertTrackedNflTeams(args.client, payloads);
-    gameIdByProviderId = await upsertTrackedNflGames(args.client, payloads, teamIdByProviderId);
+    const teamIdByProviderId = await upsertTrackedNflTeams(args.client, pendingPayloads);
+    const externalIds=pendingPayloads.map(p=>nflProviderIntegerId(p.game.providerGameId,"game"));
+    const known=await args.client.from("games").select("id,external_id,game_date").eq("sport","nfl").in("external_id",externalIds);
+    if(known.error)throw Error("NFL tracking fixture identity read failed: "+known.error.message);
+    gameIdByProviderId=new Map((known.data??[]).map(g=>[String(g.external_id),g.id]));
+    for(const g of known.data??[]){const source=pendingPayloads.find(p=>String(g.external_id)===p.game.providerGameId);if(g.game_date&&Date.parse(g.game_date)!==Date.parse(source!.game.scheduledStart))throw Error("NFL tracking existing fixture start differs");}
+    const absent=pendingPayloads.filter(p=>!gameIdByProviderId.has(p.game.providerGameId));
+    if(absent.length){const created=await upsertTrackedNflGames(args.client,absent,teamIdByProviderId,true);for(const [id,key]of created)gameIdByProviderId.set(id,key);}
   }
-  const records = payloads.flatMap((payload) => {
+  const records = pendingPayloads.flatMap((payload) => {
     const externalId = nflProviderIntegerId(payload.game.providerGameId, "game");
     const gameId = gameIdByProviderId.get(payload.game.providerGameId);
     if (gameId === undefined) throw new Error(`NFL tracking game row missing for ${payload.game.providerGameId}.`);
+    const publicLock=publicLockByGame.get(payload.game.providerGameId);
+    if(publicLock)return buildNflPublishedDeadlineTrackingRecords(publicLock,gameId).filter(record=>!existingKeys.has(`${externalId}:${record.market}`));
     if (recovery && recoverySource) {
       return buildNflPublishedPregameRecoveryRecords({ source: recoverySource, gameId, recovery: recovery.receipt });
     }

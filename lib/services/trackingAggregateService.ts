@@ -304,7 +304,8 @@ export function selectTrackingRecordsByScope(records: PredictionRecordRow[]): {
   ).filter((record) => !isTossUp(record));
   const currentReleaseRecords = dedupePredictionRecordsForTracking(
     filterCompleteUclTrackingCohorts(
-      publicRecords.filter(isCurrentUclTrackingRelease),
+      publicRecords.filter(isCurrentUclTrackingRelease).filter(record =>
+        record.sport !== "nfl" || record.source_quality !== "nfl_public_operational_forecast_r1"),
     ).filter(isTrackingRecordEligible).map(withUclFrozenTrackingForecast),
   ).filter((record) => !isTossUp(record));
   return { calendarRecords, currentReleaseRecords };

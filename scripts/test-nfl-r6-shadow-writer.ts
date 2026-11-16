@@ -8,6 +8,7 @@ import {
   __NFL_R6_MONEYLINE_SHADOW_TEST__,
   buildNflR6ShadowMoneylineDecision,
   NFL_R6_ARTIFACT_DECISION_RELEASE,
+  NFL_KNOWN_STARTER_PRIOR_RELEASE,
   NFL_R6_MONEYLINE_DECISION_RELEASE,
   NFL_R6_MONEYLINE_MODEL_RELEASE,
   NFL_R6_RUNTIME_ARTIFACT_RELEASE,
@@ -383,6 +384,32 @@ for (const invalidState of [
   assert.ok(invalidHistory.health.blockingReasons.includes("away_quarterback_history_unmatched"));
 }
 
+// Explicit new production policy uses the trained zero-experience feature
+// prior; strict legacy calls above remain unchanged and do not acquire history.
+const priorArgs = {...currentSeasonReplacementArgs,
+  currentSeasonState: {...currentSeasonState,stats:[]},
+  knownStarterPrior: NFL_KNOWN_STARTER_PRIOR_RELEASE};
+const strictPrior = buildNflR6ShadowMoneylineDecision({...priorArgs,knownStarterPrior:undefined});
+const knownPrior = buildNflR6ShadowMoneylineDecision(priorArgs);
+assert.equal(knownPrior.quarterbackContext.away.historyMatched,false);
+assert.equal(knownPrior.quarterbackContext.away.historySource,"known_starter_prior");
+assert.equal(knownPrior.health.blockingReasons.includes("away_quarterback_history_unmatched"),false);
+assert(knownPrior.health.quarterbackReasons.includes("away_quarterback_history_unmatched"));
+assert.deepEqual(knownPrior.footballProjection,strictPrior.footballProjection,"same trained prior math, no numerical repair");
+assert.equal(knownPrior.modelProbability,strictPrior.modelProbability);
+assert.deepEqual(buildNflR6ShadowMoneylineDecision({...currentSeasonReplacementArgs,knownStarterPrior:NFL_KNOWN_STARTER_PRIOR_RELEASE}),currentSeasonReplacement,"known-history games are exactly unchanged");
+for(const bad of [
+  {...priorArgs,currentSeasonState:{...priorArgs.currentSeasonState,completeThroughWeek:0}},
+  {...priorArgs,currentSeasonState:{...priorArgs.currentSeasonState,updatedAt:"2026-09-09T12:00:00Z"}},
+  {...priorArgs,currentSeasonState:{...priorArgs.currentSeasonState,season:2025}},
+  {...priorArgs,startersAndDepth:{...priorArgs.startersAndDepth,away:{...priorArgs.startersAndDepth.away,roster:[]}}},
+  {...priorArgs,startersAndDepth:{...priorArgs.startersAndDepth,away:{...priorArgs.startersAndDepth.away,team:"MIA"}}},
+]){
+ const refused=buildNflR6ShadowMoneylineDecision(bad);
+ assert.notEqual(refused.quarterbackContext.away.historySource,"known_starter_prior");
+ assert(refused.health.blockingReasons.includes("away_quarterback_history_unmatched"));
+}
+
 const unavailableReplacement = buildNflR6ShadowMoneylineDecision({
   game: { ...game, providerWeek: 2 },
   opening,
@@ -486,7 +513,7 @@ assert.equal(falsifiedLagT60.lockedAt, null);
 assert.ok(falsifiedLagT60.health.blockingReasons.includes("t60_capture_late"));
 
 const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
-assert.match(writer, /nfl_forward_evidence_writer_2026_11_15_r119_bounded_member_market/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_11_16_r120_published_deadline_tracking/);
 assert.doesNotMatch(writer, /availabilityArbitrationShadow|buildNflAvailabilityArbitrationShadow/);
 assert.match(writer, /\.\.\.shadowMoneyline\.health\.blockingReasons/);
 assert.equal((writer.match(/readNflPlayerPropsCurrentSeasonState\(/g) ?? []).length, 1);
