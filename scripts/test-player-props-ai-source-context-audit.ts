@@ -6,6 +6,7 @@ import {digest} from '../lib/playerPropsAi/evidence';
 import {nbaAuthorityFixture,nbaAuthorityReview} from './test-player-props-ai-nba-lock-authority';
 import type {AcceptedGameReview} from '../lib/playerPropsAi/reviewer';
 import type {GamePacket,Json} from '../lib/playerPropsAi/evidenceContract';
+import {PROPS_AI_ACCEPTED_RELEASES,propsReviewHasVerifiedReaderClaims} from '../lib/playerPropsAi/releases';
 globalThis.fetch=async()=>{throw Error('Source audit forbids network');};
 const at='2026-11-10T22:24:00Z',base=nbaAuthorityFixture().packet;
 function accepted(packet:GamePacket=base){
@@ -13,7 +14,7 @@ function accepted(packet:GamePacket=base){
  return{...review,gameId:packet.gameId,inputEvidence:{encoding:'gzip-base64' as const,digest:digest(packet),bytes:Buffer.byteLength(raw),data:gzipSync(raw).toString('base64')}};
 }
 const review=accepted(),before=JSON.stringify({base,review});
-for(const release of [review.release,'player_props_ai_2026_11_14_r37_complete_evidence_health','player_props_ai_2026_11_11_r36_urgent_slot_cohorts','player_props_ai_2026_11_11_r35_terminal_wave_guard','player_props_ai_2026_11_11_r34_source_mean_admission','player_props_ai_2026_11_11_r33_two_phase_review_window','player_props_ai_2026_11_11_r32_lossless_reader_tables','player_props_ai_2026_11_10_r31_verified_reader_claims'] as const){
+for(const release of PROPS_AI_ACCEPTED_RELEASES.filter(propsReviewHasVerifiedReaderClaims)){
  const result=buildPropsSourceContextAudit({packet:base,review:{...review,release},observedAt:at});
  assert.equal(result.status,'complete');assert.equal(result.review.status,'verified');assert(result.comparisonComplete);
  assert(result.actors.every(a=>a.canonicalChanged===false&&a.availabilityChanged===false&&a.admittedProofMatchesOriginal));

@@ -84,7 +84,7 @@ assert.throws(()=>gradeAiEventFromExactPairedMass({...boundary,american:Number.M
 
 // Full source normalization and current-wire admission fixtures for every sport.
 const at='2026-11-10T22:23:00Z',start='2026-11-10T23:30:00Z',lock='2026-11-10T22:30:00Z';
-function sourceFixture(sport:Sport,side:'over'|'under'){
+export function sourceFixture(sport:Sport,side:'over'|'under'){
  const over=side==='over'?-148:128,under=side==='under'?-148:128;
  if(sport==='nba'){
   const f=nbaAuthorityFixture(),id='nba-bdl-player:1',game={id:'g',start,home:'NYK',away:'BOS'};
@@ -113,7 +113,7 @@ function sourceFixture(sport:Sport,side:'over'|'under'){
  const snapshot={slateDate:'2026-11-10',snapshotId:'synthetic',asOfTimestamp:at,data:{props:[native]},modelContext:{modelReleaseId:'mlb_props_2026_10_21_r44'}} as unknown as MlbPropsBoardSnapshot;
  return{packet:liveMlbPacket({game:{id:'balldontlie-game-1',start,away:'NYY',home:'BOS'},window:{gameId:'balldontlie-game-1',stage:'final',cutoff:at,lock},snapshot,currentOdds:current,openingOdds:[]}),nba:null,nfl:null,mlb:[native]};
 }
-function accepted(packet:GamePacket,side:'over'|'under'){
+export function accepted(packet:GamePacket,side:'over'|'under'){
  const aliases=evidenceAliases(packet),players=Object.fromEntries(packet.players.map(p=>{
   const outcomes:Record<string,number[]>=packet.sport==='nba'?{points:[14,18,...v(18).slice(2)],rebounds:v(6),assists:v(3),threes:v(1)}:packet.sport==='nfl'?{receptions:[4,6,...v(6).slice(2)]}:{batter_singles:[0,1,...z().slice(2)],batter_doubles:z(),batter_triples:z(),batter_home_runs:z(),batter_walks:z(),batter_strikeouts:z(),batter_rbis:z(),batter_runs_scored:z(),batter_stolen_bases:z()};
   const weights=side==='over'?[100,128,...z().slice(2)]:[128,100,...z().slice(2)];
