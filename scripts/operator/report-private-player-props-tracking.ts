@@ -11,7 +11,7 @@
 
 import { loadEnvConfig } from "@next/env";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import {
   summarizePrivatePlayerPropTracking,
   type PrivatePlayerPropSettledRow,
@@ -26,6 +26,10 @@ import {
   readNflPlayerPropsCurrentSeasonState,
   type NflPlayerPropsCurrentSeasonStat,
 } from "../../lib/services/football/nflPlayerPropsCurrentSeasonState";
+import {
+  parseNflPlayerPropsOutcomeSupplement,
+  resolveNflPlayerPropsOutcome,
+} from "../../lib/services/football/nflPlayerPropsOutcomeSupplement";
 import {
   loadMlbPropsBoardSnapshotById,
   type MlbPropsGameLockPointer,
@@ -52,6 +56,7 @@ type Args = {
   end: string | null;
   includeRows: boolean;
   out: string | null;
+  nflOutcomeSupplement: string | null;
 };
 
 async function main(): Promise<void> {
@@ -63,7 +68,7 @@ async function main(): Promise<void> {
   const diagnostic = summarizePrivatePlayerPropTracking(loaded.rows);
   const { forecasts, ...summary } = diagnostic;
   const report = {
-    release: "private_player_props_tracking_report_2026_10_12_r1",
+    release: "private_player_props_tracking_report_2026_10_15_r2_outcome_supplement",
     readOnly: true,
     productionWrites: 0,
     localOutputWritten: Boolean(args.out),
@@ -84,6 +89,12 @@ async function loadNflRows(client: SupabaseClient, args: Args) {
   const maximumWeek = args.week ?? state.completeThroughWeek;
   const statsById = new Map(state.stats.map((row) => [`${row.gameId}|id:${row.playerId}`, row]));
   const statsByName = new Map(state.stats.map((row) => [`${row.gameId}|name:${normalize(row.playerName)}`, row]));
+  const supplement = args.nflOutcomeSupplement
+    ? parseNflPlayerPropsOutcomeSupplement(JSON.parse(readFileSync(args.nflOutcomeSupplement, "utf8")), {
+      season: args.season,
+      week: args.week ?? state.completeThroughWeek,
+    })
+    : null;
   const captured: NflPlayerPropsPrivateTrackingRow[] = [];
   const archiveWeeks: number[] = [];
   const fallbackWeeks: number[] = [];
@@ -103,11 +114,30 @@ async function loadNflRows(client: SupabaseClient, args: Args) {
       missingWeeks.push(week);
     }
   }
+  let officialStatOmissions = 0;
+  let supplementedOutcomes = 0;
+  let excludedNonparticipants = 0;
   let unmatchedOutcomes = 0;
   const rows = captured.flatMap((row): PrivatePlayerPropSettledRow[] => {
     const stat = (row.providerPlayerId ? statsById.get(`${row.gameId}|id:${row.providerPlayerId}`) : undefined)
       ?? statsByName.get(`${row.gameId}|name:${normalize(row.playerName)}`);
-    const actual = stat ? nflActual(row.market, stat) : null;
+    const storedActual = stat ? nflActual(row.market, stat) : null;
+    const resolution = resolveNflPlayerPropsOutcome({
+      storedActual,
+      gameId: row.gameId,
+      playerName: row.playerName,
+      market: row.market,
+      supplement,
+    });
+    if (storedActual === null) {
+      officialStatOmissions += 1;
+      if (resolution.disposition === "supplemented") supplementedOutcomes += 1;
+      else if (resolution.disposition === "excluded") {
+        excludedNonparticipants += 1;
+        return [];
+      }
+    }
+    const actual = resolution.actual;
     if (actual === null) { unmatchedOutcomes += 1; return []; }
     return [{
       sport: "nfl",
@@ -141,8 +171,14 @@ async function loadNflRows(client: SupabaseClient, args: Args) {
       missingWeeks,
       capturedExactOffers: captured.length,
       settledExactOffers: rows.length,
+      officialStatOmissions,
+      supplementedOutcomes,
+      excludedNonparticipants,
       unmatchedOutcomes,
-      complete: missingWeeks.length === 0 && unmatchedOutcomes === 0,
+      classifiedExactOffers: rows.length + excludedNonparticipants,
+      complete: missingWeeks.length === 0 && unmatchedOutcomes === 0
+        && rows.length + excludedNonparticipants === captured.length,
+      outcomeSupplementRelease: supplement?.release ?? null,
     },
   };
 }
@@ -408,7 +444,16 @@ function parseArgs(): Args {
   for (const [label, date] of [["start", start], ["end", end]] as const) {
     if (date !== null && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`--${label} must use YYYY-MM-DD.`);
   }
-  return { sport, season, week, start, end, includeRows: process.argv.includes("--include-rows"), out: value("out") };
+  return {
+    sport,
+    season,
+    week,
+    start,
+    end,
+    includeRows: process.argv.includes("--include-rows"),
+    out: value("out"),
+    nflOutcomeSupplement: value("nfl-outcome-supplement"),
+  };
 }
 
 function serviceClient(): SupabaseClient {
