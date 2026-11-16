@@ -5,11 +5,14 @@
 The NFL source packet contained the raw statistics, but did not include the
 compiled per-market numeric admission envelopes provided by NBA navigation.
 A correction also included only unhandled findings: valid explicit declines of
-unsupported statistics were lost when the independent second request regenerated
+unsupported statistics (including valid null-law siblings) were lost when the independent second request regenerated
 the full part. Finally the instructions suggested a prose role adjustment could
 justify an out-of-envelope mean although admission has no such waiver.
 
-R43 exposes the existing numeric contract for NFL/MLB and explains canonical
+R43 exposes every applicable canonical/component mean constraint with exact
+affected offered market indices, including required signed-component support.
+It distinguishes a structural dependency with no mean gate from an unavailable
+required input. R43 exposes the existing numeric contract for NFL/MLB and explains canonical
 means versus generative components. A correction retains source-validated
 unsupported-market declines; it still returns every player/market and repairs
 supported scopes. It does not copy an old law, force a forecast or modify admission.

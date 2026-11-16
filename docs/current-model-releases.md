@@ -13,9 +13,13 @@ envelopes with canonical/component coordinate identities. These are navigation
 for the same sources, not additional model heads, targets or scenario tail caps.
 The request explicitly distinguishes actor production from a team opportunity
 and requires an honest explicit decline when numeric source support is absent.
-A prose role adjustment cannot bypass the actual compiled envelope. Corrections
+Canonical component envelopes identify every affected offered scope: an active
+combo total cannot hide missing required signed-component support. Structural
+dependencies without a mean gate are distinguished explicitly. A prose role
+adjustment cannot bypass the actual compiled envelope. Corrections
 carry previously valid explicit declines for still numerically unavailable
-scopes along with every unhandled actor/statistic constraint; supported markets
+scopes, including valid null-law siblings, along with every unhandled
+actor/statistic constraint; supported markets
 remain eligible. The existing complete 1,984-ASCII-byte feedback limit and
 2,048-token correction cushion are unchanged; overflow refuses the correction
 rather than truncating findings or buying a third phase. Original actors, market

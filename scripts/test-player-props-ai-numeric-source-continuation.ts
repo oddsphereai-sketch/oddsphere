@@ -3,15 +3,16 @@ import assert from 'node:assert/strict';
 import {PRODUCT_RELEASE,type GamePacket,type Evidence} from '../lib/playerPropsAi/evidenceContract';
 import {digest} from '../lib/playerPropsAi/evidence';
 import {evidenceAliases} from '../lib/playerPropsAi/input';
+import {validateLaw} from '../lib/playerPropsAi/law';
 import {encodeCanonicalScenarioLaw} from '../lib/playerPropsAi/generativeCoordinates';
 import {PROPS_AI_WIRE_RELEASE} from '../lib/playerPropsAi/scenarioCoordinates';
 import {PROPS_AI_RELEASE,PROPS_AI_PRIMARY_MODEL,propsReviewHasMemberExecutionContracts,propsReviewHasVerifiedReaderClaims} from '../lib/playerPropsAi/releases';
-import {sourceMeanAdmissionSupport} from '../lib/playerPropsAi/forecastSanity';
+import {sourceForecastIssues,sourceMeanAdmissionSupport} from '../lib/playerPropsAi/forecastSanity';
 import {numericSourceNavigation} from '../lib/playerPropsAi/numericSourceNavigation';
 import {sourceAwareDiagnosticCorrection} from '../lib/playerPropsAi/sourceAwareCorrectionFeedback';
 import {completeDiagnosticCorrection} from '../lib/playerPropsAi/completeCorrectionFeedback';
 import {independentPriorEvents} from '../lib/playerPropsAi/priorEvents';
-import {jointReviewRequest,parseJointReview} from '../lib/playerPropsAi/request';
+import {jointReviewRequest,parseJointReview,parseJointPlayerReview} from '../lib/playerPropsAi/request';
 import {runPropsReview} from '../lib/playerPropsAi/reviewer';
 import type {PropsAiJob,PropsAiReviewStore} from '../lib/playerPropsAi/budget';
 import {verifiedReaderFixture} from './lib/player-props-ai-reader-fixture';
@@ -49,6 +50,19 @@ const mlb:GamePacket={...structuredClone(p),sport:'mlb',players:[{...structuredC
 assert.equal(numericSourceNavigation(mlb)!.players[0].markets[0].meanAdmissionSupport?.state,'source_opportunity');assert.equal(numericSourceNavigation(mlb)!.players[0].markets[0].meanAdmissionSupport?.maximum,5);
 for(const release of ['player_props_ai_2026_11_15_r42_supported_nfl_binary_events',PROPS_AI_RELEASE]){assert(propsReviewHasMemberExecutionContracts(release));assert(propsReviewHasVerifiedReaderClaims(release));}
 assert.equal(digest({p,bad,good}),before);
+// Frozen round70 counterexamples: null-law siblings and derived components.
+const siblings=packet(2),siblingDraft=draft(siblings);Object.assign(siblingDraft.players.p1,{law:null,gaps:['forecast_declined'],confidence:[0,0,0,0,0],exceptions:Array(5).fill('forecast_declined')});
+assert.equal(parseJointPlayerReview(siblings,'p1',siblingDraft.players.p1).law,null);
+const siblingCorrection=sourceAwareDiagnosticCorrection(siblings,siblingDraft);assert.equal(siblingCorrection.status,'ready');if(siblingCorrection.status==='ready'){assert(siblingCorrection.text.includes('P1 M3,4'));assert(!siblingCorrection.text.includes('P1 M0'),'Numerically supported scopes are not blanket-declined by guidance');}
+const combo:GamePacket={...packet(),players:[{id:'p0',name:'Synthetic combo',team:'A',opponent:'B',markets:['rushing_receiving_yards'],missing:[],evidence:[{id:'log',kind:'recent_games',source:'Synthetic single game',availableAt:at,value:{game:{startTime:'2030-05-29T23:00:00Z',awayTeam:'A',homeTeam:'B'},box:{rushing_yards:10,receiving_yards:20}}},{id:'prior',kind:'independent_model',source:'Synthetic sum prior',availableAt:at,value:{market:'rushing_receiving_yards',independentProjection:40,line:35.5,independentOver:.5,independentUnder:.5}}]}]};
+const combined=numericSourceNavigation(combo)!,constraints=combined.players[0].canonicalMeanConstraints;assert.equal(combined.players[0].markets[0].meanAdmissionSupport?.active,true);
+for(const stat of ['rushing_yards','receiving_yards']){const c=constraints.find(c=>c.statistic===stat)!;assert.equal(c.meanRule,'explicit_decline_affected');assert.deepEqual(c.affectedMarketIndices,[0]);}
+assert(!combined.meaning.includes('missing dependency envelope is not'));
+const unsupportedCombo=validateLaw('nfl',combo.players[0],{weights:v(1),outcomes:{rushing_yards:v(15),receiving_yards:v(20)}});assert.equal(sourceForecastIssues(combo,combo.players[0],unsupportedCombo).filter(i=>i.code==='forecast_numeric_support_unavailable').length,2);
+const supportedCombo=structuredClone(combo);supportedCombo.players[0].evidence.push(...[0,1,2].map(i=>({id:'extra'+i,kind:'recent_games' as const,source:'Synthetic component game',availableAt:at,value:{game:{startTime:`2030-05-${26+i}T23:00:00Z`,awayTeam:'A',homeTeam:'B'},box:{rushing_yards:10+i*5,receiving_yards:20+i*5}}})));
+const supportedConstraints=numericSourceNavigation(supportedCombo)!.players[0].canonicalMeanConstraints;assert(supportedConstraints.every(c=>c.meanRule==='within_range'));const usefulCombo=validateLaw('nfl',supportedCombo.players[0],{weights:v(1),outcomes:{rushing_yards:v(10,20),receiving_yards:v(20,30)}});assert.equal(sourceForecastIssues(supportedCombo,supportedCombo.players[0],usefulCombo).length,0,'Valid derived recovery remains eligible');
+const componentMismatch=validateLaw('nfl',supportedCombo.players[0],{weights:v(1),outcomes:{rushing_yards:v(-95),receiving_yards:v(135)}});assert(sourceForecastIssues(supportedCombo,supportedCombo.players[0],componentMismatch).filter(i=>i.code==='forecast_mean_outside_supplied_support').length>=2,'A plausible sum cannot cancel unsupported signed components');
+const dependent=numericSourceNavigation({...p,players:[{...p.players[0],markets:['passing_yards']}]} )!.players[0].canonicalMeanConstraints;assert.deepEqual(dependent.map(c=>c.statistic),['passing_yards'],'Structural QB coordinates do not invent a mean gate for an unoffered event');
 const expectedCorrectionText=next.text;
 async function main(){let phase=0;const requests:ReturnType<typeof jointReviewRequest>[]=[],receipts:Record<string,unknown>[]=[];
  const job={job_key:'synthetic-source-continuation',sport:'nfl',game_id:p.gameId,game_day:'2030-06-01',stage:'final',scheduled_start:p.start,lock_at:p.lock,state:'pending',model:PROPS_AI_PRIMARY_MODEL,requested_tier:'default'} as PropsAiJob;
