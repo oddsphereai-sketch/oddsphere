@@ -9,7 +9,10 @@ for another market does not authorize the reviewer-declined market.
 R45 admission unions the exact aligned abstention tokens with the independently
 checked numerical declines. It uses the source-bound token proof, never text
 matching or confidence. The law, prices, confidence and factual selections are
-not changed. A conditional availability/source caveat is not automatically an
+not changed. Source-context audit membership uses the authoritative verified-reader
+release predicate, so changing the current generation cannot orphan an accepted
+R44 archive. All supported original generations are exercised by the audit test.
+A conditional availability/source caveat is not automatically an
 abstention. Every original player and market remains represented. A supported
 sibling scope remains eligible, including a derived market that uses the same
 law. The normal existing correction phase can explicitly reopen a supported
