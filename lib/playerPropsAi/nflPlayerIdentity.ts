@@ -9,10 +9,14 @@ export const PROPS_AI_NFL_SOURCE_RELEASE=PROPS_AI_NFL_EVENT_SOURCE_RELEASE;
 /** Separate from the unchanged event-source qualification contract. */
 export const PROPS_AI_NFL_IDENTITY_RELEASE='player_props_ai_nfl_identity_2026_11_10_r1_cutoff_exact_id' as const;
 /** Versioned curated name data; the cutoff/namespace/conflict contract stays R1. */
-export const PROPS_AI_NFL_ALIAS_RELEASE='player_props_ai_nfl_alias_catalog_2026_11_15_r1_official_names' as const;
+export const PROPS_AI_NFL_ALIAS_RELEASE='player_props_ai_nfl_alias_catalog_2026_11_16_r2_hibner_official_names' as const;
 const norm=(s:string)=>s.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/\b(jr|sr|ii|iii|iv)\b/g,'').replace(/[^a-z]/g,'');
 // Name equivalence is explicit and must bind the independently captured native ID.
 const aliases=[
+ // Same native ID; the official club profile URL and draft page use both names.
+ // https://www.baltimoreravens.com/team/players-roster/matt-hibner/
+ // https://www.baltimoreravens.com/draft/2026/matthew-hibner
+ {id:'33934589',names:['Matt Hibner','Matthew Hibner']},
  // Exact independently captured BDL IDs; literal same-person naming evidence:
  // https://www.tennesseetitans.com/team/players-roster/cam-ward/
  {id:'13873931',names:['Cam Ward','Cameron Ward']},

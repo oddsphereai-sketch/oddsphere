@@ -1,3 +1,27 @@
+## November 16 exact Hibner NFL name catalog R44
+
+Shared generation is `player_props_ai_2026_11_16_r44_hibner_official_alias`;
+NFL writer is `nfl_player_props_writer_2026_11_16_r105_hibner_official_alias`.
+The curated alias catalog is
+`player_props_ai_nfl_alias_catalog_2026_11_16_r2_hibner_official_names`.
+Only literal Matt Hibner / Matthew Hibner for independently captured BDL ID
+33934589 is added. Baltimore's official profile uses the Matt URL and Matthew
+heading; its draft page uses the Matthew URL and Matt heading:
+https://www.baltimoreravens.com/team/players-roster/matt-hibner/ and
+https://www.baltimoreravens.com/draft/2026/matthew-hibner.
+The existing namespace, game/team/start/cutoff and conflicting-fact guards remain
+unchanged. Names cannot create an ID, team, missing prior or source authority.
+
+R43 and all earlier accepted reviews keep explicit original membership and
+locked reader precedence. Numerical source support, law R3, grade R5, selection
+R8, NFL source R3/identity R1, member R61/lifecycle R43, NBA writer R25, native
+MLB R44, lease, two slots, model/output/provider budgets and $50/$60 limits stay
+unchanged. No historical row, failure, forecast or closed slot is rewritten.
+A prospective alias enables preparation only; it proves neither model success
+nor pricing/publication. The earlier preflight callback was not archived, so
+this verified retained-data defect is not claimed as its established cause.
+See `docs/model-audits/2026-11-16-props-hibner-identity.md`.
+
 ## November 16 canonical source navigation and correction continuation R43
 
 Shared generation is `player_props_ai_2026_11_16_r43_numeric_source_continuation`;
