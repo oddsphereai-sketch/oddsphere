@@ -48,7 +48,7 @@ const many=packet(40),overflow=sourceAwareDiagnosticCorrection(many,draft(many))
 const nba=structuredClone(p);nba.sport='nba';assert.equal(numericSourceNavigation(nba),null);
 const mlb:GamePacket={...structuredClone(p),sport:'mlb',players:[{...structuredClone(p.players[0]),markets:['batter_home_runs'],evidence:[{id:'p0:batter_home_runs:recentForm',kind:'recent_games',source:'Synthetic tagged game',availableAt:at,value:{logs:[{gameId:'one',value:0,plateAppearances:4},{gameId:'two',value:0,plateAppearances:5}]}}]}]};
 assert.equal(numericSourceNavigation(mlb)!.players[0].markets[0].meanAdmissionSupport?.state,'source_opportunity');assert.equal(numericSourceNavigation(mlb)!.players[0].markets[0].meanAdmissionSupport?.maximum,5);
-for(const release of ['player_props_ai_2026_11_15_r42_supported_nfl_binary_events',PROPS_AI_RELEASE]){assert(propsReviewHasMemberExecutionContracts(release));assert(propsReviewHasVerifiedReaderClaims(release));}
+for(const release of ['player_props_ai_2026_11_16_r43_numeric_source_continuation','player_props_ai_2026_11_15_r42_supported_nfl_binary_events',PROPS_AI_RELEASE]){assert(propsReviewHasMemberExecutionContracts(release));assert(propsReviewHasVerifiedReaderClaims(release));}
 assert.equal(digest({p,bad,good}),before);
 // Frozen round70 counterexamples: null-law siblings and derived components.
 const siblings=packet(2),siblingDraft=draft(siblings);Object.assign(siblingDraft.players.p1,{law:null,gaps:['forecast_declined'],confidence:[0,0,0,0,0],exceptions:Array(5).fill('forecast_declined')});

@@ -19,6 +19,7 @@ const store = await import('../lib/services/football/nflPlayerPropsSnapshotStore
 let checks=0;
 
 for (const c of [
+  {id:'33934589',full:'Matt Hibner',alias:'Matthew Hibner',team:'BAL'},
   {id:'13873931',full:'Cam Ward',alias:'Cameron Ward',team:'TEN'},
   {id:'697',full:'Bam Knight',alias:'Zonovan Knight',team:'ARI'},
 ]) {
