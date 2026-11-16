@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {PRODUCT_RELEASE,type GamePacket,type Evidence} from '../lib/playerPropsAi/evidenceContract';
 import {digest} from '../lib/playerPropsAi/evidence';
 import {evidenceAliases} from '../lib/playerPropsAi/input';
-import {validateLaw} from '../lib/playerPropsAi/law';
+import {primitives,validateLaw} from '../lib/playerPropsAi/law';
 import {encodeCanonicalScenarioLaw} from '../lib/playerPropsAi/generativeCoordinates';
 import {PROPS_AI_WIRE_RELEASE} from '../lib/playerPropsAi/scenarioCoordinates';
 import {PROPS_AI_RELEASE,PROPS_AI_PRIMARY_MODEL,propsReviewHasMemberExecutionContracts,propsReviewHasVerifiedReaderClaims} from '../lib/playerPropsAi/releases';
@@ -63,6 +63,14 @@ const supportedCombo=structuredClone(combo);supportedCombo.players[0].evidence.p
 const supportedConstraints=numericSourceNavigation(supportedCombo)!.players[0].canonicalMeanConstraints;assert(supportedConstraints.every(c=>c.meanRule==='within_range'));const usefulCombo=validateLaw('nfl',supportedCombo.players[0],{weights:v(1),outcomes:{rushing_yards:v(10,20),receiving_yards:v(20,30)}});assert.equal(sourceForecastIssues(supportedCombo,supportedCombo.players[0],usefulCombo).length,0,'Valid derived recovery remains eligible');
 const componentMismatch=validateLaw('nfl',supportedCombo.players[0],{weights:v(1),outcomes:{rushing_yards:v(-95),receiving_yards:v(135)}});assert(sourceForecastIssues(supportedCombo,supportedCombo.players[0],componentMismatch).filter(i=>i.code==='forecast_mean_outside_supplied_support').length>=2,'A plausible sum cannot cancel unsupported signed components');
 const dependent=numericSourceNavigation({...p,players:[{...p.players[0],markets:['passing_yards']}]} )!.players[0].canonicalMeanConstraints;assert.deepEqual(dependent.map(c=>c.statistic),['passing_yards'],'Structural QB coordinates do not invent a mean gate for an unoffered event');
+// Frozen round71 counterexample: an unavailable direct count must not
+// demote a separately supported derived market.
+const mixed:GamePacket={...packet(),sport:'mlb',players:[{id:'p0',name:'Synthetic batter',team:'A',opponent:'B',markets:['batter_singles','batter_hits'],missing:[],evidence:[{id:'p0:batter_hits:recentForm',kind:'recent_games',source:'Synthetic tagged hits games',availableAt:at,value:{logs:[{gameId:'one',date:'2030-05-28',opponent:'B',homeAway:'home',value:1},{gameId:'two',date:'2030-05-29',opponent:'B',homeAway:'away',value:2},{gameId:'three',date:'2030-05-30',opponent:'B',homeAway:'home',value:3}]}},{id:'p0:prior:hits',kind:'independent_model',source:'Synthetic hits prior',availableAt:at,value:{market:'batter_hits',independentProjection:2,line:1.5,independentOver:.5,independentUnder:.5}}]}]};
+const mixedPlayer=mixed.players[0],mixedNav=numericSourceNavigation(mixed)!,mixedConstraint=mixedNav.players[0].canonicalMeanConstraints.find(c=>c.statistic==='batter_singles')!;assert.equal(mixedConstraint.meanRule,'explicit_decline_affected');assert.deepEqual(mixedConstraint.affectedMarketIndices,[0]);
+const mixedOutcomes=Object.fromEntries(primitives('mlb',mixedPlayer).map(stat=>[stat,stat==='batter_doubles'?v(1,3):v(0)]));const mixedLaw=validateLaw('mlb',mixedPlayer,{weights:v(1),outcomes:mixedOutcomes});
+const mixedIssues=sourceForecastIssues(mixed,mixedPlayer,mixedLaw);assert.equal(mixedIssues.length,1);assert.deepEqual(mixedIssues[0].markets,['batter_singles']);
+const mixedAliases=new Map([...evidenceAliases(mixed)].map(([a,id])=>[id,a]));const mixedDraft={wireRelease:PROPS_AI_WIRE_RELEASE,players:{p0:verifiedReaderFixture(mixed,'p0',{priorRead:Object.fromEntries(independentPriorEvents(mixedPlayer).map(e=>[mixedAliases.get(e.sourceId)!,e.preferredOutcome])),evidenceIds:[mixedAliases.get(mixedPlayer.evidence[0].id)!],gaps:[],confidence:[0,1],exceptions:['forecast_declined',null],law:encodeCanonicalScenarioLaw('mlb',mixedPlayer,{weights:v(1),outcomes:mixedOutcomes})})}};
+assert.deepEqual(parseJointReview(mixed,mixedDraft).players[0].sourceDeclinedMarkets,['batter_singles']);assert.deepEqual(JSON.parse(jointReviewRequest(mixed,PROPS_AI_PRIMARY_MODEL,7000).input).numericSourceNavigation.players[0].canonicalMeanConstraints.find((c:{statistic:string})=>c.statistic==='batter_singles').affectedMarketIndices,[0]);
 const expectedCorrectionText=next.text;
 async function main(){let phase=0;const requests:ReturnType<typeof jointReviewRequest>[]=[],receipts:Record<string,unknown>[]=[];
  const job={job_key:'synthetic-source-continuation',sport:'nfl',game_id:p.gameId,game_day:'2030-06-01',stage:'final',scheduled_start:p.start,lock_at:p.lock,state:'pending',model:PROPS_AI_PRIMARY_MODEL,requested_tier:'default'} as PropsAiJob;

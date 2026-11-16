@@ -15,7 +15,11 @@ export function numericSourceConstraints(packet:GamePacket,player:Player){
  return [...new Set([...primitives(packet.sport,player),...qualified])].flatMap(statistic=>{
   const affected=qualified.filter(m=>marketUsesStatistic(m,statistic));if(!affected.length)return[];
   const envelope=support[statistic]??null,required=qualified.includes(statistic)||statistic.endsWith('yards')&&affected.some(m=>COMBOS[m]?.includes(statistic));
-  return[{statistic,affectedMarketIndices:affected.map(m=>player.markets.indexOf(m)),meanAdmissionSupport:envelope,
+  // Unavailable non-yard direct statistics require only their own decline;
+  // unlike active bounds or unavailable signed combo components, that rule
+  // does not extend to a separately supported derived market.
+  const ruleAffected=!envelope?.active&&required&&!statistic.endsWith('yards')?[statistic]:affected;
+  return[{statistic,affectedMarketIndices:ruleAffected.map(m=>player.markets.indexOf(m)),meanAdmissionSupport:envelope,
    meanRule:envelope?.active?'within_range' as const:required?'explicit_decline_affected' as const:'no_mean_bound' as const}];
  });
 }
