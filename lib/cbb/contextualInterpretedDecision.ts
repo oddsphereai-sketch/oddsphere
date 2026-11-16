@@ -60,7 +60,7 @@ const ownNativeId=(q:{sourceEventId?:string;providerEventId?:string})=>q.sourceE
 const precise=(value:string)=>{const ms=Date.parse(value),fraction=value.match(/\.(\d+)(?:Z|[+-]\d{2}:?\d{2})$/i)?.[1]??"";return !Number.isFinite(ms)||fraction.length>9&&/[1-9]/.test(fraction.slice(9))?null:BigInt(ms)*BigInt(1000000)+BigInt(fraction.slice(3,9).padEnd(6,"0"));};
 const sameQuote=(a:Pick<Quote,"gameId"|"sportsbook"|"market"|"line"|"firstPrice"|"secondPrice"|"providerObservedAt">,b:typeof a)=>
  a.gameId===b.gameId&&family(a.sportsbook)===family(b.sportsbook)&&a.market===b.market&&a.line===b.line&&a.firstPrice===b.firstPrice&&a.secondPrice===b.secondPrice&&precise(a.providerObservedAt)!==null&&precise(a.providerObservedAt)===precise(b.providerObservedAt);
-function executionProof(q:Quote,input:CbbContextualFeatureInput,receipt:CbbContextualMarketInterpretation):{problem:string|null;columnProof?:CbbContextualConsumerQuote}{
+export function cbbContextualExecutionProof(q:Quote,input:CbbContextualFeatureInput,receipt:CbbContextualMarketInterpretation):{problem:string|null;columnProof?:CbbContextualConsumerQuote}{
  const at=Date.parse(input.asOf),stream=receipt.streams.find(s=>family(s.book)===family(q.sportsbook)&&s.market===q.market&&(s.role==="consumer"||s.role==="professional")),current=stream?.currentQuote;
  if(!current||!sameQuote(q,current.rawQuote))return {problem:"execution_pair_not_current_unambiguous_interpreted_quote"};
  if(q.sourceEventId&&q.providerEventId&&q.sourceEventId!==q.providerEventId||ownNativeId(q)&&current.eventId&&q.provider&&q.provider===current.provider&&ownNativeId(q)!==current.eventId)return {problem:"execution_same_provider_native_identity_conflict"};
@@ -92,7 +92,7 @@ export function buildCbbInterpretedDecision(args:{input:CbbContextualFeatureInpu
  const riskEvaluator=args.recommendationRisk?createCbbRecommendationRiskEvaluator({latent:args.latent,context:args.recommendationRisk,numerics:args.numerics,assessmentTier:"lean"}):null;
  const bestRiskEvaluator=args.recommendationRisk?createCbbRecommendationRiskEvaluator({latent:args.latent,context:args.recommendationRisk,numerics:args.numerics,assessmentTier:"best"}):null;
  const markets=(["moneyline","spread","total"] as const).map(market=>{
-  const target=args.targets.find(q=>q.market===market),proof=target?executionProof(target,input,receipt):{problem:"missing_execution_pair"};
+  const target=args.targets.find(q=>q.market===market),proof=target?cbbContextualExecutionProof(target,input,receipt):{problem:"missing_execution_pair"};
   if(!target||proof.problem)return {market,target:target??null,grade:"Held" as const,reason:proof.problem,selection:null,probability:null,loseProbability:null,pushProbability:null,price:null,expectedValue:null,stake:0};
   const p=law.probabilitiesFast(market,target.line);
   const selection:"first"|"second"=p.first>=p.second?"first":"second",direction=selection==="first"?1:-1;

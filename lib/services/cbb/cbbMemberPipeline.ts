@@ -43,7 +43,7 @@ import {forecastCbbFullDivisionOneBatch} from "@/lib/cbb/fullDivisionOneForecast
 import {buildCbbGameForecastBoard} from "@/lib/cbb/gameForecastBoard";
 import type {CbbProvisionalBoard} from "@/lib/cbb/provisionalLifecycle";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_13_r56_per_game_failure_isolation" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_16_r57_same_contract_execution" as const;
 /** Book/contract choice only. No prior projection, probability or grade runs. */
 export function selectCbbContextualPipelineTargets(quotes:CbbQuote[]):CbbQuote[]{
   const boardBook=chooseCbbSupportedTargetBook(quotes);
@@ -295,7 +295,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       legacyAnchorQuotes:anchors?.quotes.map(q=>({...q,anchorCapturedAt:q.anchorCapturedAt??anchors.capturedAt})),
       historyComplete:{price:canonicalHistory.price.complete,split:canonicalHistory.split.complete,consumer:canonicalHistory.retailPrice?.complete??false}});
     const targets=selectCbbContextualPipelineTargets(quotes);
-    const board=contextualRuntime.evaluate({input:assembled.input,independent:row.forecast,targets,coverage:assembled.coverage});
+    const board=contextualRuntime.evaluate({input:assembled.input,independent:row.forecast,targets,executionCandidates:quotes,coverage:assembled.coverage});
     contextualInputCounts.evaluated++;if(retained)contextualInputCounts.continued++;else if(legacy)contextualInputCounts.migrated++;
     if(!targets.length)contextualInputCounts.unpriced++;
     boardCandidates.set(row.game.id,board);
