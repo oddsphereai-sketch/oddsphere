@@ -59,7 +59,9 @@ for(const sport of ['nba','nfl','mlb'] as const)for(const side of ['over','under
   const applied=applyNflSiteAi(f.nfl,f.packet,originalChoices,at);
   const beforeLock=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:10,evaluatedAt:at,nextBoard:applied});
   const frozen=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:10,evaluatedAt:f.packet.lock,nextBoard:applied,previous:beforeLock});
-  const bytes=JSON.stringify(frozen);assert.strictEqual(applyNflSiteAi(frozen.board,f.packet,emptyChoices,at),frozen.board);
+  const lockedDraft={...frozen.board,publicationEnabled:false as const,trackingEnabled:false as const};
+  const bytes=JSON.stringify(frozen),draftBytes=JSON.stringify(lockedDraft);assert.strictEqual(applyNflSiteAi(lockedDraft,f.packet,emptyChoices,at),lockedDraft);
+  assert.equal(JSON.stringify(lockedDraft),draftBytes);controls++;
   assert.deepEqual(buildNflPlayerPropsMemberSnapshot(frozen,f.packet.lock).memberDecisions,frozen.memberDecisions);assert.equal(JSON.stringify(frozen),bytes);controls+=3;
  }else if(f.mlb){
   const applied=applyMlbSiteAi(f.mlb,f.packet,originalChoices,at),frozen=applied.map(r=>({...r,lockStatus:{status:'locked' as const,lockedAt:f.packet.lock}}));
