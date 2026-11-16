@@ -63,7 +63,7 @@ import { assertMlbChampionRuntime } from "@/lib/automodel/mlbChampionRuntime";
 export const maxDuration = 300;
 
 const TRACKING_REFRESH_PUBLICATION_RELEASE =
-  "tracking_refresh_publication_2026_11_08_r4_all_sport_integrity_guard";
+  "tracking_refresh_publication_2026_11_16_r5_complete_nfl_slate";
 
 // The active EPL pipeline stores under sport="soccer" and is competition-
 // scoped in snapshot_json. Include soccer in the scheduled cycle so EPL

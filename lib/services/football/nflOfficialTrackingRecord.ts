@@ -24,7 +24,7 @@ import {
 } from "./footballCrossMarketCoherence";
 
 export const NFL_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "nfl_official_tracking_record_2026_09_28_r16_market_marriage" as const;
+  "nfl_official_tracking_record_2026_11_16_r17_published_deadline_tracking" as const;
 
 const NFL_TRACKED_MARKETS = ["moneyline", "spread", "total"] as const;
 
@@ -233,6 +233,22 @@ function coherenceArgs(payload: NflForwardEvidencePayload): Parameters<typeof as
     // predecessor. Earlier immutable payloads retain their original contract.
     publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
   };
+}
+
+/** Copy an already-approved published source; caller must bind a versioned
+ * public-lock receipt and actual lock/recovery clock before persistence. */
+export function serializeNflPublishedSourceTracking(args: {
+  source: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }; gameId: number;
+}): PredictionRecordRow[] {
+  if (args.source.payload.schemaRelease !== NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
+      args.source.stage !== "unlocked" || args.source.payload.stage !== "unlocked" ||
+      !args.source.payload.decisions.publicationEnabled || args.source.payload.captureAttempt ||
+      hashNflForwardEvidencePayload(args.source.payload) !== args.source.payloadSha256)
+    throw new Error("NFL published tracking requires intact approved original pregame source");
+  const records = serializeTrackingRecords({payload: args.source.payload, gameId: args.gameId});
+  if (records.length !== 3 || new Set(records.map(r => r.market)).size !== 3)
+    throw new Error("NFL published tracking requires all three original forecast markets");
+  return records;
 }
 
 function serializeTrackingRecords(

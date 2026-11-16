@@ -10,7 +10,13 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 
 export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "nfl_forward_member_snapshot_2026_11_06_r73_publication_clock" as const;
+  "nfl_forward_member_snapshot_2026_11_16_r74_known_starter_prior" as const;
+const NFL_KNOWN_STARTER_PREDECESSOR = {
+  snapshot: "nfl_forward_member_snapshot_2026_11_06_r73_publication_clock",
+  fixture: "nfl_weekly_member_fixture_2026_11_06_r80_exact_player_availability_continuity",
+  member: "nfl_v1_member_release_2026_11_06_r64_exact_player_availability_continuity",
+  decision: "nfl_v1_daily_edge_decision_2026_11_06_r66_exact_player_availability_continuity",
+} as const;
 const NFL_PUBLICATION_CLOCK_PREDECESSOR = {
   snapshot: "nfl_forward_member_snapshot_2026_11_06_r72_exact_player_availability_continuity",
   fixture: "nfl_weekly_member_fixture_2026_11_06_r80_exact_player_availability_continuity",
@@ -356,6 +362,7 @@ const NFL_RAW_SIGNAL_PREVIOUS_FIXTURE_RELEASE =
 const NFL_NONPUSH_PREVIOUS_FIXTURE_RELEASE =
   "nfl_weekly_member_fixture_2026_09_21_r26_locked_transition_continuity" as const;
 const NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES = [
+  NFL_KNOWN_STARTER_PREDECESSOR.snapshot,
   NFL_PUBLICATION_CLOCK_PREDECESSOR.snapshot,
   NFL_EXACT_PLAYER_AVAILABILITY_PREDECESSOR.snapshot,
   NFL_QUARTERBACK_CONTINUITY_PREDECESSOR.snapshot,
@@ -480,6 +487,11 @@ function nflForwardMemberSnapshotKeyForRelease(
   input: { season: number; week: number },
   snapshotRelease: string,
 ): string {
+  if (snapshotRelease === NFL_KNOWN_STARTER_PREDECESSOR.snapshot) {
+    return ["nfl", "daily-edge", input.season, input.week, snapshotRelease,
+      NFL_KNOWN_STARTER_PREDECESSOR.fixture, NFL_KNOWN_STARTER_PREDECESSOR.member,
+      NFL_KNOWN_STARTER_PREDECESSOR.decision].join("::");
+  }
   if (snapshotRelease === NFL_PUBLICATION_CLOCK_PREDECESSOR.snapshot) {
     return ["nfl", "daily-edge", input.season, input.week, snapshotRelease,
       NFL_PUBLICATION_CLOCK_PREDECESSOR.fixture, NFL_PUBLICATION_CLOCK_PREDECESSOR.member,
@@ -882,6 +894,7 @@ export async function readNflForwardMemberSnapshot(input: {
   const now = input.now ? new Date(input.now).toISOString() : new Date().toISOString();
   const snapshotKeys = [...new Set([
     nflForwardMemberSnapshotKeyForRelease(input, NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE),
+    nflForwardMemberSnapshotKeyForRelease(input, NFL_KNOWN_STARTER_PREDECESSOR.snapshot),
     nflForwardMemberSnapshotKeyForRelease(input, NFL_PUBLICATION_CLOCK_PREDECESSOR.snapshot),
     nflForwardMemberSnapshotKeyForPreviousCurrentDecision(input),
     ...NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES.map((release) =>
@@ -1006,6 +1019,10 @@ function validateNflForwardMemberSnapshot(
     decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE &&
     fixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE &&
     heldMemberFixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE) ||
+    (memberRelease === NFL_KNOWN_STARTER_PREDECESSOR.member &&
+      decisionRelease === NFL_KNOWN_STARTER_PREDECESSOR.decision &&
+      fixtureRelease === NFL_KNOWN_STARTER_PREDECESSOR.fixture &&
+      heldMemberFixtureRelease === NFL_KNOWN_STARTER_PREDECESSOR.fixture) ||
     (memberRelease === NFL_EXACT_PLAYER_AVAILABILITY_PREDECESSOR.member &&
       decisionRelease === NFL_EXACT_PLAYER_AVAILABILITY_PREDECESSOR.decision &&
       fixtureRelease === NFL_EXACT_PLAYER_AVAILABILITY_PREDECESSOR.fixture &&
@@ -1253,7 +1270,7 @@ function validateNflForwardMemberSnapshot(
     snapshot.fixture?.provenance?.sourceChecksum !== snapshot.sourceChecksum ||
     !Number.isFinite(Date.parse(snapshot.sourceCapturedAt ?? "")) ||
     !Number.isFinite(Date.parse(snapshot.publishedAt ?? "")) ||
-    (snapshot.snapshotRelease === NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE &&
+    ((snapshot.snapshotRelease === NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE || snapshot.snapshotRelease === NFL_KNOWN_STARTER_PREDECESSOR.snapshot) &&
       Date.parse(snapshot.publishedAt!) < Date.parse(snapshot.sourceCapturedAt!)) ||
     !/^[a-f0-9]{64}$/.test(snapshot.sourceChecksum ?? "")
   ) {

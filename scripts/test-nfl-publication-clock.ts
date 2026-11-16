@@ -5,9 +5,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { refreshCompactMemberSnapshot } from "../lib/services/football/nflForwardEvidenceWriter";
 import { buildNflForwardMemberSnapshot, readNflForwardMemberSnapshot, writeNflForwardMemberSnapshot,
   NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE, type NflForwardMemberSnapshot } from "../lib/services/football/nflForwardMemberSnapshotStore";
-import type { NflForwardStoredEvidence, NflForwardEvidencePayload } from "../lib/services/football/nflForwardEvidence";
-import { buildNflWeekOneHeldMemberFixture } from "../lib/services/football/nflWeekOneHeldMemberFixture";
+import { hashNflForwardEvidencePayload, type NflForwardStoredEvidence, type NflForwardEvidencePayload } from "../lib/services/football/nflForwardEvidence";
+import { buildNflWeekOneHeldMemberFixture, NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE } from "../lib/services/football/nflWeekOneHeldMemberFixture";
 
+import {NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE} from "../lib/services/football/nflV1ActionableGradeCandidate";
 const load = <T>(name: string): T => JSON.parse(gunzipSync(readFileSync(`scripts/fixtures/${name}.json.gz`)).toString());
 const predecessor = load<NflForwardMemberSnapshot>("nfl-publication-clock-r72-member-20261106");
 const older = load<NflForwardMemberSnapshot>("nfl-availability-predecessor-member-20261106");
@@ -21,12 +22,24 @@ const evidence = [...load<FrozenRow[]>("nfl-publication-clock-current-evidence-2
   gameStartAt: row.payload.game.scheduledStart, payloadSha256: row.payload_sha256, payload: row.payload,
 }));
 const evidenceBytes = JSON.stringify(evidence);
+// Only synthetic unlocked copies enter the new writer contract. Every frozen
+// original and every old locked DTO remains byte-exact in the controls.
+const currentEvidence = structuredClone(evidence);
+for(const row of currentEvidence) if(row.stage==='unlocked') {
+ row.payload.decisions.modelPromotionStatus= NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE;
+ for(const decision of row.payload.decisions.evaluatedBets) decision.decisionRelease=NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
+ row.payloadSha256=hashNflForwardEvidencePayload(row.payload);
+}
+const currentFixture = {...predecessor.fixture,heldMemberFixtureRelease:NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE};
 const completedAt = new Date(Date.parse(predecessor.sourceCapturedAt) + 120_000).toISOString();
 function harness() {
   type Write = { snapshot_key: string; payload: NflForwardMemberSnapshot; generated_at: string; updated_at: string };
   const requested: string[] = [], writes: Write[] = [];
   const client = { from(table: string) {
-    assert.equal(table, "lab_response_snapshots", "publication regression harness permits no provider or other DB access");
+    if(table==='prediction_records') {
+      const q={select(){return q;},eq(){return q;},in(){return q;},limit(n:number){assert.equal(n,33);return q;},then(resolve:(r:unknown)=>void){resolve({data:[],error:null});}};return q;
+    }
+    assert.equal(table, "lab_response_snapshots", "publication regression harness permits only compact snapshot and bounded public-lock reads");
     return {
       select() { return { eq(_column: string, key: string) { requested.push(key); return { async maybeSingle() {
         const saved = writes.find(row => row.snapshot_key === key);
@@ -39,16 +52,16 @@ function harness() {
   return { client, writes, requested };
 }
 async function main() {
-  assert.throws(() => buildNflForwardMemberSnapshot({ fixture: predecessor.fixture, season: 2026, week: 9, publishedAt: predecessor.publishedAt }), /publication/);
-  assert.throws(() => buildNflForwardMemberSnapshot({ fixture: predecessor.fixture, season: 2026, week: 9, publishedAt: "invalid" }), /publication/);
-  const newSnapshot = buildNflForwardMemberSnapshot({ fixture: predecessor.fixture, season: 2026, week: 9, publishedAt: completedAt });
+  assert.throws(() => buildNflForwardMemberSnapshot({ fixture: currentFixture, season: 2026, week: 9, publishedAt: predecessor.publishedAt }), /publication/);
+  assert.throws(() => buildNflForwardMemberSnapshot({ fixture: currentFixture, season: 2026, week: 9, publishedAt: "invalid" }), /publication/);
+  const newSnapshot = buildNflForwardMemberSnapshot({ fixture: currentFixture, season: 2026, week: 9, publishedAt: completedAt });
   assert.equal(newSnapshot.snapshotRelease, NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE);
-  assert.deepEqual(newSnapshot.fixture, predecessor.fixture, "new outer metadata must not touch any stored card, projection, grade or evidence");
+  assert.deepEqual(newSnapshot.fixture, currentFixture, "new outer metadata must not touch any stored card, projection, grade or evidence");
   const legacyRead = harness();
   assert.deepEqual(await readNflForwardMemberSnapshot({ client: legacyRead.client, season: 2026, week: 9, now: completedAt }), predecessor,
     "R72 predecessor keeps its exact original payload and takes precedence over R71");
-  assert.equal(legacyRead.requested.length, 2);
-  assert.equal(legacyRead.requested[1], storedKey(predecessor), "fallback must address the full frozen R72 key, not just its release fragment");
+  assert.equal(legacyRead.requested.length, 3);
+  assert.equal(legacyRead.requested[2], storedKey(predecessor), "fallback must address the full frozen R72 key, not just its release fragment");
   await assert.rejects(() => writeNflForwardMemberSnapshot({ client: legacyRead.client, snapshot: predecessor }), /legacy snapshots are read-only/);
   await assert.rejects(() => writeNflForwardMemberSnapshot({ client: legacyRead.client, snapshot: { ...newSnapshot, publishedAt: predecessor.publishedAt } }), /publication/);
   assert.equal(legacyRead.writes.length, 0, "invalid or historical publications never reach the DB write");
@@ -58,8 +71,8 @@ async function main() {
   assert.deepEqual(await readNflForwardMemberSnapshot({ client: invalidCurrent.client, season: 2026, week: 9, now: completedAt }), predecessor,
     "a malformed new publication cannot hide the valid exact predecessor");
   const current = harness();
-  const expectedFixture = buildNflWeekOneHeldMemberFixture(evidence, { previousFixture: predecessor.fixture });
-  const result = await refreshCompactMemberSnapshot({ client: current.client, existing: evidence, payloads: [],
+  const expectedFixture = buildNflWeekOneHeldMemberFixture(currentEvidence, { previousFixture: predecessor.fixture });
+  const result = await refreshCompactMemberSnapshot({ client: current.client, existing: currentEvidence, payloads: [],
     season: 2026, week: 9, now: predecessor.publishedAt, apply: true, publicationClock: () => completedAt });
   assert.equal(result.memberSnapshotUpdated, true, result.memberSnapshotError ?? "publication failed");
   assert.equal(current.writes.length, 1);
@@ -78,12 +91,12 @@ async function main() {
     "the original legacy lock is byte-for-byte authority, not a rebuilt current card");
   assert.deepEqual(await readNflForwardMemberSnapshot({ client: current.client, season: 2026, week: 9, now: completedAt }), stored.payload);
   const bad = harness();
-  const rejected = await refreshCompactMemberSnapshot({ client: bad.client, existing: evidence, payloads: [], season: 2026, week: 9,
+  const rejected = await refreshCompactMemberSnapshot({ client: bad.client, existing: currentEvidence, payloads: [], season: 2026, week: 9,
     now: predecessor.publishedAt, apply: true, publicationClock: () => predecessor.publishedAt });
   assert.equal(rejected.memberSnapshotUpdated, false); assert.match(rejected.memberSnapshotError!, /publication/);
   assert.equal(bad.writes.length, 0, "clock failure retains the prior stored board");
   const malformed = harness();
-  const malformedResult = await refreshCompactMemberSnapshot({ client: malformed.client, existing: evidence, payloads: [], season: 2026, week: 9,
+  const malformedResult = await refreshCompactMemberSnapshot({ client: malformed.client, existing: currentEvidence, payloads: [], season: 2026, week: 9,
     now: predecessor.publishedAt, apply: true, publicationClock: () => "invalid" });
   assert.equal(malformedResult.memberSnapshotUpdated, false); assert.equal(malformed.writes.length, 0);
   assert.equal(JSON.stringify(predecessor), originalBytes); assert.equal(JSON.stringify(evidence), evidenceBytes);

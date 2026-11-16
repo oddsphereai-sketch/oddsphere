@@ -48,7 +48,9 @@ import { isVerifiedEventOpening } from "../dailyEdge/marketCycleOpening";
 import { verifiedTrailMovementDirection } from "../dailyEdge/verifiedTrailMovement";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_11_06_r80_exact_player_availability_continuity" as const;
+  "nfl_weekly_member_fixture_2026_11_16_r81_known_starter_prior" as const;
+const NFL_KNOWN_STARTER_PREDECESSOR_MEMBER_RELEASE = "nfl_v1_member_release_2026_11_06_r64_exact_player_availability_continuity" as const;
+const NFL_KNOWN_STARTER_PREDECESSOR_DECISION_RELEASE = "nfl_v1_daily_edge_decision_2026_11_06_r66_exact_player_availability_continuity" as const;
 const NFL_EXACT_PLAYER_AVAILABILITY_PREDECESSOR_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_11_06_r63_quarterback_regime_continuity" as const;
 const NFL_EXACT_PLAYER_AVAILABILITY_PREDECESSOR_DECISION_RELEASE =
@@ -393,6 +395,8 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[], preservedLockedIds
     row.payload.decisions.evaluatedBets.every((decision) =>
       decision.decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE);
   const isPreviousAuthority = (row: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }) =>
+    (row.payload.decisions.modelPromotionStatus === NFL_KNOWN_STARTER_PREDECESSOR_MEMBER_RELEASE &&
+      row.payload.decisions.evaluatedBets.every(d => d.decisionRelease === NFL_KNOWN_STARTER_PREDECESSOR_DECISION_RELEASE)) ||
     (row.payload.decisions.modelPromotionStatus === NFL_EXACT_PLAYER_AVAILABILITY_PREDECESSOR_MEMBER_RELEASE &&
       row.payload.decisions.evaluatedBets.every((decision) =>
         decision.decisionRelease === NFL_EXACT_PLAYER_AVAILABILITY_PREDECESSOR_DECISION_RELEASE)) ||
@@ -593,6 +597,12 @@ function movementRowsForGame(
       row.providerGameId === latest.providerGameId &&
       Date.parse(row.capturedAt) <= Date.parse(latest.capturedAt))
     .sort((first, second) => Date.parse(first.capturedAt) - Date.parse(second.capturedAt));
+}
+
+/** Writer-only check of a single already-published source. Complete-slate
+ * admission remains in buildNflWeekOneHeldMemberFixture; this creates no writer. */
+export function renderNflPublishedSourceGame(row: NflForwardStoredEvidence & {payload: NflForwardEvidencePayload}): DailyEdgeGameDto {
+  return buildHeldGame(row, [row]);
 }
 
 function buildHeldGame(

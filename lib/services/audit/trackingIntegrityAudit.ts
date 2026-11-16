@@ -1,11 +1,12 @@
 import { trackingCorrectionSupersededRecordId } from "../tracking/trackingCorrectionPrecedence";
 import { computeSlateDate } from "../../dates/slateDate";
+import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllPredictionRecords, dedupePredictionRecordsForTracking, effectiveTrackingPlayGrade, trackingDisplaySport, isTrackingRecordEligible } from "../trackingAggregateService";
 import { gradeStoredTrackingRecord } from "../predictionGradingService";
 import type { PredictionRecordRow, PredictionGradeRow } from "../../types/domain/Tracking";
 
-export const TRACKING_INTEGRITY_AUDIT_RELEASE = "tracking_integrity_audit_2026_11_08_r1_published_locks_and_settlement" as const;
+export const TRACKING_INTEGRITY_AUDIT_RELEASE = "tracking_integrity_audit_2026_11_16_r2_complete_published_nfl_slate" as const;
 export const TRACKING_CBB_MANIFEST_CLOCK_RELEASE = "tracking_cbb_manifest_clock_2026_11_08_r1_publication_metadata" as const;
 const PAGE_SIZE = 200;
 const ROLLOUT = "2026-11-08T00:00:00Z";
@@ -15,6 +16,17 @@ export type TrackingIntegrityReport = { release: typeof TRACKING_INTEGRITY_AUDIT
 const gradeKey = (value: unknown) => String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 export const trackingManifestInSlateWindow = (sport: "nfl" | "cfb", startsAt: string, from: string) => computeSlateDate(sport, startsAt) >= from;
 const terminal = (value: string) => ["final", "completed", "status_final", "post", "off", "canceled", "cancelled", "postponed"].includes(value.toLowerCase().replace(/^status[_ -]*/, ""));
+
+/** A full published slate detects games absent from the lock table itself.
+ * Presence only: no source grade is recalculated or retrospectively promoted. */
+export function comparePublishedNflSlate(records:PredictionRecordRow[], games:ReadonlyArray<{externalId:number;startsAt:string;source:string}>,now:string):TrackingIntegrityFinding[]{
+ const at=Date.parse(now),findings:TrackingIntegrityFinding[]=[],seen=new Set<string>();
+ for(const g of games){const start=Date.parse(g.startsAt);if(!Number.isSafeInteger(g.externalId)||!Number.isFinite(start))throw Error("NFL published tracking manifest identity/clock invalid");
+  if(start>at)continue;const key=`${g.externalId}:${start}`;if(seen.has(key))continue;seen.add(key);
+  for(const market of ["moneyline","spread","total"]){const row=records.find(r=>r.sport==="nfl"&&r.external_id===g.externalId&&r.market===market&&r.locked_at);
+   if(!row)findings.push({kind:"published_nfl_game_missing_tracking",sport:"nfl",game:g.externalId,market,severity:"error",detail:`Published game has started but no immutable ${market} tracking record exists (${g.source}). Preserve original source; do not fabricate a late T-60 capture.`});}
+ }return findings;
+}
 
 /** Exact saved lock expectations only. No reforecast or retrospective grading changes. */
 export function compareTrackingLockExpectations(records: PredictionRecordRow[], expectations: TrackingLockExpectation[]): TrackingIntegrityFinding[] {
@@ -37,7 +49,7 @@ export function compareTrackingLockExpectations(records: PredictionRecordRow[], 
   return findings;
 }
 
-export function inspectTrackingSettlements(args: { records: PredictionRecordRow[]; games: Map<number, any>; grades: Map<number, PredictionGradeRow>; now: string }): TrackingIntegrityFinding[] {
+export function inspectTrackingSettlements(args: { records: PredictionRecordRow[]; games: Map<number, Parameters<typeof gradeStoredTrackingRecord>[1]>; grades: Map<number, PredictionGradeRow>; now: string }): TrackingIntegrityFinding[] {
   const findings: TrackingIntegrityFinding[] = [];
   const now = Date.parse(args.now);
   for (const row of args.records) {
@@ -70,7 +82,7 @@ export async function runTrackingIntegrityAudit(args: { client: SupabaseClient; 
   const read = await fetchAllPredictionRecords(db, { from, to: through, signal: deadline });
   if (read.error) throw new Error(`tracking integrity ledger read failed: ${JSON.stringify(read.error)}`);
   const records = dedupePredictionRecordsForTracking(read.rows);
-  const games = new Map<number, any>(), grades = new Map<number, PredictionGradeRow>();
+  const games = new Map<number, Parameters<typeof gradeStoredTrackingRecord>[1]>(), grades = new Map<number, PredictionGradeRow>();
   const gameIds = [...new Set(records.map(r => r.game_id))], ids = records.map(r => r.id!);
   for (let i = 0; i < gameIds.length; i += PAGE_SIZE) {
     const r = await db.from("games").select("id,status,game_date,home_score,away_score,first_inning_runs").in("id", gameIds.slice(i, i + PAGE_SIZE)).abortSignal(deadline);
@@ -98,6 +110,30 @@ export async function runTrackingIntegrityAudit(args: { client: SupabaseClient; 
       if ((r.data?.length ?? 0) < PAGE_SIZE) break;
     }
   }
+  // A failed final attempt is stored as unlocked, so the successful-T60
+  // inventory above cannot establish full NFL coverage by itself.
+  const nflPublishedGames:Array<{externalId:number;startsAt:string;source:string}>=[];
+  for(let offset=0;;offset+=PAGE_SIZE){
+    const r=await db.from("lab_response_snapshots").select("snapshot_key,games:payload->fixture->snapshot->games")
+      .like("snapshot_key","nfl::daily-edge::%").gte("generated_at",`${from}T00:00:00Z`)
+      .order("snapshot_key").range(offset,offset+PAGE_SIZE-1).abortSignal(deadline);
+    if(r.error)throw Error("tracking integrity NFL published-slate read failed: "+r.error.message);
+    for(const source of r.data??[]){if(!Array.isArray(source.games))throw Error("tracking integrity NFL published slate is malformed");
+      for (const game of source.games as DailyEdgeGameDto[]) {
+        if (!game.gameStartAt) throw Error("tracking integrity NFL published fixture clock missing");
+        if (computeSlateDate("nfl",game.gameStartAt)<from) continue;
+        const externalId = Number(game.external_id);
+        nflPublishedGames.push({externalId,startsAt:game.gameStartAt,source:source.snapshot_key});
+        if (!game.lockedAt) continue;
+        for (const [market,key] of [["moneyline","moneyline"],["spread","first_inning"],["total","total"]] as const) {
+          const grade = gradeKey(game.markets[key].verdict?.label);
+          if (["best_angle","lean"].includes(grade) && !expectations.some(e=>e.sport==="nfl"&&e.externalId===externalId&&e.market===market))
+            expectations.push({sport:"nfl",externalId,market,grade,lockedAt:game.lockedAt,startsAt:game.gameStartAt,source:source.snapshot_key});
+        }
+      }}
+    if((r.data?.length??0)<PAGE_SIZE)break;
+  }
+  const publishedSlateFindings=comparePublishedNflSlate(records,nflPublishedGames,checkedAt);
   // CBB member-game rows intentionally have slate_date=null. Their sole
   // writer stamps generated_at at the actual lock publication. Bound reads by
   // that relational clock, then validate the original ET fixture date in JS.
@@ -180,7 +216,7 @@ export async function runTrackingIntegrityAudit(args: { client: SupabaseClient; 
     ["best_angle", "lean"].includes(effectiveTrackingPlayGrade(row)) && !cbbSourceKeys.has(`${row.external_id}:${row.market}`))
     .map(row => ({ kind: "cbb_published_source_missing", sport: "cbb", game: row.external_id!, market: row.market, recordId: row.id, severity: "error",
       detail: "Locked CBB call has no independently read member lock in the audit window; never treat an empty source read as healthy coverage." }));
-  const findings = [...cbbSourceGaps, ...compareTrackingLockExpectations(records, expectations), ...inspectTrackingSettlements({ records, games, grades, now: checkedAt })];
+  const findings = [...publishedSlateFindings, ...cbbSourceGaps, ...compareTrackingLockExpectations(records, expectations), ...inspectTrackingSettlements({ records, games, grades, now: checkedAt })];
   const sports: TrackingIntegrityReport["sports"] = {};
   for (const name of ["mlb", "nba", "wnba", "nhl", "nfl", "cfb", "cbb", "soccer", "epl", "ucl"]) sports[name] = { records: 0, bestAngles: 0, leans: 0, settled: 0, pending: 0, publishedActionableLocks: 0 };
   for (const lock of expectations) {
