@@ -88,8 +88,33 @@ export function validateScenarioOpportunities(sport:GamePacket["sport"],law:Acce
   if(sport!=="nfl"||!law.outcomes.passing_yards)return;
   invariant(law.outcomes.passing_yards.every((yards,i)=>law.outcomes.passing_completions[i]!==0||yards===0),"NFL passing yards require a completed pass in the same scenario; correct the named passing opportunity statistics.");
 }
+/** Exact supplied event requirements shared by admission and prospective navigation.
+ * It reads only the already supplied prompt quotes, never executionQuotes. */
+export type SourceForecastEventConstraint={market:string;line:number;contract:'two_way'|'milestone';inclusive:boolean;origin:'independent_prior'|'priced_event';sourceId:string;rule:'both_sides_positive'|'priced_complement_or_push';oneWayYes:boolean};
+export function sourceForecastEventConstraints(packet:GamePacket,player:Player,lawRelease:string):SourceForecastEventConstraint[]{
+ const constraints:SourceForecastEventConstraint[]=[],qualified=qualifiedForecastMarkets(player);
+ for(const prior of independentPriorEvents(player)){
+  if(!prior.market||prior.line===null||!qualified.includes(prior.market))continue;
+  const milestone=prior.offerContract==='milestone',inclusive=milestone||prior.market==='anytime_td';
+  const uncertain=milestone?prior.yesProbability!==null&&prior.yesProbability>0&&prior.noProbability!==null&&prior.noProbability!==undefined&&prior.noProbability>0
+   :prior.market==='anytime_td'?prior.yesProbability!==null&&prior.yesProbability>0&&prior.yesProbability<1
+   :prior.overProbability!==null&&prior.overProbability>0&&prior.underProbability!==null&&prior.underProbability>0;
+  if(uncertain)constraints.push({market:prior.market,line:prior.line,contract:inclusive?'milestone':'two_way',inclusive,origin:'independent_prior',sourceId:prior.sourceId,rule:'both_sides_positive',oneWayYes:inclusive});
+ }
+ const memberContracts=propsAiLawHasMemberExecutionContracts(lawRelease),seen=new Set<string>();
+ for(const q of packet.quotes){
+  if(!qualified.includes(q.market)||!sourceEventUsable(q)||q.playerId!==player.id||q.opening||q.live||q.receivedAtProvenance!=='provider_response'||Date.parse(q.receivedAt)>Date.parse(packet.cutoff)||Date.parse(packet.cutoff)-Date.parse(q.receivedAt)>15*60000)continue;
+  if(memberContracts&&!isSupportedMemberExecutionContract(packet.sport,q))continue;
+  const key=`${q.market}|${q.line}|${memberContracts?quoteContract(q):q.offerContract??'two_way'}`;if(seen.has(key))continue;seen.add(key);
+  const contractInclusive=q.offerContract==='milestone'||q.side==='yes',inclusive=contractInclusive||q.market==='anytime_td';
+  // The original diagnostic contract label remains exact; anytime_td is
+  // mathematically inclusive even for a generic over/under source label.
+  constraints.push({market:q.market,line:q.line,contract:contractInclusive?'milestone':'two_way',inclusive,origin:'priced_event',sourceId:q.id,rule:'priced_complement_or_push',oneWayYes:q.side==='yes'});
+ }
+ return constraints;
+}
 export function sourceForecastIssues(packet:GamePacket,player:Player,law:AcceptedPlayerLaw):ForecastSanityIssue[]{
-  const issues:ForecastSanityIssue[]=[],priors=independentPriorEvents(player),qualified=qualifiedForecastMarkets(player);
+  const issues:ForecastSanityIssue[]=[],qualified=qualifiedForecastMarkets(player);
   const logs=player.evidence.filter(e=>e.kind==="recent_games"&&e.value&&typeof e.value==="object"&&!Array.isArray(e.value)&&e.value.box);
   const history=readerLogWindows(packet.sport,logs,packet.cutoff),envelopes=sourceMeanAdmissionSupport(packet,player);
   const affected=(primitive:string)=>qualified.filter(m=>marketUsesStatistic(m,primitive));
@@ -131,28 +156,13 @@ export function sourceForecastIssues(packet:GamePacket,player:Player,law:Accepte
     if(!concordant||!discordant)issues.push({code:"combo_dependence_erases_source_variation",markets,example:`${pair.first}/${pair.second}: retain higher-together AND opposing variation`,
       detail:`${player.id} ${pair.first}/${pair.second} combinations erase observed joint variation. Source games contain both higher-together and opposing outcomes; include that dependence or explicitly except the affected combinations.`});
   }
-  for(const prior of priors){
-    if(!prior.market||prior.line===null||!qualified.includes(prior.market))continue;
-    const milestone=prior.offerContract==="milestone",inclusive=milestone||prior.market==="anytime_td";
-    const uncertain=milestone?prior.yesProbability!==null&&prior.yesProbability>0&&prior.noProbability!==null&&prior.noProbability!==undefined&&prior.noProbability>0
-      :prior.market==="anytime_td"?prior.yesProbability!==null&&prior.yesProbability>0&&prior.yesProbability<1
-      :prior.overProbability!==null&&prior.overProbability>0&&prior.underProbability!==null&&prior.underProbability>0;
-    if(!uncertain)continue;
-    const f=lawForecast(law,prior.market,prior.line,inclusive);
-    if(f.over===0||f.under===0)issues.push({code:"unsupported_zero_probability_tail",markets:[prior.market],example:`${prior.market}@${prior.line}: missing opposing prior tail`,events:[{market:prior.market,line:prior.line,contract:inclusive?"milestone":"two_way"}],
-      detail:`${player.id} ${prior.market} at ${prior.line} has zero opposite-event mass although the independent source assigns both outcomes positive probability. Include realistic opposing tails or explicitly except this market; never clip the displayed probability.`});
-  }
-  const memberContracts=propsAiLawHasMemberExecutionContracts(law.release),seen=new Set<string>();
-  for(const q of packet.quotes){
-    if(!qualified.includes(q.market)||!sourceEventUsable(q)||q.playerId!==player.id||q.opening||q.live||q.receivedAtProvenance!=="provider_response"||Date.parse(q.receivedAt)>Date.parse(packet.cutoff)||Date.parse(packet.cutoff)-Date.parse(q.receivedAt)>15*60000)continue;
-    // Original R1/R2 admission and dedup remain exact. Only future laws align
-    // priced-tail admission with the actual member contract; source priors above
-    // still constrain every supplied independent event, including milestones.
-    if(memberContracts&&!isSupportedMemberExecutionContract(packet.sport,q))continue;
-    const key=`${q.market}|${q.line}|${memberContracts?quoteContract(q):q.offerContract??"two_way"}`;if(seen.has(key))continue;seen.add(key);
-    const f=lawForecast(law,q.market,q.line,q.offerContract==="milestone"||q.side==="yes");
-    if(unqualifiedEventTail(f,q.side==="yes"))issues.push({code:"unsupported_priced_event_certainty",markets:[q.market],example:`${q.market}@${q.line}: missing opposing priced tail`,events:[{market:q.market,line:q.line,contract:q.side==="yes"||q.offerContract==="milestone"?"milestone":"two_way"}],
-      detail:`${player.id} ${q.market} at offered line ${q.line} has no opposing tail. A finite scenario sample does not establish certainty for an executable event; re-evaluate tails or explicitly except this scope.`});
+  for(const event of sourceForecastEventConstraints(packet,player,law.release)){
+    const f=lawForecast(law,event.market,event.line,event.inclusive);
+    if(event.rule==='both_sides_positive'){
+      if(f.over===0||f.under===0)issues.push({code:"unsupported_zero_probability_tail",markets:[event.market],example:`${event.market}@${event.line}: missing opposing prior tail`,events:[{market:event.market,line:event.line,contract:event.contract}],
+        detail:`${player.id} ${event.market} at ${event.line} has zero opposite-event mass although the independent source assigns both outcomes positive probability. Include realistic opposing tails or explicitly except this market; never clip the displayed probability.`});
+    }else if(unqualifiedEventTail(f,event.oneWayYes))issues.push({code:"unsupported_priced_event_certainty",markets:[event.market],example:`${event.market}@${event.line}: missing opposing priced tail`,events:[{market:event.market,line:event.line,contract:event.contract}],
+      detail:`${player.id} ${event.market} at offered line ${event.line} has no opposing tail. A finite scenario sample does not establish certainty for an executable event; re-evaluate tails or explicitly except this scope.`});
   }
   return issues;
 }

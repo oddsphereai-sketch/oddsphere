@@ -1,7 +1,6 @@
 import {createHash} from "node:crypto";
 import {OriginalPartActorAdmission,type ActorAdmissionProposal} from "./actorAdmission";
-import {sourceAwareDiagnosticCorrection} from './sourceAwareCorrectionFeedback';
-import {namedSourceCorrection} from "./sourceConstraintCards";
+import {reviewCorrectionFeedback} from './reviewCorrectionFeedback';
 import {acceptedResponseEvidence} from "./responseEvidence";
 import {physicalLawFindings} from "./physicalDiagnostics";
 import {failureEvidence} from "./failureEvidence";
@@ -144,16 +143,17 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
           catch(error){reason=(error as Error).message;}
           let correctionUnavailable=false;
           if(phase===1&&!parsed&&draft!==undefined){
-            try{const next=part.packet.sport==="nba"?namedSourceCorrection(part.packet,draft):sourceAwareDiagnosticCorrection(part.packet,draft);
+            try{const next=reviewCorrectionFeedback(part.packet,draft);
               if(next.status==="ready"&&next.affectedActorIds.length)feedbackTexts.set(index,next.text);
               else if(next.status==="unavailable"&&["feedback_exceeds_cushion","diagnostic_unavailable"].includes(next.reason))correctionUnavailable=true;
             }catch{correctionUnavailable=true;}
           }
-          // A failed NBA part can retain independently admitted actors only after
+          // A failed original part can retain independently admitted actors only after
           // its exact raw request/input/draft and known charge are recorded.
-          // Full responses are still requested in phase two; old outputs are ignored.
+          // Phase two still requests the full response; resampled outputs for already
+          // admitted actors are ignored. Their original accepted bytes remain authoritative.
           let actorProposal:ActorAdmissionProposal|undefined,actorUnavailable=false;
-          if(part.packet.sport==="nba"&&texts.length===1&&draft!==undefined&&(!parsed||actorAdmissions.has(index))){
+          if(texts.length===1&&draft!==undefined&&(!parsed||actorAdmissions.has(index))){
             try{
               let admission=actorAdmissions.get(index);
               if(!admission){admission=new OriginalPartActorAdmission(part.packet);actorAdmissions.set(index,admission);}

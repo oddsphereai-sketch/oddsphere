@@ -1,3 +1,35 @@
+## November 16 exact event support and cross-sport actor retention R46
+
+Shared generation is `player_props_ai_2026_11_16_r46_event_support_and_actor_retention`;
+NBA writer is `nba_player_props_private_writer_2026_11_16_r27_event_support_and_actor_retention`
+and NFL writer is `nfl_player_props_writer_2026_11_16_r107_event_support_and_actor_retention`.
+Future requests expose the exact existing strict/inclusive event, opposing-tail,
+integer-push and explicit unsupported-stat exception actions. Event enumeration
+is shared with admission; these copied constraints are not new evidence, a
+probability floor, forecast target or automatic decline. No validity guard is
+relaxed and no numerical law or exception is silently repaired.
+
+The original-source/request/draft/known-charge actor-retention path now applies
+to NBA, NFL and MLB within the same two phases. A valid original actor cannot be
+replaced by a worse resampled correction. Every required actor/scope must still
+be admitted before whole-game completion; unknown charges, unavailable archives,
+malformed envelopes and lost acknowledgement remain fail-closed. The pure audit
+uses the same sport-specific feedback dispatch and model/tier/reference/billing
+identity verifiers as runtime, with exact saved proofs and unique phase response
+references.
+
+R45 and every older accepted review retain exact stored qualification, original
+contracts and locked payload precedence. Law R3/grade R5/selection R8, NFL source
+R3/identity R1/alias R2, member R61/lifecycle R43 and native MLB R44 stay unchanged.
+No old forecast/result/closed slot, model, phase/output cap, provider budget,
+paired schedule, sport-scoped lease, schema or $50/$60 limit changes. Synthetic
+real-reviewer/receipt tests preserve supported actionable Over and Under recovery
+without a blanket player decline or flatter-board policy. Required protected
+release gates and two consecutive fresh triple whole-product clean rounds must
+pass on the unchanged final candidate; ordinary live generation/publication and
+retention remain separate proof. See
+`docs/model-audits/2026-11-16-props-event-support-retention.md`.
+
 ## November 16 explicit reviewer abstention R45
 
 Shared generation is `player_props_ai_2026_11_16_r45_explicit_abstention`;
