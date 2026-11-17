@@ -104,7 +104,9 @@ actual writer statements feed collector-to-packet regressions for renamed
 collisions in both orders and both provider lanes, plus unique-name recovery.
 No source request, name inference or closed-job replay is added.
 
-Current identity constraints retain every nonempty supplied team token, including
+After the existing successful same-ID current-player lookup (which may correct
+an obsolete quote-team association), current identity constraints retain every
+nonempty supplied unresolved team token, including
 unmapped IDs/labels; another feed cannot erase it. Raw current quote name/ID
 ownership is captured before metadata display-name replacement and unioned into
 both Owls and Odds joins. Missing teams remain distinct from explicit unresolved

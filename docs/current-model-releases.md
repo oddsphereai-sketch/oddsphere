@@ -25,7 +25,9 @@ refresh or backdate a quote price/receipt. Failed attempts count too; incomplete
 cannot supply a team. No operator/provider/model test request is purchased.
 One ambiguity-preserving resolver owns cached, current, Owls and Odds API name
 joins.
-Current identity constraints retain every nonempty supplied team token, including
+After the existing successful same-ID current-player lookup (which may correct
+an obsolete quote-team association), current identity constraints retain every
+nonempty supplied unresolved team token, including
 unmapped IDs/labels; another feed cannot erase it. Raw current quote name/ID
 ownership is captured before metadata display-name replacement and unioned into
 both Owls and Odds joins. Missing teams remain distinct from explicit unresolved

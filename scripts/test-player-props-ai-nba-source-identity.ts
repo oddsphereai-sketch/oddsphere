@@ -108,11 +108,11 @@ const stored={decisions:[nativeRow,{...legacyNative,lockedAt:lock}]};const resto
 // Current explicit unknown/wrong-game values constrain the same actor even
 // when no historical game happens to provide that numeric ID's display name.
 for(const playerTeam of ['99','unrecognized team','Chicago Bulls'])for(const reverse of [false,true]){
- const currentRows=[...fullName,{...fullName[0],provider:'balldontlie',playerTeam}];
+ const currentRows=[...fullName,{...fullName[0],provider:'balldontlie' as const,playerTeam}];
  if(reverse)currentRows.reverse();
  const currentArgs={...fullNameArgs,currentObservations:currentRows,market:{...teamlessMarket,observations:currentRows}};
  assert.throws(()=>liveNbaPacket(currentArgs),/NBA player\/team matchup identity incomplete/);
- const unrelated={...state,games:[...state.games,{gameId:2,homeTeamId:99,awayTeamId:6,homeTeam:'LAL',awayTeam:'CLE',startTime:past}]};
+ const unrelated={...fullNameArgs.prior,games:[...fullNameArgs.prior.games,{gameId:2,season:2026,homeTeamId:99,awayTeamId:6,homeTeam:'LAL',awayTeam:'CLE',homeScore:0,awayScore:0,startTime:past}]};
  assert.throws(()=>liveNbaPacket({...currentArgs,prior:unrelated,current:unrelated}),/NBA player\/team matchup identity incomplete/,'Adding unrelated cache cannot change current conflict authority');
 }
 assert.doesNotThrow(()=>liveNbaPacket({...fullNameArgs,currentObservations:[...fullName,{...fullName[0],provider:'balldontlie',playerTeam:null}],market:teamlessMarket}),'A truly absent team is distinct from a supplied unresolved declaration');
