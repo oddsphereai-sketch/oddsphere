@@ -14,7 +14,7 @@ import {assessConfidenceLeanPrice} from "../services/dailyEdge/confidenceLeanPri
 
 import {qualifyMoneylinePrice,MONEYLINE_PRICE_NO_PLAY_REASON} from "../services/dailyEdge/moneylinePricePolicy";
 
-export const CBB_INTERPRETED_DECISION_RELEASE="cbb_interpreted_decision_2026_11_06_r13_moneyline_wager_price_boundaries" as const;
+export const CBB_INTERPRETED_DECISION_RELEASE="cbb_interpreted_decision_2026_11_16_r14_owned_current_receipts" as const;
 /** Product label boundaries, not learned accuracy claims or signal activation
  * gates. The forecast has already interpreted the full qualified market.
  * Confidence is the same unconditional win probability stored in the decision;
@@ -62,7 +62,17 @@ const sameQuote=(a:Pick<Quote,"gameId"|"sportsbook"|"market"|"line"|"firstPrice"
  a.gameId===b.gameId&&family(a.sportsbook)===family(b.sportsbook)&&a.market===b.market&&a.line===b.line&&a.firstPrice===b.firstPrice&&a.secondPrice===b.secondPrice&&precise(a.providerObservedAt)!==null&&precise(a.providerObservedAt)===precise(b.providerObservedAt);
 export function cbbContextualExecutionProof(q:Quote,input:CbbContextualFeatureInput,receipt:CbbContextualMarketInterpretation):{problem:string|null;columnProof?:CbbContextualConsumerQuote}{
  const at=Date.parse(input.asOf),stream=receipt.streams.find(s=>family(s.book)===family(q.sportsbook)&&s.market===q.market&&(s.role==="consumer"||s.role==="professional")),current=stream?.currentQuote;
- if(!current||!sameQuote(q,current.rawQuote))return {problem:"execution_pair_not_current_unambiguous_interpreted_quote"};
+ // Providers timestamp their own observations. An independently admitted
+ // whole HTTP pair can still own execution when another provider's last-known
+ // observation confirms exactly the same physical-book prices and contract.
+ // The target keeps its original native/HTTP clocks, IDs and orientation proof.
+ const ownedSameState=stream?.role==="consumer"&&current&&q.provider&&current.provider&&q.provider!==current.provider&&
+  q.gameId===current.rawQuote.gameId&&q.line===current.rawQuote.line&&q.firstPrice===current.rawQuote.firstPrice&&q.secondPrice===current.rawQuote.secondPrice&&
+  stream.quotes.some(observation=>{const raw=observation.rawQuote;
+   return observation.provider===q.provider&&sameQuote(q,raw)&&"availabilityKind"in raw&&raw.availabilityKind==="http_response"&&raw.canonicalReceipt===undefined&&
+    precise(q.fetchedAt)!==null&&precise(raw.fetchedAt??"")===precise(q.fetchedAt)&&ownNativeId(raw)===ownNativeId(q);
+  });
+ if(!current||!sameQuote(q,current.rawQuote)&&!ownedSameState)return {problem:"execution_pair_not_current_unambiguous_interpreted_quote"};
  if(q.sourceEventId&&q.providerEventId&&q.sourceEventId!==q.providerEventId||ownNativeId(q)&&current.eventId&&q.provider&&q.provider===current.provider&&ownNativeId(q)!==current.eventId)return {problem:"execution_same_provider_native_identity_conflict"};
  if(q.gameId!==input.independent.gameId||q.phase!=="current"||"canonicalReceipt" in q)return {problem:"execution_identity_phase_or_receipt_invalid"};
  // Last-known-state selection may retain another whole observation of the

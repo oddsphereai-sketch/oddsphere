@@ -6,7 +6,7 @@ import { fetchAllPredictionRecords, dedupePredictionRecordsForTracking, effectiv
 import { gradeStoredTrackingRecord } from "../predictionGradingService";
 import type { PredictionRecordRow, PredictionGradeRow } from "../../types/domain/Tracking";
 
-export const TRACKING_INTEGRITY_AUDIT_RELEASE = "tracking_integrity_audit_2026_11_16_r2_complete_published_nfl_slate" as const;
+export const TRACKING_INTEGRITY_AUDIT_RELEASE = "tracking_integrity_audit_2026_11_16_r3_cbb_market_coverage" as const;
 export const TRACKING_CBB_MANIFEST_CLOCK_RELEASE = "tracking_cbb_manifest_clock_2026_11_08_r1_publication_metadata" as const;
 const PAGE_SIZE = 200;
 const ROLLOUT = "2026-11-08T00:00:00Z";
@@ -16,6 +16,24 @@ export type TrackingIntegrityReport = { release: typeof TRACKING_INTEGRITY_AUDIT
 const gradeKey = (value: unknown) => String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 export const trackingManifestInSlateWindow = (sport: "nfl" | "cfb", startsAt: string, from: string) => computeSlateDate(sport, startsAt) >= from;
 const terminal = (value: string) => ["final", "completed", "status_final", "post", "off", "canceled", "cancelled", "postponed"].includes(value.toLowerCase().replace(/^status[_ -]*/, ""));
+
+/** Presence/price health includes priced passes and Watchlist, not just plays.
+ * An execution failure at lock remains an operational finding, never a reason
+ * to manufacture missing bets or reinterpret the original public payload. */
+export function inspectCbbLockedMarketCoverage(records: PredictionRecordRow[], source: {externalId:number;source:string;rows:ReadonlyArray<{market:string;grade:string;price?:number|null;reason?:string|null}>}): TrackingIntegrityFinding[] {
+ const findings:TrackingIntegrityFinding[]=[];
+ for(const bet of source.rows){
+  const base={sport:"cbb",game:source.externalId,market:bet.market,severity:"error" as const};
+  if(gradeKey(bet.grade)==="held"){
+   if(bet.reason==="missing_execution_pair"||bet.reason?.startsWith("execution_"))findings.push({...base,kind:"cbb_locked_market_unpriced",detail:`Original lock has incomplete quote evaluation: ${bet.reason} (${source.source}). Preserve it for evidence review.`});
+   continue;
+  }
+  if(!Number.isFinite(bet.price))continue;
+  const row=records.find(r=>r.sport==="cbb"&&r.external_id===source.externalId&&r.market===bet.market&&r.locked_at);
+  if(!row)findings.push({...base,kind:"cbb_priced_market_missing_tracking",detail:`Saved priced ${bet.grade} market has no immutable tracking record (${source.source}).`});
+  else if(row.odds_american===null||row.odds_american===undefined)findings.push({...base,recordId:row.id,kind:"cbb_locked_market_price_missing",detail:`Saved priced market has an unpriced tracking record (${source.source}). Preserve both sources for review.`});
+ }return findings;
+}
 
 /** A full published slate detects games absent from the lock table itself.
  * Presence only: no source grade is recalculated or retrospectively promoted. */
@@ -138,6 +156,7 @@ export async function runTrackingIntegrityAudit(args: { client: SupabaseClient; 
   // writer stamps generated_at at the actual lock publication. Bound reads by
   // that relational clock, then validate the original ET fixture date in JS.
   const cbbPublishedFrom = new Date(Date.parse(`${from}T00:00:00Z`) - 86_400_000).toISOString();
+  const cbbCoverageFindings:TrackingIntegrityFinding[]=[];
   for (let offset = 0; ; offset += PAGE_SIZE) {
     const r = await db.from("lab_response_snapshots").select("snapshot_key,id:payload->snapshot->>gameId,locked:payload->snapshot->>lockedAt,starts:payload->snapshot->>startsAt,rows:payload->snapshot->board->rows")
       .like("snapshot_key", "cbb::member-game::%").gte("generated_at", cbbPublishedFrom).lte("generated_at", `${through}T23:59:59.999Z`).order("snapshot_key").range(offset, offset + PAGE_SIZE - 1).abortSignal(deadline);
@@ -147,6 +166,7 @@ export async function runTrackingIntegrityAudit(args: { client: SupabaseClient; 
       if (!s.starts || !Number.isFinite(Date.parse(s.starts))) throw new Error("tracking integrity CBB locked fixture clock missing");
       const slate = computeSlateDate("cbb", s.starts);
       if (slate < from || slate > through) continue;
+      cbbCoverageFindings.push(...inspectCbbLockedMarketCoverage(records,{externalId:Number(s.id),source:s.snapshot_key,rows:(s.rows??[]) as Array<{market:string;grade:string;price?:number|null;reason?:string|null}>}));
       for (const bet of (s.rows ?? []) as Array<{ market: string; grade: string }>) {
       const grade = gradeKey(bet.grade); if (["best_angle", "lean"].includes(grade)) expectations.push({ sport: "cbb", externalId: Number(s.id), market: bet.market, grade, lockedAt: s.locked, startsAt: s.starts!, source: s.snapshot_key });
     } }
@@ -216,7 +236,7 @@ export async function runTrackingIntegrityAudit(args: { client: SupabaseClient; 
     ["best_angle", "lean"].includes(effectiveTrackingPlayGrade(row)) && !cbbSourceKeys.has(`${row.external_id}:${row.market}`))
     .map(row => ({ kind: "cbb_published_source_missing", sport: "cbb", game: row.external_id!, market: row.market, recordId: row.id, severity: "error",
       detail: "Locked CBB call has no independently read member lock in the audit window; never treat an empty source read as healthy coverage." }));
-  const findings = [...publishedSlateFindings, ...cbbSourceGaps, ...compareTrackingLockExpectations(records, expectations), ...inspectTrackingSettlements({ records, games, grades, now: checkedAt })];
+  const findings = [...publishedSlateFindings, ...cbbSourceGaps, ...cbbCoverageFindings, ...compareTrackingLockExpectations(records, expectations), ...inspectTrackingSettlements({ records, games, grades, now: checkedAt })];
   const sports: TrackingIntegrityReport["sports"] = {};
   for (const name of ["mlb", "nba", "wnba", "nhl", "nfl", "cfb", "cbb", "soccer", "epl", "ucl"]) sports[name] = { records: 0, bestAngles: 0, leans: 0, settled: 0, pending: 0, publishedActionableLocks: 0 };
   for (const lock of expectations) {

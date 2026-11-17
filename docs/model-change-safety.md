@@ -6190,3 +6190,32 @@ original behavior. Never select an offer by its grade or historical outcome.
 Preserve source, clock, orientation, same-law probability/push and lock-precedence
 controls. Full model/focused/type/lint/build, fresh-base protected publication and
 ordinary live writer/reader verification remain required.
+
+
+## November 16 prospective quote receipts and tracking fixture clocks
+
+CBB interpreted decision R14, outer decision R15, grade R14, publisher R58,
+adapter R40 and tracking R42 end in `owned_current_receipts`; execution recovery
+is `cbb_verified_execution_2026_11_16_r2_owned_current_receipts`. Numerical model,
+calibration and evidence R7 remain exact. An independently admitted consumer HTTP
+pair keeps its own native clock, receipt, provider identity and orientation when
+another provider confirms the identical current physical-book contract and both
+prices. Conflicting economics, missing original proof and stale/future receipts
+remain held. Invalid or absent preferred targets can use existing qualified whole
+current offers under the established book priority. Valid original contracts
+remain exact before the unchanged same-contract better-payout policy. No grade,
+risk, resistance or price-cap threshold changes and no new provider calls.
+
+CFB writer is `cfb_forward_evidence_writer_2026_11_16_r156_current_fixture_recovery`.
+Accuracy-only recovery requires the latest known unambiguous fixture time and
+teams; an expired opening placeholder cannot freeze a game before its corrected
+kickoff and block the genuine priced T-60 records. Existing official/public
+T-60 locks remain authoritative. Numerical CFB releases remain unchanged.
+
+Audit `tracking_integrity_audit_2026_11_16_r3_cbb_market_coverage` includes missing
+priced CBB passes/Watchlist markets and execution failures at lock, using the
+existing bounded scheduled read path. It never reconstructs a wager or writes a
+historical correction. Original R14/R13 and older CBB receipts, locked DTOs and
+tracking rows retain exact release-specific precedence. Historical repairs need
+separate explicit owner approval. Required focused/full/type/lint/build checks,
+fresh-main protected PR and ordinary production writer/lock/reader proof apply.
