@@ -42,21 +42,13 @@ integration/protection gates and an expected-head protected PR merge. Actual
 Ready/current/www and ordinary future publication proof remain separate.
 
 
-The retained current-season cache also contains an exact ID/name/team and
-same-player played-game association for an offered actor whose particular
-current quote has no team. The existing native pipeline already uses this
-captured identity, but live AI preparation loses it when no priced native head
-exists for the offered market. The prospective NBA source R3 separates that
-identity from model-head availability. It may use only the same current-season
-captured record, exact ID/name, matching historical game/box team, original cache
-availability and actual offered game. Missing/future/prior-season/ambiguous or
-conflicting evidence stays held. The packet archives the original association
-as identity provenance, explicitly not a current roster/health/lineup confirmation
-or another independent forecast. No scalar or head is manufactured.
-
-The live path also reuses the collector's existing exact NBA full-team-name
-catalog. Legacy cached adapters keep their original alias semantics. A real
-wrong-game or conflicting supplied team remains blocked; a cache fallback can
-never override it. This prospective failure mode is reproduced from retained
-source evidence, not claimed as a reconstruction of the unavailable historical
-callback or its complete collector membership.
+Fresh round85 rejected the proposed current-season latest-played-team fallback:
+a traded player could inherit a former team and miss an exact-team current Out
+report. That fallback was removed in full before release. A historical team
+association never fills missing current identity. The prospective source R3 only
+reuses the collector's existing exact full-team-name catalog for currently
+supplied same-game team evidence. It preserves offered actors without fabricating
+a priced native head, and refuses absent/conflicting/wrong-game identity. The
+exact original callback for the two missed finals is still unavailable, so this
+cannot be claimed as a proved repair of those specific historical source gaps.
+No new provider lookup or review is purchased to manufacture that proof.

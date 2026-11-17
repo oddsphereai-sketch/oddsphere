@@ -4,20 +4,17 @@
 import {instant,invariant} from './evidence';
 import {propsTeam} from './teamIdentity';
 import {canonicalNbaPropsTeam} from '../services/nba/nbaPlayerPropsTeamIdentity';
-import {NBA_PLAYER_PROPS_CURRENT_STATE_RELEASE} from '../services/nba/nbaPlayerPropsCurrentStateContract';
-import {currentNbaProviderSeason} from '../services/nba/nbaProviderSeason';
 export const PROPS_AI_NBA_SOURCE_RELEASE='player_props_ai_nba_source_2026_11_09_r1_exact_source_evidence' as const;
-export const PROPS_AI_NBA_CURRENT_SOURCE_RELEASE='player_props_ai_nba_source_2026_11_17_r3_captured_identity_without_head' as const;
+export const PROPS_AI_NBA_CURRENT_SOURCE_RELEASE='player_props_ai_nba_source_2026_11_17_r3_exact_team_alias_authority' as const;
 type Native={team:string;opponent:string;evaluatedAt:string};
 type Offer={playerTeam:string|null;observedAt:string;fetchedAt:string;receivedAt?:string|null;isLive?:boolean};
-export type CapturedNbaActorIdentity={id:string;name:string;team:string;teamId:string;season:number;availableAt:string;lastObservedAt:string;lastObservedGameId:number;sourceRelease:string};
-export type NbaCurrentActorAuthority={id:string;name:string;team:string;opponent:string;markets:string[];capturedIdentity?:CapturedNbaActorIdentity};
+export type NbaCurrentActorAuthority={id:string;name:string;team:string;opponent:string;markets:string[]};
 type NamedNative=Native&{playerId:string;playerName:string;market:string;scheduledStart?:string};
 type NamedOffer=Offer&{canonicalPlayerId:string|null;playerName:string|null;market:string;provider:string};
-type ActorSources={native:readonly NamedNative[];offers:readonly NamedOffer[];teamNames:ReadonlyMap<string,string>;home:string;away:string;start?:string;snapshotAt:string;archiveAt:string;cutoff:string;capturedIdentities?:readonly CapturedNbaActorIdentity[]};
-export const nbaSourceActorNameKey=(value:string)=>value.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+type ActorSources={native:readonly NamedNative[];offers:readonly NamedOffer[];teamNames:ReadonlyMap<string,string>;home:string;away:string;start?:string;snapshotAt:string;archiveAt:string;cutoff:string};
 const currentTeam=(value:string)=>canonicalNbaPropsTeam(propsTeam(value));
-export const sameNbaSourceActorName=(first:string,second:string)=>Boolean(nbaSourceActorNameKey(first))&&nbaSourceActorNameKey(first)===nbaSourceActorNameKey(second);
+const actorName=(value:string)=>value.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+export const sameNbaSourceActorName=(first:string,second:string)=>Boolean(actorName(first))&&actorName(first)===actorName(second);
 /** Live-only identity authority. Retained price history is deliberately absent:
  * it can describe chronology, never the current actor, label, team or scope. */
 export function resolveNbaCurrentActors(args:ActorSources):NbaCurrentActorAuthority[]{
@@ -25,18 +22,7 @@ export function resolveNbaCurrentActors(args:ActorSources):NbaCurrentActorAuthor
  return currentIds.map(id=>{
   const offers=args.offers.filter(q=>q.canonicalPlayerId===id),markets=new Set(offers.map(q=>q.market)),native=instant(args.snapshotAt)<=instant(args.cutoff)?args.native.filter(row=>row.playerId===id&&markets.has(row.market)&&instant(row.evaluatedAt)<=instant(args.cutoff)):[];
   invariant(native.every(row=>row.scheduledStart===undefined||args.start===undefined||instant(row.scheduledStart)===instant(args.start)),'NBA native prior fixture identity incomplete');
-  const captured=args.capturedIdentities?.filter(row=>row.id===id)??[],named=offers.flatMap(q=>q.playerName?.trim()?[q.playerName]:[]);
-  const candidate=captured.length===1?captured[0]:null;
-  const capturedIdentity=candidate&&named.length&&named.every(name=>sameNbaSourceActorName(name,candidate.name))
-   &&candidate.sourceRelease===NBA_PLAYER_PROPS_CURRENT_STATE_RELEASE&&candidate.season===currentNbaProviderSeason(new Date(args.start??args.cutoff))
-   &&/^nba-bdl-player:[1-9]\d*$/.test(candidate.id)&&/^[1-9]\d*$/.test(candidate.teamId)
-   &&Number.isSafeInteger(candidate.lastObservedGameId)&&candidate.lastObservedGameId>0
-   &&currentTeam(args.teamNames.get(candidate.teamId)??'unknown')===currentTeam(candidate.team)
-   &&Number.isFinite(Date.parse(candidate.availableAt))&&Number.isFinite(Date.parse(candidate.lastObservedAt))
-   &&instant(candidate.lastObservedAt)<=instant(candidate.availableAt)&&instant(candidate.availableAt)<=instant(args.cutoff)
-   &&[currentTeam(args.home),currentTeam(args.away)].includes(currentTeam(candidate.team))?candidate:null;
-  const resolved=resolveNbaOfferedPlayerTeam({...args,native,offers,currentSource:true,capturedTeam:capturedIdentity?.team});
-  const {team,opponent}=resolved;
+  const {team,opponent}=resolveNbaOfferedPlayerTeam({...args,native,offers,currentSource:true});
   invariant([propsTeam(args.home),propsTeam(args.away)].includes(team)&&[propsTeam(args.home),propsTeam(args.away)].includes(opponent)&&team!==opponent,'NBA player/team matchup identity incomplete');
   const namedOffers=offers.filter(q=>typeof q.playerName==='string'&&q.playerName.trim()).sort((a,b)=>Number(b.provider==='balldontlie')-Number(a.provider==='balldontlie')||a.playerName!.localeCompare(b.playerName!));
   // The exact canonical ID binds native model rows. When current authoritative
@@ -45,7 +31,7 @@ export function resolveNbaCurrentActors(args:ActorSources):NbaCurrentActorAuthor
   // only when all current names are genuinely absent.
   const names=namedOffers.length?namedOffers.map(q=>q.playerName!):native.map(row=>row.playerName).filter(name=>typeof name==='string'&&name.trim());
   invariant(names.length>0&&names.every(name=>sameNbaSourceActorName(name,names[0])),'NBA current player-name identity incomplete or conflicting');
-  return{id,name:names[0],team,opponent,markets:[...new Set(offers.map(q=>q.market))].sort(),...(resolved.usedCapturedIdentity&&capturedIdentity?{capturedIdentity}: {})};
+  return{id,name:names[0],team,opponent,markets:[...new Set(offers.map(q=>q.market))].sort()};
  });
 }
 /** Empty successful collections have no evaluable offered actors. Known old
@@ -65,9 +51,9 @@ export function resolveNbaWithdrawalActors(args:ActorSources):NbaCurrentActorAut
   }catch{return[];}
  });
 }
-export function resolveNbaOfferedPlayerTeam(args:{native:readonly Native[];offers:readonly Offer[];teamNames:ReadonlyMap<string,string>;home:string;away:string;snapshotAt:string;archiveAt:string;cutoff:string;currentSource?:boolean;capturedTeam?:string}){
- // Legacy cached adapters keep their original alias rules. Only the new live
- // source uses the collector's existing exact full-name catalog.
+export function resolveNbaOfferedPlayerTeam(args:{native:readonly Native[];offers:readonly Offer[];teamNames:ReadonlyMap<string,string>;home:string;away:string;snapshotAt:string;archiveAt:string;cutoff:string;currentSource?:boolean}){
+ // Only the live source reuses the collector exact alias catalog. A historical
+ // last-played team can never supply missing current actor authority.
  const normalize=args.currentSource?currentTeam:propsTeam;
  const cutoff=instant(args.cutoff),known=new Set([...args.teamNames.values(),args.home,args.away].map(normalize)),teams=new Set<string>();
  if(instant(args.snapshotAt)<=cutoff)for(const row of args.native)if(instant(row.evaluatedAt)<=cutoff){
@@ -75,18 +61,14 @@ export function resolveNbaOfferedPlayerTeam(args:{native:readonly Native[];offer
   if(!((team===home&&opponent===away)||(team===away&&opponent===home)))return{team:'unknown',opponent:'unknown'};
   teams.add(team);
  }
- let unknownSuppliedTeam=false;
  for(const q of args.offers){
   const available=q.receivedAt??args.archiveAt;
   if(q.isLive||!q.playerTeam||instant(available)>cutoff||instant(q.observedAt)>instant(available)||instant(q.fetchedAt)>instant(available))continue;
   const team=normalize(args.teamNames.get(q.playerTeam)??q.playerTeam);
-  if(known.has(team))teams.add(team);else unknownSuppliedTeam=true;
+  if(known.has(team))teams.add(team);
  }
- const home=normalize(args.home),away=normalize(args.away),fallback=args.currentSource&&args.capturedTeam?normalize(args.capturedTeam):null;
- const usedCapturedIdentity=teams.size===0&&!unknownSuppliedTeam&&Boolean(fallback&&(fallback===home||fallback===away));
- if(usedCapturedIdentity)teams.add(fallback!);
- const team=teams.size===1?[...teams][0]:'unknown';
- return{team,opponent:team===home?away:team===away?home:'unknown',...(usedCapturedIdentity?{usedCapturedIdentity:true as const}: {})};
+ const team=teams.size===1?[...teams][0]:'unknown',home=normalize(args.home),away=normalize(args.away);
+ return{team,opponent:team===home?away:team===away?home:'unknown'};
 }
 
 /** The final arbitrated pick is not the independent probability's event. Never

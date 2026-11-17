@@ -3,8 +3,6 @@ import {qualifyNflSourceEvent,sourceEventSummary,qualifyConflictingSourceObserva
 import {createNflPacketActorResolver,sameNflPropActorName,PROPS_AI_NFL_SOURCE_RELEASE,PROPS_AI_NFL_IDENTITY_RELEASE,PROPS_AI_NFL_ALIAS_RELEASE} from "./nflPlayerIdentity";
 /** Complete captured collector inputs. Pure: no provider, database or inference calls. */
 import type {NbaPlayerPropsCurrentState} from "../services/nba/nbaPlayerPropsCurrentState";
-import {NBA_PLAYER_PROPS_CURRENT_STATE_RELEASE} from '../services/nba/nbaPlayerPropsCurrentStateContract';
-import {currentNbaProviderSeason} from '../services/nba/nbaProviderSeason';
 import type {NbaPlayerPropsMemberSnapshot} from "../services/nba/nbaPlayerPropsProductContract";
 import type {NbaPlayerPropsMarketHistory} from "../services/nba/nbaPlayerPropsPrivateStore";
 import type {NflPlayerPropsProductionSnapshot} from "../services/football/nflPlayerPropsProductionContract";
@@ -24,7 +22,7 @@ import type {CapturedReviewWindow} from "./liveWindow";
 import {propsTeam} from "./teamIdentity";
 import {digest,instant,invariant} from "./evidence";
 import {attachCapturedNbaParticipationReports,type CapturedNbaParticipationReport} from './participationEligibility';
-import {resolveNbaCurrentActors,resolveNbaWithdrawalActors,sameNbaSourceActorName,nbaSourceActorNameKey,PROPS_AI_NBA_CURRENT_SOURCE_RELEASE,type CapturedNbaActorIdentity} from './nbaSourceIdentity';
+import {resolveNbaCurrentActors,resolveNbaWithdrawalActors,sameNbaSourceActorName,PROPS_AI_NBA_CURRENT_SOURCE_RELEASE} from './nbaSourceIdentity';
 
 export type LivePropsGame={id:string;start:string;away:string;home:string};
 const json=(v:unknown):Json=>JSON.parse(JSON.stringify(v));
@@ -67,29 +65,8 @@ export function liveNbaPacket(args:{game:LivePropsGame;window:CapturedReviewWind
   const availableState=(state:NbaPlayerPropsCurrentState)=>instant(state.updatedAt)<=instant(at)?state:{...state,games:[],boxes:[],advanced:[],players:[]};
   const prior=availableState(args.prior),currentState=availableState(args.current);
   const teamNames=new Map([...prior.games,...currentState.games].flatMap(game=>[[String(game.homeTeamId),game.homeTeam],[String(game.awayTeamId),game.awayTeam]] as [string,string][]));
-  // Identity is not a priced-model head. Reuse the already captured current
-  // season's explicit ID/team association only when the provider did not supply
-  // one and the same named actor is actually offered in this exact game.
-  const offeredIdentityIds=new Set(currentAtCutoff.flatMap(q=>q.canonicalPlayerId?[q.canonicalPlayerId]:[]));
-  const currentIdentityGames=new Map<number,(typeof currentState.games)[number]|null>();
-  for(const game of currentState.games)currentIdentityGames.set(game.gameId,currentIdentityGames.has(game.gameId)?null:game);
-  const nameOwners=new Map<string,Set<number>>();
-  for(const row of new Map([...prior.players,...currentState.players].map(player=>[player.playerId,player])).values()){
-    if(!row.playerName)continue;const key=nbaSourceActorNameKey(row.playerName),ids=nameOwners.get(key)??new Set<number>();ids.add(row.playerId);nameOwners.set(key,ids);
-  }
-  const capturedIdentities:CapturedNbaActorIdentity[]=currentState.release===NBA_PLAYER_PROPS_CURRENT_STATE_RELEASE&&currentState.season===currentNbaProviderSeason(new Date(args.game.start))
-   ?currentState.players.filter(row=>offeredIdentityIds.has(`nba-bdl-player:${row.playerId}`)).flatMap(row=>{
-    const team=teamNames.get(String(row.latestTeamId));
-    const played=currentState.boxes.find(box=>{
-     const game=currentIdentityGames.get(box.gameId);
-     return box.playerId===row.playerId&&box.teamId===row.latestTeamId&&game?.season===currentState.season
-      &&[game.homeTeamId,game.awayTeamId].includes(box.teamId)&&Date.parse(game.startTime)===Date.parse(row.lastObservedAt);
-    });
-    return row.playerName&&nameOwners.get(nbaSourceActorNameKey(row.playerName))?.size===1&&team&&played?[{id:`nba-bdl-player:${row.playerId}`,name:row.playerName,team,teamId:String(row.latestTeamId),season:currentState.season,lastObservedGameId:played.gameId,
-     availableAt:currentState.updatedAt,lastObservedAt:row.lastObservedAt,sourceRelease:currentState.release}]:[];
-   }):[];
   const historical=args.market.observations.filter(q=>q.canonicalGameId===args.game.id&&(CATALOG.nba.required as readonly string[]).includes(q.market)&&!q.isLive&&q.canonicalPlayerId&&instant(q.receivedAt??args.market.updatedAt)<=instant(at)&&instant(q.observedAt)<=instant(q.receivedAt??args.market.updatedAt)&&instant(q.fetchedAt)<=instant(q.receivedAt??args.market.updatedAt));
-  const identity={native,offers:empty?historical:currentAtCutoff,teamNames,home:args.game.home,away:args.game.away,start:args.game.start,snapshotAt:args.snapshot.generatedAt,archiveAt:args.market.updatedAt,cutoff:at,...(!empty?{capturedIdentities}:{})};
+  const identity={native,offers:empty?historical:currentAtCutoff,teamNames,home:args.game.home,away:args.game.away,start:args.game.start,snapshotAt:args.snapshot.generatedAt,archiveAt:args.market.updatedAt,cutoff:at};
   const actors=empty?resolveNbaWithdrawalActors(identity):resolveNbaCurrentActors(identity);
   invariant(actors.length>0,empty?'NBA empty current collection has no verified withdrawal identity':'NBA current collector has no verified supported actors');
   const authority={nbaActors:new Map([[args.game.id,actors]])};
@@ -99,14 +76,6 @@ export function liveNbaPacket(args:{game:LivePropsGame;window:CapturedReviewWind
   const market={...args.market,observations:[...args.market.observations,...currentAtCutoff]};
   const source:EnrichedSource={readOnly:true,generatedAt:at,priorNba:prior,currentNba:currentState,nba:[{date:args.snapshot.slateDate,snapshot,market}],nfl:[],nbaContext:args.context};
   const packet=fromCachedExport(source,args.window,authority).packets[0];invariant(packet,"NBA live game missing from captured source");
-  for(const actor of actors){
-    if(!actor.capturedIdentity)continue;
-    const player=packet.players.find(p=>p.id===actor.id);invariant(player,'Captured identity actor missing from original offer inventory');
-    player.evidence.push({id:`${actor.id}:captured-source-identity`,kind:'matchup',availableAt:actor.capturedIdentity.availableAt,
-     source:'Original captured current-season player ID/team association; not a new forecast, current roster confirmation, lineup or health assertion',
-     value:json({...actor.capturedIdentity,gameId:args.game.id,start:args.game.start,home:args.game.home,away:args.game.away,opponent:actor.opponent,
-      meaning:'The current same-game quote supplies this exact actor ID/name but no usable team. This original captured latest observed team association supplies identity only, not another independent confirmation. It cannot manufacture a market-specific model head, new quote or participation clearance.'})});
-  }
   for(const p of packet.players){p.team=propsTeam(p.team);p.opponent=propsTeam(p.opponent);invariant([propsTeam(args.game.home),propsTeam(args.game.away)].includes(p.team)&&[propsTeam(args.game.home),propsTeam(args.game.away)].includes(p.opponent)&&p.team!==p.opponent,"NBA player/team matchup identity incomplete");}
   invariant(instant(packet.start)===instant(args.game.start),'NBA native fixture clock mismatch');
   // Original same-actor history remains source context even when its identity

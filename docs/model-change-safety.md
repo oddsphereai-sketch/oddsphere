@@ -1,9 +1,9 @@
-## November 17 bounded correction context and captured identity R47
+## November 17 bounded correction context and exact identity aliases R47
 
 Shared generation is `player_props_ai_2026_11_17_r47_correction_draft_context`;
 NBA writer is `nba_player_props_private_writer_2026_11_17_r28_correction_draft_context`
 and NFL writer is `nfl_player_props_writer_2026_11_17_r108_correction_draft_context`.
-NBA live source is `player_props_ai_nba_source_2026_11_17_r3_captured_identity_without_head`.
+NBA live source is `player_props_ai_nba_source_2026_11_17_r3_exact_team_alias_authority`.
 
 The existing second request can include a complete numeric reference for every
 failed actor from its known original primary draft. It is explicitly UNACCEPTED,
@@ -14,15 +14,12 @@ No returned number is automatically retained, spliced, clamped or excepted. All
 original factual, physical, source-mean, event-tail and dependence guards apply.
 The same canonical joint-pair predicates now drive admission and navigation.
 
-NBA preparation can retain a current offered actor's separately captured
-current-season identity even when its offered market has no priced native head.
-Only an exact offered ID/name, matching latest played-game/box team, original
-cache availability and matchup association qualify. It does not assert current
-roster confirmation, participation or health. Supplied conflicts, unknown teams,
-future/unavailable/prior-season/ambiguous records remain held. The original
-association is archived; no missing market-specific model head is manufactured.
-The live path reuses the collector's existing exact full-team-name catalog;
-legacy cached adapters keep their original alias semantics.
+NBA preparation reuses the collector's existing exact full-team-name catalog
+when a currently captured same-game quote explicitly supplies team identity,
+including an actor whose offered market has no priced native head. It does not
+invent a missing model head or use a historical last-played team as current
+roster authority. Missing, future, conflicting, wrong-game and ambiguous current
+identity stays held. Legacy cached adapters retain their original alias rules.
 
 R46 and earlier accepted reviews and all stored locks remain exact under their
 original contracts. Law R3/grade R5/selection R8, native MLB R44, models, output
