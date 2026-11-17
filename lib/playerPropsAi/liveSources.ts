@@ -1,4 +1,5 @@
 import {assertNbaCurrentQuoteFixtures,assertNbaCurrentQuotePrices} from '../services/nba/nbaPlayerPropsCurrentIdentityContract';
+import {canonicalNbaPropsTeam} from '../services/nba/nbaPlayerPropsTeamIdentity';
 import {qualifyNflExecutionContracts,qualifyUnsupportedNflAnytime} from './nflExecutionContracts';
 import {qualifyNflSourceEvent,sourceEventSummary,qualifyConflictingSourceObservations} from "./sourceEvents";
 import {createNflPacketActorResolver,sameNflPropActorName,PROPS_AI_NFL_SOURCE_RELEASE,PROPS_AI_NFL_IDENTITY_RELEASE,PROPS_AI_NFL_ALIAS_RELEASE} from "./nflPlayerIdentity";
@@ -57,6 +58,18 @@ export function liveNbaPacket(args:{game:LivePropsGame;window:CapturedReviewWind
   assertNbaCurrentQuoteFixtures(currentAtCutoff,args.game);assertNbaCurrentQuotePrices(currentAtCutoff);
   invariant(!currentAtCutoff.some(retailIdentityMissing),'NBA retail offered-player identity incomplete');
   invariant(currentAtCutoff.every(q=>q.playerIdentityAvailableAt===undefined||instant(q.playerIdentityAvailableAt)<=instant(at)),'NBA player/team matchup identity incomplete: current identity response after cutoff');
+  for(const q of currentAtCutoff){const proof=q.playerIdentityEvidence;if(!proof)continue;
+    const fixture=proof.fixture;
+    invariant(proof.release==='nba_player_identity_2026_11_17_r1_current_profile'&&proof.provider==='balldontlie'
+      &&proof.endpoint==='/v1/players'&&q.canonicalPlayerId===`nba-bdl-player:${proof.providerPlayerId}`
+      &&proof.status==='verified'&&typeof q.playerName==='string'&&sameNbaSourceActorName(q.playerName,proof.playerName)
+      &&fixture&&fixture.gameId===args.game.id&&instant(fixture.start)===instant(args.game.start)
+      &&canonicalNbaPropsTeam(fixture.homeTeam)===canonicalNbaPropsTeam(args.game.home)&&canonicalNbaPropsTeam(fixture.awayTeam)===canonicalNbaPropsTeam(args.game.away)
+      &&/^[1-9][0-9]*$/.test(fixture.homeTeamId)&&/^[1-9][0-9]*$/.test(fixture.awayTeamId)&&fixture.homeTeamId!==fixture.awayTeamId
+      &&[fixture.homeTeamId,fixture.awayTeamId].includes(proof.teamId)
+      &&q.playerIdentityAvailableAt!==undefined&&instant(q.playerIdentityAvailableAt)===instant(proof.availableAt)
+      &&instant(proof.availableAt)<=instant(at),'NBA player/team matchup identity incomplete: current profile receipt');
+  }
   const nativeAvailable=instant(args.snapshot.generatedAt)<=instant(at),empty=currentAtCutoff.length===0;
   // A later native snapshot cannot donate priors, names or market scopes to an
   // earlier cutoff. The current fixture and independently available offers may
@@ -68,6 +81,12 @@ export function liveNbaPacket(args:{game:LivePropsGame;window:CapturedReviewWind
   const availableState=(state:NbaPlayerPropsCurrentState)=>instant(state.updatedAt)<=instant(at)?state:{...state,games:[],boxes:[],advanced:[],players:[]};
   const prior=availableState(args.prior),currentState=availableState(args.current);
   const teamNames=new Map([...prior.games,...currentState.games].flatMap(game=>[[String(game.homeTeamId),game.homeTeam],[String(game.awayTeamId),game.awayTeam]] as [string,string][]));
+  for(const q of currentAtCutoff){const proof=q.playerIdentityEvidence;if(!proof)continue;
+    const mappedTeam=proof.teamId===proof.fixture.homeTeamId?proof.fixture.homeTeam:proof.fixture.awayTeam;
+    invariant(/^[1-9][0-9]*$/.test(proof.teamId)&&q.playerTeam!==null
+      &&canonicalNbaPropsTeam(mappedTeam)===canonicalNbaPropsTeam(teamNames.get(q.playerTeam)??q.playerTeam),
+      'NBA player/team matchup identity incomplete: current profile team receipt');
+  }
   const historical=args.market.observations.filter(q=>q.canonicalGameId===args.game.id&&(CATALOG.nba.required as readonly string[]).includes(q.market)&&!q.isLive&&q.canonicalPlayerId&&instant(q.receivedAt??args.market.updatedAt)<=instant(at)&&instant(q.observedAt)<=instant(q.receivedAt??args.market.updatedAt)&&instant(q.fetchedAt)<=instant(q.receivedAt??args.market.updatedAt));
   const identity={native,offers:empty?historical:currentAtCutoff,teamNames,home:args.game.home,away:args.game.away,start:args.game.start,snapshotAt:args.snapshot.generatedAt,archiveAt:args.market.updatedAt,cutoff:at};
   const actors=empty?resolveNbaWithdrawalActors(identity):resolveNbaCurrentActors(identity);
@@ -83,7 +102,7 @@ export function liveNbaPacket(args:{game:LivePropsGame;window:CapturedReviewWind
   // player. Keep them in the immutable private packet, not as an extra matchup
   // signal that could invalidate an identical accepted context or buy tokens.
   const identityReceipts=[...new Map(currentAtCutoff.filter(q=>q.playerIdentityAvailableAt&&q.playerTeam&&actors.some(actor=>actor.id===q.canonicalPlayerId)).map(q=>{
-    const actor=actors.find(actor=>actor.id===q.canonicalPlayerId)!,value={provider:q.provider,playerId:actor.id,playerName:q.playerName,providerTeam:q.playerTeam,team:actor.team,availableAt:q.playerIdentityAvailableAt!};return[digest(value),value] as const;
+    const actor=actors.find(actor=>actor.id===q.canonicalPlayerId)!,value={provider:q.provider,playerId:actor.id,playerName:q.playerName,providerTeam:q.playerTeam,team:actor.team,availableAt:q.playerIdentityAvailableAt!,...(q.playerIdentityEvidence?{currentProfile:q.playerIdentityEvidence}:{})};return[digest(value),value] as const;
   })).values()];
   if(identityReceipts.length)packet.sourceIdentityEvidence=json({release:'player_props_ai_nba_identity_receipts_2026_11_17_r1',receipts:identityReceipts,meaning:'Original current-player identity response completion only. No new price, independent forecast, matchup measurement or participation clearance. Canonical actor ID/name/team already carry these identity facts; not an additional AI source document.'});
   for(const p of packet.players){p.team=propsTeam(p.team);p.opponent=propsTeam(p.opponent);invariant([propsTeam(args.game.home),propsTeam(args.game.away)].includes(p.team)&&[propsTeam(args.game.home),propsTeam(args.game.away)].includes(p.opponent)&&p.team!==p.opponent,"NBA player/team matchup identity incomplete");}

@@ -51,7 +51,7 @@ import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
 import { buildNbaPlayerPropsMemberPrices } from "./nbaPlayerPropsMemberPrices";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_11_17_r28_correction_draft_context" as const;
+  "nba_player_props_private_writer_2026_11_17_r29_reference_identity_receipts" as const;
 
 export function nbaPlayerPropsForecastIsPublishable(
   row: Pick<NbaPlayerPropsForwardDecision, "independentProjection" | "finalProjection">,

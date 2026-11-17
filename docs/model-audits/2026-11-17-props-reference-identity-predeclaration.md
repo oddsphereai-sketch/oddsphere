@@ -1,0 +1,11 @@
+# Prospective current reference-player identity coverage
+
+Base: `11b134a3c44ee0aa446c147550a7d21b389b9628`.
+
+Stored November 17 market evidence includes a uniquely name-mapped reference-only actor with no current team. The existing collector performs current-player lookup for BDL quote IDs before reference collection, so that actor can never reach the existing lookup. A newest-retained-row replay reproduces the identity refusal; retained history is not an exact immutable collector callback or a complete provider census. No claim is made that a roster lookup will return valid same-fixture authority for the real actor.
+
+Future ordinary collection will reuse successful current-player identity responses within the same invocation and use the existing `/v1/players` endpoint in 100-ID batches for still-unresolved, uniquely canonical reference IDs. It remains inside the original deadline/lease/provider controls. Request impact: no extra lookup for already covered same-fixture actors; at most one additional bounded lookup per 100 unresolved reference IDs. Failed/incomplete/continued/unrequested/duplicate metadata, conflicting names/teams and wrong-fixture/future evidence cannot qualify. No operator provider call or paid AI test is authorized.
+
+Current profile identity evidence is private, independently clocked and cannot refresh a price or supply a model prior/participation clearance. All input actors, reference inventory and unresolved facts remain explicit. Existing accepted R47 and older laws and stored locks retain original precedence and are never rewritten. Supported Over/Under promotion and invalid-source refusal must be paired in offline actual collector/writer controls. No numerical, grade, stake, budget, slot, output-cap or schema change.
+
+Prospective versions: generation R48; NBA collector R9; NBA current source R4; NBA writer R29; shared-generation NFL writer R109. Law R4/grade R6/selection R9/native MLB R44 unchanged. Two consecutive rounds of three fresh whole-product reviewers on unchanged final candidate and all mandatory local/hosted real mocked-PG/protection/actual Ready gates are required. Actual generation/publication/retention/locks must be verified through ordinary scheduled production.
