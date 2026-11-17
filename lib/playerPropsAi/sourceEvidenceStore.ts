@@ -10,7 +10,8 @@ import {readerCanonicalContextHash} from './readerContext';
 import {readerAvailabilityContextHash} from './readerClaimFreshness';
 import {digest,etDate,instant,validatePacket} from './evidence';
 export const PROPS_SOURCE_EVIDENCE_RELEASE='player_props_source_evidence_2026_11_17_r1_immutable_callback' as const;
-export const PROPS_SOURCE_EVIDENCE_LIMITS={rawBytes:16_000_000,compressedBytes:2_000_000,contextsPerGameDay:64,writeWindowMs:3000} as const;
+export const PROPS_SOURCE_EVIDENCE_STORAGE_RELEASE='player_props_source_evidence_storage_2026_11_17_r2_bounded_ack' as const;
+export const PROPS_SOURCE_EVIDENCE_LIMITS={rawBytes:16_000_000,compressedBytes:2_000_000,contextsPerGameDay:64,writeWindowMs:5000,reconcileWindowMs:1500} as const;
 type Capsule={release:typeof PROPS_SOURCE_EVIDENCE_RELEASE;contextHash:string;packetHash:string;auditHash:string;bytes:number;compressedBytes:number;encoding:'gzip-base64';data:string;observedAt:string;originalReview:Pick<AcceptedGameReview,'release'|'inputHash'|'issuedAt'|'cutoff'|'gameId'|'sourceGameId'|'start'|'lock'|'stage'>;audit:PropsSourceContextAudit};
 export type SourceEvidenceReceipt={status:'not_needed'|'retained'|'unavailable';key?:string;packetHash?:string;reason?:string};
 function originalReference(review:AcceptedGameReview):Capsule['originalReview']{return{release:review.release,inputHash:review.inputHash,issuedAt:review.issuedAt!,cutoff:review.cutoff,gameId:review.gameId,...(review.sourceGameId?{sourceGameId:review.sourceGameId}:{}),start:review.start,lock:review.lock,stage:review.stage};}
@@ -64,7 +65,7 @@ export async function retainPropsSourceEvidence(args:{client:SupabaseClient;writ
  if(!args.writerRunId)return{status:'unavailable',reason:'missing_existing_writer_lease'};
  const day=etDate(packet.start),prefix=`props-source-evidence:v1:${packet.sport}:${day}:${digest(packet.sourceGameId??packet.gameId)}:`,contextHash=identity(packet,originalReference(review),audit),key=prefix+contextHash;
  const signal=AbortSignal.timeout(PROPS_SOURCE_EVIDENCE_LIMITS.writeWindowMs);
- const read=()=>args.client.from('lab_response_snapshots').select('payload').eq('snapshot_key',key).abortSignal(signal).maybeSingle();
+ const read=(readSignal=signal)=>args.client.from('lab_response_snapshots').select('payload').eq('snapshot_key',key).abortSignal(readSignal).maybeSingle();
  const verify=(payload:unknown)=>{const old=verifyPropsSourceEvidence(payload,review);if(old.capsule.contextHash!==contextHash||old.packet.sport!==packet.sport||old.packet.sourceGameId!==packet.sourceGameId||old.packet.gameId!==packet.gameId||instant(old.packet.start)!==instant(packet.start)||digest(old.capsule.originalReview)!==digest(originalReference(review)))throw Error('existing_evidence_conflict');return{status:'retained' as const,key,packetHash:old.capsule.packetHash};};
  try{
   validatePacket(packet);if(digest(packet)!==audit.currentPacketHash||audit.gameId!==(packet.sourceGameId??packet.gameId)||audit.review.inputHash!==review.inputHash||instant(args.observedAt)<instant(audit.observedAt)||instant(audit.observedAt)<instant(packet.cutoff))throw Error('callback_binding_mismatch');
@@ -75,7 +76,10 @@ export async function retainPropsSourceEvidence(args:{client:SupabaseClient;writ
   const capsule:Capsule={release:PROPS_SOURCE_EVIDENCE_RELEASE,contextHash,packetHash:digest(packet),auditHash:digest(audit),bytes:raw.length,compressedBytes:compressed.length,encoding:'gzip-base64',data:compressed.toString('base64'),observedAt:audit.observedAt,originalReview:originalReference(review),audit};decodePropsSourceEvidence(capsule);
   const retention=new Date(instant(packet.start)+366*86400000).toISOString();
   const saved=await args.client.from('lab_response_snapshots').insert({snapshot_key:key,kind:'daily_edge',sport:packet.sport,slate_date:day,payload:capsule,payload_version:PROPS_SOURCE_EVIDENCE_RELEASE,source:PROPS_SOURCE_EVIDENCE_RELEASE,generated_at:audit.observedAt,updated_at:audit.observedAt,expires_at:retention,stale_until:retention}).abortSignal(signal);
-  if(saved.error){const reconciled=await read();if(reconciled.error||!reconciled.data)throw Error('evidence_insert_unconfirmed');return verify(reconciled.data.payload);}
+  // A timed-out insert may already have committed. Its aborted signal cannot
+  // confirm the acknowledgement: allow exactly one separately bounded read,
+  // retaining the same immutable key and full original-review verification.
+  if(saved.error){const reconciled=await read(AbortSignal.timeout(PROPS_SOURCE_EVIDENCE_LIMITS.reconcileWindowMs));if(reconciled.error||!reconciled.data)throw Error('evidence_insert_unconfirmed');return verify(reconciled.data.payload);}
   return{status:'retained',key,packetHash:capsule.packetHash};
  }catch(error){return{status:'unavailable',key,reason:signal.aborted?'evidence_storage_deadline':error instanceof Error?error.message:'evidence_storage_unavailable'};}
 }
