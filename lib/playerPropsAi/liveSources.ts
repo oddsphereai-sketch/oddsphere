@@ -1,3 +1,4 @@
+import {assertNbaCurrentQuoteFixtures} from '../services/nba/nbaPlayerPropsCurrentIdentityContract';
 import {qualifyNflExecutionContracts,qualifyUnsupportedNflAnytime} from './nflExecutionContracts';
 import {qualifyNflSourceEvent,sourceEventSummary,qualifyConflictingSourceObservations} from "./sourceEvents";
 import {createNflPacketActorResolver,sameNflPropActorName,PROPS_AI_NFL_SOURCE_RELEASE,PROPS_AI_NFL_IDENTITY_RELEASE,PROPS_AI_NFL_ALIAS_RELEASE} from "./nflPlayerIdentity";
@@ -53,6 +54,7 @@ export function liveNbaPacket(args:{game:LivePropsGame;window:CapturedReviewWind
     return q.isOpening===false&&!q.isLive&&['over','under','yes'].includes(q.side)&&Math.abs(q.americanPrice)>=100
       &&instant(q.observedAt)<=instant(available)&&instant(q.fetchedAt)<=instant(available)&&instant(available)<=instant(at);
   });
+  assertNbaCurrentQuoteFixtures(currentAtCutoff,args.game);
   invariant(!currentAtCutoff.some(retailIdentityMissing),'NBA retail offered-player identity incomplete');
   invariant(currentAtCutoff.every(q=>q.playerIdentityAvailableAt===undefined||instant(q.playerIdentityAvailableAt)<=instant(at)),'NBA player/team matchup identity incomplete: current identity response after cutoff');
   const nativeAvailable=instant(args.snapshot.generatedAt)<=instant(at),empty=currentAtCutoff.length===0;

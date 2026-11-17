@@ -20,7 +20,7 @@ import type {refreshNbaPlayerPropsPrivateCandidate} from '../lib/services/nba/nb
 import {nbaAuthorityFixture,nbaAuthorityReview} from '../scripts/test-player-props-ai-nba-lock-authority';
 
 globalThis.fetch=async()=>{throw Error('Actual NBA writer proof forbids HTTP');};
-async function runCase(mode:'majority_out'|'all_out'|'missing_healthy_features'|'same_name_other_team'){
+async function runCase(mode:'majority_out'|'all_out'|'missing_healthy_features'|'same_name_other_team'|'rejected_current_identity'){
  const original=process.env.NODE_ENV;Object.assign(process.env,{NODE_ENV:'test'});
  try{
  const initial='2026-11-10T22:24:00Z',completed='2026-11-10T22:26:00Z',after='2026-11-10T22:30:01Z';let tick=initial,loads=0,writes=0,tracked=0;
@@ -50,7 +50,7 @@ async function runCase(mode:'majority_out'|'all_out'|'missing_healthy_features'|
   espnNbaInjuries:{canonicalNbaAbbreviation:(value:string)=>value,fetchEspnNbaGameInjuries:async(id:string|number)=>{assert.equal(String(id),report.eventId);return report;}},
   nbaPlayerPropsSettlementStore:{},
   nbaPlayerPropsCurrentState:{readNbaPlayerPropsCurrentState:async()=>state},
-  nbaPlayerPropsLiveCollector:{collectNbaPlayerPropsLiveMarket:async(args:{canonicalPlayersByName:Record<string,string>})=>{if(mode==='same_name_other_team')assert.equal(args.canonicalPlayersByName.synthetica,undefined,'Different canonical IDs sharing a name must not become a last-row-wins reference alias');return({observations,games:[{canonicalGameId:gameId,providerGameId:'1',scheduledStart:packet.start,homeTeam:'NYK',awayTeam:'BOS'}],teamIdsByGame:{[gameId]:{home:2,away:1}},providerRequests:{balldontlie:0,theOddsApi:0,owls:0},theOddsApiCreditsUsed:0,findings:[]});}},
+  nbaPlayerPropsLiveCollector:{collectNbaPlayerPropsLiveMarket:async(args:{canonicalPlayersByName:Record<string,string>})=>{if(mode==='rejected_current_identity')throw Error('synthetic_raw_identity_conflict');if(mode==='same_name_other_team')assert.equal(args.canonicalPlayersByName.synthetica,undefined,'Different canonical IDs sharing a name must not become a last-row-wins reference alias');return({observations,games:[{canonicalGameId:gameId,providerGameId:'1',scheduledStart:packet.start,homeTeam:'NYK',awayTeam:'BOS'}],teamIdsByGame:{[gameId]:{home:2,away:1}},providerRequests:{balldontlie:0,theOddsApi:0,owls:0},theOddsApiCreditsUsed:0,findings:[]});}},
   nbaPlayerPropsPrivateStore:{readNbaPlayerPropsMarketHistory:async()=>null,mergeNbaPlayerPropsMarketHistory:()=>({history:{release:'synthetic',observations},added:0,refreshed:0,conflicts:0}),writeNbaPlayerPropsMarketHistory:async()=>{},readNbaPlayerPropsPrivateSnapshot:async()=>previous,writeNbaPlayerPropsPrivateSnapshot:async(args:{snapshot:product.NbaPlayerPropsMemberSnapshot})=>{assert(args.snapshot.decisions.length>0,"The real canonical store rejects a generic zero-row slate");writes++;published=args.snapshot;}},
   nbaPlayerPropsPointInTimeFeatures:{buildNbaPlayerPropsPointInTimeFeatures:(args:{candidates:{playerId:number;teamId:number}[]})=>{assert.equal(args.candidates.find(c=>c.playerId===1)?.teamId,1,'Actual current quote team owns the native candidate despite a stale opposite-team cache');return(mode==='missing_healthy_features'?[3]:[1,2,3]).map(player_id=>({game_id:1,player_id,team_id:mode==='same_name_other_team'&&player_id===3?2:1,player_name:mode==='same_name_other_team'&&player_id===3?'Synthetic a':`Synthetic ${String.fromCharCode(96+player_id)}`}));}},
   nbaPlayerPropsFrozenRuntime:{buildNbaPlayerPropsForwardDecisions:(args:{features:{player_id:number}[]})=>{if(mode==='same_name_other_team')assert(args.features.some(f=>f.player_id===3),'An Out player on BOS cannot erase the distinct same-name native player on NYK');return nativeRows.filter(r=>args.features.some(f=>r.playerId.endsWith(':'+f.player_id))).map(r=>({...r,release:'synthetic',gameId:1,playerId:Number(r.playerId.split(':').at(-1)),finalProjection:r.projection}));}},
@@ -78,7 +78,9 @@ async function runCase(mode:'majority_out'|'all_out'|'missing_healthy_features'|
  const writer=(moduleFixture.exports as {refreshNbaPlayerPropsPrivateCandidate:typeof refreshNbaPlayerPropsPrivateCandidate}).refreshNbaPlayerPropsPrivateCandidate;
  const query={select(){return query;},eq(){return query;},like(){return query;},order(){return query;},limit:async()=>({data:[],error:null})};
  const schedule=[{id:'synthetic-schedule',externalId:Number(report.eventId),gameStartAt:packet.start,slateDate:'2026-11-10',status:'STATUS_SCHEDULED',homeTeam:'NYK',homeTeamDisplayName:'New York',homeTeamLogo:'',awayTeam:'BOS',awayTeamDisplayName:'Boston',awayTeamLogo:'',venue:null}] satisfies Parameters<typeof writer>[0]['schedule'];
- const result=await writer({client:{from:()=>query} as unknown as Parameters<typeof writer>[0]['client'],writerRunId:'synthetic-lease-owner',slateDate:'2026-11-10',season:2026,schedule,ballDontLieApiKey:'synthetic-not-real',fullRefresh:false,now:initial,fetchImpl:globalThis.fetch});
+ const writerArgs={client:{from:()=>query} as unknown as Parameters<typeof writer>[0]['client'],writerRunId:'synthetic-lease-owner',slateDate:'2026-11-10',season:2026,schedule,ballDontLieApiKey:'synthetic-not-real',fullRefresh:false,now:initial,fetchImpl:globalThis.fetch};
+ if(mode==='rejected_current_identity'){const before=evidence.digest(previous);await assert.rejects(()=>writer(writerArgs),/synthetic_raw_identity_conflict/);assert.equal(writes,0);assert.equal(tracked,0);assert.equal(evidence.digest(previous),before,'Rejected whole current source preserves the exact prior canonical/lock payload');return;}
+ const result=await writer(writerArgs);
  if(mode==='missing_healthy_features'){assert.equal(result.status,'last_known_good_preserved');assert.equal(loads,0);assert.equal(writes,0);assert(result.findings.includes('feature_coverage_below_80_percent:1/3'));return;}
  assert.equal(result.status,'published_private');assert.equal(loads,1);assert.equal(writes,mode==='all_out'?2:3);assert.equal(tracked,writes);
  assert(published);const rows=(published as product.NbaPlayerPropsMemberSnapshot).decisions;
@@ -90,5 +92,5 @@ async function runCase(mode:'majority_out'|'all_out'|'missing_healthy_features'|
  console.log(`Actual writer ${mode} control passed: all three source actors reviewed, ${unavailableRows.length} unavailable scopes No Play, ${rows.filter(r=>r.grade==='Best Angle').length} current Best Angle; all four scopes publish and lock. No HTTP/paid calls.`);
  }finally{if(original===undefined)Reflect.deleteProperty(process.env,'NODE_ENV');else Object.assign(process.env,{NODE_ENV:original});}
 }
-async function main(){for(const mode of ['same_name_other_team','majority_out','all_out','missing_healthy_features'] as const)await runCase(mode);}
+async function main(){for(const mode of ['rejected_current_identity','same_name_other_team','majority_out','all_out','missing_healthy_features'] as const)await runCase(mode);}
 void main().catch(error=>{console.error(error);process.exitCode=1;});

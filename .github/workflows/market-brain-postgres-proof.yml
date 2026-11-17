@@ -82,6 +82,7 @@ jobs:
         run: node --import tsx scripts/test-mlb-props-engine.ts && node --import tsx scripts/test-player-props-ai-mlb-event-settlement.ts && node --import tsx scripts/test-player-props-ai-mlb-handoff.ts && node --import tsx scripts/test-player-props-ai-mlb-unknown-ack.ts && node --import tsx scripts/test-mlb-props-indexed-cutoff.ts && node --import tsx scripts/test-mlb-props-locked-source-authority.ts && node --import tsx scripts/test-mlb-props-locked-client-authority.tsx && node --import tsx scripts/test-mlb-props-retention-authority.ts && node --import tsx scripts/test-mlb-props-locked-board-presence.ts && node --import tsx scripts/test-mlb-props-same-clock-source-authority.ts && node --import tsx scripts/test-player-props-ai-mlb-handoff-runtime.ts && node --import tsx scripts/test-player-props-ai-mlb-writer-handoff.ts && node --import tsx scripts/test-player-props-private-tracking.ts
       - name: Prove current NBA identity lookup and ambiguity-safe provider aliases
         run: node --import tsx scripts/test-nba-player-props-owls-live-collector.ts && node --import tsx scripts/test-player-props-ai-nba-ambiguous-aliases.ts
+          node --import tsx scripts/test-player-props-ai-nba-collection-identity-contract.ts
       - name: Prove exact source event support and cross-sport known-receipt actor retention
         run: node --import tsx scripts/test-player-props-ai-event-support-retention.ts
       - name: Prove explicit reviewer abstentions reach cross-sport pricing without changing stored generations

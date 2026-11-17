@@ -1,3 +1,4 @@
+import {validatedNbaScheduleRecords,validatedNbaQuoteRecords,validatedNbaPlayerRecords,validatedNbaReferenceEvents,assertNbaReferenceResponse} from './nbaPlayerPropsCurrentIdentityContract';
 import {resolveNbaPlayerAliases} from './nbaPlayerPropsPlayerIdentity';
 import {canonicalNbaPropsTeam as canonicalTeam} from "./nbaPlayerPropsTeamIdentity";
 import {
@@ -65,7 +66,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
     headers: { Authorization: args.ballDontLieApiKey, Accept: "application/json" }, fetchImpl,
   })));
   for (const envelope of gameEnvelopes) assertNoDeclaredContinuation(envelope.body, "NBA games");
-  const rawGames = [...new Map(gameEnvelopes.flatMap((envelope) => data(envelope.body))
+  const rawGames = [...new Map(validatedNbaScheduleRecords(gameEnvelopes.map(envelope=>envelope.body))
     .map((game) => [String(game.id), game])).values()];
   const games = rawGames.map(gameIdentity)
     .filter((game): game is NbaPlayerPropGameIdentity => game !== null);
@@ -84,6 +85,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
     scheduledStart: game.scheduledStart,
   }]));
   let observations: NbaPlayerPropPriceObservation[] = [];
+  const rawPlayerIdentityEntries:(readonly[string,string])[]=[];
   let bdlRequests = gameEnvelopes.length;
   const findings: string[] = [];
   for (const game of games) {
@@ -94,11 +96,13 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
     });
     bdlRequests += 1;
     assertCompleteBdlPropsResponse(current.body, "NBA current player props");
-    const playerMap = canonicalPlayerMap(data(current.body));
+    const currentCapture=validatedNbaQuoteRecords(current.body,game.providerGameId);
+    rawPlayerIdentityEntries.push(...currentCapture.aliases);
+    const playerMap = canonicalPlayerMap(currentCapture.rows);
     const currentReceivedAt = new Date().toISOString();
-    observations.push(...normalizeBallDontLieNbaPlayerProps({
-      values: data(current.body), fetchedAt, events: eventMap, canonicalPlayers: playerMap,
-    }).rows.map(row => ({ ...row, receivedAt: currentReceivedAt })));
+    observations.push(...currentCapture.rows.flatMap(value=>normalizeBallDontLieNbaPlayerProps({
+      values:[value], fetchedAt, events:eventMap, canonicalPlayers:playerMap,
+    }).rows).map(row=>({...row,receivedAt:currentReceivedAt})));
     if (args.includeOpenings) {
       const opening = await requestJson({
         url: `${BDL_BASE}/nba/v2/odds/player_props/opening?game_id=${encodeURIComponent(game.providerGameId)}`,
@@ -107,21 +111,24 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
       });
       bdlRequests += 1;
       assertCompleteBdlPropsResponse(opening.body, "NBA opening player props");
-      const openingRows = data(opening.body);
+      const openingCapture=validatedNbaQuoteRecords(opening.body,game.providerGameId,true);
+      rawPlayerIdentityEntries.push(...openingCapture.aliases);
+      const openingRows=openingCapture.rows;
+      const openingPlayerMap={...canonicalPlayerMap(openingRows),...playerMap};
       const openingReceivedAt = new Date().toISOString();
-      observations.push(...normalizeBallDontLieNbaPlayerProps({
-        values: openingRows,
+      observations.push(...openingRows.flatMap(value=>normalizeBallDontLieNbaPlayerProps({
+        values: [value],
         fetchedAt,
         opening: true,
         events: eventMap,
-        canonicalPlayers: { ...canonicalPlayerMap(openingRows), ...playerMap },
-      }).rows.map(row => ({ ...row, receivedAt: openingReceivedAt })));
+        canonicalPlayers: openingPlayerMap,
+      }).rows).map(row => ({ ...row, receivedAt: openingReceivedAt })));
     }
   }
 
   // Preserve raw quote label ownership before current-player metadata can
   // replace a display name. Both reference joins must see every captured owner.
-  const capturedPlayerIdentityEntries=[...(args.canonicalPlayerIdentityEntries??[]),...observations.flatMap(row=>row.playerName&&row.canonicalPlayerId?[[row.playerName,row.canonicalPlayerId] as const]:[])];
+  const capturedPlayerIdentityEntries=[...(args.canonicalPlayerIdentityEntries??[]),...rawPlayerIdentityEntries,...observations.flatMap(row=>row.playerName&&row.canonicalPlayerId?[[row.playerName,row.canonicalPlayerId] as const]:[])];
   if (args.knownPlayerIdentitiesById) {
     observations = observations.map((row) => {
       if (row.provider !== "balldontlie" || !row.providerPlayerId) return row;
@@ -154,10 +161,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
         fetchImpl,
       });
       assertNoDeclaredContinuation(response.body,"NBA current player identity");
-      const rawIdentities=object(response.body)?.data;
-      if(!Array.isArray(rawIdentities)||rawIdentities.length!==ids.length||rawIdentities.some(player=>object(player)===null))throw new Error('Malformed or incomplete current NBA identity batch');
-      const identities=rawIdentities as Record<string,unknown>[],returned=identities.map(player=>scalarId(player.id));
-      if(identities.length!==ids.length||new Set(returned).size!==ids.length||returned.some(id=>id===null||!ids.includes(id)))throw new Error('Incomplete or conflicting current NBA identity batch');
+      const identities=validatedNbaPlayerRecords(response.body,ids);
       observations = applyResolvedPlayerIdentities(observations, identities,new Date().toISOString());
     } catch {
       findings.push(`balldontlie_player_identity_lookup_failed:${ids.length}`);
@@ -171,9 +175,9 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
       const response = await new OwlsInsightClient(args.owlsInsightApiKey, { fetchImpl, timeoutMs: 20_000 })
         .props<{ data?: unknown }>("nba");
       assertCompleteOwlsPropsResponse(response.body, "NBA Owls player props");
-      const owlsEvents = array(object(response.body)?.data);
+      validateOwlsCapacity(array(object(response.body)?.data));
+      const owlsEvents=validatedNbaReferenceEvents(response.body,'owls');
       const owlsReceivedAt = new Date().toISOString();
-      validateOwlsCapacity(owlsEvents);
       const canonicalGames: Record<string, string> = {};
       for (const eventValue of owlsEvents) {
         const event = object(eventValue);
@@ -184,12 +188,17 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
         if (matches.length === 1) canonicalGames[eventId] = matches[0]!.canonicalGameId;
         else if (matches.length > 1) findings.push(`owls_event_ambiguous:${eventId}`);
       }
-      const normalized = normalizeOwlsNbaPlayerProps({
-        events: owlsEvents,
-        fetchedAt,
-        canonicalGames,
-        canonicalPlayers: canonicalNames(observations,args.canonicalPlayersByName,capturedPlayerIdentityEntries),
-      });
+      const canonicalPlayers=canonicalNames(observations,args.canonicalPlayersByName,capturedPlayerIdentityEntries);
+      const normalizedRows:NbaPlayerPropPriceObservation[]=[],unknownMarkets=new Map<string,number>();let inputRows=0;
+      for(const event of owlsEvents)for(const bookValue of array(event.books)){
+        const book=object(bookValue)!;
+        for(const prop of array(book.props)){
+          const part=normalizeOwlsNbaPlayerProps({events:[{...event,books:[{...book,props:[prop]}]}],fetchedAt,canonicalGames,canonicalPlayers});
+          normalizedRows.push(...part.rows);inputRows+=part.inputRows;
+          for(const [market,count] of Object.entries(part.unknownMarkets))unknownMarkets.set(market,(unknownMarkets.get(market)??0)+count);
+        }
+      }
+      const normalized={rows:normalizedRows,inputRows,unknownMarkets:Object.fromEntries(unknownMarkets)};
       const freshRows = normalized.rows.map(row => ({ ...row, receivedAt: owlsReceivedAt })).filter((row) => {
         const observedAt = Date.parse(row.observedAt);
         const fetched = Date.parse(fetchedAt);
@@ -200,7 +209,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
       if (freshRows.length < normalized.rows.length) findings.push("owls_stale_or_future_prop_rows_rejected");
       if (normalized.rows.some((row) => row.canonicalGameId === null)) findings.push("owls_prop_event_identity_unmatched");
       if (Object.keys(normalized.unknownMarkets).length > 0) findings.push("owls_unknown_prop_markets_present");
-      if (freshRows.length === 0) findings.push("owls_player_props_empty_for_slate");
+      if(freshRows.length===0)findings.push(normalized.inputRows>0?"owls_no_admissible_prop_rows_for_slate":"owls_player_props_empty_for_slate");
     } catch {
       findings.push("owls_player_props_capture_failed");
     }
@@ -227,16 +236,21 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
   const requestedGapIds = args.useTheOddsApiForGameIds ?? inferredGapIds;
   const gapGames = games.filter((game) => requestedGapIds.has(game.canonicalGameId));
   if (gapGames.length > 0 && args.theOddsApiKey) {
+    const oddsRows:NbaPlayerPropPriceObservation[]=[];
+    try{
+    theOddsApiRequests += 1;
     const eventsResponse = await requestJson({
       url: `${ODDS_BASE}/sports/${ODDS_SPORT}/events?apiKey=${encodeURIComponent(args.theOddsApiKey)}`,
       headers: { Accept: "application/json" }, fetchImpl,
     });
-    theOddsApiRequests += 1;
     creditsUsed += headerInteger(eventsResponse.headers, "x-requests-last") ?? 0;
     creditsRemaining = headerInteger(eventsResponse.headers, "x-requests-remaining");
-    const oddsEvents = array(eventsResponse.body);
+    const oddsEvents=validatedNbaReferenceEvents(eventsResponse.body,'odds');
     for (const game of gapGames) {
-      const event = oddsEvents.map(object).find((row) => row && eventMatches(row, game));
+      const matches=oddsEvents.filter(row=>eventMatches(row,game));
+      const unique=new Map(matches.map(row=>[String(row.id),row]));
+      if(unique.size>1)throw new Error("Ambiguous current Odds fixture");
+      const event=[...unique.values()][0];
       const eventId = text(event?.id);
       if (!eventId) { findings.push(`the_odds_api_event_unmatched:${game.canonicalGameId}`); continue; }
       const url = new URL(`${ODDS_BASE}/sports/${ODDS_SPORT}/events/${eventId}/odds`);
@@ -244,17 +258,20 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
       url.searchParams.set("markets", ODDS_MARKETS.join(","));
       url.searchParams.set("bookmakers", ODDS_BOOKMAKERS);
       url.searchParams.set("oddsFormat", "american");
+      theOddsApiRequests += 1;
       const response = await requestJson({ url: url.toString(), headers: { Accept: "application/json" }, fetchImpl });
       const oddsReceivedAt = new Date().toISOString();
-      theOddsApiRequests += 1;
       creditsUsed += headerInteger(response.headers, "x-requests-last") ?? ODDS_MARKETS.length;
       creditsRemaining = headerInteger(response.headers, "x-requests-remaining") ?? creditsRemaining;
-      observations.push(...normalizeTheOddsApiNbaPlayerProps({
-        events: [response.body], fetchedAt,
+      const exactResponse=assertNbaReferenceResponse(response.body,eventId,game);
+      oddsRows.push(...normalizeTheOddsApiNbaPlayerProps({
+        events: [exactResponse], fetchedAt,
         canonicalGames: { [eventId]: game.canonicalGameId },
         canonicalPlayers: canonicalNames(observations,args.canonicalPlayersByName,capturedPlayerIdentityEntries),
       }).rows.map(row => ({ ...row, receivedAt: oddsReceivedAt })));
     }
+    observations.push(...oddsRows);
+    }catch{findings.push("the_odds_api_player_props_capture_failed");}
   } else if (gapGames.length > 0) findings.push("the_odds_api_gap_fetch_skipped_missing_key");
 
   return {
@@ -361,7 +378,8 @@ function canonicalNames(rows:readonly NbaPlayerPropPriceObservation[],known:Read
 
 function eventMatches(event: Record<string, unknown>, game: NbaPlayerPropGameIdentity): boolean {
   return canonicalTeam(text(event.home_team) ?? "") === canonicalTeam(game.homeTeam)
-    && canonicalTeam(text(event.away_team) ?? "") === canonicalTeam(game.awayTeam);
+    && canonicalTeam(text(event.away_team) ?? "") === canonicalTeam(game.awayTeam)
+    && Math.abs(Date.parse(text(event.commence_time)??"")-Date.parse(game.scheduledStart))<=30*60000;
 }
 
 async function requestJson(args: {
@@ -380,14 +398,9 @@ async function requestJson(args: {
   catch { throw new Error("NBA props provider returned invalid JSON."); }
 }
 
-function data(value: unknown): Record<string, unknown>[] {
-  const root = object(value);
-  if (!Array.isArray(root?.data)) throw new Error("NBA props BALLDONTLIE response is missing data.");
-  return root.data.map(object).filter((row): row is Record<string, unknown> => row !== null);
-}
 function dedupe(rows: readonly NbaPlayerPropPriceObservation[]): NbaPlayerPropPriceObservation[] {
   return [...new Map(rows.map((row) => [[
-    row.provider, row.providerObservationId, row.side, row.observedAt, row.isOpening ? "opening" : "current",
+    row.provider, row.providerObservationId, row.canonicalGameId, row.canonicalPlayerId, row.sportsbook, row.market,row.offerType,row.line,row.americanPrice,row.side, row.observedAt, row.isOpening ? "opening" : "current",
   ].join("|"), row])).values()];
 }
 function array(value: unknown): unknown[] { return Array.isArray(value) ? value : []; }

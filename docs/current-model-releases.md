@@ -52,6 +52,32 @@ unavailable. Legacy cached adapters and established R2 noncurrent-native context
 schema remain exact, independently of the new live identity release, so a tag
 bump alone cannot withdraw a valid original review.
 
+
+The collector validates current identity before canonical maps and deduplication:
+raw schedule records and duplicate fixture IDs must agree; current quote IDs,
+recognized nested/name/team shapes and duplicate observation owners must agree
+and bind that endpoint's requested game. Same-record current-player metadata
+cannot choose between contradictory nested/flat teams or malformed name fields.
+Raw opening player/name ownership is preserved before normalization; valid
+historical team/trade context is not required to equal a current roster team.
+Original normalizer/observation R3 and every stored generation stay unchanged.
+
+Owls event/prop identity is checked before mapping, and Odds selection is unique
+within the same 30-minute fixture tolerance already used for Owls; targeted responses must retain
+the requested event and fixture. Invalid whole optional lanes are discarded with
+explicit capture failure, never labeled genuine empty. Valid BDL continuity and
+explicit same-prop quotes from distinct books survive. Per-record normalization
+and one request-local alias map preserve the full current quote namespace without
+repeated per-prop catalog rebuilding. No endpoint, source caps, cadence, model,
+phase or budget is added. Existing pending-only normal rescue and first-lock
+precedence stay authoritative. Actual live proof remains separate.
+
+
+The current capture also refuses contradictory prices for one exact provider/
+book/player contract at the same source clock; duplicate ordering cannot choose
+a favorable price. Distinct books/contracts and historical opening values stay
+separate. These are capture checks, not changes to pricing or grade formulas.
+
 R46 and earlier accepted reviews and all stored locks remain exact under their
 original contracts. Law R3/grade R5/selection R8, native MLB R44, models, output
 caps, exactly two phases/slots, shared sport lease, schema and
