@@ -13,6 +13,7 @@ import {
   isSharpApiHistoryUniqueConflict,
   marketIntelligenceGameKey,
   matchCbbSourceGame,
+  matchCbbPlaybookSourceGame,
   selectNbaRollingMarketGames,
   selectVerifiedSharpApiCurrentRows,
   selectVerifiedSharpApiWindowRows,
@@ -25,6 +26,8 @@ import {
   SharpApiRateLimitError,
 } from "../lib/providers/real_api/_sharpApiClient";
 import type { MarketSplitObservationV2 } from "../lib/types/domain/MarketIntelligenceV2";
+import { buildPlaybookSplitObservationsV2 } from "../lib/services/marketIntelligenceV2/canonicalAdapters";
+import { cbbQualifiedPublicSplitPair } from "../lib/services/cbb/cbbReaderMarketEvidence";
 import { readFileSync } from "node:fs";
 
 let pass = 0;
@@ -34,8 +37,57 @@ const failures: string[] = [];
 check(
   "Market Intelligence V2 versions response completion clocks and bounded writes",
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE ===
-    "market_intelligence_v2_capture_2026_11_06_r30_verified_cbb_school_identity",
+    "market_intelligence_v2_capture_2026_11_17_r31_cbb_public_consensus_identity",
 );
+
+{
+  // Source-proven names, synthetic fixtures/percentages. No real-game replay
+  // or reconstructed wager is published in the test suite.
+  const start = "2030-11-18T00:30:00Z", fetched = "2030-11-17T20:00:00Z";
+  for (const [index, [source, awayName, awayLocation]] of [
+    ["Florida Int'l Golden Panthers", "Florida International Panthers", "Florida International"],
+    ["Nicholls St Colonels", "Nicholls Colonels", "Nicholls"],
+    ["IUPUI Jaguars", "IU Indianapolis Jaguars", "IU Indianapolis"],
+  ].entries()) {
+    const game = { id: index + 1, externalId: index + 1, slateDate: "2030-11-17", gameDate: start,
+      homeTeamId: 100, awayTeamId: index + 1, homeAbbr: "HOME", awayAbbr: "AWAY",
+      homeName: "Example Eagles", homeLocation: "Example", awayName, awayLocation };
+    const matched = matchCbbPlaybookSourceGame([game], source, game.homeName, start);
+    check(`Playbook exact full name ${source} resolves before canonical admission`, matched?.game === game && !matched.reversed);
+    const reversed = matchCbbPlaybookSourceGame([game], game.homeName, source, start);
+    check(`Playbook ${source} preserves neutral-site orientation`, reversed?.game === game && reversed.reversed);
+    check(`Playbook ${source} cannot change another provider's identity`, matchCbbSourceGame([game], source, game.homeName, start) === null);
+    check(`Playbook ${source} rejects wrong opponent/time, missing time and duplicate fixture`,
+      matchCbbPlaybookSourceGame([game], source, "Other Eagles", start) === null &&
+      matchCbbPlaybookSourceGame([game], source, game.homeName, "2030-11-19T00:30:00Z") === null &&
+      matchCbbPlaybookSourceGame([game], source, game.homeName, null) === null &&
+      matchCbbPlaybookSourceGame([game, { ...game, id: 99, externalId: 99 }], source, game.homeName, start) === null);
+    for (const bad of ["Panthers", "Colonels", "Jaguars", "Florida Atlantic Golden Panthers", "Nicholls St Eagles", "IUPUI Eagles"])
+      check(`Playbook ${source} cannot admit unverified school/mascot ${bad}`, matchCbbPlaybookSourceGame([game], bad, game.homeName, start) === null);
+    for (const reverse of [false, true]) {
+      const row = { gameId: `synthetic-native-${index}`, awayTeamName: reverse ? game.homeName : source,
+        homeTeamName: reverse ? source : game.homeName, startTime: start, splits: {
+          moneyline: { bets: { homePercent: 62, awayPercent: 38 }, money: { homePercent: 71, awayPercent: 29 } },
+          spread: { bets: { homePercent: 57, awayPercent: 43 }, money: { homePercent: 64, awayPercent: 36 } },
+          total: { bets: { overPercent: 54, underPercent: 46 }, money: { overPercent: 61, underPercent: 39 } },
+        } };
+      const match = matchCbbPlaybookSourceGame([game], row.awayTeamName, row.homeTeamName, row.startTime)!;
+      const bytes = JSON.stringify(row);
+      const built = buildPlaybookSplitObservationsV2({ row, canonicalEventId: String(match.game.externalId), league: "cbb", fetchedAt: fetched,
+        canonicalMarketId: market => `${game.externalId}:${market}`,
+        selectionKey: (market, side) => `${game.externalId}:${market}:${match.reversed && side === "home" ? "away" : match.reversed && side === "away" ? "home" : side}` });
+      check(`Playbook ${source} transports all three complete pairs without relabeling clocks or percentages`,
+        built.rejected.length === 0 && built.observations.length === 6 && JSON.stringify(row) === bytes &&
+        built.observations.every(o => o.provider_event_id === row.gameId && o.fetched_at === fetched && o.source_observed_at === null && !o.source_timestamp_verified));
+      for (const market of ["moneyline", "spread", "total"] as const) {
+        const pair = cbbQualifiedPublicSplitPair(built.observations, game.externalId, market, Date.parse(fetched));
+        const first = pair?.find(o => o.selection_key.endsWith(`:${market === "total" ? "over" : "home"}`));
+        check(`Playbook ${source} ${market} public panel retains its canonical side`,
+          pair?.length === 2 && first?.bets_pct === (market === "total" ? .54 : market === "spread" ? reverse ? .43 : .57 : reverse ? .38 : .62));
+      }
+    }
+  }
+}
 
 {
   const game = {

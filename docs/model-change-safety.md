@@ -1,3 +1,36 @@
+## November 17 CBB Playbook public-consensus identity R31
+
+Capture release is
+`market_intelligence_v2_capture_2026_11_17_r31_cbb_public_consensus_identity`.
+The existing leased collector admits three exact Playbook full participant names:
+`Florida Int'l Golden Panthers` → `Florida International Panthers`,
+`Nicholls St Colonels` → `Nicholls Colonels`, and
+`IUPUI Jaguars` → `IU Indianapolis Jaguars`. These source-local aliases precede
+the unchanged both-participant, kickoff, uniqueness and orientation checks.
+They do not extend the identity rules for any other provider, school or mascot.
+Original native event IDs, percentages, hashes and capture clocks remain exact;
+missing provider clocks remain unverified. R31 supersedes capture R30 below.
+
+This is source admission, with no forecast equation, calibration, grade threshold,
+price selection, stake, member copy/layout, source priority, provider request,
+cadence, lease, writer, schema or historical rewrite. CBB numerical R7,
+decision R15/grade R14, sole member publisher R58, adapter R40 and tracking R42
+remain authoritative. Newly admitted public context follows their existing rules;
+it is not evidence of a new accuracy improvement or grounds for forced plays.
+Exact stored locked payloads retain writer and reader precedence.
+
+Synthetic transport tests exercise all three markets in both orientations and
+reject unknown schools/mascots, wrong or missing kickoff and ambiguous fixtures.
+Existing CBB writer/reader tests preserve locked decisions and split sections.
+The private saved-slate census has 55 current games: 53 have all three public
+panels, with two missing source-name joins; one further source-name join affects
+the upcoming slate. Real-game source evidence and board-impact audits stay
+private. Protected publication requires full model verification, focused checks,
+type/lint/build, latest-main integration safety and actual ordinary collector,
+reader, writer/lease and subsequent lock proof. No new paid source poll or
+historical repair is authorized. Roll back the collector release together with
+its source-local aliases; never rewrite stored observations or member locks.
+
 ## November 17 immutable actual-callback evidence R49 audit repair
 
 NBA writer is `nba_player_props_private_writer_2026_11_17_r30_immutable_source_evidence`;
