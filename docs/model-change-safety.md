@@ -1,3 +1,80 @@
+## November 17 bounded correction context and current identity authority R47
+
+Shared generation is `player_props_ai_2026_11_17_r47_correction_draft_context`;
+NBA writer is `nba_player_props_private_writer_2026_11_17_r28_correction_draft_context`
+and NFL writer is `nfl_player_props_writer_2026_11_17_r108_correction_draft_context`.
+NBA live source is `player_props_ai_nba_source_2026_11_17_r3_current_quote_team_authority`.
+
+The existing second request can include a complete numeric reference for every
+failed actor from its known original primary draft. It is explicitly UNACCEPTED,
+not evidence or an approved forecast. Both raw and JSON-escaped feedback must
+fit the unchanged 1,984 ASCII-byte allowance. Complete diagnostics take priority;
+if every affected reference cannot fit, no partial vector or finding is dropped.
+No returned number is automatically retained, spliced, clamped or excepted. All
+original factual, physical, source-mean, event-tail and dependence guards apply.
+The same canonical joint-pair predicates now drive admission and navigation.
+
+NBA collector R8 is `nba_player_props_live_collector_2026_11_17_r8_current_identity_authority`.
+A last-played cache supplies labels only and cannot fill a current quote's team
+or suppress the existing current-player lookup. That ordinary lookup keeps its
+same endpoint, 100-ID batches, existing source deadlines and provider budgets;
+it may run where a historical-cache shortcut previously hid missing current
+identity. Lookup completion has its own private immutable identity receipt (not an extra
+model/matchup signal) and availability clock; it cannot
+refresh or backdate a quote price/receipt. Failed attempts count too; incomplete/continuing/conflicting responses
+cannot supply a team. No operator/provider/model test request is purchased.
+One ambiguity-preserving resolver owns cached, current, Owls and Odds API name
+joins. Complete captured alias ownership is retained across provider overlays;
+multiple IDs for a normalized name remain unresolved, never last-row-wins or
+reassigned from a matching line/price/team. Explicit provider IDs remain intact.
+Native candidates use the actual current offer set and explicit current team,
+never retained price history or last-played fallback. Wrong-team native heads
+cannot donate current priors. Medical identity remains exact-team and
+source-bound: a same-name player on the opponent is not silently treated as this
+actor or used to infer a roster move. Exact collector
+team aliases preserve supported same-game identity; missing authority remains
+unavailable. Legacy cached adapters and established R2 noncurrent-native context
+schema remain exact, independently of the new live identity release, so a tag
+bump alone cannot withdraw a valid original review.
+
+R46 and earlier accepted reviews and all stored locks remain exact under their
+original contracts. Native MLB R44, models, output
+caps, exactly two phases/slots, shared sport lease, schema and
+$50/$60 limits remain unchanged. Synthetic controls preserve supported Over and
+Under recovery and quantify newly eligible identity coverage without a blanket
+demotion. Two new consecutive fresh triple whole-product CLEAR rounds and all
+mandatory local/hosted/protected gates are required. Deployment and offline
+checks remain separate from ordinary live generation/publication proof. See
+`docs/model-audits/2026-11-17-props-correction-context-predeclaration.md`.
+
+
+
+Prospective law R4 is `player_props_ai_law_2026_11_17_r4_canonical_book_pairing`,
+grade R6 is `player_props_ai_grade_2026_11_17_r6_canonical_book_pairing`, and
+selection R9 is `player_props_ai_selection_2026_11_17_r9_canonical_book_pairing`.
+Their numerical event masses and confidence/EV thresholds are unchanged. New
+R4 decisions group and pair complementary same-provider/same-contract prices
+using the authoritative underlying-book identity, while preserving the exact
+selected quote, labels, clocks and prices. Valid Over and Under paired-confidence
+Leans recover symmetrically; conflicting, stale, different-provider/book/line
+prices cannot qualify. Original R3/R5/R8 pairing and every older law policy remain
+explicit immutable discriminators, including their original alias behavior.
+Existing stored grades and locked payloads retain precedence and are never
+regraded, relabeled, replaced or reconstructed by the new policy. This is a
+prospective qualification/selection change, not a new probability target, a
+confidence floor, an automatic promotion or a formula change. Synthetic
+collector→current-wire→member controls prove both actionable directions and
+old-policy/lock precedence. No paid test or extra review is introduced.
+
+
+A current executable bookmaker identity must remain nonempty after canonical
+normalization. Punctuation-only labels cannot be paired or promoted as one
+underlying book. Current collection rejects that invalid identity; an invalid
+optional whole lane is discarded while valid BDL continuity remains. R4 pricing
+also refuses empty canonical identities if collection is bypassed. Named-book
+aliases and both actionable directions still recover; old R3 pricing policy and
+all stored locks remain exact. No new lookup, paid test or review is added.
+
 ## November 16 exact event support and cross-sport actor retention R46
 
 Shared generation is `player_props_ai_2026_11_16_r46_event_support_and_actor_retention`;

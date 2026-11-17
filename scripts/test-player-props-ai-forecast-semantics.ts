@@ -3,7 +3,8 @@ import {encodeCanonicalScenarioLaw} from "../lib/playerPropsAi/generativeCoordin
 import assert from "node:assert/strict";
 import {PRODUCT_RELEASE,type GamePacket,type Evidence} from "../lib/playerPropsAi/evidenceContract";
 import {validateLaw,lawForecast,primitives} from "../lib/playerPropsAi/law";
-import {sourceForecastIssues,validateSourceForecast,unqualifiedEventTail} from "../lib/playerPropsAi/forecastSanity";
+import {sourceForecastIssues,sourceForecastJointConstraints,validateSourceForecast,unqualifiedEventTail} from "../lib/playerPropsAi/forecastSanity";
+import {reviewSupportNavigation} from '../lib/playerPropsAi/reviewSupportNavigation';
 import {independentPriorEvent} from "../lib/playerPropsAi/priorEvents";
 import {readerLogWindows} from "../lib/playerPropsAi/readerLogs";
 import {decodeNamedScenarioLaw,PROPS_AI_LEGACY_WIRE_RELEASE,PROPS_AI_WIRE_RELEASE} from "../lib/playerPropsAi/scenarioCoordinates";
@@ -40,6 +41,12 @@ const jointRaw={weights:[1,1,1,...Array(13).fill(0)],outcomes:{points:[10,20,30,
 assert.throws(()=>validateSourceForecast(joint,joint.players[0],validateLaw("nba",joint.players[0],jointRaw),[null,null]),/combo_dependence/);
 const sourceJoint=validateLaw("nba",joint.players[0],{...jointRaw,outcomes:{...jointRaw.outcomes,rebounds:[8,4,10,...Array(13).fill(8)]}});
 assert.doesNotThrow(()=>validateSourceForecast(joint,joint.players[0],sourceJoint,[null,null]));
+const jointBefore=JSON.stringify(joint),jointRequirements=sourceForecastJointConstraints(joint,joint.players[0]),jointNavigation=reviewSupportNavigation(joint).players[0].jointRequirements;
+assert.deepEqual(jointRequirements,[{first:'points',second:'rebounds',markets:['points_rebounds']}]);
+assert.deepEqual(jointNavigation.map(r=>({statistics:r.canonicalStatistics,markets:r.marketIndices})),[{statistics:['points','rebounds'],markets:[1]}]);
+assert(jointNavigation[0].rule.includes('both weights>0')&&jointNavigation[0].rule.includes('canonical statistics'));
+const noCombo=structuredClone(joint);noCombo.players[0].markets=['points'];assert.deepEqual(sourceForecastJointConstraints(noCombo,noCombo.players[0]),[]);
+assert.equal(JSON.stringify(joint),jointBefore,'Joint navigation must preserve original source bytes');
 const receiver=packet("nfl",["receptions","receiving_yards"],[log(0,{receptions:1,receiving_yards:4}),log(1,{receptions:3,receiving_yards:25}),log(2,{receptions:4,receiving_yards:37}),prior("receptions",2.2,2.5),prior("receiving_yards",34,30.5)]);
 const badReceiver=validateLaw("nfl",receiver.players[0],{weights:vector(1),outcomes:{receptions:vector(26),receiving_yards:vector(-2)}});
 const receiverCodes=sourceForecastIssues(receiver,receiver.players[0],badReceiver).map(x=>x.code);

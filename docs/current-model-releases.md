@@ -1,3 +1,137 @@
+## November 17 bounded correction context and current identity authority R47
+
+Shared generation is `player_props_ai_2026_11_17_r47_correction_draft_context`;
+NBA writer is `nba_player_props_private_writer_2026_11_17_r28_correction_draft_context`
+and NFL writer is `nfl_player_props_writer_2026_11_17_r108_correction_draft_context`.
+NBA live source is `player_props_ai_nba_source_2026_11_17_r3_current_quote_team_authority`.
+
+The existing second request can include a complete numeric reference for every
+failed actor from its known original primary draft. It is explicitly UNACCEPTED,
+not evidence or an approved forecast. Both raw and JSON-escaped feedback must
+fit the unchanged 1,984 ASCII-byte allowance. Complete diagnostics take priority;
+if every affected reference cannot fit, no partial vector or finding is dropped.
+No returned number is automatically retained, spliced, clamped or excepted. All
+original factual, physical, source-mean, event-tail and dependence guards apply.
+The same canonical joint-pair predicates now drive admission and navigation.
+
+NBA collector R8 is `nba_player_props_live_collector_2026_11_17_r8_current_identity_authority`.
+A last-played cache supplies labels only and cannot fill a current quote's team
+or suppress the existing current-player lookup. That ordinary lookup keeps its
+same endpoint, 100-ID batches, existing source deadlines and provider budgets;
+it may run where a historical-cache shortcut previously hid missing current
+identity. Lookup completion has its own private immutable identity receipt (not an extra
+model/matchup signal) and availability clock; it cannot
+refresh or backdate a quote price/receipt. Failed attempts count too; incomplete/continuing/conflicting responses
+cannot supply a team. No operator/provider/model test request is purchased.
+One ambiguity-preserving resolver owns cached, current, Owls and Odds API name
+joins.
+After the existing successful same-ID current-player lookup (which may correct
+an obsolete quote-team association), current identity constraints retain every
+nonempty supplied unresolved team token, including
+unmapped IDs/labels; another feed cannot erase it. Raw current quote name/ID
+ownership is captured before metadata display-name replacement and unioned into
+both Owls and Odds joins. Missing teams remain distinct from explicit unresolved
+teams. Legacy cached adapter semantics and stored records remain unchanged.
+
+Current-player lookup validates the raw array cardinality and every raw record
+before normalization: null, primitive or array extras reject the whole metadata
+batch. No filtered malformed row can turn an incomplete response into current
+team authority. Exact unique requested IDs and continuation guards still apply.
+
+Complete captured alias ownership is unioned from raw prior/current player arrays
+before per-ID display precedence and retained across provider overlays;
+multiple IDs for a normalized name remain unresolved, never last-row-wins or
+reassigned from a matching line/price/team. Explicit provider IDs remain intact.
+Native candidates use the actual current offer set and explicit current team,
+never retained price history or last-played fallback. Wrong-team native heads
+cannot donate current priors. Medical identity remains exact-team and
+source-bound: a same-name player on the opponent is not silently treated as this
+actor or used to infer a roster move. Exact collector
+team aliases preserve supported same-game identity; missing authority remains
+unavailable. Legacy cached adapters and established R2 noncurrent-native context
+schema remain exact, independently of the new live identity release, so a tag
+bump alone cannot withdraw a valid original review.
+
+
+The collector validates current identity before canonical maps and deduplication:
+raw schedule records and duplicate fixture IDs must agree; current quote IDs,
+recognized nested/name/team shapes and duplicate observation owners must agree
+and bind that endpoint's requested game. Same-record current-player metadata
+cannot choose between contradictory nested/flat teams or malformed name fields.
+Raw opening player/name ownership is preserved before normalization; valid
+historical team/trade context is not required to equal a current roster team.
+Original normalizer/observation R3 and every stored generation stay unchanged.
+
+Owls event/prop identity is checked before mapping, and Odds selection is unique
+within the same 30-minute fixture tolerance already used for Owls; targeted responses must retain
+the requested event and fixture. Invalid whole optional lanes are discarded with
+explicit capture failure, never labeled genuine empty. Valid BDL continuity and
+explicit same-prop quotes from distinct books survive. Per-record normalization
+and one request-local alias map preserve the full current quote namespace without
+repeated per-prop catalog rebuilding. No endpoint, source caps, cadence, model,
+phase or budget is added. Existing pending-only normal rescue and first-lock
+precedence stay authoritative. Actual live proof remains separate.
+
+
+The current capture also refuses contradictory prices for one exact provider/
+book/player contract at the same source clock; duplicate ordering cannot choose
+a favorable price. Distinct books/contracts and historical opening values stay
+separate. These are capture checks, not changes to pricing or grade formulas.
+
+
+Same-clock price consistency uses the normalized economic provider/book/actor/
+market/contract/source-instant namespace independently of raw record IDs, before
+AI market reports as well as execution. Calendar-only dates remain calendar
+values; two supplied precise datetime values must agree. A legacy precise date
+without datetime remains supported. Documented NBA date/datetime shapes are at
+https://nba.balldontlie.io/ (Games example/attributes); no provider API was called.
+
+
+Capture and execution share the authoritative `quoteBook` and
+`executionContractKey` namespace, including punctuation-equivalent book names.
+Equal-economic aliases remain valid; conflicting aliases reject atomically.
+Schedule duplicates retain an actually supplied precise record over a calendar-
+only record in either order; two precise clocks still must agree, and original
+calendar-only fallback remains when no precise record was supplied.
+
+R46 and earlier accepted reviews and all stored locks remain exact under their
+original contracts. Native MLB R44, models, output
+caps, exactly two phases/slots, shared sport lease, schema and
+$50/$60 limits remain unchanged. Synthetic controls preserve supported Over and
+Under recovery and quantify newly eligible identity coverage without a blanket
+demotion. Two new consecutive fresh triple whole-product CLEAR rounds and all
+mandatory local/hosted/protected gates are required. Deployment and offline
+checks remain separate from ordinary live generation/publication proof. See
+`docs/model-audits/2026-11-17-props-correction-context-predeclaration.md`.
+
+
+
+Prospective law R4 is `player_props_ai_law_2026_11_17_r4_canonical_book_pairing`,
+grade R6 is `player_props_ai_grade_2026_11_17_r6_canonical_book_pairing`, and
+selection R9 is `player_props_ai_selection_2026_11_17_r9_canonical_book_pairing`.
+Their numerical event masses and confidence/EV thresholds are unchanged. New
+R4 decisions group and pair complementary same-provider/same-contract prices
+using the authoritative underlying-book identity, while preserving the exact
+selected quote, labels, clocks and prices. Valid Over and Under paired-confidence
+Leans recover symmetrically; conflicting, stale, different-provider/book/line
+prices cannot qualify. Original R3/R5/R8 pairing and every older law policy remain
+explicit immutable discriminators, including their original alias behavior.
+Existing stored grades and locked payloads retain precedence and are never
+regraded, relabeled, replaced or reconstructed by the new policy. This is a
+prospective qualification/selection change, not a new probability target, a
+confidence floor, an automatic promotion or a formula change. Synthetic
+collector→current-wire→member controls prove both actionable directions and
+old-policy/lock precedence. No paid test or extra review is introduced.
+
+
+A current executable bookmaker identity must remain nonempty after canonical
+normalization. Punctuation-only labels cannot be paired or promoted as one
+underlying book. Current collection rejects that invalid identity; an invalid
+optional whole lane is discarded while valid BDL continuity remains. R4 pricing
+also refuses empty canonical identities if collection is bypassed. Named-book
+aliases and both actionable directions still recover; old R3 pricing policy and
+all stored locks remain exact. No new lookup, paid test or review is added.
+
 ## November 16 prospective CBB withdrawn-fixture lock guard
 
 Lock sweep is `cbb_pregame_lock_sweep_2026_11_16_r2_published_fixture_census`;
@@ -66,6 +200,25 @@ The original target and substitution trace are saved for future decisions.
 No additional provider request, model fit, calibration, paid inference, writer
 or schedule is introduced. Activation requires the protected release checks and
 ordinary production writer/reader verification.
+
+
+Price consistency has one normalized economic authority. Each current BDL record,
+Owls prop and Odds outcome is normalized separately before any cross-record
+normalizer deduplication; the exact execution-contract census then sees every
+quote. Raw shape, fixture and actor-ownership validation remains before mapping,
+but does not approximate price contracts. Distinct ordinary and milestone offers
+and equivalent numeric representations survive; contradictory same-contract
+prices at the same instant reject the whole lane. Odds aliases are built once
+per response, with bounded streaming outcomes and unchanged atomic optional-lane
+commit. Original provider normalizers and stored generations remain exact.
+
+
+The existing conditional Odds gap decision also counts the authoritative
+underlying `quoteBook` identity across provider spellings. Equivalent aliases
+cannot falsely establish two-book coverage or suppress the configured ordinary
+gap fetch; genuine distinct books still skip it. Empty canonical labels are not
+corroboration. This corrects routing within the existing endpoints, source caps
+and conditional provider budget; no operator request or extra review is added.
 
 ## November 16 exact event support and cross-sport actor retention R46
 

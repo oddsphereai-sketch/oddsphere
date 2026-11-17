@@ -1,12 +1,12 @@
 /** Deterministic navigation over the same admission rules, never a forecast. */
 import type {GamePacket} from './evidenceContract';
-import {sourceForecastEventConstraints} from './forecastSanity';
+import {sourceForecastEventConstraints,sourceForecastJointConstraints} from './forecastSanity';
 import {numericSourceConstraints} from './numericSourceNavigation';
 import {evidenceAliases} from './input';
 import {PROPS_AI_LAW_RELEASE} from './releases';
 import {invariant} from './evidence';
 
-export const REVIEW_SUPPORT_NAVIGATION_RELEASE='player_props_review_support_navigation_2026_11_16_r1_event_and_exception_actions' as const;
+export const REVIEW_SUPPORT_NAVIGATION_RELEASE='player_props_review_support_navigation_2026_11_17_r2_joint_witnesses' as const;
 export function reviewSupportNavigation(packet:GamePacket){
  const aliases=new Map([...evidenceAliases(packet)].map(([alias,id])=>[id,alias])),quotes=new Map(packet.quotes.map(q=>[q.id,q]));
  return{release:REVIEW_SUPPORT_NAVIGATION_RELEASE,
@@ -15,6 +15,10 @@ export function reviewSupportNavigation(packet:GamePacket){
   players:packet.players.map((player,playerIndex)=>{
    const indices=[...new Set(numericSourceConstraints(packet,player).filter(c=>c.meanRule==='explicit_decline_affected').flatMap(c=>c.affectedMarketIndices))].sort((a,b)=>a-b);
    return{playerIndex,playerId:player.id,
+    jointRequirements:sourceForecastJointConstraints(packet,player).map(pair=>({
+     canonicalStatistics:[pair.first,pair.second],marketIndices:pair.markets.map(market=>player.markets.indexOf(market)),
+     rule:'For each affected combination retain BOTH a positive and a negative product (x[i]-x[j])*(y[i]-y[j]) over indices i!=j with both weights>0. Ties and zero-weight scenarios are not witnesses. x/y are canonical statistics derived from the same scenario coordinates, not arbitrary column names. Otherwise explicitly except the affected combination scopes.',
+    })),
     unavailableNumericActions:indices.map(marketIndex=>({marketIndex,market:player.markets[marketIndex],action:`exceptions[${marketIndex}] must explicitly select a permitted source reason or forecast_declined; confidence[${marketIndex}]=0 alone does not resolve missing numeric support. No missing value becomes zero.`})),
     eventRequirements:sourceForecastEventConstraints(packet,player,PROPS_AI_LAW_RELEASE).map(event=>{
      const alias=aliases.get(event.sourceId),quote=quotes.get(event.sourceId);

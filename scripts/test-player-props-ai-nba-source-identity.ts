@@ -23,7 +23,15 @@ assert.equal(resolveNbaOfferedPlayerTeam({...base,native:[{team:'CHA',opponent:'
 
 import {fromCachedExport,type CachedExport}from'../lib/playerPropsAi/cachedAdapters';
 import {liveNbaPacket}from'../lib/playerPropsAi/liveSources';
+import {NBA_PLAYER_PROPS_CURRENT_STATE_RELEASE} from '../lib/services/nba/nbaPlayerPropsCurrentState';
+import type {NbaPlayerPropsCurrentState} from '../lib/services/nba/nbaPlayerPropsCurrentState';
 import {digest}from'../lib/playerPropsAi/evidence';
+import {sourceInput} from '../lib/playerPropsAi/request';
+import {unpackReaderSourceV3} from '../lib/playerPropsAi/sourceCodec';
+import {criticalContextHashes} from '../lib/playerPropsAi/criticalContext';
+import {readerCanonicalContextHash} from '../lib/playerPropsAi/readerContext';
+import {readerAvailabilityContextHash} from '../lib/playerPropsAi/readerClaimFreshness';
+import {attachCapturedNbaParticipationReports,playerParticipationEligibility} from '../lib/playerPropsAi/participationEligibility';
 const id='nba-bdl-player:9001',gameId='synthetic-nba-game',start='2026-11-10T00:00:00Z',lock='2026-11-09T23:00:00Z';
 const state={updatedAt:past,games:[{gameId:1,homeTeamId:4,awayTeamId:6,homeTeam:'CHA',awayTeam:'CLE',startTime:'2026-11-01T00:00:00Z'}],boxes:[],advanced:[],players:[]};
 const observations=[{...offer(null,'2026-11-09T22:42:00Z'),provider:'owls',side:'over'},{...offer('4','2026-11-09T22:42:00Z'),provider:'balldontlie',side:'under'}].map((q,i)=>({...q,canonicalPlayerId:id,canonicalGameId:gameId,playerName:'Synthetic offered actor',market:'rebounds',sportsbook:'synthetic-book',line:4.5,americanPrice:-110,providerObservationId:'synthetic-'+i,isOpening:false}));
@@ -38,6 +46,48 @@ assert.equal(live.players[0].evidence.filter(e=>e.kind==='independent_model').le
 const disputed:CachedExport={...source,nba:[{...source.nba[0],market:{...source.nba[0].market!,observations:[...source.nba[0].market!.observations,{...source.nba[0].market!.observations[1],playerTeam:'6',providerObservationId:'conflict'}]}}]};
 assert.throws(()=>liveNbaPacket({game:{id:gameId,start,home:'CHA',away:'CLE'},window,snapshot:disputed.nba[0].snapshot!,market:disputed.nba[0].market!,prior:disputed.priorNba,current:disputed.currentNba,currentObservations:disputed.nba[0].market!.observations}),/NBA player\/team matchup identity incomplete/);
 console.log('Actual cached adapter and live packet retain the unmodelled offered actor, both providers, market and missing-head status; conflicting team remains blocked; source bytes unchanged.');
+
+// Current explicit full-team names use the existing collector catalog, even
+// without a priced native head. Last-played associations never fill missing team.
+const teamlessMarket={...source.nba[0].market!,observations:source.nba[0].market!.observations.filter(q=>q.provider==='owls')};
+const identityArgs={game:{id:gameId,start,home:'CHA',away:'CLE'},window,snapshot:source.nba[0].snapshot!,market:teamlessMarket,prior:source.priorNba,current:source.currentNba,currentObservations:teamlessMarket.observations};
+assert.throws(()=>liveNbaPacket(identityArgs),/NBA player\/team matchup identity incomplete/,'Missing current team remains held, never guessed from history');
+const fullName=teamlessMarket.observations.map(q=>({...q,playerTeam:'Charlotte Hornets'}));
+const fullNameArgs={...identityArgs,currentObservations:fullName,market:{...teamlessMarket,observations:fullName}},identityBefore=digest(fullNameArgs),identified=liveNbaPacket(fullNameArgs);
+assert.equal(identified.players.length,1);assert.equal(identified.players[0].team,'CHA');assert.deepEqual(identified.players[0].markets,['rebounds']);assert.equal(identified.players[0].evidence.filter(e=>e.kind==='independent_model').length,0);
+const repeatedIdentity=liveNbaPacket({...fullNameArgs,window:{...window,cutoff:'2026-11-09T22:44:00Z'}});assert.deepEqual(criticalContextHashes(repeatedIdentity),criticalContextHashes(identified));
+assert.equal(readerCanonicalContextHash(repeatedIdentity,id),readerCanonicalContextHash(identified,id));assert.equal(readerAvailabilityContextHash(repeatedIdentity,id),readerAvailabilityContextHash(identified,id));
+assert.equal(digest(fullNameArgs),identityBefore);
+const rosterRows=fullName.map(q=>({...q,provider:'balldontlie' as const,playerIdentityAvailableAt:'2026-11-09T22:42:30Z'}));
+const rosterArgs={...fullNameArgs,currentObservations:rosterRows,market:{...teamlessMarket,observations:rosterRows}},rosterPacket=liveNbaPacket(rosterArgs);
+assert(rosterPacket.sourceIdentityEvidence&&JSON.stringify(rosterPacket.sourceIdentityEvidence).includes('2026-11-09T22:42:30Z'));
+const withoutReceipt=structuredClone(rosterPacket);delete withoutReceipt.sourceIdentityEvidence;
+const withWire=JSON.parse(sourceInput(rosterPacket)),withoutWire=JSON.parse(sourceInput(withoutReceipt));
+const withSource=unpackReaderSourceV3(withWire) as Record<string,unknown>,withoutSource=unpackReaderSourceV3(withoutWire) as Record<string,unknown>;
+assert.equal(withSource.rawPacketDigest,digest(rosterPacket));assert.equal(withoutSource.rawPacketDigest,digest(withoutReceipt),'Original full packet integrity must remain exact');
+delete withSource.rawPacketDigest;delete withoutSource.rawPacketDigest;
+assert.deepEqual(withSource,withoutSource,'Private receipt payload cannot become extra model evidence; the existing original-packet hash still changes normally');
+assert.deepEqual(withWire.reviewSupportNavigation,withoutWire.reviewSupportNavigation);assert.deepEqual(withWire.namedConstraintCards,withoutWire.namedConstraintCards);assert.deepEqual(withWire.namedMarketNavigation,withoutWire.namedMarketNavigation);
+assert.equal(Buffer.byteLength(JSON.stringify(withWire)),Buffer.byteLength(JSON.stringify(withoutWire)),'No receipt payload is added to input bytes; a different original integrity hash is still retained');
+assert.deepEqual(criticalContextHashes(rosterPacket),criticalContextHashes(identified),'Same identity receipt cannot be counted as another matchup signal or change identical context');
+assert.equal(readerCanonicalContextHash(rosterPacket,id),readerCanonicalContextHash(identified,id));
+assert.equal(readerAvailabilityContextHash(rosterPacket,id),readerAvailabilityContextHash(identified,id));
+assert(rosterPacket.executionQuotes?.every(q=>q.receivedAt===rosterRows[0].receivedAt),'Identity lookup cannot pretend to refresh an executable price');
+const laterRoster=rosterRows.map(q=>({...q,playerIdentityAvailableAt:'2026-11-09T22:43:30Z'})),laterRosterPacket=liveNbaPacket({...rosterArgs,window:{...window,cutoff:'2026-11-09T22:44:00Z'},currentObservations:laterRoster,market:{...teamlessMarket,observations:laterRoster}});
+assert.deepEqual(criticalContextHashes(laterRosterPacket),criticalContextHashes(rosterPacket));assert.equal(readerCanonicalContextHash(laterRosterPacket,id),readerCanonicalContextHash(rosterPacket,id));assert.equal(readerAvailabilityContextHash(laterRosterPacket,id),readerAvailabilityContextHash(rosterPacket,id));
+assert.throws(()=>liveNbaPacket({...rosterArgs,currentObservations:laterRoster,market:{...teamlessMarket,observations:laterRoster}}),/NBA player\/team matchup identity incomplete/,'Future roster response cannot establish a team at an earlier quote cutoff');
+assert.throws(()=>liveNbaPacket({...rosterArgs,currentObservations:[rosterRows[0],...laterRoster],market:{...teamlessMarket,observations:[rosterRows[0],...laterRoster]}}),/NBA player\/team matchup identity incomplete/,'Another valid team quote cannot launder future metadata into current actor names or source evidence');
+
+for(const playerTeam of ['Chicago Bulls','unrecognized team']){const rows=fullName.map(q=>({...q,playerTeam}));assert.throws(()=>liveNbaPacket({...fullNameArgs,currentObservations:rows,market:{...teamlessMarket,observations:rows}}),/NBA player\/team matchup identity incomplete/);}
+// A real current trade/report cannot be bypassed with the historical cache team.
+const historicalIdentity={...source.currentNba,release:NBA_PLAYER_PROPS_CURRENT_STATE_RELEASE,season:2026,players:[{playerId:9001,playerName:'Synthetic offered actor',latestTeamId:4,lastObservedAt:'2026-11-01T00:00:00Z'}]} as NbaPlayerPropsCurrentState;
+assert.throws(()=>liveNbaPacket({...identityArgs,current:historicalIdentity}),/NBA player\/team matchup identity incomplete/,'Even a matching historical ID/name/team never becomes current roster authority');
+const currentCle=fullName.map(q=>({...q,playerTeam:'Cleveland Cavaliers'}));
+const traded=liveNbaPacket({...identityArgs,current:historicalIdentity,currentObservations:currentCle,market:{...teamlessMarket,observations:currentCle}});
+assert.equal(traded.players[0].team,'CLE','A current explicit team owns identity despite an older played-team association');
+const medical=attachCapturedNbaParticipationReports(traded,[{gameId,start,awayTeam:'CLE',homeTeam:'CHA',expectedEventId:'1',availableAt:cutoff,report:{eventId:'1',teams:new Map([['CHA',[]],['CLE',[{player_id:null,source_player_id:'synthetic-espn',name:'Synthetic offered actor',status:'out',position:'G',injury_type:null,expected_return_at:null,reported_at:cutoff}]]])}}]);
+assert.equal(playerParticipationEligibility(medical,medical.players[0]).blocked,true,'Current same-fixture Out must not be hidden by an old played-team association');
+console.log('Current explicit full-name identity: unpriced actor retained with zero invented heads; absent current team stays held despite historical association; all reader hashes remain stable.');
 
 import{nbaIndependentProbabilityEvent}from'../lib/playerPropsAi/nbaSourceIdentity';
 import{independentPriorEvent}from'../lib/playerPropsAi/priorEvents';
@@ -54,3 +104,15 @@ assert.equal(independentPriorEvent(legacyHead).preferredOutcome,'unavailable');a
 console.log('Native prior event: opposite final side cannot reverse the independent event; missing legacy reference side stays unknown with original untyped probability retained.');
 import{encodeNbaPlayerPropsPrivatePayload,decodeNbaPlayerPropsPrivatePayload}from'../lib/services/nba/nbaPlayerPropsPrivateStore';
 const stored={decisions:[nativeRow,{...legacyNative,lockedAt:lock}]};const restored=decodeNbaPlayerPropsPrivatePayload<typeof stored>(encodeNbaPlayerPropsPrivatePayload(stored,'candidate_snapshot'),'candidate_snapshot');assert.deepEqual(restored,stored);assert(!Object.hasOwn(restored!.decisions[1],'independentSide'),'Lossless storage cannot fabricate legacy reference side');
+
+// Current explicit unknown/wrong-game values constrain the same actor even
+// when no historical game happens to provide that numeric ID's display name.
+for(const playerTeam of ['99','unrecognized team','Chicago Bulls'])for(const reverse of [false,true]){
+ const currentRows=[...fullName,{...fullName[0],provider:'balldontlie' as const,playerTeam}];
+ if(reverse)currentRows.reverse();
+ const currentArgs={...fullNameArgs,currentObservations:currentRows,market:{...teamlessMarket,observations:currentRows}};
+ assert.throws(()=>liveNbaPacket(currentArgs),/NBA player\/team matchup identity incomplete/);
+ const unrelated={...fullNameArgs.prior,games:[...fullNameArgs.prior.games,{gameId:2,season:2026,homeTeamId:99,awayTeamId:6,homeTeam:'LAL',awayTeam:'CLE',homeScore:0,awayScore:0,startTime:past}]};
+ assert.throws(()=>liveNbaPacket({...currentArgs,prior:unrelated,current:unrelated}),/NBA player\/team matchup identity incomplete/,'Adding unrelated cache cannot change current conflict authority');
+}
+assert.doesNotThrow(()=>liveNbaPacket({...fullNameArgs,currentObservations:[...fullName,{...fullName[0],provider:'balldontlie',playerTeam:null}],market:teamlessMarket}),'A truly absent team is distinct from a supplied unresolved declaration');

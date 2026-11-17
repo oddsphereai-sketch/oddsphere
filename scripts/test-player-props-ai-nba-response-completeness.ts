@@ -31,6 +31,7 @@ async function collect(options:Options,observed:Seen){
     const games=u.searchParams.get('season_type')==='ist'?[]:[{id:77,datetime:start,home_team:{id:1,abbreviation:'BOS'},visitor_team:{id:2,abbreviation:'NYK'}}];
     return Response.json({data:games,meta:{per_page:100,next_cursor:null},...(options.target==='schedule'?options.patch:{})});
    }
+   if(u.pathname==='/v1/players'){assert.deepEqual(u.searchParams.getAll('player_ids[]'),['1','2']);return Response.json({data:[{id:1,first_name:'Synthetic',last_name:'One',team_id:1},{id:2,first_name:'Synthetic',last_name:'Two',team_id:2}]});}
    assert(['/v2/odds/player_props','/nba/v2/odds/player_props/opening'].includes(u.pathname));
    assert.deepEqual([...u.searchParams.keys()],['game_id'],'Props never gain pagination parameters or requests');
    const target=u.pathname.endsWith('/opening')?'opening':'current';
@@ -63,7 +64,7 @@ async function main(){
   for(const patch of [{},{meta:undefined},{meta:null},{meta:{per_page:2}},{meta:{next_cursor:null,has_more:false}},{meta:{per_page:2,diagnostic:'unrelated'}}]){
    const observed=seen(),{result}=await collect({patch,target:'current'},observed),before=digest(result),packet=source(result,observed);
    healthyHash??=digest(result.observations);assert.equal(digest(result.observations),healthyHash,'Healthy metadata cannot alter IDs, lines, prices or source/receipt clocks');
-   assert.equal(result.observations.length,8);assert.equal(packet.executionQuotes?.length,4);assert.equal(observed.calls.length,4);assert.equal(digest(result),before);
+   assert.equal(result.observations.length,8);assert.equal(packet.executionQuotes?.length,4);assert.equal(observed.calls.length,5);assert.equal(digest(result),before);
   }
   const bad:Record<string,unknown>[]=[{next_cursor:'next'},{has_more:true},{meta:{next_cursor:'next'}},{meta:{next_cursor:{unknown:true}}},{meta:{has_more:true}},{meta:{hasMore:'false'}},{meta:'malformed'},{meta:[]},{meta:{per_page:'2'}},{meta:{per_page:null}},{meta:{per_page:-1}},{meta:{per_page:1.5}},{meta:{per_page:Number.MAX_SAFE_INTEGER+1}},{meta:{per_page:0}},{meta:{per_page:3}}];
   for(const target of ['current','opening'] as const)for(const empty of [false,true])for(const patch of bad){
@@ -82,10 +83,10 @@ async function main(){
    const observed=seen(),{result}=await collect({owls:true,target:'owls',patch},observed);
    assert.equal(result.observations.filter(q=>q.provider==='owls').length,0);assert.equal(result.observations.filter(q=>q.provider==='balldontlie').length,8);
    assert(result.findings.includes('owls_player_props_capture_failed'));assert(!result.findings.includes('owls_player_props_empty_for_slate'));
-   assert.equal(observed.calls.length,5);source(result,observed);
+   assert.equal(observed.calls.length,6);source(result,observed);
   }
   const empty=await collect({empty:true,opening:false},seen());assert.equal(empty.result.observations.length,0,'Genuine complete current-empty remains empty');
-  console.log(`NBA complete-response proof passed: actual collector -> live source -> strict two-actor request; current/opening ${bad.length} malformed/continuation/count controls on empty/nonempty; schedule continuation with independent page-size semantics; healthy optional Owls and failed optional isolation; exact quote/clock preservation and unchanged requests. All I/O mocked, no model/token-count/database calls.`);
+  console.log(`NBA complete-response proof passed: actual collector -> live source -> strict two-actor request; current/opening ${bad.length} malformed/continuation/count controls on empty/nonempty; schedule continuation with independent page-size semantics; healthy optional Owls and failed optional isolation; exact price clocks plus separately timed ordinary identity lookup and no props paging. All I/O mocked, no model/token-count/database calls.`);
  }finally{globalThis.Date=OriginalDate;}
 }
 void main().catch(error=>{console.error(error);process.exitCode=1;});

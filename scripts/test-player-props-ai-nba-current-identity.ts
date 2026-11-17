@@ -10,7 +10,13 @@ import type {NbaPlayerPropPriceObservation as Observation} from '../lib/services
 import {normalizeBallDontLieNbaPlayerProps} from '../lib/services/nba/nbaPlayerPropsProviders';
 import {mergeNbaPlayerPropsMarketHistory} from '../lib/services/nba/nbaPlayerPropsPrivateStore';
 import {sourceInput} from '../lib/playerPropsAi/request';
-import {PROPS_AI_NBA_CURRENT_SOURCE_RELEASE} from '../lib/playerPropsAi/nbaSourceIdentity';
+import {PROPS_AI_NBA_NATIVE_CONTEXT_RELEASE,PROPS_AI_NBA_CURRENT_SOURCE_RELEASE} from '../lib/playerPropsAi/nbaSourceIdentity';
+import {readerCanonicalContextHash} from '../lib/playerPropsAi/readerContext';
+import {readerAvailabilityContextHash,reviewedReaderContextCurrent} from '../lib/playerPropsAi/readerClaimFreshness';
+import {criticalContextHashes} from '../lib/playerPropsAi/criticalContext';
+import {PROPS_AI_READER_CLAIMS_RELEASE} from '../lib/playerPropsAi/releases';
+import {PROPS_AI_READER_CONTEXT_RELEASE} from '../lib/playerPropsAi/readerContext';
+import type {AcceptedGameReview} from '../lib/playerPropsAi/reviewer';
 import {readerEvidence} from '../lib/playerPropsAi/readerCoverage';
 import {independentPriorEvents} from '../lib/playerPropsAi/priorEvents';
 
@@ -83,27 +89,42 @@ const emptyWithGhost=liveNbaPacket({...args,currentObservations:[],market:retain
 assert.throws(()=>liveNbaPacket({...args,currentObservations:[],market:{...args.market,observations:produced}}),/empty current collection has no verified withdrawal identity/,'No identity is fabricated merely to manufacture an empty-source observation');
 const nativeRow={gameId:game.id,playerId:known[0].canonicalPlayerId!,playerName:'Synthetic Current 0',team:'BOS',opponent:'NYK',market:'points',line:6.5,side:'over',independentSide:'over',independentProbability:.6,independentProjection:8,evaluatedAt:receipt,modelRelease:'synthetic native identity',role:[],production:[],matchup:[],lockedAt:null};
 const nativeSnapshot={...args.snapshot,decisions:[nativeRow]} as unknown as typeof args.snapshot,nativeBefore=digest(nativeSnapshot);
-const missingCurrentLabels=known.map(q=>q.canonicalPlayerId===nativeRow.playerId?{...q,playerName:null,playerTeam:null}:q);
+const missingCurrentLabels=known.map(q=>q.canonicalPlayerId===nativeRow.playerId?{...q,playerName:null}:q);
 const nativeBound=liveNbaPacket({...args,snapshot:nativeSnapshot,currentObservations:missingCurrentLabels});
-assert.equal(nativeBound.players[0].name,nativeRow.playerName);assert.equal(nativeBound.players[0].team,'BOS');assert.equal(nativeBound.players[0].evidence.filter(e=>e.kind==='independent_model').length,1,'An original available matching native head may supply same-ID identity, without adding unoffered scopes');
-assert.throws(()=>liveNbaPacket({...args,snapshot:{...nativeSnapshot,generatedAt:'2026-11-10T18:52:00Z'},currentObservations:missingCurrentLabels}),/NBA player\/team matchup identity incomplete/,'A future native head cannot donate missing current actor identity');
-assert.throws(()=>liveNbaPacket({...args,snapshot:{...nativeSnapshot,decisions:[{...nativeSnapshot.decisions[0],team:'NYK',opponent:'BOS'}]}}),/NBA player\/team matchup identity incomplete/,'A contradictory available native head cannot silently donate a prior');
+assert.equal(nativeBound.players[0].name,nativeRow.playerName);assert.equal(nativeBound.players[0].team,'BOS');assert.equal(nativeBound.players[0].evidence.filter(e=>e.kind==='independent_model').length,1,'An original available matching native head may supply a same-ID label/head only when current team is explicit');
+assert.throws(()=>liveNbaPacket({...args,snapshot:{...nativeSnapshot,generatedAt:'2026-11-10T18:52:00Z'},currentObservations:missingCurrentLabels}),/NBA current player-name identity incomplete/,'A future native head cannot donate missing current actor identity');
+const wrongHead=liveNbaPacket({...args,snapshot:{...nativeSnapshot,decisions:[{...nativeSnapshot.decisions[0],team:'NYK',opponent:'BOS'}]}});assert.equal(wrongHead.players[0].team,'BOS');assert.equal(wrongHead.players[0].evidence.filter(e=>e.kind==='independent_model').length,0,'A wrong-team native head cannot silently donate a current prior');
+assert.throws(()=>liveNbaPacket({...args,snapshot:nativeSnapshot,currentObservations:known.map(q=>q.canonicalPlayerId===nativeRow.playerId?{...q,playerTeam:null}:q)}),/NBA player\/team matchup identity incomplete/,'Even a timely same-market native head cannot supply absent current team authority');
 assert.throws(()=>liveNbaPacket({...args,snapshot:{...nativeSnapshot,decisions:[{...nativeSnapshot.decisions[0],scheduledStart:'2026-11-11T02:30:00Z'}]}}),/NBA native prior fixture identity incomplete/,'An available native head with a contradictory fixture clock cannot become a current prior');
 assert.throws(()=>liveNbaPacket({...args,snapshot:{...nativeSnapshot,games:[{...nativeSnapshot.games[0],homeTeam:'LAL'}]}}),/NBA native fixture identity incomplete/,'An available native header must bind the exact current fixture before supplying heads');
 assert.equal(digest(nativeSnapshot),nativeBefore,'Original native priors/identity bytes are never relabeled');
 assert.throws(()=>liveNbaPacket({...args,prior:{...args.prior,updatedAt:'2026-11-10T18:52:00Z'},current:{...args.current,updatedAt:'2026-11-10T18:52:00Z'}}),/NBA player\/team matchup identity incomplete/,'Future stat-cache game/team metadata cannot donate numeric-team identity to the current source');
 const role=[{key:'minutes_mean_5',label:'Recent minutes',format:'decimal',value:35}],matchup=[{key:'opponent_adjusted_defense',label:'Opponent defense',format:'decimal',value:110}];
 const withdrawnHead={...nativeRow,market:'rebounds',playerName:'Native display label',role,matchup},contextSnapshot={...args.snapshot,decisions:[withdrawnHead]} as unknown as typeof args.snapshot,contextBefore=digest(contextSnapshot);
-const contextual=liveNbaPacket({...args,snapshot:contextSnapshot,currentObservations:narrow}),contextualActor=contextual.players[0],nativeContext=contextualActor.evidence.find(e=>(e.value as {nativeContextRelease?:string}).nativeContextRelease===PROPS_AI_NBA_CURRENT_SOURCE_RELEASE)!;
+const contextual=liveNbaPacket({...args,snapshot:contextSnapshot,currentObservations:narrow}),contextualActor=contextual.players[0],nativeContext=contextualActor.evidence.find(e=>(e.value as {nativeContextRelease?:string}).nativeContextRelease===PROPS_AI_NBA_NATIVE_CONTEXT_RELEASE)!;
 assert(nativeContext,'Genuine same-actor role/matchup context from an available unoffered native market is retained');assert.deepEqual(contextualActor.markets,['points']);assert.equal(contextualActor.name,'Synthetic Current 0');assert.equal(contextualActor.team,'BOS');
 assert.deepEqual(independentPriorEvents(contextualActor),[],'A context-only withdrawn head cannot become a current independent event or priorRead requirement');
 assert(!Object.hasOwn(nativeContext.value as object,'independentProjection'));assert(!Object.hasOwn(nativeContext.value as object,'independentProbability'));assert(!Object.hasOwn(nativeContext.value as object,'market'));
 const contextFacts=readerEvidence(contextual)[contextualActor.id];assert.equal(contextFacts.opportunity_role.status,'available');assert.equal(contextFacts.matchup.status,'available');assert.equal(contextFacts.independent_model.status,'missing');assert(sourceInput(contextual).includes('same-actor noncurrent-market context'));
 const duplicateContext=liveNbaPacket({...args,snapshot:{...contextSnapshot,decisions:[{...contextSnapshot.decisions[0],market:'points',playerName:'Synthetic Current 0'},contextSnapshot.decisions[0]]},currentObservations:narrow});
-assert(!duplicateContext.players[0].evidence.some(e=>(e.value as {nativeContextRelease?:string}).nativeContextRelease===PROPS_AI_NBA_CURRENT_SOURCE_RELEASE),'Repeated current/native metrics are not extra context or votes');
+assert(!duplicateContext.players[0].evidence.some(e=>(e.value as {nativeContextRelease?:string}).nativeContextRelease===PROPS_AI_NBA_NATIVE_CONTEXT_RELEASE),'Repeated current/native metrics are not extra context or votes');
 const missingOwnIdentity=narrow.map(q=>q.canonicalPlayerId===nativeRow.playerId?{...q,playerTeam:null,playerName:null}:q);
 assert.throws(()=>liveNbaPacket({...args,snapshot:contextSnapshot,currentObservations:missingOwnIdentity}),/NBA player\/team matchup identity incomplete/,'An unoffered head cannot donate current identity');
-const futureContext=liveNbaPacket({...args,snapshot:{...contextSnapshot,generatedAt:'2026-11-10T18:52:00Z'},currentObservations:narrow});assert(!futureContext.players[0].evidence.some(e=>(e.value as {nativeContextRelease?:string}).nativeContextRelease===PROPS_AI_NBA_CURRENT_SOURCE_RELEASE));
-const wrongContext=liveNbaPacket({...args,snapshot:{...contextSnapshot,decisions:[{...contextSnapshot.decisions[0],team:'NYK',opponent:'BOS'}]},currentObservations:narrow});assert(!wrongContext.players[0].evidence.some(e=>(e.value as {nativeContextRelease?:string}).nativeContextRelease===PROPS_AI_NBA_CURRENT_SOURCE_RELEASE));assert(wrongContext.players[0].missing.some(s=>s.includes('noncurrent native context identity mismatch')));
+const futureContext=liveNbaPacket({...args,snapshot:{...contextSnapshot,generatedAt:'2026-11-10T18:52:00Z'},currentObservations:narrow});assert(!futureContext.players[0].evidence.some(e=>(e.value as {nativeContextRelease?:string}).nativeContextRelease===PROPS_AI_NBA_NATIVE_CONTEXT_RELEASE));
+const wrongContext=liveNbaPacket({...args,snapshot:{...contextSnapshot,decisions:[{...contextSnapshot.decisions[0],team:'NYK',opponent:'BOS'}]},currentObservations:narrow});assert(!wrongContext.players[0].evidence.some(e=>(e.value as {nativeContextRelease?:string}).nativeContextRelease===PROPS_AI_NBA_NATIVE_CONTEXT_RELEASE));assert(wrongContext.players[0].missing.some(s=>s.includes('noncurrent native context identity mismatch')));
 assert.equal(digest(contextSnapshot),contextBefore);
 console.log('NBA current identity passed: eight old orphan retail records do not block all current actors/scopes/quotes; explicit current unknowns remain fail-closed, opening/live/future/wrong-game/unsupported isolation, explicit-empty versus missing, honest source limitations and immutable raw history. Synthetic only; no network.');
+
+// Frozen synthetic R46 context fixture, computed under pure original4eba.
+// A new live identity release must not rewrite the established context schema.
+{
+ const now='2026-11-17T20:00:00Z',oldAt='2026-11-17T19:50:00Z',start='2026-11-18T01:00:00Z',lock='2026-11-18T00:00:00Z',id='nba-bdl-player:9001',gameId='synthetic-game';
+ const state={updatedAt:oldAt,games:[{gameId:1,homeTeamId:4,awayTeamId:6,homeTeam:'CHA',awayTeam:'CLE',startTime:'2026-11-10T01:00:00Z'}],boxes:[],advanced:[],players:[]};
+ const observations=['over','under'].map((side,i)=>({provider:'synthetic',providerPlayerId:'9001',canonicalPlayerId:id,canonicalGameId:gameId,playerName:'Synthetic actor',playerTeam:'4',market:'rebounds',sportsbook:'synthetic-book',line:4.5,americanPrice:-110,side,observedAt:now,fetchedAt:now,receivedAt:now,isLive:false,isOpening:false,providerObservationId:String(i)}));
+ const snapshot={generatedAt:oldAt,slateDate:'2026-11-17',games:[{gameId,scheduledStart:start,homeTeam:'CHA',awayTeam:'CLE'}],decisions:[{gameId,playerId:id,playerName:'Synthetic actor',team:'CHA',opponent:'CLE',market:'points',scheduledStart:start,evaluatedAt:oldAt,modelRelease:'synthetic-native',role:[{key:'minutes',value:30}],production:[],matchup:[],lockedAt:null}]};
+ const packet=liveNbaPacket({game:{id:gameId,start,home:'CHA',away:'CLE'},window:{gameId,stage:'final',cutoff:now,lock},snapshot,market:{updatedAt:now,observations},prior:state,current:state,currentObservations:observations} as unknown as Parameters<typeof liveNbaPacket>[0]);
+ const oldCritical='07502017c331229a7b93e9915e2f0052bdfb552ba418d060cae1c8386a021eae',oldCanonical='b9eb225c3f36578f7569358fb2ce986be7c15aa7fd4a33810a34809fe3e51bc7',oldAvailability='a847069716000d6d5cc64b8ab481ec2466757be6439f694bc7d58ce6ef9a3d89';
+ assert.equal(criticalContextHashes(packet)[id],oldCritical);assert.equal(readerCanonicalContextHash(packet,id),oldCanonical);assert.equal(readerAvailabilityContextHash(packet,id),oldAvailability);
+ const review={release:'player_props_ai_2026_11_16_r46_event_support_and_actor_retention',criticalContextHashes:{[id]:oldCritical},players:[{playerId:id,sourceReadProofs:{release:PROPS_AI_READER_CLAIMS_RELEASE,contextRelease:PROPS_AI_READER_CONTEXT_RELEASE,originalCriticalContextHash:oldCritical,canonicalContextHash:oldCanonical,availabilityContextHash:oldAvailability}}]} as unknown as AcceptedGameReview;
+ assert.equal(reviewedReaderContextCurrent(packet,review,id),true,'Unchanged original R46 source proof remains current across the identity release bump');
+}

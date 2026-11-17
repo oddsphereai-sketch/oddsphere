@@ -3,7 +3,7 @@ import type {Evidence,GamePacket,Json,Player} from "./evidenceContract";
 import {digest,invariant,instant,stable} from "./evidence";
 import {readerLogWindows} from "./readerLogs";
 import {independentPriorEvents} from "./priorEvents";
-import {PROPS_AI_NBA_CURRENT_SOURCE_RELEASE} from './nbaSourceIdentity';
+import {PROPS_AI_NBA_NATIVE_CONTEXT_RELEASE} from './nbaSourceIdentity';
 export const READER_AREAS=["recent_form","opportunity_role","matchup","head_to_head","availability","game_environment","market","independent_model"] as const;
 export type ReaderArea=typeof READER_AREAS[number];
 export type SourceCoverage="available"|"partial"|"missing";
@@ -62,7 +62,7 @@ export function playerReaderEvidence(packet:GamePacket,player:Player,allocate:(n
         rows:rows.map(r=>({gameId:r.gameId??null,date:r.date??null,plateAppearances:r.plateAppearances??null,suppliedWorkloadLabel:r.secondaryLabel??null}))},[e],"partial");
     }
   }
-  const nativeContexts=packet.sport==='nba'?player.evidence.filter(e=>e.kind==='matchup'&&obj(e.value).nativeContextRelease===PROPS_AI_NBA_CURRENT_SOURCE_RELEASE):[];
+  const nativeContexts=packet.sport==='nba'?player.evidence.filter(e=>e.kind==='matchup'&&obj(e.value).nativeContextRelease===PROPS_AI_NBA_NATIVE_CONTEXT_RELEASE):[];
   const metricRows=(key:string)=>[...new Map([...heads,...nativeContexts].flatMap(e=>Array.isArray(obj(e.value)[key])?(obj(e.value)[key] as Json[]).map(v=>({e,value:v})):[]).map(row=>[stable(row.value),row])).values()];
   const role=metricRows("role"),production=metricRows("production"),matchup=metricRows("matchup");
   if(role.length)add("opportunity_role","Timestamped workload/usage inputs",role.map(x=>x.value),[...new Map(role.map(x=>[x.e.id,x.e])).values()]);

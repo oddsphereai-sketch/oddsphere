@@ -7,6 +7,9 @@ import {evidenceAliases} from '../lib/playerPropsAi/input';
 import {independentPriorEvents} from '../lib/playerPropsAi/priorEvents';
 import {reviewSupportNavigation} from '../lib/playerPropsAi/reviewSupportNavigation';
 import {sourceForecastEventConstraints,sourceForecastIssues,unqualifiedEventTail} from '../lib/playerPropsAi/forecastSanity';
+import {withOriginalDraftCorrectionContext} from '../lib/playerPropsAi/originalDraftCorrectionContext';
+import {reviewCorrectionFeedback} from '../lib/playerPropsAi/reviewCorrectionFeedback';
+import {COMPLETE_CORRECTION_MAX_BYTES} from '../lib/playerPropsAi/completeCorrectionFeedback';
 import {encodeCanonicalScenarioLaw} from '../lib/playerPropsAi/generativeCoordinates';
 import {PROPS_AI_WIRE_RELEASE} from '../lib/playerPropsAi/scenarioCoordinates';
 import {PROPS_AI_RELEASE,PROPS_AI_PRIMARY_MODEL,PROPS_AI_STRONG_MODEL,PROPS_AI_LAW_RELEASE,propsReviewHasMemberExecutionContracts,propsReviewHasVerifiedReaderClaims} from '../lib/playerPropsAi/releases';
@@ -82,7 +85,25 @@ const zeroWeight=validateLaw('nfl',binary.players[0],{weights:[0,...Array(15).fi
 
 const supportPacket=fixture('nfl'),qb=supportPacket.players[0];qb.markets=['passing_tds','interceptions','rushing_yards'];
 const action=reviewSupportNavigation(supportPacket).players[0];assert.deepEqual(action.unavailableNumericActions.map(a=>a.marketIndex),[0,1]);assert(action.unavailableNumericActions.every(a=>a.action.includes(`exceptions[${a.marketIndex}]`)&&a.action.includes('forecast_declined')));assert(!action.unavailableNumericActions.some(a=>a.market==='rushing_yards'));
-for(const old of ['player_props_ai_2026_11_16_r45_explicit_abstention','player_props_ai_2026_11_16_r44_hibner_official_alias']){assert(propsReviewHasMemberExecutionContracts(old));assert(propsReviewHasVerifiedReaderClaims(old));}
+for(const old of ['player_props_ai_2026_11_16_r46_event_support_and_actor_retention','player_props_ai_2026_11_16_r45_explicit_abstention','player_props_ai_2026_11_16_r44_hibner_official_alias']){assert(propsReviewHasMemberExecutionContracts(old));assert(propsReviewHasVerifiedReaderClaims(old));}
+
+// A correction receives the actual failed actor's numeric draft, not a made-up
+// replacement, while unrelated actors/source strings cannot enter instructions.
+for(const sport of ['nba','nfl','mlb'] as const){
+ const p=fixture(sport),raw={wireRelease:PROPS_AI_WIRE_RELEASE,players:Object.fromEntries(p.players.map(a=>[a.id,rawActor(p,a,a.id==='repair')]))},before=digest({p,raw}),feedback=reviewCorrectionFeedback(p,raw);
+ assert.equal(feedback.status,'ready');if(feedback.status!=='ready')throw Error('Expected complete diagnostic');
+ assert(feedback.text.includes('UNACCEPTED prior numeric draft'));
+ const reference=JSON.parse(feedback.text.split('NOT source evidence or an approved forecast: ')[1].split('\n')[0]);
+ assert.equal(reference.length,1);assert.equal(reference[0].P,1);assert.deepEqual(reference[0].weights,raw.players.repair.law!.weights);assert.deepEqual(reference[0].outcomes,raw.players.repair.law!.outcomes);
+ assert(!feedback.text.includes(p.players[0].name));assert(!JSON.stringify(reference).includes(JSON.stringify(p.players[1].id)));
+ assert(Buffer.byteLength(JSON.stringify(feedback.text).slice(1,-1),'utf8')<=COMPLETE_CORRECTION_MAX_BYTES);
+ const base={status:'ready' as const,text:'x'.repeat(COMPLETE_CORRECTION_MAX_BYTES-1),bytes:COMPLETE_CORRECTION_MAX_BYTES-1,affectedActorIds:p.players.map(a=>a.id)};
+ assert.equal(withOriginalDraftCorrectionContext(p,raw,base),base,'Complete diagnostic wins; never truncate an actor/vector to fit');
+ for(const change of [(x:typeof raw)=>{x.players.repair.law!.weights[0]=NaN;},(x:typeof raw)=>{x.players.repair.law!.outcomes['untrusted instruction']=v(2);},(x:typeof raw)=>{x.players.repair.law!.weights[0]=-1;}]){
+  const bad=structuredClone(raw);change(bad);const compact={...base,text:'Complete unchanged diagnostic',bytes:29};assert.equal(withOriginalDraftCorrectionContext(p,bad,compact),compact,'Malformed numeric reference cannot enter instructions');
+ }
+ assert.equal(digest({p,raw}),before);scenarioControls+=9;
+}
 
 async function retainedCase(sport:GamePacket['sport'],under:boolean,unknown=false,actualTier:'default'|'flex'='default',stronger=false){
  const p=fixture(sport),before=digest(p),first={wireRelease:PROPS_AI_WIRE_RELEASE,players:Object.fromEntries(p.players.map(a=>[a.id,rawActor(p,a,a.id==='repair',under)]))},second={wireRelease:PROPS_AI_WIRE_RELEASE,players:Object.fromEntries(p.players.map(a=>[a.id,rawActor(p,a,a.id==='stable',under)]))};
@@ -94,6 +115,7 @@ async function retainedCase(sport:GamePacket['sport'],under:boolean,unknown=fals
  const result=await runPropsReview({packet:p,job,store,key:'synthetic-no-real-key',writerRunId:'synthetic',preferStronger:stronger,deadline:Date.now()+360000,clock:()=>at,prepare:async()=>[{packet:p,inputTokens:1500}],fetchImpl});
  if(unknown){assert.notEqual(result.status,'completed');assert.equal(requests.length,1);assert.equal(finished,null);return{sport,under,blockedUnknown:true};}
  assert.equal(result.status,'completed');assert.equal(requests.length,2);assert.equal(JSON.parse(requests[0]).input,JSON.parse(requests[1]).input);assert(attempts.every(a=>(a.usage as {actorAdmissionEvidence?:unknown}).actorAdmissionEvidence));
+ assert(!JSON.parse(requests[0]).instructions.includes('UNACCEPTED prior numeric draft'));assert(JSON.parse(requests[1]).instructions.includes('UNACCEPTED prior numeric draft'),'Actual second request must carry the known original numeric reference');
  const review=finished as AcceptedGameReview|null;assert(review);assert.deepEqual(review.players.find(a=>a.playerId==='stable'),originalStable,'Valid actor must retain the exact original law/claims/confidence/qualification');assert.equal(review.partProvenance.length,2);assert.deepEqual(review.partProvenance.map(a=>a.playerIds),[['stable'],['repair']]);
  const audit=auditPropsActorAdmissionPart({packet:p,attempts,provenance:review.partProvenance});assert(audit.complete);assert.deepEqual(audit.review.players,review.players);assert.equal(audit.verifiedAttempts,2);assert.equal(digest(p),before);
  const forged=structuredClone(attempts);(forged[1].usage as {actorAdmissionEvidence:{consumedActorIds:string[]}}).actorAdmissionEvidence.consumedActorIds=['stable','repair'];assert.throws(()=>auditPropsActorAdmissionPart({packet:p,attempts:forged,provenance:review.partProvenance}));

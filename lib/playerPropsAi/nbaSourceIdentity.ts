@@ -3,14 +3,19 @@
  * No roster inference, provider request, omitted actor or historical backfill. */
 import {instant,invariant} from './evidence';
 import {propsTeam} from './teamIdentity';
+import {canonicalNbaPropsTeam} from '../services/nba/nbaPlayerPropsTeamIdentity';
 export const PROPS_AI_NBA_SOURCE_RELEASE='player_props_ai_nba_source_2026_11_09_r1_exact_source_evidence' as const;
-export const PROPS_AI_NBA_CURRENT_SOURCE_RELEASE='player_props_ai_nba_source_2026_11_10_r2_current_actor_authority' as const;
+// Permanent existing noncurrent-native context annotation: independent of future
+// live identity releases, so identical facts retain their original reader hash.
+export const PROPS_AI_NBA_NATIVE_CONTEXT_RELEASE='player_props_ai_nba_source_2026_11_10_r2_current_actor_authority' as const;
+export const PROPS_AI_NBA_CURRENT_SOURCE_RELEASE='player_props_ai_nba_source_2026_11_17_r3_current_quote_team_authority' as const;
 type Native={team:string;opponent:string;evaluatedAt:string};
-type Offer={playerTeam:string|null;observedAt:string;fetchedAt:string;receivedAt?:string|null;isLive?:boolean};
+type Offer={playerTeam:string|null;observedAt:string;fetchedAt:string;receivedAt?:string|null;isLive?:boolean;playerIdentityAvailableAt?:string};
 export type NbaCurrentActorAuthority={id:string;name:string;team:string;opponent:string;markets:string[]};
 type NamedNative=Native&{playerId:string;playerName:string;market:string;scheduledStart?:string};
 type NamedOffer=Offer&{canonicalPlayerId:string|null;playerName:string|null;market:string;provider:string};
 type ActorSources={native:readonly NamedNative[];offers:readonly NamedOffer[];teamNames:ReadonlyMap<string,string>;home:string;away:string;start?:string;snapshotAt:string;archiveAt:string;cutoff:string};
+const currentTeam=(value:string)=>canonicalNbaPropsTeam(propsTeam(value));
 const actorName=(value:string)=>value.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 export const sameNbaSourceActorName=(first:string,second:string)=>Boolean(actorName(first))&&actorName(first)===actorName(second);
 /** Live-only identity authority. Retained price history is deliberately absent:
@@ -20,7 +25,7 @@ export function resolveNbaCurrentActors(args:ActorSources):NbaCurrentActorAuthor
  return currentIds.map(id=>{
   const offers=args.offers.filter(q=>q.canonicalPlayerId===id),markets=new Set(offers.map(q=>q.market)),native=instant(args.snapshotAt)<=instant(args.cutoff)?args.native.filter(row=>row.playerId===id&&markets.has(row.market)&&instant(row.evaluatedAt)<=instant(args.cutoff)):[];
   invariant(native.every(row=>row.scheduledStart===undefined||args.start===undefined||instant(row.scheduledStart)===instant(args.start)),'NBA native prior fixture identity incomplete');
-  const {team,opponent}=resolveNbaOfferedPlayerTeam({...args,native,offers});
+  const {team,opponent}=resolveNbaOfferedPlayerTeam({...args,native:[],offers,currentSource:true});
   invariant([propsTeam(args.home),propsTeam(args.away)].includes(team)&&[propsTeam(args.home),propsTeam(args.away)].includes(opponent)&&team!==opponent,'NBA player/team matchup identity incomplete');
   const namedOffers=offers.filter(q=>typeof q.playerName==='string'&&q.playerName.trim()).sort((a,b)=>Number(b.provider==='balldontlie')-Number(a.provider==='balldontlie')||a.playerName!.localeCompare(b.playerName!));
   // The exact canonical ID binds native model rows. When current authoritative
@@ -49,20 +54,25 @@ export function resolveNbaWithdrawalActors(args:ActorSources):NbaCurrentActorAut
   }catch{return[];}
  });
 }
-export function resolveNbaOfferedPlayerTeam(args:{native:readonly Native[];offers:readonly Offer[];teamNames:ReadonlyMap<string,string>;home:string;away:string;snapshotAt:string;archiveAt:string;cutoff:string}){
- const cutoff=instant(args.cutoff),known=new Set([...args.teamNames.values(),args.home,args.away].map(propsTeam)),teams=new Set<string>();
+export function resolveNbaOfferedPlayerTeam(args:{native:readonly Native[];offers:readonly Offer[];teamNames:ReadonlyMap<string,string>;home:string;away:string;snapshotAt:string;archiveAt:string;cutoff:string;currentSource?:boolean}){
+ // Only the live source reuses the collector exact alias catalog. A historical
+ // last-played team can never supply missing current actor authority.
+ const normalize=args.currentSource?currentTeam:propsTeam;
+ const cutoff=instant(args.cutoff),known=new Set([...args.teamNames.values(),args.home,args.away].map(normalize)),teams=new Set<string>();
  if(instant(args.snapshotAt)<=cutoff)for(const row of args.native)if(instant(row.evaluatedAt)<=cutoff){
-  const team=propsTeam(row.team),opponent=propsTeam(row.opponent),home=propsTeam(args.home),away=propsTeam(args.away);
+  const team=normalize(row.team),opponent=normalize(row.opponent),home=normalize(args.home),away=normalize(args.away);
   if(!((team===home&&opponent===away)||(team===away&&opponent===home)))return{team:'unknown',opponent:'unknown'};
   teams.add(team);
  }
  for(const q of args.offers){
   const available=q.receivedAt??args.archiveAt;
-  if(q.isLive||!q.playerTeam||instant(available)>cutoff||instant(q.observedAt)>instant(available)||instant(q.fetchedAt)>instant(available))continue;
-  const team=propsTeam(args.teamNames.get(q.playerTeam)??q.playerTeam);
-  if(known.has(team))teams.add(team);
+  if(q.isLive||!q.playerTeam||instant(available)>cutoff||instant(q.observedAt)>instant(available)||instant(q.fetchedAt)>instant(available)||q.playerIdentityAvailableAt!==undefined&&instant(q.playerIdentityAvailableAt)>cutoff)continue;
+  const team=normalize(args.teamNames.get(q.playerTeam)??q.playerTeam);
+  // Every explicit current declaration constrains identity, even an unmapped
+  // ID/label. Another provider cannot erase unresolved or wrong-fixture facts.
+  if(args.currentSource||known.has(team))teams.add(team);
  }
- const team=teams.size===1?[...teams][0]:'unknown',home=propsTeam(args.home),away=propsTeam(args.away);
+ const team=teams.size===1?[...teams][0]:'unknown',home=normalize(args.home),away=normalize(args.away);
  return{team,opponent:team===home?away:team===away?home:'unknown'};
 }
 

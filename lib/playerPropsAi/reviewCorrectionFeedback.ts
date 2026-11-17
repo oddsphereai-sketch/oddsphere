@@ -2,7 +2,9 @@
 import type {GamePacket} from './evidenceContract';
 import {namedSourceCorrection} from './sourceConstraintCards';
 import {sourceAwareDiagnosticCorrection} from './sourceAwareCorrectionFeedback';
+import {withOriginalDraftCorrectionContext} from './originalDraftCorrectionContext';
 
 export function reviewCorrectionFeedback(packet:GamePacket,draft:unknown){
- return packet.sport==='nba'?namedSourceCorrection(packet,draft):sourceAwareDiagnosticCorrection(packet,draft);
+ const feedback=packet.sport==='nba'?namedSourceCorrection(packet,draft):sourceAwareDiagnosticCorrection(packet,draft);
+ return withOriginalDraftCorrectionContext(packet,draft,feedback);
 }
