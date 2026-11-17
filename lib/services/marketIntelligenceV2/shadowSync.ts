@@ -16,6 +16,7 @@ import { normalizeMlbTeamName } from "../../providers/real_api/_teamNameNormaliz
 import { normalizeNhlTeamName } from "../../providers/nhl/_teamNameNormalizer";
 import { buildGameKey, type NormalizerSport } from "../../providers/playbook/playbookTeamNormalizer";
 import { cbbSplitTeamMatches } from "../../cbb/exactSplitIdentity";
+import { canonicalCbbTeamName } from "../../cbb/dataset";
 import { OwlsInsightClient, type OwlsSport } from "../../providers/owls/owlsInsightClient";
 import {
   normalizeOwlsSharpBookSplits,
@@ -86,7 +87,7 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_capture_2026_11_06_r30_verified_cbb_school_identity";
+  "market_intelligence_v2_capture_2026_11_17_r31_cbb_public_consensus_identity";
 
 type CbbSourceMatch = { game: GameRef; reversed: boolean };
 const cbbSide = (side: MarketIntelligenceSelectionSide, reversed: boolean): MarketIntelligenceSelectionSide =>
@@ -115,6 +116,22 @@ export function matchCbbSourceGame(games: readonly GameRef[], sourceAway: string
     return direct !== reversed ? [{ game, reversed }] : [];
   });
   return matches.length === 1 ? matches[0] : null;
+}
+
+// Exact full participant names from the ordinary Playbook capture. Keep these
+// source-local: a retired nickname must not change another provider's identity
+// or reinterpret a stored member lock. Both participants/time/uniqueness still
+// pass the existing canonical fixture matcher before any observation is built.
+const cbbPlaybookFullNames = new Map([
+  ["Florida Int'l Golden Panthers", "Florida International Panthers"],
+  ["Nicholls St Colonels", "Nicholls Colonels"],
+  ["IUPUI Jaguars", "IU Indianapolis Jaguars"],
+].map(([source, canonical]) => [canonicalCbbTeamName(source), canonical]));
+
+export function matchCbbPlaybookSourceGame(games: readonly GameRef[], sourceAway: string, sourceHome: string,
+  sourceStart: string | null): CbbSourceMatch | null {
+  const resolve = (name: string) => cbbPlaybookFullNames.get(canonicalCbbTeamName(name)) ?? name;
+  return matchCbbSourceGame(games, resolve(sourceAway), resolve(sourceHome), sourceStart);
 }
 
 export type SharpHistoryFailureClass =
@@ -747,7 +764,7 @@ async function collectPlaybookSplits(opts: {
   for (const row of rows) {
     const key = marketIntelligenceGameKey(opts.sport, row.awayTeamName, row.homeTeamName);
     const cbbMatch = opts.sport === "cbb"
-      ? matchCbbSourceGame(opts.games, row.awayTeamName ?? "", row.homeTeamName ?? "", playbookStartTime(row)) : null;
+      ? matchCbbPlaybookSourceGame(opts.games, row.awayTeamName ?? "", row.homeTeamName ?? "", playbookStartTime(row)) : null;
     const game = opts.sport === "cbb" ? cbbMatch?.game ?? null : key ? findPlaybookGameMatch(gamesByKey.get(key) ?? [], row) : null;
     if (!game) {
       rejected.push({
