@@ -11,7 +11,7 @@ import { readCbbSettlementFixtureCatchupDates } from "@/lib/services/cbb/cbbSett
 import { sweepCbbPregameLocks } from "@/lib/services/cbb/cbbPregameLockSweep";
 
 export const dynamic = "force-dynamic";
-const CBB_DAILY_REFRESH_RUNTIME_RELEASE = "cbb_daily_refresh_runtime_2026_11_13_r3_lock_first_failure_isolation";
+const CBB_DAILY_REFRESH_RUNTIME_RELEASE = "cbb_daily_refresh_runtime_2026_11_16_r4_published_fixture_census";
 const CBB_DAILY_REFRESH_LEASE_MINUTES = 10;
 // The observed R51 publication used ~515s before the existing seven-date
 // settlement postlude. Retain 30s below the unchanged ten-minute sport lease.
