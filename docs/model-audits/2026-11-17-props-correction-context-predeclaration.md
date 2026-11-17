@@ -111,3 +111,8 @@ unmapped IDs/labels; another feed cannot erase it. Raw current quote name/ID
 ownership is captured before metadata display-name replacement and unioned into
 both Owls and Odds joins. Missing teams remain distinct from explicit unresolved
 teams. Legacy cached adapter semantics and stored records remain unchanged.
+
+Current-player lookup validates the raw array cardinality and every raw record
+before normalization: null, primitive or array extras reject the whole metadata
+batch. No filtered malformed row can turn an incomplete response into current
+team authority. Exact unique requested IDs and continuation guards still apply.

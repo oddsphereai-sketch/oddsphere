@@ -154,7 +154,9 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
         fetchImpl,
       });
       assertNoDeclaredContinuation(response.body,"NBA current player identity");
-      const identities=data(response.body),returned=identities.map(player=>scalarId(player.id));
+      const rawIdentities=object(response.body)?.data;
+      if(!Array.isArray(rawIdentities)||rawIdentities.length!==ids.length||rawIdentities.some(player=>object(player)===null))throw new Error('Malformed or incomplete current NBA identity batch');
+      const identities=rawIdentities as Record<string,unknown>[],returned=identities.map(player=>scalarId(player.id));
       if(identities.length!==ids.length||new Set(returned).size!==ids.length||returned.some(id=>id===null||!ids.includes(id)))throw new Error('Incomplete or conflicting current NBA identity batch');
       observations = applyResolvedPlayerIdentities(observations, identities,new Date().toISOString());
     } catch {

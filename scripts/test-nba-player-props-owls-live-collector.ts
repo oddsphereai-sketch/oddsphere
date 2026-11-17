@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import {liveNbaPacket} from "../lib/playerPropsAi/liveSources";
 
 import { collectNbaPlayerPropsLiveMarket } from "../lib/services/nba/nbaPlayerPropsLiveCollector";
 
@@ -83,7 +84,7 @@ async function main(): Promise<void> {
 
   // A played-team cache must not masquerade as current roster evidence or
   // suppress the already supported ordinary bounded identity lookup.
-  for(const mode of ['current','failed','continued','conflicting','incomplete','unexpected'] as const){
+  for(const mode of ['current','failed','continued','conflicting','incomplete','unexpected','malformed_null','malformed_boolean','malformed_string','malformed_number','malformed_array','malformed_nested'] as const){
     const calls:string[]=[];
     const source:typeof fetch=async(input,init)=>{
       const url=String(input);calls.push(url);
@@ -91,6 +92,8 @@ async function main(): Promise<void> {
         const parsed=new URL(url);assert.equal(parsed.searchParams.get('per_page'),'100');assert.deepEqual(parsed.searchParams.getAll('player_ids[]'),['10']);
         if(mode==='failed')return new Response('{}',{status:500});
         const player={id:10,first_name:'Test',last_name:'Player',team_id:2};
+        const malformed:Record<string,unknown>={malformed_null:null,malformed_boolean:false,malformed_string:'bad',malformed_number:42,malformed_array:[],malformed_nested:['nested']};
+        if(Object.hasOwn(malformed,mode))return json({data:[player,malformed[mode]]});
         return json({data:mode==='conflicting'?[player,{...player,team_id:1}]:mode==='incomplete'?[]:mode==='unexpected'?[{...player,id:999}]:[player],...(mode==='continued'?{meta:{next_cursor:20}}:{})});
       }
       const response=await fetchImpl(input,init);
@@ -101,6 +104,11 @@ async function main(): Promise<void> {
     assert.equal(calls.filter(url=>url.includes('/v1/players?')).length,1);assert.equal(current.providerRequests.balldontlie,4,'Failed identity request attempts count too');
     assert(current.observations.every(row=>row.playerTeam===(mode==='current'?'2':null)),'Only explicit consistent current identity can fill quote team; cache team is never donated');
     if(mode==='current')assert(current.observations.every(row=>row.playerIdentityAvailableAt&&Date.parse(row.playerIdentityAvailableAt)>=Date.parse(row.receivedAt!)),'Lookup has its own availability clock, never a price receipt rewrite');
+
+    const cutoff=new Date().toISOString(),game={id:'nba-bdl:99',start,home:'NYK',away:'BOS'},state={updatedAt:cutoff,games:[{gameId:1,homeTeamId:1,awayTeamId:2,homeTeam:'NYK',awayTeam:'BOS',startTime:'2026-11-01T00:00:00Z'}],boxes:[],advanced:[],players:[]};
+    const packetArgs={game,window:{gameId:game.id,stage:'early',cutoff,lock:new Date(Date.parse(start)-3600000).toISOString()},snapshot:{generatedAt:cutoff,slateDate:start.slice(0,10),games:[{gameId:game.id,scheduledStart:start,homeTeam:'NYK',awayTeam:'BOS'}],decisions:[]},market:{updatedAt:cutoff,observations:current.observations},prior:state,current:state,currentObservations:current.observations} as unknown as Parameters<typeof liveNbaPacket>[0];
+    if(mode==='current'){const packet=liveNbaPacket(packetArgs);assert.equal(packet.players[0].team,'BOS');assert.equal(packet.executionQuotes?.length,2);}
+    else{assert(current.findings.includes('balldontlie_player_identity_lookup_failed:1'));assert(current.observations.every(row=>row.playerIdentityAvailableAt===undefined),'Rejected whole batch cannot donate metadata availability or a team');assert.throws(()=>liveNbaPacket(packetArgs),/NBA player\/team matchup identity incomplete/,'Malformed/incomplete metadata cannot admit an otherwise unresolved current actor');}
     assert.equal(calls.some(url=>url.includes('the-odds-api.com')||url.includes('openai.com')),false);
   }
   process.stdout.write("NBA player-props Owl live collector contract and current-versus-played team authority passed.\n");
