@@ -5,9 +5,12 @@ import {instant,invariant} from './evidence';
 import {propsTeam} from './teamIdentity';
 import {canonicalNbaPropsTeam} from '../services/nba/nbaPlayerPropsTeamIdentity';
 export const PROPS_AI_NBA_SOURCE_RELEASE='player_props_ai_nba_source_2026_11_09_r1_exact_source_evidence' as const;
-export const PROPS_AI_NBA_CURRENT_SOURCE_RELEASE='player_props_ai_nba_source_2026_11_17_r3_exact_team_alias_authority' as const;
+// Permanent existing noncurrent-native context annotation: independent of future
+// live identity releases, so identical facts retain their original reader hash.
+export const PROPS_AI_NBA_NATIVE_CONTEXT_RELEASE='player_props_ai_nba_source_2026_11_10_r2_current_actor_authority' as const;
+export const PROPS_AI_NBA_CURRENT_SOURCE_RELEASE='player_props_ai_nba_source_2026_11_17_r3_current_quote_team_authority' as const;
 type Native={team:string;opponent:string;evaluatedAt:string};
-type Offer={playerTeam:string|null;observedAt:string;fetchedAt:string;receivedAt?:string|null;isLive?:boolean};
+type Offer={playerTeam:string|null;observedAt:string;fetchedAt:string;receivedAt?:string|null;isLive?:boolean;playerIdentityAvailableAt?:string};
 export type NbaCurrentActorAuthority={id:string;name:string;team:string;opponent:string;markets:string[]};
 type NamedNative=Native&{playerId:string;playerName:string;market:string;scheduledStart?:string};
 type NamedOffer=Offer&{canonicalPlayerId:string|null;playerName:string|null;market:string;provider:string};
@@ -22,7 +25,7 @@ export function resolveNbaCurrentActors(args:ActorSources):NbaCurrentActorAuthor
  return currentIds.map(id=>{
   const offers=args.offers.filter(q=>q.canonicalPlayerId===id),markets=new Set(offers.map(q=>q.market)),native=instant(args.snapshotAt)<=instant(args.cutoff)?args.native.filter(row=>row.playerId===id&&markets.has(row.market)&&instant(row.evaluatedAt)<=instant(args.cutoff)):[];
   invariant(native.every(row=>row.scheduledStart===undefined||args.start===undefined||instant(row.scheduledStart)===instant(args.start)),'NBA native prior fixture identity incomplete');
-  const {team,opponent}=resolveNbaOfferedPlayerTeam({...args,native,offers,currentSource:true});
+  const {team,opponent}=resolveNbaOfferedPlayerTeam({...args,native:[],offers,currentSource:true});
   invariant([propsTeam(args.home),propsTeam(args.away)].includes(team)&&[propsTeam(args.home),propsTeam(args.away)].includes(opponent)&&team!==opponent,'NBA player/team matchup identity incomplete');
   const namedOffers=offers.filter(q=>typeof q.playerName==='string'&&q.playerName.trim()).sort((a,b)=>Number(b.provider==='balldontlie')-Number(a.provider==='balldontlie')||a.playerName!.localeCompare(b.playerName!));
   // The exact canonical ID binds native model rows. When current authoritative
@@ -63,7 +66,7 @@ export function resolveNbaOfferedPlayerTeam(args:{native:readonly Native[];offer
  }
  for(const q of args.offers){
   const available=q.receivedAt??args.archiveAt;
-  if(q.isLive||!q.playerTeam||instant(available)>cutoff||instant(q.observedAt)>instant(available)||instant(q.fetchedAt)>instant(available))continue;
+  if(q.isLive||!q.playerTeam||instant(available)>cutoff||instant(q.observedAt)>instant(available)||instant(q.fetchedAt)>instant(available)||q.playerIdentityAvailableAt!==undefined&&instant(q.playerIdentityAvailableAt)>cutoff)continue;
   const team=normalize(args.teamNames.get(q.playerTeam)??q.playerTeam);
   if(known.has(team))teams.add(team);
  }

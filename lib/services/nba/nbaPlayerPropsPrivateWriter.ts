@@ -1,3 +1,4 @@
+import {currentNbaTeamId} from './nbaPlayerPropsTeamIdentity';
 import {summarizePropsAiRuntimeHealth,propsAiFinalSourceHolds} from '../../playerPropsAi/runtimeHealth';
 import {propsAiTwoPhaseCompletionWindowMs} from "../../playerPropsAi/completionWindow";
 import {buildPropsSourceContextAuditSlate,retainedPropsSourceContextAudits,type PropsSourceContextAudit} from "../../playerPropsAi/sourceContextAudit";
@@ -153,9 +154,10 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   if(!priorState)throw new Error("NBA props prior state missing after readiness check");
 
   const players = new Map([...priorState.players, ...(currentState?.players ?? [])].map((row) => [row.playerId, row]));
-  const canonicalPlayersByName = Object.fromEntries([...players.values()].flatMap((player) => player.playerName
-    ? [[normalize(player.playerName), `nba-bdl-player:${player.playerId}`] as const]
-    : []));
+  const nameOwners=new Map<string,Set<string>>();
+  for(const player of players.values())if(player.playerName){const name=normalize(player.playerName),ids=nameOwners.get(name)??new Set<string>();ids.add(`nba-bdl-player:${player.playerId}`);nameOwners.set(name,ids);}
+  // A name shared by different IDs is unresolved, never last-row-wins identity.
+  const canonicalPlayersByName=Object.fromEntries([...nameOwners].filter(([,ids])=>ids.size===1).map(([name,ids])=>[name,[...ids][0]]));
   const live = await collectNbaPlayerPropsLiveMarket({
     slateDate: args.slateDate,
     ballDontLieApiKey: args.ballDontLieApiKey,
@@ -165,7 +167,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     canonicalPlayersByName,
     knownPlayerIdentitiesById: Object.fromEntries([...players.values()].map((player) => [String(player.playerId), {
       playerName: player.playerName,
-      playerTeam: player.latestTeamId === null ? null : String(player.latestTeamId),
+      playerTeam: null, // Names only; played-team history cannot suppress current identity lookup.
     }])),
     fetchImpl: sourceFetch,
   });
@@ -206,7 +208,6 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   const stateBoxes = [...priorState.boxes, ...(currentState?.boxes ?? [])];
   const stateAdvanced = [...priorState.advanced, ...(currentState?.advanced ?? [])];
   const candidates: NbaPlayerPropCandidate[] = [];
-  const candidateKeys = new Set<string>();
   const upcomingGames = live.games.flatMap((game) => {
     const ids = live.teamIdsByGame[game.canonicalGameId];
     if (!ids) return [];
@@ -221,26 +222,20 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     }];
   });
   const gameById = new Map(upcomingGames.map((game) => [game.gameId, game]));
-  for (const observation of mergedMarket.history.observations) {
-    if (!observation.canonicalGameId) continue;
-    const gameId = Number(observation.canonicalGameId.replace(/^.*:/, ""));
-    const playerId = playerIdFromObservation(observation);
-    const game = gameById.get(gameId);
-    if (!game || playerId === null) continue;
-    const identity = players.get(playerId);
-    const providerTeam = Number(observation.playerTeam);
-    const teamId = [providerTeam, identity?.latestTeamId]
-      .find((value) => value === game.homeTeamId || value === game.awayTeamId);
-    if (!teamId) continue;
-    const key = `${gameId}|${playerId}`;
-    if (candidateKeys.has(key)) continue;
-    candidateKeys.add(key);
-    candidates.push({
-      gameId,
-      playerId,
-      playerName: observation.playerName ?? identity?.playerName ?? null,
-      teamId,
-    });
+  // Current provider/roster identity only; retained prices and last-played teams
+  // cannot create this cycle's native candidate or suppress a current Out read.
+  const currentActors=new Map<string,{gameId:number;playerId:number;playerName:string|null;teams:Set<number>;conflicting:boolean}>();
+  for(const observation of live.observations){
+    if(observation.isOpening||observation.isLive||!observation.canonicalGameId)continue;
+    const gameId=Number(observation.canonicalGameId.replace(/^.*:/,'')),playerId=playerIdFromObservation(observation),game=gameById.get(gameId);
+    if(!game||playerId===null)continue;
+    const key=`${gameId}|${playerId}`,actor=currentActors.get(key)??{gameId,playerId,playerName:observation.playerName??players.get(playerId)?.playerName??null,teams:new Set<number>(),conflicting:false};
+    if(observation.playerTeam){const team=currentNbaTeamId(observation.playerTeam,game);if(team===null)actor.conflicting=true;else actor.teams.add(team);}
+    currentActors.set(key,actor);
+  }
+  for(const actor of currentActors.values()){
+    if(actor.conflicting||actor.teams.size!==1)continue;
+    candidates.push({gameId:actor.gameId,playerId:actor.playerId,playerName:actor.playerName,teamId:[...actor.teams][0]});
   }
   const emitGameIds = new Set(upcomingGames.map((game) => game.gameId));
   const features = buildNbaPlayerPropsPointInTimeFeatures({

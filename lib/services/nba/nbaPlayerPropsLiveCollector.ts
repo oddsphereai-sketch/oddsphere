@@ -12,7 +12,7 @@ import type {
 } from "./nbaPlayerPropsContract";
 
 export const NBA_PLAYER_PROPS_LIVE_COLLECTOR_RELEASE =
-  "nba_player_props_live_collector_2026_11_10_r7_complete_response" as const;
+  "nba_player_props_live_collector_2026_11_17_r8_current_identity_authority" as const;
 const BDL_BASE = "https://api.balldontlie.io";
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_SPORT = "basketball_nba";
@@ -123,7 +123,9 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
       return identity ? {
         ...row,
         playerName: row.playerName ?? identity.playerName,
-        playerTeam: row.playerTeam ?? identity.playerTeam,
+        // A last-played cache association is not current roster authority.
+        // Leave a missing team for the existing bounded current-player lookup.
+        playerTeam: row.playerTeam,
       } : row;
     });
   }
@@ -138,14 +140,17 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
     const url = new URL(`${BDL_BASE}/v1/players`);
     url.searchParams.set("per_page", "100");
     for (const id of ids) url.searchParams.append("player_ids[]", id);
+    bdlRequests += 1;
     try {
       const response = await requestJson({
         url: url.toString(),
         headers: { Authorization: args.ballDontLieApiKey, Accept: "application/json" },
         fetchImpl,
       });
-      bdlRequests += 1;
-      observations = applyResolvedPlayerIdentities(observations, data(response.body));
+      assertNoDeclaredContinuation(response.body,"NBA current player identity");
+      const identities=data(response.body),returned=identities.map(player=>scalarId(player.id));
+      if(identities.length!==ids.length||new Set(returned).size!==ids.length||returned.some(id=>id===null||!ids.includes(id)))throw new Error('Incomplete or conflicting current NBA identity batch');
+      observations = applyResolvedPlayerIdentities(observations, identities,new Date().toISOString());
     } catch {
       findings.push(`balldontlie_player_identity_lookup_failed:${ids.length}`);
     }
@@ -284,21 +289,25 @@ function validateOwlsCapacity(events: readonly unknown[]): void {
 export function applyResolvedPlayerIdentities(
   rows: readonly NbaPlayerPropPriceObservation[],
   players: readonly Record<string, unknown>[],
+  identityAvailableAt?: string,
 ): NbaPlayerPropPriceObservation[] {
-  const identityById = new Map(players.flatMap((player) => {
-    const playerId = scalarId(player.id);
-    const teamId = scalarId(object(player.team)?.id) ?? scalarId(player.team_id);
-    const playerName = [text(player.first_name), text(player.last_name)].filter(Boolean).join(" ") || null;
-    return playerId && (teamId || playerName) ? [[playerId, { teamId, playerName }] as const] : [];
-  }));
+  const identityById=new Map<string,{teamId:string|null;playerName:string|null}|null>();
+  for(const player of players){
+    const playerId=scalarId(player.id),teamId=scalarId(object(player.team)?.id)??scalarId(player.team_id),playerName=[text(player.first_name),text(player.last_name)].filter(Boolean).join(' ')||null;
+    if(!playerId||!(teamId||playerName))continue;
+    const identity={teamId,playerName},old=identityById.get(playerId);
+    identityById.set(playerId,identityById.has(playerId)&&(old===null||old?.teamId!==teamId||old?.playerName!==playerName)?null:identity);
+  }
   return rows.map((row) => {
     if (row.provider !== "balldontlie" || !row.providerPlayerId) return row;
     const identity = identityById.get(row.providerPlayerId);
+    if(identityById.has(row.providerPlayerId)&&identity===null)return{...row,playerTeam:null,...(identityAvailableAt?{playerIdentityAvailableAt:identityAvailableAt}:{})};
     if (!identity) return row;
     return {
       ...row,
       playerName: identity.playerName ?? row.playerName,
       playerTeam: identity.teamId ?? row.playerTeam,
+      ...(identityAvailableAt?{playerIdentityAvailableAt:identityAvailableAt}:{}),
     };
   });
 }

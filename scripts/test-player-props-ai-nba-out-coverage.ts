@@ -1,3 +1,4 @@
+import * as nbaPlayerPropsTeamIdentity from '../lib/services/nba/nbaPlayerPropsTeamIdentity';
 import * as completionWindow from '../lib/playerPropsAi/completionWindow';
 /** Actual production writer wiring, real parser/bindings/lock authority, mocked I/O. */
 import assert from 'node:assert/strict';
@@ -34,20 +35,23 @@ async function runCase(mode:'majority_out'|'all_out'|'missing_healthy_features'|
  if(mode==='all_out')report.teams.get('BOS')!.push({name:'Synthetic c',status:'out',source_player_id:'c',reported_at:null});
  if(mode==='missing_healthy_features')report.teams.set('BOS',[]);
  const state={games:Array(100).fill({}),boxes:Array(500).fill({}),advanced:[],players:[1,2,3].map(playerId=>({playerId,playerName:`Synthetic ${String.fromCharCode(96+playerId)}`,latestTeamId:1}))};
+ // Deliberately stale historical team for a currently BOS actor: current
+ // quote identity must still drive the native candidate and exact-team Out.
+ state.players[0].latestTeamId=2;
  if(mode==='same_name_other_team')Object.assign(state.players[2],{playerName:'Synthetic a',latestTeamId:2});
  const observations=packet.quotes.map(q=>({canonicalGameId:gameId,canonicalPlayerId:q.playerId,providerPlayerId:q.playerId.slice(-1),playerName:packet.players.find(p=>p.id===q.playerId)!.name,playerTeam:mode==='same_name_other_team'&&q.playerId==='nba-bdl-player:3'?'2':'1',market:q.market,line:q.line,side:q.side,sportsbook:q.book,americanPrice:q.american,observedAt:q.observedAt,receivedAt:q.receivedAt,provider:q.provider,isOpening:false,isLive:false}));
  type ReviewArgs=Parameters<typeof reviewPropsForSite>[0];
  let published:product.NbaPlayerPropsMemberSnapshot|null=null;
- const modules:Record<string,Record<string,unknown>>={runtimeHealth:await import('../lib/playerPropsAi/runtimeHealth'),completionWindow,sourceContextAudit:await import('../lib/playerPropsAi/sourceContextAudit'),
+ const modules:Record<string,Record<string,unknown>>={nbaPlayerPropsTeamIdentity,runtimeHealth:await import('../lib/playerPropsAi/runtimeHealth'),completionWindow,sourceContextAudit:await import('../lib/playerPropsAi/sourceContextAudit'),
   evidence,nbaSourceIdentity,siteBindings:bindings,publication,nbaPlayerPropsLifecycle:lifecycle,nbaPlayerPropsProductContract:product,
   nbaLockAuthority:{...authority,observeNbaSourceAuthority:authority.testNbaSourceAuthority(()=>tick),captureNbaHandoffBundle:authority.testNbaHandoffCapture(()=>tick)},
   siteConfig:{propsAiSiteConfig:()=>({integrated:true})},
   espnNbaInjuries:{canonicalNbaAbbreviation:(value:string)=>value,fetchEspnNbaGameInjuries:async(id:string|number)=>{assert.equal(String(id),report.eventId);return report;}},
   nbaPlayerPropsSettlementStore:{},
   nbaPlayerPropsCurrentState:{readNbaPlayerPropsCurrentState:async()=>state},
-  nbaPlayerPropsLiveCollector:{collectNbaPlayerPropsLiveMarket:async()=>({observations,games:[{canonicalGameId:gameId,providerGameId:'1',scheduledStart:packet.start,homeTeam:'NYK',awayTeam:'BOS'}],teamIdsByGame:{[gameId]:{home:2,away:1}},providerRequests:{balldontlie:0,theOddsApi:0,owls:0},theOddsApiCreditsUsed:0,findings:[]})},
+  nbaPlayerPropsLiveCollector:{collectNbaPlayerPropsLiveMarket:async(args:{canonicalPlayersByName:Record<string,string>})=>{if(mode==='same_name_other_team')assert.equal(args.canonicalPlayersByName.synthetica,undefined,'Different canonical IDs sharing a name must not become a last-row-wins reference alias');return({observations,games:[{canonicalGameId:gameId,providerGameId:'1',scheduledStart:packet.start,homeTeam:'NYK',awayTeam:'BOS'}],teamIdsByGame:{[gameId]:{home:2,away:1}},providerRequests:{balldontlie:0,theOddsApi:0,owls:0},theOddsApiCreditsUsed:0,findings:[]});}},
   nbaPlayerPropsPrivateStore:{readNbaPlayerPropsMarketHistory:async()=>null,mergeNbaPlayerPropsMarketHistory:()=>({history:{release:'synthetic',observations},added:0,refreshed:0,conflicts:0}),writeNbaPlayerPropsMarketHistory:async()=>{},readNbaPlayerPropsPrivateSnapshot:async()=>previous,writeNbaPlayerPropsPrivateSnapshot:async(args:{snapshot:product.NbaPlayerPropsMemberSnapshot})=>{assert(args.snapshot.decisions.length>0,"The real canonical store rejects a generic zero-row slate");writes++;published=args.snapshot;}},
-  nbaPlayerPropsPointInTimeFeatures:{buildNbaPlayerPropsPointInTimeFeatures:()=>(mode==='missing_healthy_features'?[3]:[1,2,3]).map(player_id=>({game_id:1,player_id,team_id:mode==='same_name_other_team'&&player_id===3?2:1,player_name:mode==='same_name_other_team'&&player_id===3?'Synthetic a':`Synthetic ${String.fromCharCode(96+player_id)}`}))},
+  nbaPlayerPropsPointInTimeFeatures:{buildNbaPlayerPropsPointInTimeFeatures:(args:{candidates:{playerId:number;teamId:number}[]})=>{assert.equal(args.candidates.find(c=>c.playerId===1)?.teamId,1,'Actual current quote team owns the native candidate despite a stale opposite-team cache');return(mode==='missing_healthy_features'?[3]:[1,2,3]).map(player_id=>({game_id:1,player_id,team_id:mode==='same_name_other_team'&&player_id===3?2:1,player_name:mode==='same_name_other_team'&&player_id===3?'Synthetic a':`Synthetic ${String.fromCharCode(96+player_id)}`}));}},
   nbaPlayerPropsFrozenRuntime:{buildNbaPlayerPropsForwardDecisions:(args:{features:{player_id:number}[]})=>{if(mode==='same_name_other_team')assert(args.features.some(f=>f.player_id===3),'An Out player on BOS cannot erase the distinct same-name native player on NYK');return nativeRows.filter(r=>args.features.some(f=>r.playerId.endsWith(':'+f.player_id))).map(r=>({...r,release:'synthetic',gameId:1,playerId:Number(r.playerId.split(':').at(-1)),finalProjection:r.projection}));}},
   nbaPlayerPropsMovement:{selectNbaPlayerPropsMovementTarget:(args:{observations:typeof observations;sportsbook:string;side:string})=>args.observations.find(q=>q.sportsbook===args.sportsbook&&q.side===args.side),buildNbaPlayerPropsSameBookMovement:()=>null},
   nbaPlayerPropsReaderContract:{buildNbaPlayerPropsReaderEvidence:()=>({role:[],production:[],matchup:[]})},

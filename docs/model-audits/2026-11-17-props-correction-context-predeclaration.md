@@ -52,3 +52,33 @@ a priced native head, and refuses absent/conflicting/wrong-game identity. The
 exact original callback for the two missed finals is still unavailable, so this
 cannot be claimed as a proved repair of those specific historical source gaps.
 No new provider lookup or review is purchased to manufacture that proof.
+
+
+Round86 also proved a preexisting producer path: historical team metadata filled
+a current quote and suppressed the supported current-player lookup, while native
+candidate construction could use retained observations/latest played team. R47
+removes those donations end to end. Ordinary existing identity lookup remains
+bounded to the same endpoint and 100-ID batches; calls can now occur where the
+cache shortcut previously skipped necessary current evidence, within existing
+provider budgets/deadlines. The current source set—not retained price history—
+owns native candidate identity. Missing/contradictory current authority stays
+held; matching explicit current authority restores supported coverage. Same-name opposing-team medical records are not silently reassigned to this
+actor; they may belong to a distinct current player. Existing exact-team
+participation semantics remain. Current team authority must come from the
+actual quote/current-player lookup, never a played-team cache or native head. All operator checks use mocked HTTP only.
+
+Round86's other P1 was release-only context invalidation. The existing R2
+noncurrent-native context annotation is now a separate permanent schema tag;
+new live source release R3 cannot rewrite it. A frozen synthetic original R46
+reader-proof fixture verifies critical/canonical/availability hashes and current
+review retention byte-exact. Unknown context fields are not blanket ignored.
+
+
+Current-player metadata has its own captured response-availability clock. It can
+only establish identity at or after that clock; it never refreshes the original
+quote observation/receipt or price. The immutable packet retains current ID/name/team provenance privately, not as
+an extra model/matchup signal or health assertion. Identical canonical identity
+facts do not change an original review context solely because a new receipt
+records their current authority; the receipt adds no AI input tokens.
+An unchanged subsequent lookup preserves context hashes; a future response cannot
+backdate source identity to an earlier review cutoff.

@@ -26,6 +26,7 @@ import {liveNbaPacket}from'../lib/playerPropsAi/liveSources';
 import {NBA_PLAYER_PROPS_CURRENT_STATE_RELEASE} from '../lib/services/nba/nbaPlayerPropsCurrentState';
 import type {NbaPlayerPropsCurrentState} from '../lib/services/nba/nbaPlayerPropsCurrentState';
 import {digest}from'../lib/playerPropsAi/evidence';
+import {sourceInput} from '../lib/playerPropsAi/request';
 import {criticalContextHashes} from '../lib/playerPropsAi/criticalContext';
 import {readerCanonicalContextHash} from '../lib/playerPropsAi/readerContext';
 import {readerAvailabilityContextHash} from '../lib/playerPropsAi/readerClaimFreshness';
@@ -56,6 +57,19 @@ assert.equal(identified.players.length,1);assert.equal(identified.players[0].tea
 const repeatedIdentity=liveNbaPacket({...fullNameArgs,window:{...window,cutoff:'2026-11-09T22:44:00Z'}});assert.deepEqual(criticalContextHashes(repeatedIdentity),criticalContextHashes(identified));
 assert.equal(readerCanonicalContextHash(repeatedIdentity,id),readerCanonicalContextHash(identified,id));assert.equal(readerAvailabilityContextHash(repeatedIdentity,id),readerAvailabilityContextHash(identified,id));
 assert.equal(digest(fullNameArgs),identityBefore);
+const rosterRows=fullName.map(q=>({...q,provider:'balldontlie' as const,playerIdentityAvailableAt:'2026-11-09T22:42:30Z'}));
+const rosterArgs={...fullNameArgs,currentObservations:rosterRows,market:{...teamlessMarket,observations:rosterRows}},rosterPacket=liveNbaPacket(rosterArgs);
+assert(rosterPacket.sourceIdentityEvidence&&JSON.stringify(rosterPacket.sourceIdentityEvidence).includes('2026-11-09T22:42:30Z'));
+const withoutReceipt=structuredClone(rosterPacket);delete withoutReceipt.sourceIdentityEvidence;assert.equal(sourceInput(rosterPacket),sourceInput(withoutReceipt),'Private identity provenance is not extra AI tokens or another independent evidence signal');
+assert.deepEqual(criticalContextHashes(rosterPacket),criticalContextHashes(identified),'Same identity receipt cannot be counted as another matchup signal or change identical context');
+assert.equal(readerCanonicalContextHash(rosterPacket,id),readerCanonicalContextHash(identified,id));
+assert.equal(readerAvailabilityContextHash(rosterPacket,id),readerAvailabilityContextHash(identified,id));
+assert(rosterPacket.executionQuotes?.every(q=>q.receivedAt===rosterRows[0].receivedAt),'Identity lookup cannot pretend to refresh an executable price');
+const laterRoster=rosterRows.map(q=>({...q,playerIdentityAvailableAt:'2026-11-09T22:43:30Z'})),laterRosterPacket=liveNbaPacket({...rosterArgs,window:{...window,cutoff:'2026-11-09T22:44:00Z'},currentObservations:laterRoster,market:{...teamlessMarket,observations:laterRoster}});
+assert.deepEqual(criticalContextHashes(laterRosterPacket),criticalContextHashes(rosterPacket));assert.equal(readerCanonicalContextHash(laterRosterPacket,id),readerCanonicalContextHash(rosterPacket,id));assert.equal(readerAvailabilityContextHash(laterRosterPacket,id),readerAvailabilityContextHash(rosterPacket,id));
+assert.throws(()=>liveNbaPacket({...rosterArgs,currentObservations:laterRoster,market:{...teamlessMarket,observations:laterRoster}}),/NBA player\/team matchup identity incomplete/,'Future roster response cannot establish a team at an earlier quote cutoff');
+assert.throws(()=>liveNbaPacket({...rosterArgs,currentObservations:[rosterRows[0],...laterRoster],market:{...teamlessMarket,observations:[rosterRows[0],...laterRoster]}}),/NBA player\/team matchup identity incomplete/,'Another valid team quote cannot launder future metadata into current actor names or source evidence');
+
 for(const playerTeam of ['Chicago Bulls','unrecognized team']){const rows=fullName.map(q=>({...q,playerTeam}));assert.throws(()=>liveNbaPacket({...fullNameArgs,currentObservations:rows,market:{...teamlessMarket,observations:rows}}),/NBA player\/team matchup identity incomplete/);}
 // A real current trade/report cannot be bypassed with the historical cache team.
 const historicalIdentity={...source.currentNba,release:NBA_PLAYER_PROPS_CURRENT_STATE_RELEASE,season:2026,players:[{playerId:9001,playerName:'Synthetic offered actor',latestTeamId:4,lastObservedAt:'2026-11-01T00:00:00Z'}]} as NbaPlayerPropsCurrentState;

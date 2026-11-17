@@ -14,3 +14,13 @@ const NBA_TEAM_ALIASES: Readonly<Record<string, string>> = {
 export function canonicalNbaPropsTeam(value: string): string { return NBA_TEAM_ALIASES[normalizeName(value)] ?? normalizeName(value).toUpperCase(); }
 
 function normalizeName(value:string){return value.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");}
+
+/** Current explicitly supplied numeric ID/known alias only. Never a played-team fallback. */
+export function currentNbaTeamId(value:string|null,game:{homeTeamId:number;awayTeamId:number;homeTeam:string;awayTeam:string}):number|null{
+ if(!value)return null;
+ const id=Number(value);if(Number.isSafeInteger(id)&&(id===game.homeTeamId||id===game.awayTeamId))return id;
+ const team=canonicalNbaPropsTeam(value);
+ if(team===canonicalNbaPropsTeam(game.homeTeam))return game.homeTeamId;
+ if(team===canonicalNbaPropsTeam(game.awayTeam))return game.awayTeamId;
+ return null;
+}

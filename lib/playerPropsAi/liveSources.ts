@@ -54,6 +54,7 @@ export function liveNbaPacket(args:{game:LivePropsGame;window:CapturedReviewWind
       &&instant(q.observedAt)<=instant(available)&&instant(q.fetchedAt)<=instant(available)&&instant(available)<=instant(at);
   });
   invariant(!currentAtCutoff.some(retailIdentityMissing),'NBA retail offered-player identity incomplete');
+  invariant(currentAtCutoff.every(q=>q.playerIdentityAvailableAt===undefined||instant(q.playerIdentityAvailableAt)<=instant(at)),'NBA player/team matchup identity incomplete: current identity response after cutoff');
   const nativeAvailable=instant(args.snapshot.generatedAt)<=instant(at),empty=currentAtCutoff.length===0;
   // A later native snapshot cannot donate priors, names or market scopes to an
   // earlier cutoff. The current fixture and independently available offers may
@@ -76,6 +77,13 @@ export function liveNbaPacket(args:{game:LivePropsGame;window:CapturedReviewWind
   const market={...args.market,observations:[...args.market.observations,...currentAtCutoff]};
   const source:EnrichedSource={readOnly:true,generatedAt:at,priorNba:prior,currentNba:currentState,nba:[{date:args.snapshot.slateDate,snapshot,market}],nfl:[],nbaContext:args.context};
   const packet=fromCachedExport(source,args.window,authority).packets[0];invariant(packet,"NBA live game missing from captured source");
+  // These receipts establish only canonical identity, already supplied on the
+  // player. Keep them in the immutable private packet, not as an extra matchup
+  // signal that could invalidate an identical accepted context or buy tokens.
+  const identityReceipts=[...new Map(currentAtCutoff.filter(q=>q.playerIdentityAvailableAt&&q.playerTeam&&actors.some(actor=>actor.id===q.canonicalPlayerId)).map(q=>{
+    const actor=actors.find(actor=>actor.id===q.canonicalPlayerId)!,value={provider:q.provider,playerId:actor.id,playerName:q.playerName,providerTeam:q.playerTeam,team:actor.team,availableAt:q.playerIdentityAvailableAt!};return[digest(value),value] as const;
+  })).values()];
+  if(identityReceipts.length)packet.sourceIdentityEvidence=json({release:'player_props_ai_nba_identity_receipts_2026_11_17_r1',receipts:identityReceipts,meaning:'Original current-player identity response completion only. No new price, independent forecast, matchup measurement or participation clearance. Canonical actor ID/name/team already carry these identity facts; not extra model tokens.'});
   for(const p of packet.players){p.team=propsTeam(p.team);p.opponent=propsTeam(p.opponent);invariant([propsTeam(args.game.home),propsTeam(args.game.away)].includes(p.team)&&[propsTeam(args.game.home),propsTeam(args.game.away)].includes(p.opponent)&&p.team!==p.opponent,"NBA player/team matchup identity incomplete");}
   invariant(instant(packet.start)===instant(args.game.start),'NBA native fixture clock mismatch');
   // Original same-actor history remains source context even when its identity

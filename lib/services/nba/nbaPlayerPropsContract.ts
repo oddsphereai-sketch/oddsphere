@@ -79,6 +79,8 @@ export type NbaPlayerPropPriceObservation = {
   fetchedAt: string;
   /** Future collector responses only. Legacy fetchedAt remains exact collection-start metadata. */
   receivedAt?: string;
+  /** Current-player identity response completion, never a price confirmation. */
+  playerIdentityAvailableAt?: string;
   isOpening: boolean;
   isLive: boolean;
   homeTeam: string | null;

@@ -1,4 +1,4 @@
-import {resolveNbaOfferedPlayerTeam,nbaIndependentProbabilityEvent,PROPS_AI_NBA_SOURCE_RELEASE,PROPS_AI_NBA_CURRENT_SOURCE_RELEASE,type NbaCurrentActorAuthority} from './nbaSourceIdentity';
+import {resolveNbaOfferedPlayerTeam,nbaIndependentProbabilityEvent,PROPS_AI_NBA_SOURCE_RELEASE,PROPS_AI_NBA_NATIVE_CONTEXT_RELEASE,type NbaCurrentActorAuthority} from './nbaSourceIdentity';
 import {propsTeam} from './teamIdentity';
 /** Pure adapters for a LOCAL read-only export. No provider, database, writer or cron imports. */
 import type { NbaPlayerPropsCurrentState } from "../services/nba/nbaPlayerPropsCurrentState";
@@ -66,7 +66,8 @@ export function fromCachedExport(source: CachedExport,window?:CapturedReviewWind
               values.push(evidence(`${id}:${label}:${b.gameId}`, kind, cacheTimes.get(key)!, "cached NBA stat state; actual cache availability timestamp retained", { game: g, box: b, advanced: advancedAt && instant(advancedAt) <= cutoff ? advanced.get(key) ?? null : null }));
             }
           }
-          const valid = rows.filter(r => instant(r.evaluatedAt) <= cutoff && instant(snapshot.generatedAt) <= cutoff);
+          const valid = rows.filter(r => instant(r.evaluatedAt) <= cutoff && instant(snapshot.generatedAt) <= cutoff
+            &&(!currentActor||(propsTeam(r.team)===team&&propsTeam(r.opponent)===opponent&&(r.scheduledStart===undefined||instant(r.scheduledStart)===instant(game.scheduledStart)))));
           for (const row of valid) {
             values.push(evidence(`${id}:model:${row.market}`, "independent_model", new Date(Math.max(instant(row.evaluatedAt), instant(snapshot.generatedAt))).toISOString(), row.modelRelease ?? "unversioned-source",
               { market: row.market, line: row.line, ...nbaIndependentProbabilityEvent(row), finalArbitratedSide:row.side,independentProjection: row.independentProjection, evaluatedAt: row.evaluatedAt, snapshotAvailableAt: snapshot.generatedAt, calibrationRelease: row.calibrationRelease, role: row.role, production: row.production, matchup: row.matchup }));
@@ -84,7 +85,7 @@ export function fromCachedExport(source: CachedExport,window?:CapturedReviewWind
               if(propsTeam(row.team)!==team||propsTeam(row.opponent)!==opponent||row.scheduledStart!==undefined&&instant(row.scheduledStart)!==instant(game.scheduledStart)){missing.push('noncurrent native context identity mismatch; source context rejected');continue;}
               const context=Object.fromEntries(keys.map(key=>[key,(Array.isArray(row[key])?row[key]:[]).filter(value=>{const hash=digest(value);if(seenContext[key].has(hash))return false;seenContext[key].add(hash);return true;})]));
               if(!keys.some(key=>(context[key] as unknown[]).length))continue;
-              values.push(evidence(`${id}:noncurrent-native-context:${row.market}`,'matchup',new Date(Math.max(instant(row.evaluatedAt),instant(snapshot.generatedAt))).toISOString(),`${row.modelRelease??'unversioned native source'}; same-actor noncurrent-market context, not an independent event prior`,{nativeContextRelease:PROPS_AI_NBA_CURRENT_SOURCE_RELEASE,sourceMarket:row.market,...context,meaning:'Original available exact-actor/fixture context only. This market is not currently offered; its projection, probabilities, name and event cannot supply a current prior, scope or actor identity. Repeated metrics already supplied by current heads are omitted as correlated duplicates.'}));
+              values.push(evidence(`${id}:noncurrent-native-context:${row.market}`,'matchup',new Date(Math.max(instant(row.evaluatedAt),instant(snapshot.generatedAt))).toISOString(),`${row.modelRelease??'unversioned native source'}; same-actor noncurrent-market context, not an independent event prior`,{nativeContextRelease:PROPS_AI_NBA_NATIVE_CONTEXT_RELEASE,sourceMarket:row.market,...context,meaning:'Original available exact-actor/fixture context only. This market is not currently offered; its projection, probabilities, name and event cannot supply a current prior, scope or actor identity. Repeated metrics already supplied by current heads are omitted as correlated duplicates.'}));
             }
           }
           if (history.length !== knownHistory.length) missing.push("historical stat cache unavailable at this cutoff; later fetch cannot be backdated");

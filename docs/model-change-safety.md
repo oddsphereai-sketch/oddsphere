@@ -1,9 +1,9 @@
-## November 17 bounded correction context and exact identity aliases R47
+## November 17 bounded correction context and current identity authority R47
 
 Shared generation is `player_props_ai_2026_11_17_r47_correction_draft_context`;
 NBA writer is `nba_player_props_private_writer_2026_11_17_r28_correction_draft_context`
 and NFL writer is `nfl_player_props_writer_2026_11_17_r108_correction_draft_context`.
-NBA live source is `player_props_ai_nba_source_2026_11_17_r3_exact_team_alias_authority`.
+NBA live source is `player_props_ai_nba_source_2026_11_17_r3_current_quote_team_authority`.
 
 The existing second request can include a complete numeric reference for every
 failed actor from its known original primary draft. It is explicitly UNACCEPTED,
@@ -14,16 +14,28 @@ No returned number is automatically retained, spliced, clamped or excepted. All
 original factual, physical, source-mean, event-tail and dependence guards apply.
 The same canonical joint-pair predicates now drive admission and navigation.
 
-NBA preparation reuses the collector's existing exact full-team-name catalog
-when a currently captured same-game quote explicitly supplies team identity,
-including an actor whose offered market has no priced native head. It does not
-invent a missing model head or use a historical last-played team as current
-roster authority. Missing, future, conflicting, wrong-game and ambiguous current
-identity stays held. Legacy cached adapters retain their original alias rules.
+NBA collector R8 is `nba_player_props_live_collector_2026_11_17_r8_current_identity_authority`.
+A last-played cache supplies labels only and cannot fill a current quote's team
+or suppress the existing current-player lookup. That ordinary lookup keeps its
+same endpoint, 100-ID batches, existing source deadlines and provider budgets;
+it may run where a historical-cache shortcut previously hid missing current
+identity. Lookup completion has its own private immutable identity receipt (not an extra
+model/matchup signal) and availability clock; it cannot
+refresh or backdate a quote price/receipt. Failed attempts count too; incomplete/continuing/conflicting responses
+cannot supply a team. No operator/provider/model test request is purchased.
+Native candidates use the actual current offer set and explicit current team,
+never retained price history or last-played fallback. Wrong-team native heads
+cannot donate current priors. Medical identity remains exact-team and
+source-bound: a same-name player on the opponent is not silently treated as this
+actor or used to infer a roster move. Exact collector
+team aliases preserve supported same-game identity; missing authority remains
+unavailable. Legacy cached adapters and established R2 noncurrent-native context
+schema remain exact, independently of the new live identity release, so a tag
+bump alone cannot withdraw a valid original review.
 
 R46 and earlier accepted reviews and all stored locks remain exact under their
 original contracts. Law R3/grade R5/selection R8, native MLB R44, models, output
-caps, exactly two phases/slots, provider calls, shared sport lease, schema and
+caps, exactly two phases/slots, shared sport lease, schema and
 $50/$60 limits remain unchanged. Synthetic controls preserve supported Over and
 Under recovery and quantify newly eligible identity coverage without a blanket
 demotion. Two new consecutive fresh triple whole-product CLEAR rounds and all
