@@ -119,6 +119,9 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
     }
   }
 
+  // Preserve raw quote label ownership before current-player metadata can
+  // replace a display name. Both reference joins must see every captured owner.
+  const capturedPlayerIdentityEntries=[...(args.canonicalPlayerIdentityEntries??[]),...observations.flatMap(row=>row.playerName&&row.canonicalPlayerId?[[row.playerName,row.canonicalPlayerId] as const]:[])];
   if (args.knownPlayerIdentitiesById) {
     observations = observations.map((row) => {
       if (row.provider !== "balldontlie" || !row.providerPlayerId) return row;
@@ -183,7 +186,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
         events: owlsEvents,
         fetchedAt,
         canonicalGames,
-        canonicalPlayers: canonicalNames(observations,args.canonicalPlayersByName,args.canonicalPlayerIdentityEntries),
+        canonicalPlayers: canonicalNames(observations,args.canonicalPlayersByName,capturedPlayerIdentityEntries),
       });
       const freshRows = normalized.rows.map(row => ({ ...row, receivedAt: owlsReceivedAt })).filter((row) => {
         const observedAt = Date.parse(row.observedAt);
@@ -247,7 +250,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
       observations.push(...normalizeTheOddsApiNbaPlayerProps({
         events: [response.body], fetchedAt,
         canonicalGames: { [eventId]: game.canonicalGameId },
-        canonicalPlayers: canonicalNames(observations,args.canonicalPlayersByName,args.canonicalPlayerIdentityEntries),
+        canonicalPlayers: canonicalNames(observations,args.canonicalPlayersByName,capturedPlayerIdentityEntries),
       }).rows.map(row => ({ ...row, receivedAt: oddsReceivedAt })));
     }
   } else if (gapGames.length > 0) findings.push("the_odds_api_gap_fetch_skipped_missing_key");

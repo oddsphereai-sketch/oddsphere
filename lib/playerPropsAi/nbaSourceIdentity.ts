@@ -68,7 +68,9 @@ export function resolveNbaOfferedPlayerTeam(args:{native:readonly Native[];offer
   const available=q.receivedAt??args.archiveAt;
   if(q.isLive||!q.playerTeam||instant(available)>cutoff||instant(q.observedAt)>instant(available)||instant(q.fetchedAt)>instant(available)||q.playerIdentityAvailableAt!==undefined&&instant(q.playerIdentityAvailableAt)>cutoff)continue;
   const team=normalize(args.teamNames.get(q.playerTeam)??q.playerTeam);
-  if(known.has(team))teams.add(team);
+  // Every explicit current declaration constrains identity, even an unmapped
+  // ID/label. Another provider cannot erase unresolved or wrong-fixture facts.
+  if(args.currentSource||known.has(team))teams.add(team);
  }
  const team=teams.size===1?[...teams][0]:'unknown',home=normalize(args.home),away=normalize(args.away);
  return{team,opponent:team===home?away:team===away?home:'unknown'};

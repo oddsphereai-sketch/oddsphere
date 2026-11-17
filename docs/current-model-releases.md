@@ -24,7 +24,14 @@ model/matchup signal) and availability clock; it cannot
 refresh or backdate a quote price/receipt. Failed attempts count too; incomplete/continuing/conflicting responses
 cannot supply a team. No operator/provider/model test request is purchased.
 One ambiguity-preserving resolver owns cached, current, Owls and Odds API name
-joins. Complete captured alias ownership is unioned from raw prior/current player arrays
+joins.
+Current identity constraints retain every nonempty supplied team token, including
+unmapped IDs/labels; another feed cannot erase it. Raw current quote name/ID
+ownership is captured before metadata display-name replacement and unioned into
+both Owls and Odds joins. Missing teams remain distinct from explicit unresolved
+teams. Legacy cached adapter semantics and stored records remain unchanged.
+
+Complete captured alias ownership is unioned from raw prior/current player arrays
 before per-ID display precedence and retained across provider overlays;
 multiple IDs for a normalized name remain unresolved, never last-row-wins or
 reassigned from a matching line/price/team. Explicit provider IDs remain intact.
