@@ -174,3 +174,21 @@ cannot falsely establish two-book coverage or suppress the configured ordinary
 gap fetch; genuine distinct books still skip it. Empty canonical labels are not
 corroboration. This corrects routing within the existing endpoints, source caps
 and conditional provider budget; no operator request or extra review is added.
+
+
+Prospective law R4 is `player_props_ai_law_2026_11_17_r4_canonical_book_pairing`,
+grade R6 is `player_props_ai_grade_2026_11_17_r6_canonical_book_pairing`, and
+selection R9 is `player_props_ai_selection_2026_11_17_r9_canonical_book_pairing`.
+Their numerical event masses and confidence/EV thresholds are unchanged. New
+R4 decisions group and pair complementary same-provider/same-contract prices
+using the authoritative underlying-book identity, while preserving the exact
+selected quote, labels, clocks and prices. Valid Over and Under paired-confidence
+Leans recover symmetrically; conflicting, stale, different-provider/book/line
+prices cannot qualify. Original R3/R5/R8 pairing and every older law policy remain
+explicit immutable discriminators, including their original alias behavior.
+Existing stored grades and locked payloads retain precedence and are never
+regraded, relabeled, replaced or reconstructed by the new policy. This is a
+prospective qualification/selection change, not a new probability target, a
+confidence floor, an automatic promotion or a formula change. Synthetic
+collector→current-wire→member controls prove both actionable directions and
+old-policy/lock precedence. No paid test or extra review is introduced.

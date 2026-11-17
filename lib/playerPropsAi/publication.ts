@@ -4,12 +4,12 @@ import type {AcceptedGameReview} from "./reviewer";
 import type {PropsAiMemberEvidence} from "./publicationContract";
 import {PROPS_AI_EXECUTION_EVIDENCE_RELEASE} from "./publicationContract";
 import {reviewedReaderContextCurrent} from './readerClaimFreshness';
-import {PROPS_AI_ACCEPTED_RELEASES,propsAiLawSelectionRelease,propsReviewHasSemanticChecks} from "./releases";
+import {PROPS_AI_ACCEPTED_RELEASES,propsAiLawUsesCanonicalBookPairing,propsAiLawSelectionRelease,propsReviewHasSemanticChecks} from "./releases";
 import {PROPS_AI_SITE_RELEASE} from "./siteConfig";
 import {priceAiLaw,type PropsAiGrade} from "./pricing";
 import {lawForecast} from "./law";
 import {instant} from "./evidence";
-import {executionQuotes,latestExecutionQuotes,quoteContract,executionContractKey} from "./executionQuotes";
+import {executionQuotes,latestExecutionQuotes,quoteContract,quoteBook,executionContractKey} from "./executionQuotes";
 import {unqualifiedEventTail} from "./forecastSanity";
 import {playerParticipationEligibility,qualifiedParticipationException} from "./participationEligibility";
 
@@ -81,8 +81,9 @@ export function siteAiDecisions(packet:GamePacket,review:AcceptedGameReview,now:
       if(!qualifiedForecastMarkets(player).includes(market)||propsReviewHasSemanticChecks(review.release)&&reviewed.sourceDeclinedMarkets?.includes(market))continue;
       // Every exact main/alternate event is priced from the SAME stored outcome law.
       const quotes=currentQuotes.filter(q=>q.playerId===player.id&&q.market===market&&!q.opening&&q.receivedAtProvenance==="provider_response"&&!q.live);
-      for(const [book,provider,line,contract] of [...new Map(quotes.map(q=>[`${q.provider}|${q.book}|${q.line}|${quoteContract(q)}`,[q.book,q.provider,q.line,quoteContract(q)] as const])).values()]){
-        const selected=quotes.filter(q=>q.book===book&&q.provider===provider&&q.line===line&&(quoteContract(q))===contract);
+      const economicBook=(value:string)=>propsAiLawUsesCanonicalBookPairing(reviewed.law!.release)?quoteBook(value):value;
+      for(const [book,provider,line,contract] of [...new Map(quotes.map(q=>[`${q.provider}|${economicBook(q.book)}|${q.line}|${quoteContract(q)}`,[economicBook(q.book),q.provider,q.line,quoteContract(q)] as const])).values()]){
+        const selected=quotes.filter(q=>economicBook(q.book)===book&&q.provider===provider&&q.line===line&&(quoteContract(q))===contract);
         const priced=priceAiLaw({law:reviewed.law,market,quotes:selected.map(q=>({id:q.id,book:q.book,provider:q.provider,line:q.line,side:q.side,american:q.american,availableAt:q.receivedAt,confirmedAt:q.receivedAt,current:true,actionRule:"qualifying_participation"})),now,maxAgeMs:maxQuoteAgeMs,confidence:reviewed.confidence[index],exception,milestone:contract==="milestone"||market==="anytime_td"||selected.some(q=>q.side==="yes")});
         if(!priced)continue;
         // A later quote can introduce an event outside the original supported
@@ -92,7 +93,7 @@ export function siteAiDecisions(packet:GamePacket,review:AcceptedGameReview,now:
         const quote=selected.find(q=>q.id===priced.quote.id)!;
         const law=lawForecast(reviewed.law,market,line,contract==="milestone"||quote.side==="yes"||market==="anytime_td");
         if(propsReviewHasSemanticChecks(review.release)&&unqualifiedEventTail(law,quote.side==="yes"))continue;
-        result.push({playerId:player.id,market,line,side:priced.side as Quote["side"],book,provider,american:quote.american,projection:law.mean,probability:priced.probability,over:law.over,under:law.under,push:law.push,expectedValue:priced.expectedValue,fairAmerican:priced.fairAmerican,grade:priced.grade,quote:structuredClone(quote),...(priced.exactEventMass?{exactEventMass:structuredClone(priced.exactEventMass)}:{}),
+        result.push({playerId:player.id,market,line,side:priced.side as Quote["side"],book:quote.book,provider,american:quote.american,projection:law.mean,probability:priced.probability,over:law.over,under:law.under,push:law.push,expectedValue:priced.expectedValue,fairAmerican:priced.fairAmerican,grade:priced.grade,quote:structuredClone(quote),...(priced.exactEventMass?{exactEventMass:structuredClone(priced.exactEventMass)}:{}),
           evidence:{sourceEligibility:structuredClone(sourceEligibility),executionEvidence:{release:PROPS_AI_EXECUTION_EVIDENCE_RELEASE,pricedAt:now,operation:"decision",selectedQuote:structuredClone(quote),pricingQuotes:structuredClone(selected)},...(quote.sourceEvent?.status==="verified"?{sourceEventRelease:PROPS_AI_SOURCE_EVENT_RELEASE,sourceEventStatistic:quote.sourceEvent.statistic!}:{}),release:review.release,selectionRelease:propsAiLawSelectionRelease(reviewed.law.release),lawRelease:reviewed.law.release,gradeRelease:priced.gradeRelease,publicationRelease:PROPS_AI_SITE_RELEASE,reviewId:`${review.gameId}|${review.stage}|${review.issuedAt}`,lawHash:reviewed.law.hash,inputHash:review.inputHash??review.inputEvidence.digest,reviewedAt:review.issuedAt!,stage:review.stage,model:review.partProvenance.find(p=>p.playerIds.includes(player.id))?.model??review.model,confidence:reviewed.confidence[index] as 0|1|2,confidenceMeaning:"AI-estimated evidence strength; not empirical calibration",quoteConfirmedAt:quote.receivedAt,selectedSide:priced.side as Quote["side"],assessment:reviewed.assessment,coverage:Object.fromEntries(Object.entries(reviewed.coverage).map(([area,value])=>[area,{...value,facts:value.facts.map(f=>({id:f.id,hash:f.hash,label:f.label,availableAt:f.availableAt,sourceIds:[...f.sourceIds]}))}])),exception}});
       }
     }

@@ -1,8 +1,9 @@
 import { assessConfidenceLeanPrice } from "../services/dailyEdge/confidenceLeanPrice";
 import type { AcceptedPlayerLaw } from "./law";
 import { lawForecast,lawEventMass } from "./law";
-import { PROPS_AI_LAW_RELEASE,propsAiLawHasExactMass,propsAiLawGradeRelease } from "./releases";
+import { propsAiLawHasPairedConfidence,propsAiLawUsesCanonicalBookPairing,propsAiLawHasExactMass,propsAiLawGradeRelease } from "./releases";
 import {assessExactPropsConfidencePrice} from './exactConfidencePrice';
+import {quoteBook} from "./executionQuotes";
 import { invariant } from "./evidence";
 export type PropsAiGrade = "Best Angle" | "Lean" | "Watchlist" | "No Play";
 export type AiExecutionQuote = { id: string; book: string; provider: string; line: number; side: "over" | "under" | "yes";
@@ -62,7 +63,7 @@ export function gradeAiEventFromExactPairedMass(args:ExactEventGradeArgs){
 }
 export function priceAiLaw(args: { law: AcceptedPlayerLaw; market: string; quotes: AiExecutionQuote[]; now: string;
   maxAgeMs: number; confidence: number; exception: string | null; milestone?: boolean }) {
-  const exact=propsAiLawHasExactMass(args.law.release),gradeRelease=propsAiLawGradeRelease(args.law.release);
+  const exact=propsAiLawHasExactMass(args.law.release),gradeRelease=propsAiLawGradeRelease(args.law.release),canonicalBooks=propsAiLawUsesCanonicalBookPairing(args.law.release);
   const now = Date.parse(args.now); invariant(Number.isFinite(now) && Number.isFinite(args.maxAgeMs) && args.maxAgeMs >= 0, "Invalid pricing clock");
   invariant([0, 1, 2].includes(args.confidence), "Invalid estimated evidence confidence");
   const latest=new Map<string,AiExecutionQuote>(),ambiguous=new Set<string>();
@@ -78,10 +79,10 @@ export function priceAiLaw(args: { law: AcceptedPlayerLaw; market: string; quote
     const side = q.side === "yes" ? "yes" : forecast.preferredSide;
     if (q.side !== side) return [];
     const win = side === "under" ? forecast.under : forecast.over, loss = side === "under" ? forecast.over : forecast.under;
-    const opposing = eligible.find(o => o.book === q.book && o.provider === q.provider && o.line === q.line && o.side !== q.side && o.side !== "yes" && Math.abs(Date.parse(o.confirmedAt!)-Date.parse(q.confirmedAt!))<=5*60000);
+    const opposing = eligible.find(o => (canonicalBooks?quoteBook(o.book)===quoteBook(q.book):o.book===q.book) && o.provider === q.provider && o.line === q.line && o.side !== q.side && o.side !== "yes" && Math.abs(Date.parse(o.confirmedAt!)-Date.parse(q.confirmedAt!))<=5*60000);
     const mass=exact?lawEventMass(args.law,args.market,q.line,args.milestone||q.side==="yes"):null;
     const exactArgs=mass?{win:side==="under"?mass.under:mass.over,loss:side==="under"?mass.over:mass.under,push:mass.push,total:mass.total,american:q.american,opposingAmerican:opposing?.american??null,confidence:args.confidence,exception:args.exception}:null;
-    const {grade,ev,confidenceLean}=exactArgs?(args.law.release===PROPS_AI_LAW_RELEASE?gradeAiEventFromExactPairedMass(exactArgs):gradeAiEventFromMass(exactArgs)):gradeAiEvent({win,loss,american:q.american,opposingAmerican:opposing?.american??null,confidence:args.confidence,exception:args.exception});
+    const {grade,ev,confidenceLean}=exactArgs?(propsAiLawHasPairedConfidence(args.law.release)?gradeAiEventFromExactPairedMass(exactArgs):gradeAiEventFromMass(exactArgs)):gradeAiEvent({win,loss,american:q.american,opposingAmerican:opposing?.american??null,confidence:args.confidence,exception:args.exception});
     const fairWin=exactArgs?.win??win,fairLoss=exactArgs?.loss??loss;
     const decision={ gradeRelease, grade, forecast, quote: q, side, probability: win, loss, push: forecast.push,
       expectedValue: ev, fairAmerican: fairWin > 0 && fairLoss > 0 ? fairWin >= fairLoss ? -100 * fairWin / fairLoss : 100 * fairLoss / fairWin : null,

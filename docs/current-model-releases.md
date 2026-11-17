@@ -95,7 +95,7 @@ only record in either order; two precise clocks still must agree, and original
 calendar-only fallback remains when no precise record was supplied.
 
 R46 and earlier accepted reviews and all stored locks remain exact under their
-original contracts. Law R3/grade R5/selection R8, native MLB R44, models, output
+original contracts. Native MLB R44, models, output
 caps, exactly two phases/slots, shared sport lease, schema and
 $50/$60 limits remain unchanged. Synthetic controls preserve supported Over and
 Under recovery and quantify newly eligible identity coverage without a blanket
@@ -103,6 +103,25 @@ demotion. Two new consecutive fresh triple whole-product CLEAR rounds and all
 mandatory local/hosted/protected gates are required. Deployment and offline
 checks remain separate from ordinary live generation/publication proof. See
 `docs/model-audits/2026-11-17-props-correction-context-predeclaration.md`.
+
+
+
+Prospective law R4 is `player_props_ai_law_2026_11_17_r4_canonical_book_pairing`,
+grade R6 is `player_props_ai_grade_2026_11_17_r6_canonical_book_pairing`, and
+selection R9 is `player_props_ai_selection_2026_11_17_r9_canonical_book_pairing`.
+Their numerical event masses and confidence/EV thresholds are unchanged. New
+R4 decisions group and pair complementary same-provider/same-contract prices
+using the authoritative underlying-book identity, while preserving the exact
+selected quote, labels, clocks and prices. Valid Over and Under paired-confidence
+Leans recover symmetrically; conflicting, stale, different-provider/book/line
+prices cannot qualify. Original R3/R5/R8 pairing and every older law policy remain
+explicit immutable discriminators, including their original alias behavior.
+Existing stored grades and locked payloads retain precedence and are never
+regraded, relabeled, replaced or reconstructed by the new policy. This is a
+prospective qualification/selection change, not a new probability target, a
+confidence floor, an automatic promotion or a formula change. Synthetic
+collector→current-wire→member controls prove both actionable directions and
+old-policy/lock precedence. No paid test or extra review is introduced.
 
 ## November 16 prospective CBB withdrawn-fixture lock guard
 

@@ -2,7 +2,7 @@ import {qualifiedForecastMarkets} from "./sourceEvents";
 import type { GamePacket, Player, Sport } from "./evidenceContract";
 import { COMBOS } from "./evidenceContract";
 import { invariant, digest } from "./evidence";
-import { PROPS_AI_LAW_RELEASE, PRIOR_PROPS_AI_LAW_RELEASE, LEGACY_PROPS_AI_LAW_RELEASE, PROPS_AI_SCENARIOS, propsAiLawHasExactMass } from "./releases";
+import { PROPS_AI_LAW_RELEASE, ORIGINAL_PAIRED_PROPS_AI_LAW_RELEASE, PRIOR_PROPS_AI_LAW_RELEASE, LEGACY_PROPS_AI_LAW_RELEASE, PROPS_AI_SCENARIOS, propsAiLawHasExactMass } from "./releases";
 import { readerEvidence, validatePlayerCoverage, type ReaderCoverage } from "./readerCoverage";
 
 const NBA = ["points", "rebounds", "assists", "threes"] as const;
@@ -24,7 +24,7 @@ export type GameReview = { players: Record<string, PlayerReview> };
 type AcceptedLawFields = { hash: string; weights: number[]; outcomes: Record<string, number[]> };
 export type AcceptedPlayerLaw = AcceptedLawFields & (
   | {release:typeof LEGACY_PROPS_AI_LAW_RELEASE;integerWeights?:never}
-  | {release:typeof PRIOR_PROPS_AI_LAW_RELEASE|typeof PROPS_AI_LAW_RELEASE;integerWeights:number[]}
+  | {release:typeof PRIOR_PROPS_AI_LAW_RELEASE|typeof ORIGINAL_PAIRED_PROPS_AI_LAW_RELEASE|typeof PROPS_AI_LAW_RELEASE;integerWeights:number[]}
 );
 export type ExactLawEventMass={over:number;under:number;push:number;total:number;weightedValue:number};
 /** Dependencies of the canonical mathematical contract, including nested combos. */

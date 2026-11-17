@@ -9,33 +9,40 @@ export const PROPS_AI_NFL_TARGET_ACTORS_PER_PART=4;
 export const PROPS_AI_NFL_DECISION_RELEASE="player_props_ai_nfl_decision_2026_11_10_r13_verified_reader_claims" as const;
 export const LEGACY_PROPS_AI_SELECTION_RELEASE="player_props_ai_selection_2026_11_10_r6_verified_reader_claims" as const;
 export const PRIOR_PROPS_AI_SELECTION_RELEASE="player_props_ai_selection_2026_11_11_r7_exact_event_mass" as const;
-export const PROPS_AI_SELECTION_RELEASE="player_props_ai_selection_2026_11_14_r8_exact_paired_confidence" as const;
+export const ORIGINAL_PAIRED_PROPS_AI_SELECTION_RELEASE="player_props_ai_selection_2026_11_14_r8_exact_paired_confidence" as const;
+export const PROPS_AI_SELECTION_RELEASE="player_props_ai_selection_2026_11_17_r9_canonical_book_pairing" as const;
 export const PROPS_AI_NFL_EXACT_RECEIPT_RELEASES:readonly string[]=[PROPS_AI_NFL_DECISION_RELEASE,"player_props_ai_nfl_decision_2026_11_10_r12_source_participation","player_props_ai_nfl_decision_2026_11_09_r11_prelock_authority","player_props_ai_nfl_decision_2026_11_09_r10_source_event_contracts","player_props_ai_nfl_decision_2026_11_09_r9_current_execution","player_props_ai_nfl_decision_2026_11_08_r8_player_scope_publication","player_props_ai_nfl_decision_2026_11_08_r7_verified_current_actors","player_props_ai_nfl_decision_2026_11_08_r6_exact_quote_receipts"];
 export const PROPS_AI_ESTIMATE_RELEASE="player_props_ai_estimate_2026_11_07_r1_not_empirically_calibrated" as const;
 export const PROPS_AI_MEMBER_CONTRACT_RELEASE="player_props_ai_member_contract_2026_11_14_r1_nba_ou_execution" as const;
 // Permanent release membership: a future current-release bump must not change
 // the contract/admission semantics of an already archived generation or law.
 const MEMBER_EXECUTION_REVIEW_RELEASES:readonly string[]=[PROPS_AI_RELEASE,"player_props_ai_2026_11_16_r46_event_support_and_actor_retention","player_props_ai_2026_11_16_r45_explicit_abstention","player_props_ai_2026_11_16_r44_hibner_official_alias","player_props_ai_2026_11_16_r43_numeric_source_continuation","player_props_ai_2026_11_15_r42_supported_nfl_binary_events","player_props_ai_2026_11_15_r41_verified_nfl_aliases","player_props_ai_2026_11_15_r40_complete_correction_feedback","player_props_ai_2026_11_14_r38_exact_confidence_and_evidence","player_props_ai_2026_11_15_r39_verified_response_model"];
-const MEMBER_EXECUTION_LAW_RELEASES:readonly string[]=["player_props_ai_law_2026_11_14_r3_exact_paired_confidence"];
+const MEMBER_EXECUTION_LAW_RELEASES:readonly string[]=["player_props_ai_law_2026_11_17_r4_canonical_book_pairing","player_props_ai_law_2026_11_14_r3_exact_paired_confidence"];
 export function propsReviewHasMemberExecutionContracts(release:string){return MEMBER_EXECUTION_REVIEW_RELEASES.includes(release);}
 export function propsAiLawHasMemberExecutionContracts(release:string){return MEMBER_EXECUTION_LAW_RELEASES.includes(release);}
 export const PROPS_AI_READER_CLAIMS_RELEASE = "player_props_ai_reader_claims_2026_11_10_r1_source_bound" as const;
 export const LEGACY_PROPS_AI_LAW_RELEASE = "player_props_ai_law_2026_11_06_r1_integer_scenarios" as const;
 export const PRIOR_PROPS_AI_LAW_RELEASE = "player_props_ai_law_2026_11_11_r2_exact_integer_mass" as const;
-export const PROPS_AI_LAW_RELEASE = "player_props_ai_law_2026_11_14_r3_exact_paired_confidence" as const;
+export const ORIGINAL_PAIRED_PROPS_AI_LAW_RELEASE = "player_props_ai_law_2026_11_14_r3_exact_paired_confidence" as const;
+export const PROPS_AI_LAW_RELEASE = "player_props_ai_law_2026_11_17_r4_canonical_book_pairing" as const;
 export const LEGACY_PROPS_AI_GRADE_RELEASE = "player_props_ai_grade_2026_11_10_r3_source_participation" as const;
 export const PRIOR_PROPS_AI_GRADE_RELEASE = "player_props_ai_grade_2026_11_11_r4_exact_event_value" as const;
-export const PROPS_AI_GRADE_RELEASE = "player_props_ai_grade_2026_11_14_r5_exact_paired_confidence" as const;
+export const ORIGINAL_PAIRED_PROPS_AI_GRADE_RELEASE = "player_props_ai_grade_2026_11_14_r5_exact_paired_confidence" as const;
+export const PROPS_AI_GRADE_RELEASE = "player_props_ai_grade_2026_11_17_r6_canonical_book_pairing" as const;
 /** One immutable policy discriminator follows a law through admission and repricing. */
-export function propsAiLawHasExactMass(release:string):boolean{return release===PRIOR_PROPS_AI_LAW_RELEASE||release===PROPS_AI_LAW_RELEASE;}
+export function propsAiLawHasExactMass(release:string):boolean{return release===PRIOR_PROPS_AI_LAW_RELEASE||propsAiLawHasPairedConfidence(release);}
+export function propsAiLawHasPairedConfidence(release:string):boolean{return release===ORIGINAL_PAIRED_PROPS_AI_LAW_RELEASE||release===PROPS_AI_LAW_RELEASE;}
+export function propsAiLawUsesCanonicalBookPairing(release:string):boolean{return release===PROPS_AI_LAW_RELEASE;}
 export function propsAiLawGradeRelease(release:string){
  if(release===PROPS_AI_LAW_RELEASE)return PROPS_AI_GRADE_RELEASE;
+ if(release===ORIGINAL_PAIRED_PROPS_AI_LAW_RELEASE)return ORIGINAL_PAIRED_PROPS_AI_GRADE_RELEASE;
  if(release===PRIOR_PROPS_AI_LAW_RELEASE)return PRIOR_PROPS_AI_GRADE_RELEASE;
  if(release===LEGACY_PROPS_AI_LAW_RELEASE)return LEGACY_PROPS_AI_GRADE_RELEASE;
  throw new Error("Unsupported props law grade release");
 }
 export function propsAiLawSelectionRelease(release:string){
  if(release===PROPS_AI_LAW_RELEASE)return PROPS_AI_SELECTION_RELEASE;
+ if(release===ORIGINAL_PAIRED_PROPS_AI_LAW_RELEASE)return ORIGINAL_PAIRED_PROPS_AI_SELECTION_RELEASE;
  if(release===PRIOR_PROPS_AI_LAW_RELEASE)return PRIOR_PROPS_AI_SELECTION_RELEASE;
  if(release===LEGACY_PROPS_AI_LAW_RELEASE)return LEGACY_PROPS_AI_SELECTION_RELEASE;
  throw new Error("Unsupported props law selection release");

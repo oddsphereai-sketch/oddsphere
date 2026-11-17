@@ -10,7 +10,7 @@ import {executionQuotes,quoteContract,isSupportedMemberExecutionContract} from "
 import {gradeAiEvent,gradeAiEventFromMass,gradeAiEventFromExactPairedMass,compareAiEventValuesFromMass} from "./pricing";
 import {MLB_PROPS_STANDARD_STAKE_UNITS} from "../mlb/props/actionabilityPolicy";
 import {nflAiSourceBinding} from "./nflSourceBinding";
-import {PROPS_AI_ESTIMATE_RELEASE,PROPS_AI_NFL_DECISION_RELEASE,PROPS_AI_LAW_RELEASE,propsAiLawHasExactMass,propsAiLawGradeRelease,propsAiLawSelectionRelease} from "./releases";
+import {PROPS_AI_ESTIMATE_RELEASE,PROPS_AI_NFL_DECISION_RELEASE,propsAiLawHasPairedConfidence,propsAiLawHasExactMass,propsAiLawGradeRelease,propsAiLawSelectionRelease} from "./releases";
 import type {GamePacket} from "./evidenceContract";
 import {digest,instant} from "./evidence";
 import {PROPS_AI_EXECUTION_EVIDENCE_RELEASE,type PropsAiMemberEvidence} from "./publicationContract";
@@ -46,7 +46,7 @@ function currentEventPrice(packet:GamePacket,c:SiteAiDecision,q:GamePacket["quot
   const mass=c.exactEventMass;
   if(propsAiLawHasExactMass(c.evidence.lawRelease)&&!mass)throw new Error("Exact-law member pricing requires its original integer event mass");
   if(!propsAiLawHasExactMass(c.evidence.lawRelease)&&mass)throw new Error("Legacy law pricing cannot acquire prospective integer mass");
-  const future=c.evidence.lawRelease===PROPS_AI_LAW_RELEASE;
+  const future=propsAiLawHasPairedConfidence(c.evidence.lawRelease);
   if(future&&(c.evidence.gradeRelease!==propsAiLawGradeRelease(c.evidence.lawRelease)||c.evidence.selectionRelease!==propsAiLawSelectionRelease(c.evidence.lawRelease)))throw new Error("Exact paired member release mismatch");
   return mass?(future?gradeAiEventFromExactPairedMass:gradeAiEventFromMass)({...price,win:q.side==="under"?mass.under:mass.over,loss:q.side==="under"?mass.over:mass.under,push:mass.push,total:mass.total})
     :gradeAiEvent({...price,win:q.side==="under"?c.under:c.over,loss:q.side==="under"?c.over:c.under});
