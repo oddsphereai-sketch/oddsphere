@@ -9,7 +9,7 @@ law or stored lock is rewritten. This repair adds audit retention, not a new mod
 
 The actual ordinary sport-leased callback retains its complete original packet
 when a verified accepted review has a changed canonical or own-availability
-context. The existing service-only snapshot table receives insert-only private
+context, actor inventory or market scope. The existing service-only snapshot table receives insert-only private
 capsules with byte counts, compressed bytes, packet digest, original review binding,
 actual observation clock and source audit. First evidence wins for a semantic
 context; duplicate/unknown acknowledgements are read back and verified, never
@@ -17,6 +17,9 @@ upserted. Routine repricing/refetch clocks do not add new semantic capsules. Eac
 game/day has a bounded 64-context inventory and each retention operation has a
 1.5-second storage window. Failure is an explicit private process finding, and
 cannot suppress a forecast, trigger a review or alter the existing slot/deadline.
+A failure-safe finally attempts retention after a refused publication while preserving
+the original handoff exception. Full audit checksums and actual packet fixture,
+clock, source, scope, execution and current-context bindings reject corrupt attribution.
 Capsules retain one year in private storage; no public DTO/API exposes them.
 
 Retained actual cached values hash-match the normal November 17 callback audits:

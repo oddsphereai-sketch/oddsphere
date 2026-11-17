@@ -90,6 +90,13 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
     const evidence=await retainPropsSourceEvidence({client:args.client,writerRunId:args.writerRunId,packet,review,audit,observedAt});
     if(evidence.status==='unavailable')findings.push(`source_evidence_unavailable:${audit.gameId}:${evidence.reason}`);
   };
+  const handoffWithEvidence=async(packet:GamePacket,review:AcceptedGameReview|null,observedAt:string,handoff:()=>Promise<void>)=>{
+    try{await handoff();}finally{
+      // Preserve the original publication exception, including unknown ACKs.
+      // Valid actual evidence is still attempted after a failed handoff.
+      try{await retainSource(packet,review,observedAt);}catch{findings.push(`source_evidence_unavailable:${packet.sourceGameId??packet.gameId}:retention_unavailable`);}
+    }
+  };
   const finish=(outcome:SiteReviewOutcome)=>{console.info(`PLAYER_PROPS_AI_SITE ${JSON.stringify({release:PROPS_AI_RELEASE,selectionRelease:PROPS_AI_SELECTION_RELEASE,scheduleRelease:PROPS_AI_SCHEDULE_RELEASE,diagnosticsRelease:PROPS_AI_DIAGNOSTIC_RELEASE,sport:args.sport,status:outcome.status,newlyCompletedReviews,reviewedGames:outcome.games.filter(g=>g.authorityReview&&g.packet.sourceOfferSetStatus!=='empty').length,sourceGames:outcome.games.length,coverage:outcome.coverage,findings:outcome.findings.slice(0,16)})}`);return args.onSourceAudit?{...outcome,newlyCompletedReviews,sourceContextAudits:buildPropsSourceContextAuditSlate([...sourceAudits.values()])}:{...outcome,newlyCompletedReviews};};
   const store=new PropsAiStore(args.client);
   try{
@@ -155,7 +162,7 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
         // spelling. Keep the persisted job and all historical input bytes exact.
         const packet=await args.load(game,{gameId:game.id,stage:job?.stage??"final",cutoff:clock(),lock:new Date(job?instant(job.lock_at):lockOf(game)).toISOString()},job?{purpose:"scheduled_review",job}:{purpose:"lock_authority"});
         const observedAt=clock(),latest=latestForPacket(packet,priorAccepted,observedAt);capturedPackets.set(game.id,packet);
-        await auditSource(packet,latest,observedAt,initialLookupSucceeded);await args.onSourceReady?.(packet,latest,observedAt,initialLookupSucceeded);await retainSource(packet,latest,observedAt);
+        await handoffWithEvidence(packet,latest,observedAt,async()=>{await auditSource(packet,latest,observedAt,initialLookupSucceeded);await args.onSourceReady?.(packet,latest,observedAt,initialLookupSucceeded);});
         if(job)sourcePackets.set(job.job_key,packet);
       };
       // Attempt every same/earlier-lock game's actual source/withdrawal handoff
@@ -239,7 +246,7 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
           const {job,native,packet,fundedPacket,parts}=preparedGame;
           try{
             const result=await runPropsReview({packet:fundedPacket,job,store,key:config.key,writerRunId:args.writerRunId!,generationSlot,gameAdmission,prepare:async()=>parts,preferStronger:job.stage==="final"&&packet.players.some(p=>p.missing.length>0),fetchImpl:args.fetchImpl,clock,deadline});
-            if(result.status==="completed"&&"review" in result&&result.review){newlyCompletedReviews++;localCompleted.set(native.id,{packet,review:result.review});await auditSource(packet,result.review,clock(),true);await args.onReviewObserved?.(packet,result.review,true);if(args.onReviewReady){const before=instant(clock());await args.onReviewReady(packet,result.review);const acknowledged=instant(clock()),lockAt=instant(packet.lock);if(before<lockAt&&acknowledged<lockAt)readyHandoffBeforeLock.set(native.id,lockAt);}await retainSource(packet,result.review,clock());}
+            if(result.status==="completed"&&"review" in result&&result.review){newlyCompletedReviews++;const completed=result.review;localCompleted.set(native.id,{packet,review:completed});const observedAt=clock();await handoffWithEvidence(packet,completed,observedAt,async()=>{await auditSource(packet,completed,observedAt,true);await args.onReviewObserved?.(packet,completed,true);if(args.onReviewReady){const before=instant(clock());await args.onReviewReady(packet,completed);const acknowledged=instant(clock()),lockAt=instant(packet.lock);if(before<lockAt&&acknowledged<lockAt)readyHandoffBeforeLock.set(native.id,lockAt);}});}
             if(result.status!=="completed")findings.push(`review_unavailable:${native.id}:${"reason" in result?result.reason:result.status}`);
           }catch(error){findings.push(`source_or_review_unavailable:${native.id}:${propsAiFailureCode(error)}`);}
         }));
@@ -259,9 +266,7 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
         const packet=await args.load(game,{gameId:game.id,stage:"final",cutoff:clock(),lock:new Date(instant(game.start)-3600000).toISOString()},{purpose:"member_publication"});
         const observedAt=clock();
         const latest=latestForPacket(packet,accepted,observedAt);
-        await auditSource(packet,latest,observedAt,lookupAvailable(game.id));
-        await args.onReviewObserved?.(packet,latest,lookupAvailable(game.id));
-        await retainSource(packet,latest,observedAt);
+        await handoffWithEvidence(packet,latest,observedAt,async()=>{await auditSource(packet,latest,observedAt,lookupAvailable(game.id));await args.onReviewObserved?.(packet,latest,lookupAvailable(game.id));});
         const review=selectSiteReview(packet,accepted,observedAt);
         const players=packet.sourceOfferSetStatus==='empty'?[]:siteReviewCoverage(packet,latest,clock()),decisions=review?siteAiDecisions(packet,review,clock()):[];
         coverage.push({gameId:game.id,players:players.length,withdrawalContextPlayers:packet.sourceOfferSetStatus==='empty'?packet.players.length:0,reviewedPlayers:players.filter(p=>p.reviewed).length,
@@ -276,9 +281,8 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
           // A captured packet is not a successful current reload. Unknown
           // prelock source authority must reach the writer before a sibling
           // advances the common header; it may not publish native or AI fallback.
-          if(postlockReady)await auditSource(packet,latest,observedAt,lookupAvailable(game.id));
-          await args.onReviewObserved?.(packet,latest,postlockReady&&lookupAvailable(game.id));
-          if(postlockReady)await retainSource(packet,latest,observedAt);
+          if(postlockReady)await handoffWithEvidence(packet,latest,observedAt,async()=>{await auditSource(packet,latest,observedAt,lookupAvailable(game.id));await args.onReviewObserved?.(packet,latest,true);});
+          else await args.onReviewObserved?.(packet,latest,false);
           results.push({game,packet,decisions:[],authorityReview:latest,observedAt});}}
 
     }
