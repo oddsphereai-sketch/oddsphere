@@ -15,11 +15,13 @@ actual observation clock and source audit. First evidence wins for a semantic
 context; duplicate/unknown acknowledgements are read back and verified, never
 upserted. Routine repricing/refetch clocks do not add new semantic capsules. Each
 game/day has a bounded 64-context inventory and each retention operation has a
-1.5-second storage window. Failure is an explicit private process finding, and
+3-second storage window. Failure is an explicit private process finding, and
 cannot suppress a forecast, trigger a review or alter the existing slot/deadline.
 A failure-safe finally attempts retention after a refused publication while preserving
 the original handoff exception. Full audit checksums and actual packet fixture,
-clock, source, scope, execution and current-context bindings reject corrupt attribution.
+clock, source, scope, execution and current-context bindings reject corrupt attribution. Duplicate reconciliation also rebuilds the
+entire R1 comparison from the stored packet and actual original immutable review;
+a self-consistent checksum cannot invent original facts or collector authority.
 Capsules retain one year in private storage; no public DTO/API exposes them.
 
 Retained actual cached values hash-match the normal November 17 callback audits:
