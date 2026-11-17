@@ -79,6 +79,7 @@ only establish identity at or after that clock; it never refreshes the original
 quote observation/receipt or price. The immutable packet retains current ID/name/team provenance privately, not as
 an extra model/matchup signal or health assertion. Identical canonical identity
 facts do not change an original review context solely because a new receipt
-records their current authority; the receipt adds no AI input tokens.
+records their current authority. The private receipt payload is not added to AI
+source fields; the existing full-packet integrity hash still changes normally.
 An unchanged subsequent lookup preserves context hashes; a future response cannot
 backdate source identity to an earlier review cutoff.
