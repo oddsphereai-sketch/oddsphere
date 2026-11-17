@@ -141,3 +141,10 @@ The current capture also refuses contradictory prices for one exact provider/
 book/player contract at the same source clock; duplicate ordering cannot choose
 a favorable price. Distinct books/contracts and historical opening values stay
 separate. These are capture checks, not changes to pricing or grade formulas.
+
+Same-clock price consistency uses the normalized economic provider/book/actor/
+market/contract/source-instant namespace independently of raw record IDs, before
+AI market reports as well as execution. Calendar-only dates remain calendar
+values; two supplied precise datetime values must agree. A legacy precise date
+without datetime remains supported. Documented NBA date/datetime shapes are at
+https://nba.balldontlie.io/ (Games example/attributes); no provider API was called.

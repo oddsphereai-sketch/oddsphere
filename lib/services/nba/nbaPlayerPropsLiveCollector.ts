@@ -1,4 +1,4 @@
-import {validatedNbaScheduleRecords,validatedNbaQuoteRecords,validatedNbaPlayerRecords,validatedNbaReferenceEvents,assertNbaReferenceResponse} from './nbaPlayerPropsCurrentIdentityContract';
+import {validatedNbaScheduleRecords,validatedNbaQuoteRecords,validatedNbaPlayerRecords,validatedNbaReferenceEvents,assertNbaReferenceResponse,assertNbaCurrentQuotePrices} from './nbaPlayerPropsCurrentIdentityContract';
 import {resolveNbaPlayerAliases} from './nbaPlayerPropsPlayerIdentity';
 import {canonicalNbaPropsTeam as canonicalTeam} from "./nbaPlayerPropsTeamIdentity";
 import {
@@ -100,9 +100,10 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
     rawPlayerIdentityEntries.push(...currentCapture.aliases);
     const playerMap = canonicalPlayerMap(currentCapture.rows);
     const currentReceivedAt = new Date().toISOString();
-    observations.push(...currentCapture.rows.flatMap(value=>normalizeBallDontLieNbaPlayerProps({
+    const currentQuotes=currentCapture.rows.flatMap(value=>normalizeBallDontLieNbaPlayerProps({
       values:[value], fetchedAt, events:eventMap, canonicalPlayers:playerMap,
-    }).rows).map(row=>({...row,receivedAt:currentReceivedAt})));
+    }).rows).map(row=>({...row,receivedAt:currentReceivedAt}));
+    assertNbaCurrentQuotePrices(currentQuotes);observations.push(...currentQuotes);
     if (args.includeOpenings) {
       const opening = await requestJson({
         url: `${BDL_BASE}/nba/v2/odds/player_props/opening?game_id=${encodeURIComponent(game.providerGameId)}`,
@@ -205,6 +206,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
         return observedAt <= fetched + MAX_PROVIDER_CLOCK_SKEW_MS
           && fetched - observedAt <= MAX_OWLS_QUOTE_AGE_MS;
       });
+      assertNbaCurrentQuotePrices(freshRows);
       observations.push(...freshRows.filter((row) => row.canonicalGameId !== null));
       if (freshRows.length < normalized.rows.length) findings.push("owls_stale_or_future_prop_rows_rejected");
       if (normalized.rows.some((row) => row.canonicalGameId === null)) findings.push("owls_prop_event_identity_unmatched");
@@ -270,7 +272,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
         canonicalPlayers: canonicalNames(observations,args.canonicalPlayersByName,capturedPlayerIdentityEntries),
       }).rows.map(row => ({ ...row, receivedAt: oddsReceivedAt })));
     }
-    observations.push(...oddsRows);
+    assertNbaCurrentQuotePrices(oddsRows);observations.push(...oddsRows);
     }catch{findings.push("the_odds_api_player_props_capture_failed");}
   } else if (gapGames.length > 0) findings.push("the_odds_api_gap_fetch_skipped_missing_key");
 

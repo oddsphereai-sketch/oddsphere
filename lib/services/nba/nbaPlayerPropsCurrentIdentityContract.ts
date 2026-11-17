@@ -10,6 +10,12 @@ function identifier(value:unknown,field:string,required=false):string|null{
  const text=typeof value==='number'&&Number.isSafeInteger(value)?String(value):typeof value==='string'?value.trim():'';
  if(!/^[1-9][0-9]*$/.test(text)||!Number.isSafeInteger(Number(text)))fail(field);return text;
 }
+function clock(value:string,field:string):number{
+ const at=Date.parse(value),parts=/^(\d{4})-(\d{2})-(\d{2})(?:T|$)/.exec(value);
+ if(!Number.isFinite(at))fail(field);
+ if(parts){const year=Number(parts[1]),month=Number(parts[2]),day=Number(parts[3]),date=new Date(Date.UTC(year,month-1,day));if(date.getUTCFullYear()!==year||date.getUTCMonth()!==month-1||date.getUTCDate()!==day)fail(field);}
+ return at;
+}
 function observationId(value:unknown):string{if(typeof value==='string'&&value.trim())return value.trim();if(typeof value==='number'&&Number.isSafeInteger(value))return String(value);return fail('observation id');}
 function records(body:unknown):Row[]{const raw=object(body,'response').data;if(!Array.isArray(raw))fail('data array');return raw.map(value=>object(value,'data record'));}
 function agree(values:(string|null)[],field:string):string|null{const supplied=[...new Set(values.filter((value):value is string=>value!==null))];if(supplied.length>1)fail(field);return supplied[0]??null;}
@@ -31,10 +37,11 @@ export function validatedNbaScheduleRecords(bodies:readonly unknown[]):Row[]{
   const homeId=identifier(home.id,'home_team.id',true)!,awayId=identifier(away.id,'visitor_team.id',true)!,homeName=label(home),awayName=label(away);
   if(homeId===awayId||homeName===awayName)fail('distinct fixture teams');
   const datetime=optionalText(row.datetime,'datetime'),date=optionalText(row.date,'date');
-  if(date!==null&&!Number.isFinite(Date.parse(date)))fail('calendar date');
-  const clock=datetime??date;if(clock===null||!Number.isFinite(Date.parse(clock)))fail('game clock');
+  if(date!==null)clock(date,'calendar date');
+  if(datetime!==null&&date!==null&&!/^\d{4}-\d{2}-\d{2}$/.test(date)&&Date.parse(datetime)!==Date.parse(date))fail('simultaneous precise game clocks');
+  const start=datetime??date;if(start===null)fail('game clock');const startAt=clock(start,'game clock');
   // A date-only calendar value is not another precise start-time vote.
-  const identity=JSON.stringify([id,homeId,awayId,homeName,awayName,new Date(clock).toISOString()]);
+  const identity=JSON.stringify([id,homeId,awayId,homeName,awayName,new Date(startAt).toISOString()]);
   if(seen.has(id)&&seen.get(id)!==identity)fail('duplicate game identity');seen.set(id,identity);
  }
  return rows;
@@ -47,7 +54,7 @@ export function validatedNbaQuoteRecords(body:unknown,requestedGame:string,openi
   const team=teams(player??{},row.team_id,!opening),playerName=player?name(player):null;
   if(playerName)aliases.push([playerName,`nba-bdl-player:${id}`]);
   const key=observationId(row.id),identity=[game,id,...(!opening?[team,nameKey(playerName)]:[])];
-  if(!opening){const market=optionalObject(row.market,'quote market'),book=optionalText(row.vendor,'quote book'),kind=optionalText(row.prop_type,'quote market name'),clock=optionalText(row.updated_at,'quote clock');census(prices,JSON.stringify([key,book?.toLowerCase(),kind,row.line_value,clock]),[market?.type,market?.over_odds,market?.under_odds,market?.odds],'same-clock quote price conflict');}
+  if(!opening){const market=optionalObject(row.market,'quote market'),book=optionalText(row.vendor,'quote book'),kind=optionalText(row.prop_type,'quote market name'),clock=optionalText(row.updated_at,'quote clock');census(prices,JSON.stringify([game,id,book?.toLowerCase(),kind,row.line_value,clock===null?null:Date.parse(clock)]),[market?.type,market?.over_odds,market?.under_odds,market?.odds],'same-clock quote price conflict');}
   const previous=seen.get(key);if(previous){for(let i=0;i<identity.length;i++)if(previous[i]!==null&&identity[i]!==null&&previous[i]!==identity[i])fail('duplicate observation identity');seen.set(key,identity.map((value,i)=>value??previous[i]));}else seen.set(key,identity);
  }
  return{rows,aliases};
@@ -62,9 +69,9 @@ function array(value:unknown,field:string,optional=false):unknown[]{if(value===u
 function referenceHeader(event:Row,kind:ReferenceKind){
  const id=observationId(event[kind==='owls'?'gameId':'id']);
  const home=optionalText(event[kind==='owls'?'homeTeam':'home_team'],'reference home'),away=optionalText(event[kind==='owls'?'awayTeam':'away_team'],'reference away'),start=optionalText(event[kind==='owls'?'commenceTime':'commence_time'],'reference start');
- if(!home||!away||!start||!Number.isFinite(Date.parse(start))||canonicalNbaPropsTeam(home)===canonicalNbaPropsTeam(away))fail('reference fixture');
+ if(!home||!away||!start||canonicalNbaPropsTeam(home)===canonicalNbaPropsTeam(away))fail('reference fixture');
  if(event.isLive!==undefined&&event.isLive!==null&&typeof event.isLive!=='boolean')fail('reference live status');
- return{id,home:canonicalNbaPropsTeam(home),away:canonicalNbaPropsTeam(away),start:Date.parse(start)};
+ return{id,home:canonicalNbaPropsTeam(home),away:canonicalNbaPropsTeam(away),start:clock(start,'reference clock')};
 }
 function census(seen:Map<string,string>,key:string,value:unknown,field:string){const signature=JSON.stringify(value);if(seen.has(key)&&seen.get(key)!==signature)fail(field);seen.set(key,signature);}
 export function validatedNbaReferenceEvents(value:unknown,kind:ReferenceKind):Row[]{
@@ -81,7 +88,7 @@ export function validatedNbaReferenceEvents(value:unknown,kind:ReferenceKind):Ro
     // IDs live inside provider/event/book namespaces; preserving another book
     // never permits the same book's ID to select a different actor by order.
     census(props,JSON.stringify([header.id,bookName.toLowerCase(),id]),[nameKey(player),team?canonicalNbaPropsTeam(team):null],'duplicate reference prop identity');
-    census(prices,JSON.stringify([header.id,bookName.toLowerCase(),id,category,prop.line,prop.lastUpdate??book.lastUpdate]),[prop.overPrice,prop.underPrice],'same-clock reference price conflict');
+    census(prices,JSON.stringify([header.id,bookName.toLowerCase(),nameKey(player),category,prop.line,Date.parse(String(prop.lastUpdate??book.lastUpdate??''))]),[prop.overPrice,prop.underPrice],'same-clock reference price conflict');
    }
    else for(const marketValue of array(book.markets,'reference markets',true)){
     const market=object(marketValue,'reference market');optionalText(market.key,'reference market key');
@@ -105,4 +112,11 @@ export function assertNbaCurrentQuoteFixtures(rows:readonly {provider:string;sch
   if(row.homeTeam!==undefined&&row.homeTeam!==null&&canonicalNbaPropsTeam(row.homeTeam)!==canonicalNbaPropsTeam(game.home))fail('current quote home');
   if(row.awayTeam!==undefined&&row.awayTeam!==null&&canonicalNbaPropsTeam(row.awayTeam)!==canonicalNbaPropsTeam(game.away))fail('current quote away');
  }
+}
+
+type CurrentPriceQuote={provider:string;canonicalGameId:string|null;canonicalPlayerId:string|null;providerPlayerId:string|null;playerName:string|null;sportsbook:string;market:string;offerType:string;line:number;side:string;americanPrice:number;observedAt:string;isOpening:boolean};
+/** Exact economic contract, independent of provider record IDs and input order. */
+export function assertNbaCurrentQuotePrices(rows:readonly CurrentPriceQuote[]){
+ const seen=new Map<string,string>();
+ for(const row of rows){if(row.isOpening)continue;const actor=row.canonicalPlayerId??row.providerPlayerId??nameKey(row.playerName??null);census(seen,JSON.stringify([row.provider,row.canonicalGameId,actor,row.sportsbook.toLowerCase(),row.market,row.offerType,row.line,row.side,Date.parse(row.observedAt)]),row.americanPrice,'same-clock normalized quote price conflict');}
 }
