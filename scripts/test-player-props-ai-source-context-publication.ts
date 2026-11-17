@@ -24,6 +24,17 @@ try{
  const outcome=await reviewPropsForSite({client:client as never,sport:'nba',games:[{id:packet.gameId,start:packet.start,home:'NYK',away:'BOS'}],writerRunId:'synthetic',clock:()=>at,
   load:()=>{loads++;return structuredClone(packet);},onSourceAudit:a=>{audits.push(a);},onSourceReady:()=>{assert.equal(audits.length,1);},onReviewObserved:()=>{assert.equal(audits.length,2);}});
  assert.equal(outcome.status,'paid_disabled');assert.equal(loads,2);assert.equal(reads,3,'No extra audit database or source reads');assert.equal(audits.length,2);assert(audits.every(a=>a.currentPacketHash===digest(packet)&&a.review.status==='verified'));assert(outcome.sourceContextAudits?.comparisonComplete);
+ // Actual runtime publication runs BEFORE insert-only source retention. A failed
+ // private archive must remain an explicit finding, never a missing callback or
+ // another paid request. This synthetic client has no provider/model transport.
+ {const changed=structuredClone(packet);changed.cutoff=at;changed.players[0].evidence.push({id:'current-context-change',kind:'availability',source:'synthetic actual report',availableAt:at,value:{context:{away:{team:'BOS',known:true,players:[{name:changed.players[0].name,status:'questionable'}]},home:{team:'NYK',known:true,players:[]}}}});
+  let handoffs=0,storageReads=0;const changedClient={from(table:string){if(table!=='lab_response_snapshots')return client.from(table);const q={select(){return q;},eq(){return q;},abortSignal(){return q;},maybeSingle:async()=>{storageReads++;assert(handoffs>0,'Publish the actual callback before audit storage');return{data:null,error:{message:'synthetic storage unavailable'}};}};return q;}};
+  const changedOutcome=await reviewPropsForSite({client:changedClient as never,sport:'nba',games:[{id:packet.gameId,start:packet.start,home:'NYK',away:'BOS'}],writerRunId:'synthetic',clock:()=>at,load:()=>structuredClone(changed),onSourceReady:()=>{handoffs++;},onReviewObserved:()=>{handoffs++;}});
+  assert.equal(handoffs,2);assert.equal(storageReads,2);assert.equal(changedOutcome.status,'paid_disabled');assert(changedOutcome.findings.some(f=>f.startsWith('source_evidence_unavailable:')));assert(!changedOutcome.findings.some(f=>f.startsWith('current_source_unavailable:')));
+  handoffs=0;storageReads=0;const failedHandoff=await reviewPropsForSite({client:changedClient as never,sport:'nba',games:[{id:packet.gameId,start:packet.start,home:'NYK',away:'BOS'}],writerRunId:'synthetic',clock:()=>at,load:()=>structuredClone(changed),onSourceReady:()=>{handoffs++;throw Error('synthetic canonical write refused');},onReviewObserved:()=>{handoffs++;throw Error('synthetic canonical write refused');}});
+  assert(storageReads>=2,'Failure-safe finally retains actual source after failed publication callbacks');assert(failedHandoff.findings.some(f=>f.startsWith('lock_source_unavailable:')||f.startsWith('current_source_unavailable:')),'Original publication failure remains a failure');assert(failedHandoff.findings.some(f=>f.startsWith('source_evidence_unavailable:')));
+
+ }
  // A failed final current reload must invalidate publication before another
  // game's callback can advance a shared snapshot clock. Captured source bytes
  // remain archived, but cannot masquerade as a successful current reload.
