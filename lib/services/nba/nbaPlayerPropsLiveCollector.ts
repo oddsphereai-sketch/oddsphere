@@ -1,5 +1,6 @@
 import {validatedNbaScheduleRecords,validatedNbaQuoteRecords,validatedNbaPlayerRecords,validatedNbaReferenceEvents,assertNbaReferenceResponse,assertNbaCurrentQuotePrices} from './nbaPlayerPropsCurrentIdentityContract';
 import {resolveNbaPlayerAliases} from './nbaPlayerPropsPlayerIdentity';
+import {quoteBook} from '../../playerPropsAi/executionQuotes';
 import {canonicalNbaPropsTeam as canonicalTeam} from "./nbaPlayerPropsTeamIdentity";
 import {
   normalizeBallDontLieNbaPlayerProps,
@@ -230,8 +231,10 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
       && (row.side === "over" || row.side === "under"));
     const booksByScope = new Map<string, Set<string>>();
     for (const row of gameRows) {
+      const book=quoteBook(row.sportsbook);
+      if(!book)continue;
       const key = `${row.canonicalPlayerId ?? row.providerPlayerId}|${row.market}|${row.line}`;
-      booksByScope.set(key, new Set([...(booksByScope.get(key) ?? []), row.sportsbook]));
+      booksByScope.set(key, new Set([...(booksByScope.get(key) ?? []), book]));
     }
     return ![...booksByScope.values()].some((books) => books.size >= 2);
   }).map((game) => game.canonicalGameId));

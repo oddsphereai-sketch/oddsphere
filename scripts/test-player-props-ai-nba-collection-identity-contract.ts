@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {collectNbaPlayerPropsLiveMarket} from '../lib/services/nba/nbaPlayerPropsLiveCollector';
 import {liveNbaPacket} from '../lib/playerPropsAi/liveSources';
 import {digest} from '../lib/playerPropsAi/evidence';
-import {quoteContract} from '../lib/playerPropsAi/executionQuotes';
+import {quoteContract,quoteBook} from '../lib/playerPropsAi/executionQuotes';
 import {validatedNbaScheduleRecords,validatedNbaQuoteRecords,validatedNbaPlayerRecords} from '../lib/services/nba/nbaPlayerPropsCurrentIdentityContract';
 type Row=Record<string,unknown>;
 const at='2030-11-17T18:00:00Z',start='2030-11-17T23:00:00Z',later='2030-11-18T23:00:00Z',RealDate=Date;
@@ -17,7 +17,7 @@ const owl=(clock=start)=>({gameId:'owls99',commenceTime:clock,homeTeam:'NYK',awa
 const oddsEvent=(id='correct',clock=start)=>({id,commence_time:clock,home_team:'NYK',away_team:'BOS'});
 const odds=(id='correct',clock=start)=>({...oddsEvent(id,clock),bookmakers:[{key:'draftkings',last_update:at,markets:[{key:'player_points',last_update:at,outcomes:[{name:'Over',description:'Raw Person10',point:20.5,price:-110},{name:'Under',description:'Raw Person10',point:20.5,price:-110}]}]}]});
 function packet(collection:Awaited<ReturnType<typeof collectNbaPlayerPropsLiveMarket>>){const state={updatedAt:at,games:[{gameId:1,startTime:at,homeTeamId:1,awayTeamId:2,homeTeam:'NYK',awayTeam:'BOS'}],boxes:[],advanced:[],players:[]};return liveNbaPacket({game:{id:'nba-bdl:99',start,home:'NYK',away:'BOS'},window:{gameId:'nba-bdl:99',stage:'early',cutoff:at,lock:'2030-11-17T22:00:00Z'},snapshot:{generatedAt:at,slateDate:'2030-11-17',games:[{gameId:'nba-bdl:99',scheduledStart:start,homeTeam:'NYK',awayTeam:'BOS'}],decisions:[]},market:{updatedAt:at,observations:collection.observations},prior:state,current:state,currentObservations:collection.observations} as unknown as Parameters<typeof liveNbaPacket>[0]);}
-type Options={rows?:Row[];regular?:unknown[];ist?:unknown[];metadata?:unknown[];owls?:unknown;oddsEvents?:unknown;oddsBoard?:unknown;useOdds?:boolean;opening?:Row[]};
+type Options={rows?:Row[];regular?:unknown[];ist?:unknown[];metadata?:unknown[];owls?:unknown;oddsEvents?:unknown;oddsBoard?:unknown;useOdds?:boolean;inferOdds?:boolean;opening?:Row[]};
 async function collect(options:Options={}){const calls:string[]=[],rows=options.rows??[quote(10),quote(20)],sourceBefore=digest(options);
  const fetchImpl:typeof fetch=async input=>{const url=String(input);calls.push(url);const json=(v:unknown)=>Response.json(v);
   if(url.includes('/v1/games?'))return json({data:url.includes('season_type=regular')?(options.regular??[game()]):(options.ist??[])});
@@ -28,7 +28,7 @@ async function collect(options:Options={}){const calls:string[]=[],rows=options.
   if(url.includes('/events?'))return json(options.oddsEvents??[oddsEvent()]);
   if(url.includes('/events/'))return json(options.oddsBoard??odds());
   throw Error('Unexpected injected route');};
- const result=await collectNbaPlayerPropsLiveMarket({slateDate:'2030-11-17',ballDontLieApiKey:'synthetic',includeOpenings:options.opening!==undefined,owlsInsightApiKey:options.metadata?'':options.useOdds?'': 'synthetic',theOddsApiKey:options.useOdds?'synthetic':null,useTheOddsApiForGameIds:options.useOdds?new Set(['nba-bdl:99']):undefined,fetchImpl});
+ const result=await collectNbaPlayerPropsLiveMarket({slateDate:'2030-11-17',ballDontLieApiKey:'synthetic',includeOpenings:options.opening!==undefined,owlsInsightApiKey:options.metadata?'':options.useOdds?'': 'synthetic',theOddsApiKey:options.useOdds||options.inferOdds?'synthetic':null,useTheOddsApiForGameIds:options.useOdds?new Set(['nba-bdl:99']):undefined,fetchImpl});
  assert.equal(digest(options),sourceBefore,'Original returned inputs must remain exact');return{result,calls};
 }
 async function main(){globalThis.Date=Clock as DateConstructor;let controls=0;
@@ -83,6 +83,13 @@ async function main(){globalThis.Date=Clock as DateConstructor;let controls=0;
    const owlValues=[owlProp(10,'numeric-one'),{...owlProp(10,'numeric-two'),overPrice:'-110',underPrice:'-110'}];if(reverse)owlValues.reverse();const numericOwl=await collect({owls:{data:[{...owl(),books:[{key:'pinnacle',lastUpdate:at,props:owlValues}]}]}});assert(!numericOwl.result.findings.includes('owls_player_props_capture_failed'));assert.equal(packet(numericOwl.result).players.length,2);controls++;
    const extra=[quote(10),{...quote(10),id:'irrelevant-milestone-field',market:{type:'over_under',over_odds:-110,under_odds:-110,odds:120}},quote(20)];if(reverse)extra.reverse();assert.equal(packet((await collect({rows:extra})).result).players.length,2);controls++;
    const instant=odds(),otherInstant=structuredClone(instant.bookmakers[0].markets[0]);otherInstant.last_update='2030-11-17T18:00:00+00:00';otherInstant.outcomes[0].price=120;instant.bookmakers[0].markets.push(otherInstant);if(reverse)instant.bookmakers[0].markets.reverse();const clocked=await collect({useOdds:true,oddsBoard:instant});assert(clocked.result.findings.includes('the_odds_api_player_props_capture_failed'));assert.equal(packet(clocked.result).executionQuotes?.length,4);controls++;
+  }
+  // The ordinary unforced gap decision uses the same underlying book identity.
+  const ordinaryGap=await collect({inferOdds:true,owls:{data:[]}});assert.equal(ordinaryGap.result.providerRequests.theOddsApi,2);assert(ordinaryGap.result.observations.some(q=>q.provider==='the_odds_api'));controls++;
+  for(const reverse of [false,true]){
+   const sameBook=[quote(10),{...quote(10),id:'same-book-alias',vendor:'fan-duel'},quote(20)];if(reverse)sameBook.reverse();const filled=await collect({rows:sameBook,inferOdds:true,owls:{data:[]}});assert.equal(filled.result.providerRequests.theOddsApi,2);assert(filled.result.observations.some(q=>q.provider==='the_odds_api'));assert.equal(new Set(packet(filled.result).executionQuotes?.filter(q=>q.playerId==='nba-bdl-player:10').map(q=>quoteBook(q.book))).size,2);controls++;
+   const distinct=[quote(10),{...quote(10),id:'real-second-book',vendor:'pinnacle'},quote(20)];if(reverse)distinct.reverse();const corroborated=await collect({rows:distinct,inferOdds:true,owls:{data:[]}});assert.equal(corroborated.result.providerRequests.theOddsApi,0);assert.equal(new Set(packet(corroborated.result).executionQuotes?.filter(q=>q.playerId==='nba-bdl-player:10').map(q=>quoteBook(q.book))).size,2);controls++;
+   const across=await collect({rows:reverse?[quote(20),quote(10)]:[quote(10),quote(20)],inferOdds:true,owls:{data:[{...owl(),books:[{key:'fan-duel',lastUpdate:at,props:[owlProp(10),owlProp(20)]}]}]}});assert.equal(across.result.providerRequests.theOddsApi,2);assert(across.result.observations.some(q=>q.provider==='the_odds_api'));controls++;
   }
   const equalAlias=await collect({rows:[quote(10),{...quote(10),id:'alias-equal',vendor:'Fan Duel'},quote(20)]});assert.equal(packet(equalAlias.result).players.length,2);assert(!equalAlias.result.findings.some(f=>f.includes('failed')));controls++;
   const equalOwl=await collect({owls:{data:[{...owl(),books:[{key:'pinnacle',lastUpdate:at,props:[owlProp(10,'one')]},{key:'pin-nacle',lastUpdate:at,props:[owlProp(10,'two')]}]}]}});assert.equal(packet(equalOwl.result).players.length,2);assert(!equalOwl.result.findings.includes('owls_player_props_capture_failed'));controls++;

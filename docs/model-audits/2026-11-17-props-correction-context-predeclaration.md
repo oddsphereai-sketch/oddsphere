@@ -166,3 +166,11 @@ and equivalent numeric representations survive; contradictory same-contract
 prices at the same instant reject the whole lane. Odds aliases are built once
 per response, with bounded streaming outcomes and unchanged atomic optional-lane
 commit. Original provider normalizers and stored generations remain exact.
+
+
+The existing conditional Odds gap decision also counts the authoritative
+underlying `quoteBook` identity across provider spellings. Equivalent aliases
+cannot falsely establish two-book coverage or suppress the configured ordinary
+gap fetch; genuine distinct books still skip it. Empty canonical labels are not
+corroboration. This corrects routing within the existing endpoints, source caps
+and conditional provider budget; no operator request or extra review is added.
