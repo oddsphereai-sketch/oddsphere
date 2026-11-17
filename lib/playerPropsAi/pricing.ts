@@ -51,7 +51,8 @@ export function gradeAiEventFromMass(args:ExactEventGradeArgs){
   else if(args.confidence>=1&&economics.numerator>BigInt(0)||args.confidence===2&&confidenceLean?.qualified)grade="Lean";
   return{grade,ev:economics.ev,confidenceLean};
 }
-/** R3 only. R2's accepted paired-confidence arithmetic above remains unchanged. */
+/** R3/R4 share exact paired arithmetic; R4 versions book binding upstream.
+ * R2's accepted arithmetic above remains unchanged. */
 export function gradeAiEventFromExactPairedMass(args:ExactEventGradeArgs){
   const economics=exactEventEconomics(args);
   const confidenceLean=args.opposingAmerican===null?null:assessExactPropsConfidencePrice({...args,opposingAmerican:args.opposingAmerican});
@@ -68,6 +69,7 @@ export function priceAiLaw(args: { law: AcceptedPlayerLaw; market: string; quote
   invariant([0, 1, 2].includes(args.confidence), "Invalid estimated evidence confidence");
   const latest=new Map<string,AiExecutionQuote>(),ambiguous=new Set<string>();
   for(const q of args.quotes){
+    if(canonicalBooks&&!quoteBook(q.book))continue;
     if(!q.current||q.confirmedAt===null||!Number.isFinite(Date.parse(q.confirmedAt))||Date.parse(q.confirmedAt)>now||Date.parse(q.availableAt)>now)continue;
     const key=JSON.stringify([q.provider,q.book.toLowerCase().replace(/[^a-z0-9]/g,""),q.line,q.side]),old=latest.get(key);
     const rank=old?Date.parse(q.confirmedAt)-Date.parse(old.confirmedAt!)||Date.parse(q.availableAt)-Date.parse(old.availableAt):1;

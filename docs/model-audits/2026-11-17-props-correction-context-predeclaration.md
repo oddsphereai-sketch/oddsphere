@@ -192,3 +192,12 @@ prospective qualification/selection change, not a new probability target, a
 confidence floor, an automatic promotion or a formula change. Synthetic
 collector→current-wire→member controls prove both actionable directions and
 old-policy/lock precedence. No paid test or extra review is introduced.
+
+
+A current executable bookmaker identity must remain nonempty after canonical
+normalization. Punctuation-only labels cannot be paired or promoted as one
+underlying book. Current collection rejects that invalid identity; an invalid
+optional whole lane is discarded while valid BDL continuity remains. R4 pricing
+also refuses empty canonical identities if collection is bypassed. Named-book
+aliases and both actionable directions still recover; old R3 pricing policy and
+all stored locks remain exact. No new lookup, paid test or review is added.

@@ -86,7 +86,7 @@ export function validatedNbaReferenceEvents(value:unknown,kind:ReferenceKind):Ro
  for(const event of events){
   const header=referenceHeader(event,kind);census(headers,header.id,header,'duplicate reference event');
   for(const bookValue of array(event[kind==='owls'?'books':'bookmakers'],'reference books',true)){
-   const book=object(bookValue,'reference book'),bookName=optionalText(book.key,'book key')??optionalText(book.title,'book title');if(!bookName)fail('reference book identity');
+   const book=object(bookValue,'reference book'),bookName=optionalText(book.key,'book key')??optionalText(book.title,'book title');if(!bookName||!quoteBook(bookName))fail('reference book identity');
    if(kind==='owls')for(const propValue of array(book.props,'reference props',true)){
     const prop=object(propValue,'reference prop'),player=optionalText(prop.playerName,'reference player name'),category=optionalText(prop.category,'reference category'),team=optionalText(prop.team,'reference player team');
     if(!player||!category)fail('reference prop identity');
@@ -122,5 +122,5 @@ type CurrentPriceQuote={provider:string;canonicalGameId:string|null;canonicalPla
 /** Exact economic contract, independent of provider record IDs and input order. */
 export function assertNbaCurrentQuotePrices(rows:readonly CurrentPriceQuote[]){
  const seen=new Map<string,string>();
- for(const row of rows){if(row.isOpening)continue;const actor=row.canonicalPlayerId??row.providerPlayerId??nameKey(row.playerName??null);const contract=executionContractKey({playerId:actor??'unresolved',market:row.market,provider:row.provider,book:row.sportsbook,line:row.line,side:row.side==='yes'?'yes':row.side==='under'?'under':'over',offerContract:row.offerType==='milestone'?'milestone':'two_way'});census(seen,JSON.stringify([row.canonicalGameId,contract,row.side,Date.parse(row.observedAt)]),row.americanPrice,'same-clock normalized quote price conflict');}
+ for(const row of rows){if(row.isOpening)continue;if(!quoteBook(row.sportsbook))fail('current quote book identity');const actor=row.canonicalPlayerId??row.providerPlayerId??nameKey(row.playerName??null);const contract=executionContractKey({playerId:actor??'unresolved',market:row.market,provider:row.provider,book:row.sportsbook,line:row.line,side:row.side==='yes'?'yes':row.side==='under'?'under':'over',offerContract:row.offerType==='milestone'?'milestone':'two_way'});census(seen,JSON.stringify([row.canonicalGameId,contract,row.side,Date.parse(row.observedAt)]),row.americanPrice,'same-clock normalized quote price conflict');}
 }

@@ -17,6 +17,7 @@ import {buildNbaPlayerPropsMemberSnapshot} from '../lib/services/nba/nbaPlayerPr
 import {ORIGINAL_PAIRED_PROPS_AI_LAW_RELEASE,ORIGINAL_PAIRED_PROPS_AI_GRADE_RELEASE,ORIGINAL_PAIRED_PROPS_AI_SELECTION_RELEASE,propsAiLawSelectionRelease} from '../lib/playerPropsAi/releases';
 import {priceAiLaw,gradeAiEventFromExactPairedMass} from '../lib/playerPropsAi/pricing';
 import {primitives,validateLaw,lawForecast,lawEventMass,scenarioStat} from '../lib/playerPropsAi/law';
+import {quoteBook} from '../lib/playerPropsAi/executionQuotes';
 import {withOriginalDraftCorrectionContext} from '../lib/playerPropsAi/originalDraftCorrectionContext';
 import {advanceNbaPlayerPropsCandidateLifecycle} from '../lib/services/nba/nbaPlayerPropsLifecycle';
 const at='2030-11-17T18:00:00.000Z',start='2030-11-17T23:00:00.000Z',lock='2030-11-17T22:00:00.000Z',RealDate=Date;
@@ -30,34 +31,39 @@ function review(p:any,w=128,l=100){
  const parsed=parseJointReview(p,raw),body=JSON.stringify(p);
  return {...parsed,gameId:p.gameId,start:p.start,lock:p.lock,cutoff:p.cutoff,marketScopes:{[player.id]:[...player.markets]},criticalContextHashes:criticalContextHashes(p),model:'synthetic',partProvenance:[],stage:p.stage,issuedAt:at,inputHash:digest(p),inputEvidence:{encoding:'gzip-base64' as const,digest:digest(p),bytes:Buffer.byteLength(body),data:gzipSync(body).toString('base64')}};
 }
-async function collected(alias:boolean,reverse:boolean,direction:"over"|"under"="over"){
+async function collected(alias:boolean,reverse:boolean,direction:"over"|"under"="over",emptyBooks=false){
  const game={id:99,datetime:start,date:'2030-11-17',home_team:{id:2,abbreviation:'NYK',full_name:'New York Knicks'},visitor_team:{id:1,abbreviation:'BOS',full_name:'Boston Celtics'}};
  const bdl={id:77,game_id:99,player_id:10,team_id:1,player:{id:10,first_name:'Round',last_name:'NinetySeven',team_id:1},vendor:'baselinebook',prop_type:'points',line_value:20.5,updated_at:at,market:{type:'over_under',over_odds:direction==='over'?-180:150,under_odds:direction==='over'?150:-180}};
  const outcome=(side:string,price:number)=>({name:side,description:'Round NinetySeven',point:20.5,price});
  const book=(key:string,outcomes:any[])=>({key,last_update:at,markets:[{key:'player_points',last_update:at,outcomes}]});
  const books=alias?[book('draftkings',[outcome('Over',direction==='over'?-148:128)]),book('draft-kings',[outcome('Under',direction==='over'?128:-148)])]:[book('draftkings',[outcome('Over',direction==='over'?-148:128),outcome('Under',direction==='over'?128:-148)])];if(reverse)books.reverse();
+ if(emptyBooks)books.forEach((book,index)=>book.key=index?'???':'---');
  const event={id:'same-event',commence_time:start,home_team:'NYK',away_team:'BOS'};
  const source={game,bdl,event,books},before=digest(source),calls:string[]=[];
  const fetchImpl=async(input:any)=>{const u=String(input);calls.push(u);if(u.includes('/v1/games?'))return Response.json({data:u.includes('season_type=regular')?[game]:[]});if(u.includes('/v2/odds/player_props'))return Response.json({data:[bdl]});if(u.includes('/events?'))return Response.json([event]);if(u.includes('/events/'))return Response.json({...event,bookmakers:books});throw Error('Unexpected synthetic route '+u);};
  const collection=await collectNbaPlayerPropsLiveMarket({slateDate:'2030-11-17',ballDontLieApiKey:'no-key',theOddsApiKey:'no-key',includeOpenings:false,fetchImpl});assert.equal(digest(source),before);
  const state=nbaPlayedStateFixture(at,[10],[18,20,24],[2,4,6]),base=buildNbaPlayerPropsMemberSnapshot({mode:'private_forward_candidate',generatedAt:at,slateDate:'2030-11-17',games:[{gameId:'nba-bdl:99',scheduledStart:start,homeTeam:'NYK',awayTeam:'BOS'}],decisions:[],inputRows:collection.observations.length});
  const p=liveNbaPacket({game:{id:'nba-bdl:99',start,home:'NYK',away:'BOS'},window:{gameId:'nba-bdl:99',stage:'final',cutoff:at,lock},snapshot:base,market:{updatedAt:at,observations:collection.observations},current:state,prior:state,currentObservations:collection.observations} as any);
- const r=review(p,direction==='over'?128:100,direction==='over'?100:128),decisions=siteAiDecisions(p,r,at),member=applyNbaSiteAi(base,p,decisions,at),dk=decisions.find(c=>c.provider==='the_odds_api');assert(dk);
- return{p,r,base,decisions,member,calls,detail:{alias,reverse,providerCalls:calls.length,oddsCalls:collection.providerRequests.theOddsApi,execution:p.executionQuotes?.map(q=>({book:q.book,side:q.side,price:q.american})),decision:{grade:dk.grade,ev:dk.expectedValue,probability:dk.probability,quotes:dk.evidence.executionEvidence?.pricingQuotes.map(q=>q.side)},memberGrade:member.decisions[0]?.grade}};
+ const r=review(p,direction==='over'?128:100,direction==='over'?100:128),decisions=siteAiDecisions(p,r,at),member=applyNbaSiteAi(base,p,decisions,at),dk=decisions.find(c=>c.provider==='the_odds_api');assert(dk||emptyBooks);if(emptyBooks)assert(collection.findings.includes('the_odds_api_player_props_capture_failed'));
+ return{p,r,base,decisions,member,calls,detail:{alias,reverse,providerCalls:calls.length,oddsCalls:collection.providerRequests.theOddsApi,execution:p.executionQuotes?.map(q=>({book:q.book,side:q.side,price:q.american})),decision:dk?{grade:dk.grade,ev:dk.expectedValue,probability:dk.probability,quotes:dk.evidence.executionEvidence?.pricingQuotes.map(q=>q.side)}:null,memberGrade:member.decisions[0]?.grade}};
 }
 async function main(){try{
  const plain=await collected(false,false);const mixed=await collected(true,false);const reversed=await collected(true,true);results.aliasCases=[plain.detail,mixed.detail,reversed.detail];
+ assert(plain.detail.decision&&mixed.detail.decision&&reversed.detail.decision);
  assert.equal(plain.detail.decision.grade,'Lean');
  results.aliasPairingPreserved=mixed.detail.decision.grade==='Lean'&&reversed.detail.decision.grade==='Lean';
  const direct=(p:any,alias:boolean)=>priceAiLaw({law:plain.r.players[0].law!,market:'points',quotes:p.executionQuotes.filter((q:any)=>q.provider==='the_odds_api').map((q:any)=>({id:q.id,provider:q.provider,book:alias?q.book:'draftkings',line:q.line,side:q.side,american:q.american,availableAt:q.receivedAt,confirmedAt:q.receivedAt,current:true,actionRule:'qualifying_participation'})),now:at,maxAgeMs:900000,confidence:2,exception:null});
  results.directPrice={canonical:direct(mixed.p,false)?.grade,mixed:direct(mixed.p,true)?.grade};assert.deepEqual(results.directPrice,{canonical:'Lean',mixed:'Lean'});
  assert(results.aliasPairingPreserved);
- for(const reverse of [false,true]){const under=await collected(true,reverse,'under');assert.equal(under.detail.decision.grade,'Lean');assert(under.member.decisions.some((row:any)=>row.aiReview?.executionEvidence?.selectedQuote?.provider==='the_odds_api'&&row.side==='under'&&row.grade==='Lean'));}
+ for(const reverse of [false,true]){const under=await collected(true,reverse,'under');assert(under.detail.decision);assert.equal(under.detail.decision.grade,'Lean');assert(under.member.decisions.some((row:any)=>row.aiReview?.executionEvidence?.selectedQuote?.provider==='the_odds_api'&&row.side==='under'&&row.grade==='Lean'));}
  assert(mixed.member.decisions.some((row:any)=>row.aiReview?.executionEvidence?.selectedQuote?.provider==='the_odds_api'&&row.side==='over'&&row.grade==='Lean'));
  const oldFields={release:ORIGINAL_PAIRED_PROPS_AI_LAW_RELEASE,weights:[...plain.r.players[0].law!.weights],integerWeights:[...plain.r.players[0].law!.integerWeights!],outcomes:structuredClone(plain.r.players[0].law!.outcomes)};const oldLaw={...oldFields,hash:digest(oldFields)};
  const oldQuotes=mixed.p.executionQuotes!.filter(q=>q.provider==='the_odds_api').map(q=>({id:q.id,provider:q.provider,book:q.book,line:q.line,side:q.side,american:q.american,availableAt:q.receivedAt,confirmedAt:q.receivedAt,current:true,actionRule:'qualifying_participation' as const}));
  const oldPriced=priceAiLaw({law:oldLaw,market:'points',quotes:oldQuotes,now:at,maxAgeMs:900000,confidence:2,exception:null});assert.equal(oldPriced?.grade,'Watchlist');assert.equal(oldPriced?.gradeRelease,ORIGINAL_PAIRED_PROPS_AI_GRADE_RELEASE);assert.equal(propsAiLawSelectionRelease(oldLaw.release),ORIGINAL_PAIRED_PROPS_AI_SELECTION_RELEASE);
  const oldCanonical=priceAiLaw({law:oldLaw,market:'points',quotes:oldQuotes.map(q=>({...q,book:'draftkings'})),now:at,maxAgeMs:900000,confidence:2,exception:null});assert.equal(oldCanonical?.grade,'Lean');results.originalR3PolicyExact=true;
+ for(const direction of ['over','under'] as const)for(const reverse of [false,true]){const invalid=await collected(true,reverse,direction,true);assert(!invalid.decisions.some(q=>q.provider==='the_odds_api'));assert(invalid.member.decisions.every(q=>Boolean(quoteBook(q.sportsbook))));}
+ for(const labels of [['---','???'],['',''],['  ','!!!']]){const invalid=oldQuotes.map((q,i)=>({...q,book:labels[i%2]}));assert.equal(priceAiLaw({law:plain.r.players[0].law!,market:'points',quotes:invalid,now:at,maxAgeMs:900000,confidence:2,exception:null}),null);}
+ const opaqueOld=priceAiLaw({law:oldLaw,market:'points',quotes:oldQuotes.map(q=>({...q,book:'---'})),now:at,maxAgeMs:900000,confidence:2,exception:null});assert.equal(opaqueOld?.grade,'Lean');results.unattributedNewBooksRefused=true;
  const complete=structuredClone(mixed.p);complete.executionQuotes=complete.executionQuotes!.filter(q=>q.provider!=='the_odds_api').concat(plain.p.executionQuotes!.filter(q=>q.provider==='the_odds_api').flatMap(q=>[q,{...q,id:q.id+'alias',book:'draft-kings'}]));
  const completeDecisions=siteAiDecisions(complete,plain.r,at);assert.equal(completeDecisions.find(q=>q.provider==='the_odds_api')?.grade,'Lean');results.completeAliasPairsPreserved=true;
 
