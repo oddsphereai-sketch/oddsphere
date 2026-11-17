@@ -83,3 +83,16 @@ records their current authority. The private receipt payload is not added to AI
 source fields; the existing full-packet integrity hash still changes normally.
 An unchanged subsequent lookup preserves context hashes; a future response cannot
 backdate source identity to an earlier review cutoff.
+
+
+Round87 proved another existing name-alias overlay could bind a current retail
+quote to the last of two same-name IDs and even publish an actionable forecast.
+The prospective repair now uses one ambiguity-preserving join for writer cached
+labels, current retail identities, Owls and Odds API aliases. Full captured alias
+ownership (including collisions excluded from the map) travels to the collector,
+so a later provider overlay cannot resurrect a discarded historical ambiguity.
+Distinct normalized-name owners remain unresolved; line, price and team are not
+used to guess the person. ID-rich source rows remain intact; unresolved retail
+identity holds before paid review and reference-only missing identity remains an
+explicit limitation. Positive unique-ID controls restore both provider lanes
+without any extra source requests, phases, budgets or forecast/grade changes.

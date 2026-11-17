@@ -1,3 +1,4 @@
+import {resolveNbaPlayerAliases} from './nbaPlayerPropsPlayerIdentity';
 import {currentNbaTeamId} from './nbaPlayerPropsTeamIdentity';
 import {summarizePropsAiRuntimeHealth,propsAiFinalSourceHolds} from '../../playerPropsAi/runtimeHealth';
 import {propsAiTwoPhaseCompletionWindowMs} from "../../playerPropsAi/completionWindow";
@@ -154,10 +155,8 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   if(!priorState)throw new Error("NBA props prior state missing after readiness check");
 
   const players = new Map([...priorState.players, ...(currentState?.players ?? [])].map((row) => [row.playerId, row]));
-  const nameOwners=new Map<string,Set<string>>();
-  for(const player of players.values())if(player.playerName){const name=normalize(player.playerName),ids=nameOwners.get(name)??new Set<string>();ids.add(`nba-bdl-player:${player.playerId}`);nameOwners.set(name,ids);}
-  // A name shared by different IDs is unresolved, never last-row-wins identity.
-  const canonicalPlayersByName=Object.fromEntries([...nameOwners].filter(([,ids])=>ids.size===1).map(([name,ids])=>[name,[...ids][0]]));
+  const canonicalPlayerIdentityEntries=[...players.values()].flatMap(player=>player.playerName?[[player.playerName,`nba-bdl-player:${player.playerId}`] as const]:[]);
+  const canonicalPlayersByName=resolveNbaPlayerAliases(canonicalPlayerIdentityEntries);
   const live = await collectNbaPlayerPropsLiveMarket({
     slateDate: args.slateDate,
     ballDontLieApiKey: args.ballDontLieApiKey,
@@ -165,6 +164,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     owlsInsightApiKey: args.owlsInsightApiKey,
     includeOpenings: args.fullRefresh,
     canonicalPlayersByName,
+    canonicalPlayerIdentityEntries,
     knownPlayerIdentitiesById: Object.fromEntries([...players.values()].map((player) => [String(player.playerId), {
       playerName: player.playerName,
       playerTeam: null, // Names only; played-team history cannot suppress current identity lookup.

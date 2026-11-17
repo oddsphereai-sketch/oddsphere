@@ -68,7 +68,7 @@ export type GamePacket = {
   sourceExecutionContractRelease?:string;
   /** Original post-enrichment collector completion, not a price receipt or a reconstructed cutoff. */
   sourceIdentityAvailableAt?:string;
-  /** Private current-identity receipt provenance; not extra numeric evidence or AI tokens. */
+  /** Private current-identity receipt provenance; not extra numeric evidence or AI source fields. */
   sourceIdentityEvidence?:Json;
   sharedGameContext?: Json;
   /** Native collector identity when the funding calendar uses a separately bound fixture ID. */

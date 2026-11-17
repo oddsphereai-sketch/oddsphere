@@ -1,3 +1,4 @@
+import {resolveNbaPlayerAliases} from './nbaPlayerPropsPlayerIdentity';
 import {canonicalNbaPropsTeam as canonicalTeam} from "./nbaPlayerPropsTeamIdentity";
 import {
   normalizeBallDontLieNbaPlayerProps,
@@ -52,6 +53,8 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
   includeOpenings: boolean;
   useTheOddsApiForGameIds?: ReadonlySet<string>;
   canonicalPlayersByName?: Readonly<Record<string, string>>;
+  /** Full captured alias ownership, including ambiguity excluded from the map. */
+  canonicalPlayerIdentityEntries?:readonly (readonly [string,string])[];
   knownPlayerIdentitiesById?: Readonly<Record<string, Readonly<{ playerName: string | null; playerTeam: string | null }>>>;
   fetchImpl?: typeof fetch;
 }): Promise<NbaPlayerPropsLiveCollection> {
@@ -180,7 +183,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
         events: owlsEvents,
         fetchedAt,
         canonicalGames,
-        canonicalPlayers: args.canonicalPlayersByName,
+        canonicalPlayers: canonicalNames(observations,args.canonicalPlayersByName,args.canonicalPlayerIdentityEntries),
       });
       const freshRows = normalized.rows.map(row => ({ ...row, receivedAt: owlsReceivedAt })).filter((row) => {
         const observedAt = Date.parse(row.observedAt);
@@ -244,10 +247,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
       observations.push(...normalizeTheOddsApiNbaPlayerProps({
         events: [response.body], fetchedAt,
         canonicalGames: { [eventId]: game.canonicalGameId },
-        canonicalPlayers: {
-          ...args.canonicalPlayersByName,
-          ...Object.fromEntries([...canonicalNames(observations).entries()]),
-        },
+        canonicalPlayers: canonicalNames(observations,args.canonicalPlayersByName,args.canonicalPlayerIdentityEntries),
       }).rows.map(row => ({ ...row, receivedAt: oddsReceivedAt })));
     }
   } else if (gapGames.length > 0) findings.push("the_odds_api_gap_fetch_skipped_missing_key");
@@ -348,9 +348,10 @@ function canonicalPlayerMap(rows: readonly Record<string, unknown>[]): Record<st
   return Object.fromEntries(ids);
 }
 
-function canonicalNames(rows: readonly NbaPlayerPropPriceObservation[]): Map<string, string> {
-  return new Map(rows.flatMap((row) => row.playerName && row.canonicalPlayerId
-    ? [[normalizeName(row.playerName), row.canonicalPlayerId] as const] : []));
+function canonicalNames(rows:readonly NbaPlayerPropPriceObservation[],known:Readonly<Record<string,string>>={},captured:readonly (readonly [string,string])[]=[]):Record<string,string>{
+ // Union source ownership BEFORE resolving. An ambiguous current name cannot
+ // fall through to a stale map or be restored by a later provider overlay.
+ return resolveNbaPlayerAliases([...Object.entries(known),...captured,...rows.flatMap(row=>row.playerName&&row.canonicalPlayerId?[[row.playerName,row.canonicalPlayerId] as const]:[])]);
 }
 
 function eventMatches(event: Record<string, unknown>, game: NbaPlayerPropGameIdentity): boolean {
@@ -391,9 +392,6 @@ function object(value: unknown): Record<string, unknown> | null {
 function text(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
 function scalarId(value: unknown): string | null {
   return typeof value === "number" && Number.isFinite(value) ? String(value) : text(value);
-}
-function normalizeName(value: string): string {
-  return value.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
 }
 function headerInteger(headers: Headers, name: string): number | null {
   const value = Number(headers.get(name));
