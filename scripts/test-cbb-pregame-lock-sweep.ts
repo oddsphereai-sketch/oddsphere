@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { buildCbbProvisionalBoard } from "../lib/cbb/provisionalBoard";
 import { CBB_SCORE_RESEARCH_RELEASE } from "../lib/cbb/scoreResearch";
 import type { CbbForecast, CbbGame, CbbQuote } from "../lib/cbb/types";
-import { writeCbbMemberGame, type CbbStoredMemberGame } from "../lib/services/cbb/cbbMemberGameStore";
-import { sweepCbbPregameLocks } from "../lib/services/cbb/cbbPregameLockSweep";
+import { writeCbbMemberGame, cbbMemberGameForReader, type CbbStoredMemberGame } from "../lib/services/cbb/cbbMemberGameStore";
+import { sweepCbbPregameLocks, isCbbFixtureWithdrawnByPublishedCensus } from "../lib/services/cbb/cbbPregameLockSweep";
 
 const start="2026-11-13T19:00:00Z",before="2026-11-13T17:00:00Z",due="2026-11-13T18:05:00Z";
 const team=(id:number)=>({id,abbreviation:`T${id}`,full_name:`School ${id}`,name:`School ${id}`,college:null,conference_id:1});
@@ -13,9 +13,13 @@ const fixtures=games.map(g=>({id:g.id,external_id:g.id,game_date:start,slate_dat
   away_team:{external_id:g.visitor_team.id,display_name:g.visitor_team.full_name,abbreviation:g.visitor_team.abbreviation}}));
 const stored=new Map<string,CbbStoredMemberGame>(),tracked:Array<Record<string,unknown>>=[];let writes=0;
 let dbFailure=false,overflow=false;
+let censusIds:unknown=[1,2],censusFailure=false;
+const census={snapshot_key:"cbb::2026-11-13::current-only::live-copy",generated_at:"2026-11-13T17:30:00Z",gameIds:[1,2]};
 const db={from:(table:string)=>{
-  if(table==="lab_response_snapshots")return {select:()=>({in:async(_:string,keys:string[])=>({data:keys.filter(k=>stored.has(k)).map(k=>({snapshot_key:k,payload:stored.get(k)})),error:null}),
-    eq:(_:string,key:string)=>({maybeSingle:async()=>({data:stored.has(key)?{payload:stored.get(key)}:null,error:null})})}),upsert:async(r:{snapshot_key:string;payload:CbbStoredMemberGame})=>{writes++;stored.set(r.snapshot_key,structuredClone(r.payload));return{error:null};}};
+  if(table==="lab_response_snapshots")return {select:(fields:string)=>{
+    if(fields.includes("gameIds:")){const q={eq:()=>q,in:(_key:string,keys:string[])=>{assert.equal(keys.length,2);assert(keys.every(k=>/^cbb::2026-11-(12|13)::current-only::live-copy$/.test(k)));return q;},lte:()=>q,order:()=>q,limit:()=>q,maybeSingle:async()=>({data:censusFailure?null:{...census,gameIds:censusIds},error:censusFailure?{message:"census unavailable"}:null})};return q;}
+    return ({in:async(_:string,keys:string[])=>({data:keys.filter(k=>stored.has(k)).map(k=>({snapshot_key:k,payload:stored.get(k)})),error:null}),
+    eq:(_:string,key:string)=>({maybeSingle:async()=>({data:stored.has(key)?{payload:stored.get(key)}:null,error:null})})});},upsert:async(r:{snapshot_key:string;payload:CbbStoredMemberGame})=>{writes++;stored.set(r.snapshot_key,structuredClone(r.payload));return{error:null};}};
   const filters=new Map<string,unknown>();
   if(table==="games")return {select:()=>{
     const q={eq:(k:string,v:unknown)=>{filters.set(k,v);return q;},gt:()=>q,lte:()=>q,order:()=>q,
@@ -35,6 +39,20 @@ async function main(){
     const board=buildCbbProvisionalBoard(f,[q,{...q,market:"spread",line:-7.5,firstPrice:-105,secondPrice:-115},{...q,market:"total",line:146.5,firstPrice:-110,secondPrice:-110}]);
     await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:before},db);
   }
+  const check=(extra:Partial<Parameters<typeof isCbbFixtureWithdrawnByPublishedCensus>[0]>={})=>isCbbFixtureWithdrawnByPublishedCensus({census,id:3,startsAt:start,capturedAt:before,now:due,...extra});
+  assert.equal(check(),true);assert.equal(check({id:2}),false);assert.equal(check({id:NaN}),false);
+  for(const bad of [null,{...census,snapshot_key:"cbb::2026-02-31::current-only::live-copy"},{...census,gameIds:null},{...census,gameIds:[1,"2"]},{...census,gameIds:[1,1]},{...census,generated_at:"bad"},{...census,generated_at:"2026-11-14T00:00:00Z"},{...census,generated_at:"2026-11-13T16:00:00Z"}])assert.equal(check({census:bad}),false,"Missing, malformed, future or older census cannot suppress a prelock record");
+  assert.equal(check({startsAt:"2026-11-20T19:00:00Z"}),false,"A seven-day census cannot withdraw a fixture outside its window");
+  assert.equal(check({census:{...census,snapshot_key:"cbb::2026-11-12::current-only::live-copy"}}),true,"The previous ET day's seven-day publication covers midnight rollover");
+  const originals=structuredClone(stored);
+  censusIds=[2];
+  const removed=await sweepCbbPregameLocks({db,now:due});
+  assert.equal(removed.locked,1);assert.equal(removed.trackingInserted,3);assert(removed.problems.includes("1:withdrawn_by_newer_published_fixture_census"));
+  assert.equal(stored.get("cbb::member-game::1")!.snapshot.lockedAt,null);
+
+  // Reset only the synthetic harness to prove ordinary supported first locks.
+  stored.clear();for(const [key,value]of originals)stored.set(key,value);
+  tracked.length=0;censusIds=[1,2];
   const original=structuredClone(stored.get("cbb::member-game::2")!);
   fixtures[0].home_team.display_name="Changed institution";
   const report=await sweepCbbPregameLocks({db,now:due});
@@ -55,8 +73,17 @@ async function main(){
   fixtures[0].home_team.display_name=games[0].home_team.full_name;
   stored.get("cbb::member-game::1")!.snapshot.capturedAt="2026-11-13T18:01:00Z";
   const afterCutoff=await sweepCbbPregameLocks({db,now:due});assert.equal(afterCutoff.locked,0);assert(afterCutoff.problems.some(p=>p.includes("pre_cutoff")));
+  // With no newer trustworthy census, the existing publication still owns
+  // first-lock eligibility; a census outage cannot block supported picks.
+  stored.get("cbb::member-game::1")!.snapshot.capturedAt=before;
+  censusFailure=true;const withoutCensus=await sweepCbbPregameLocks({db,now:due});censusFailure=false;
+  assert.equal(withoutCensus.locked,1);assert(withoutCensus.problems.includes("fixture_census_unavailable_retained_prelock_policy"));
+  const lockedBytes=JSON.stringify([...stored]);censusIds=[];
+  const withdrawnAfterLock=await sweepCbbPregameLocks({db,now:due});
+  assert.equal(withdrawnAfterLock.locked,0);assert.equal(JSON.stringify([...stored]),lockedBytes,"A newer census never suppresses, replaces or rewrites an existing lock");
+  assert.deepEqual(cbbMemberGameForReader(stored.get("cbb::member-game::2")!,games[1]).markets,frozen.memberGame.markets,"Reader keeps exact frozen markets after withdrawal from the current census");
   dbFailure=true;await assert.rejects(sweepCbbPregameLocks({db,now:due}),/db unavailable/);dbFailure=false;
   overflow=true;await assert.rejects(sweepCbbPregameLocks({db,now:due}),/cap reached/);
-  console.log("PASS CBB lock-first sweep: exact frozen decisions, tracking parity, per-game isolation, immutable repeat, strict cutoff/kickoff clocks, DB failure and bounded cap; zero real IO");
+  console.log("PASS CBB lock-first sweep: exact frozen decisions, tracking parity, per-game isolation, immutable repeat, strict cutoff/kickoff clocks, indexed two-key published census, withdrawn IDs, unknown-source fallback, DB failure and bounded cap; zero real IO");
 }
 main().catch(e=>{console.error(e);process.exitCode=1});

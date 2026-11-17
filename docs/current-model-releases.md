@@ -1,3 +1,26 @@
+## November 16 prospective CBB withdrawn-fixture lock guard
+
+Lock sweep is `cbb_pregame_lock_sweep_2026_11_16_r2_published_fixture_census`;
+daily runtime is `cbb_daily_refresh_runtime_2026_11_16_r4_published_fixture_census`.
+Before a first lock, the existing leased sweep can identify a withdrawn fixture
+only from a newer complete published provider-ID census covering that Eastern
+slate. Stale canonical scheduled IDs cannot create new phantom tracking records
+after removal from the current schedule. A missing, failed, malformed, future,
+older or out-of-window census retains the original prelock policy and reports
+unavailable metadata when applicable. It cannot block an otherwise supported
+pick or reinterpret an existing lock. New replacement fixture IDs keep their
+own normal evaluation and lock paths.
+
+No forecast, probability, quote, threshold, stake, calibration, provider request,
+writer, timer or schema changes. Numerical CBB model/calibration R7, interpreted
+R14/decision R15/grade R14/publisher R58/adapter R40/tracking R42 remain exact.
+A narrow indexed two-key census read occurs only when unlocked due fixtures exist.
+Existing public locks and tracking originals always retain precedence; historical
+postponement/result corrections require separate owner approval. Validate valid
+due captures alongside withdrawn IDs, source failures/clocks, midnight coverage,
+writer/reader immutability, zero current-board grade impact, all required local/
+hosted gates, fresh-main integration safety and ordinary production proof.
+
 ## November 16 prospective quote receipts and tracking fixture clocks
 
 CBB interpreted decision R14, outer decision R15, grade R14, publisher R58,
