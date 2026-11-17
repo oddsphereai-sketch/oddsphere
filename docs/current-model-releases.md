@@ -1,3 +1,34 @@
+## November 17 current reference-player identity receipts R48
+
+Shared generation is `player_props_ai_2026_11_17_r48_reference_identity_receipts`;
+NBA collector is `nba_player_props_live_collector_2026_11_17_r9_reference_identity_receipts`,
+NBA live source is `player_props_ai_nba_source_2026_11_17_r4_reference_identity_receipts`,
+NBA writer is `nba_player_props_private_writer_2026_11_17_r29_reference_identity_receipts`,
+and shared-generation NFL writer is `nfl_player_props_writer_2026_11_17_r109_reference_identity_receipts`.
+Law R4, grade R6, selection R9, native MLB R44, numerical guards and all older accepted
+policies/locked payloads remain unchanged.
+
+Future ordinary NBA collection reuses successful current-player responses within the
+same invocation and extends the existing 100-ID `/v1/players` lookup to still-unresolved
+uniquely canonical reference-only actors. Failed IDs are not retried in that invocation.
+A current same-fixture primary identity needs no new lookup. An additional batch may be
+needed for previously unqueried reference IDs; the original deadline and provider
+controls still bound it. Names/teams cannot be inferred from price, last-played history
+or an ambiguous alias. Missing, incomplete, continued, conflicting, wrong-fixture and
+future identity remains refused, with the original reference rows and prices retained.
+
+The private profile receipt records the actual independent identity response, its
+completion clock and original reference name/team. It cannot refresh a quote, become
+a forecast prior, supply participation clearance or buy AI tokens. Identical real
+actor/context facts retain their original hashes. Exactly two ordinary review slots
+and phases remain; no paid test, manual source/model request, new endpoint, replay,
+budget change, schema migration, formula change or historical correction is added.
+
+See `docs/model-audits/2026-11-17-props-reference-identity-predeclaration.md`. Two new
+consecutive rounds of three fresh whole-product CLEAR reviewers on the unchanged
+candidate and all mandatory protected release gates are required; actual normal
+generation/member publication/retention/locks remain separate live proof.
+
 ## November 17 bounded correction context and current identity authority R47
 
 Shared generation is `player_props_ai_2026_11_17_r47_correction_draft_context`;

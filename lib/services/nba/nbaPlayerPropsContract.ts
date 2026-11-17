@@ -81,6 +81,20 @@ export type NbaPlayerPropPriceObservation = {
   receivedAt?: string;
   /** Current-player identity response completion, never a price confirmation. */
   playerIdentityAvailableAt?: string;
+  /** Future ordinary current-profile receipt. Identity only, never price freshness. */
+  playerIdentityEvidence?: Readonly<{
+    release: "nba_player_identity_2026_11_17_r1_current_profile";
+    provider: "balldontlie";
+    endpoint: "/v1/players";
+    providerPlayerId: string;
+    playerName: string;
+    teamId: string;
+    fixture: Readonly<{gameId: string; homeTeamId: string; awayTeamId: string; homeTeam: string; awayTeam: string; start: string}>;
+    availableAt: string;
+    originalPlayerName: string | null;
+    originalPlayerTeam: string | null;
+    status: "verified" | "conflicting_reference";
+  }>;
   isOpening: boolean;
   isLive: boolean;
   homeTeam: string | null;

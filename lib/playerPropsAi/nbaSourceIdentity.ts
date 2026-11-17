@@ -8,7 +8,7 @@ export const PROPS_AI_NBA_SOURCE_RELEASE='player_props_ai_nba_source_2026_11_09_
 // Permanent existing noncurrent-native context annotation: independent of future
 // live identity releases, so identical facts retain their original reader hash.
 export const PROPS_AI_NBA_NATIVE_CONTEXT_RELEASE='player_props_ai_nba_source_2026_11_10_r2_current_actor_authority' as const;
-export const PROPS_AI_NBA_CURRENT_SOURCE_RELEASE='player_props_ai_nba_source_2026_11_17_r3_current_quote_team_authority' as const;
+export const PROPS_AI_NBA_CURRENT_SOURCE_RELEASE='player_props_ai_nba_source_2026_11_17_r4_reference_identity_receipts' as const;
 type Native={team:string;opponent:string;evaluatedAt:string};
 type Offer={playerTeam:string|null;observedAt:string;fetchedAt:string;receivedAt?:string|null;isLive?:boolean;playerIdentityAvailableAt?:string};
 export type NbaCurrentActorAuthority={id:string;name:string;team:string;opponent:string;markets:string[]};

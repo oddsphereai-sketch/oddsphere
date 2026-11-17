@@ -1,6 +1,7 @@
 import {validatedNbaScheduleRecords,validatedNbaQuoteRecords,validatedNbaPlayerRecords,validatedNbaReferenceEvents,assertNbaReferenceResponse,assertNbaCurrentQuotePrices} from './nbaPlayerPropsCurrentIdentityContract';
 import {resolveNbaPlayerAliases} from './nbaPlayerPropsPlayerIdentity';
 import {quoteBook} from '../../playerPropsAi/executionQuotes';
+import {sameNbaSourceActorName} from '../../playerPropsAi/nbaSourceIdentity';
 import {canonicalNbaPropsTeam as canonicalTeam} from "./nbaPlayerPropsTeamIdentity";
 import {
   normalizeBallDontLieNbaPlayerProps,
@@ -15,7 +16,7 @@ import type {
 } from "./nbaPlayerPropsContract";
 
 export const NBA_PLAYER_PROPS_LIVE_COLLECTOR_RELEASE =
-  "nba_player_props_live_collector_2026_11_17_r8_current_identity_authority" as const;
+  "nba_player_props_live_collector_2026_11_17_r9_reference_identity_receipts" as const;
 const BDL_BASE = "https://api.balldontlie.io";
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_SPORT = "basketball_nba";
@@ -89,6 +90,10 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
   const rawPlayerIdentityEntries:(readonly[string,string])[]=[];
   let bdlRequests = gameEnvelopes.length;
   const findings: string[] = [];
+  // Invocation-local only. An identity receipt cannot refresh a quote or survive
+  // into another collection as new roster authority.
+  const currentProfiles = new Map<string, {player: Record<string, unknown>; availableAt: string}>();
+  const attemptedIdentityIds=new Set<string>();
   for (const game of games) {
     const current = await requestJson({
       url: `${BDL_BASE}/v2/odds/player_props?game_id=${encodeURIComponent(game.providerGameId)}`,
@@ -152,6 +157,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
       : []))];
   for (let offset = 0; offset < unresolvedPlayerIds.length; offset += 100) {
     const ids = unresolvedPlayerIds.slice(offset, offset + 100);
+    for(const id of ids)attemptedIdentityIds.add(id);
     const url = new URL(`${BDL_BASE}/v1/players`);
     url.searchParams.set("per_page", "100");
     for (const id of ids) url.searchParams.append("player_ids[]", id);
@@ -164,7 +170,9 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
       });
       assertNoDeclaredContinuation(response.body,"NBA current player identity");
       const identities=validatedNbaPlayerRecords(response.body,ids);
-      observations = applyResolvedPlayerIdentities(observations, identities,new Date().toISOString());
+      const availableAt=new Date().toISOString();
+      for(const player of identities)currentProfiles.set(String(player.id),{player,availableAt});
+      observations = applyResolvedPlayerIdentities(observations, identities,availableAt);
     } catch {
       findings.push(`balldontlie_player_identity_lookup_failed:${ids.length}`);
     }
@@ -289,6 +297,34 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
     }catch{findings.push("the_odds_api_player_props_capture_failed");}
   } else if (gapGames.length > 0) findings.push("the_odds_api_gap_fetch_skipped_missing_key");
 
+  // Reference-only actors are discovered after the primary lookup. Reuse that
+  // invocation's actual responses, then complete only missing current identity
+  // through the existing endpoint and 100-ID batch boundary. Never use a
+  // last-played team, omit an unresolved actor or turn this into a price clock.
+  const primaryIdentities=new Set(observations.filter(q=>q.provider==='balldontlie'&&!q.isOpening&&!q.isLive
+    &&q.canonicalGameId&&q.canonicalPlayerId&&q.playerName&&q.playerTeam&&playerTeamMatchesGame(q,teamIdsByGame))
+    .map(q=>JSON.stringify([q.canonicalGameId,q.canonicalPlayerId])));
+  const referenceIds=[...new Set(observations.flatMap(row=>{
+    if(row.provider==='balldontlie'||row.isOpening||row.isLive||!row.canonicalPlayerId)return[];
+    const id=row.canonicalPlayerId.match(/^nba-bdl-player:(\d+)$/)?.[1];
+    if(!id||row.playerTeam&&referenceTeamMatchesGame(row,teamIdsByGame,games))return[];
+    return primaryIdentities.has(JSON.stringify([row.canonicalGameId,row.canonicalPlayerId]))?[]:[id];
+  }))];
+  const missingReferenceIds=referenceIds.filter(id=>!currentProfiles.has(id)&&!attemptedIdentityIds.has(id));
+  for(let offset=0;offset<missingReferenceIds.length;offset+=100){
+    const ids=missingReferenceIds.slice(offset,offset+100),url=new URL(`${BDL_BASE}/v1/players`);
+    for(const id of ids)attemptedIdentityIds.add(id);
+    url.searchParams.set('per_page','100');for(const id of ids)url.searchParams.append('player_ids[]',id);
+    bdlRequests+=1;
+    try{
+      const response=await requestJson({url:url.toString(),headers:{Authorization:args.ballDontLieApiKey,Accept:'application/json'},fetchImpl});
+      assertNoDeclaredContinuation(response.body,'NBA reference current player identity');
+      const players=validatedNbaPlayerRecords(response.body,ids),availableAt=new Date().toISOString();
+      for(const player of players)currentProfiles.set(String(player.id),{player,availableAt});
+    }catch{findings.push(`balldontlie_reference_identity_lookup_failed:${ids.length}`);}
+  }
+  observations=applyResolvedReferenceIdentities(observations,currentProfiles,teamIdsByGame,games);
+
   return {
     release: NBA_PLAYER_PROPS_LIVE_COLLECTOR_RELEASE,
     games,
@@ -299,6 +335,37 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
     theOddsApiCreditsRemaining: creditsRemaining,
     findings,
   };
+}
+
+function referenceTeamMatchesGame(row:NbaPlayerPropPriceObservation,teams:NbaPlayerPropsLiveCollection['teamIdsByGame'],games:readonly NbaPlayerPropGameIdentity[]){
+  if(playerTeamMatchesGame(row,teams))return true;
+  const game=games.find(g=>g.canonicalGameId===row.canonicalGameId);
+  return Boolean(game&&row.playerTeam&&[canonicalTeam(game.homeTeam),canonicalTeam(game.awayTeam)].includes(canonicalTeam(row.playerTeam)));
+}
+
+export function applyResolvedReferenceIdentities(
+  rows:readonly NbaPlayerPropPriceObservation[],
+  profiles:ReadonlyMap<string,{player:Record<string,unknown>;availableAt:string}>,
+  teams:NbaPlayerPropsLiveCollection['teamIdsByGame'],
+  games:readonly NbaPlayerPropGameIdentity[],
+):NbaPlayerPropPriceObservation[]{
+  const teamNames=new Map<string,string>();for(const game of games){const ids=teams[game.canonicalGameId];if(ids){teamNames.set(String(ids.home),canonicalTeam(game.homeTeam));teamNames.set(String(ids.away),canonicalTeam(game.awayTeam));}}
+  return rows.map(row=>{
+    if(row.provider==='balldontlie'||row.isOpening||row.isLive)return row;
+    const id=row.canonicalPlayerId?.match(/^nba-bdl-player:(\d+)$/)?.[1],capture=id?profiles.get(id):undefined;
+    if(!id||!capture)return row;
+    const player=capture.player,teamId=scalarId(object(player.team)?.id)??scalarId(player.team_id),name=[text(player.first_name),text(player.last_name)].filter(Boolean).join(' ');
+    if(!teamId||!name)return row;
+    const game=games.find(game=>game.canonicalGameId===row.canonicalGameId),fixtureIds=game?teams[game.canonicalGameId]:undefined;
+    if(!game||!fixtureIds)return row;
+    const expectedTeam=teamNames.get(teamId)??canonicalTeam(teamId),declaredTeam=row.playerTeam?(teamNames.get(row.playerTeam)??canonicalTeam(row.playerTeam)):null;
+    const conflict=!row.playerName||!sameNbaSourceActorName(row.playerName,name)||(declaredTeam!==null&&declaredTeam!==expectedTeam)
+      ||![String(fixtureIds.home),String(fixtureIds.away)].includes(teamId);
+    return{...row,playerName:conflict?row.playerName:name,playerTeam:conflict?'unknown':row.playerTeam??expectedTeam,
+      playerIdentityAvailableAt:capture.availableAt,playerIdentityEvidence:{release:'nba_player_identity_2026_11_17_r1_current_profile',provider:'balldontlie',endpoint:'/v1/players',providerPlayerId:id,playerName:name,teamId,
+        fixture:{gameId:game.canonicalGameId,homeTeamId:String(fixtureIds.home),awayTeamId:String(fixtureIds.away),homeTeam:game.homeTeam,awayTeam:game.awayTeam,start:game.scheduledStart},
+        availableAt:capture.availableAt,originalPlayerName:row.playerName,originalPlayerTeam:row.playerTeam,status:conflict?'conflicting_reference':'verified'}};
+  });
 }
 
 function owlsEventMatches(event: Record<string, unknown>, game: NbaPlayerPropGameIdentity): boolean {
