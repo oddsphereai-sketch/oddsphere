@@ -53,14 +53,14 @@ export function validatedNbaScheduleRecords(bodies:readonly unknown[]):Row[]{
  return[...seen.values()].map(entry=>entry.row);
 }
 export function validatedNbaQuoteRecords(body:unknown,requestedGame:string,opening=false):{rows:Row[];aliases:readonly (readonly [string,string])[]}{
- const expected=identifier(requestedGame,'requested game',true),rows=records(body),aliases:(readonly[string,string])[]=[],seen=new Map<string,(string|null)[]>(),prices=new Map<string,string>();
+ const expected=identifier(requestedGame,'requested game',true),rows=records(body),aliases:(readonly[string,string])[]=[],seen=new Map<string,(string|null)[]>();
  for(const row of rows){
   const game=identifier(row.game_id,'quote game_id',true);if(game!==expected)fail('quote requested game');
   const player=optionalObject(row.player,'player'),id=identifier(row.player_id,'quote player_id',true)!,nested=identifier(player?.id,'player.id');agree([id,nested],'simultaneous player IDs');
   const team=teams(player??{},row.team_id,!opening),playerName=player?name(player):null;
   if(playerName)aliases.push([playerName,`nba-bdl-player:${id}`]);
   const key=observationId(row.id),identity=[game,id,...(!opening?[team,nameKey(playerName)]:[])];
-  if(!opening){const market=optionalObject(row.market,'quote market'),book=optionalText(row.vendor,'quote book'),kind=optionalText(row.prop_type,'quote market name'),clock=optionalText(row.updated_at,'quote clock');census(prices,JSON.stringify([game,id,book===null?null:quoteBook(book),kind,row.line_value,clock===null?null:Date.parse(clock)]),[market?.type,market?.over_odds,market?.under_odds,market?.odds],'same-clock quote price conflict');}
+  if(!opening){optionalObject(row.market,'quote market');optionalText(row.vendor,'quote book');optionalText(row.prop_type,'quote market name');optionalText(row.updated_at,'quote clock');}
   const previous=seen.get(key);if(previous){for(let i=0;i<identity.length;i++)if(previous[i]!==null&&identity[i]!==null&&previous[i]!==identity[i])fail('duplicate observation identity');seen.set(key,identity.map((value,i)=>value??previous[i]));}else seen.set(key,identity);
  }
  return{rows,aliases};
@@ -82,7 +82,7 @@ function referenceHeader(event:Row,kind:ReferenceKind){
 function census(seen:Map<string,string>,key:string,value:unknown,field:string){const signature=JSON.stringify(value);if(seen.has(key)&&seen.get(key)!==signature)fail(field);seen.set(key,signature);}
 export function validatedNbaReferenceEvents(value:unknown,kind:ReferenceKind):Row[]{
  const events=array(kind==='owls'?object(value,'Owls response').data:value,'reference events').map(value=>object(value,'reference event'));
- const headers=new Map<string,string>(),props=new Map<string,string>(),prices=new Map<string,string>();
+ const headers=new Map<string,string>(),props=new Map<string,string>();
  for(const event of events){
   const header=referenceHeader(event,kind);census(headers,header.id,header,'duplicate reference event');
   for(const bookValue of array(event[kind==='owls'?'books':'bookmakers'],'reference books',true)){
@@ -94,13 +94,11 @@ export function validatedNbaReferenceEvents(value:unknown,kind:ReferenceKind):Ro
     // IDs live inside provider/event/book namespaces; preserving another book
     // never permits the same book's ID to select a different actor by order.
     census(props,JSON.stringify([header.id,quoteBook(bookName),id]),[nameKey(player),team?canonicalNbaPropsTeam(team):null],'duplicate reference prop identity');
-    census(prices,JSON.stringify([header.id,quoteBook(bookName),nameKey(player),category,prop.line,Date.parse(String(prop.lastUpdate??book.lastUpdate??''))]),[prop.overPrice,prop.underPrice],'same-clock reference price conflict');
    }
    else for(const marketValue of array(book.markets,'reference markets',true)){
     const market=object(marketValue,'reference market');optionalText(market.key,'reference market key');
     for(const outcomeValue of array(market.outcomes,'reference outcomes',true)){
-     const outcome=object(outcomeValue,'reference outcome');const player=optionalText(outcome.description,'reference player name'),side=optionalText(outcome.name,'reference side');
-     census(prices,JSON.stringify([header.id,quoteBook(bookName),market.key,nameKey(player),side?.toLowerCase(),outcome.point,market.last_update??book.last_update]),outcome.price,'same-clock reference price conflict');
+     const outcome=object(outcomeValue,'reference outcome');optionalText(outcome.description,'reference player name');optionalText(outcome.name,'reference side');
     }
    }
   }

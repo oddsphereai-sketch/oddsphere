@@ -155,3 +155,14 @@ Equal-economic aliases remain valid; conflicting aliases reject atomically.
 Schedule duplicates retain an actually supplied precise record over a calendar-
 only record in either order; two precise clocks still must agree, and original
 calendar-only fallback remains when no precise record was supplied.
+
+
+Price consistency has one normalized economic authority. Each current BDL record,
+Owls prop and Odds outcome is normalized separately before any cross-record
+normalizer deduplication; the exact execution-contract census then sees every
+quote. Raw shape, fixture and actor-ownership validation remains before mapping,
+but does not approximate price contracts. Distinct ordinary and milestone offers
+and equivalent numeric representations survive; contradictory same-contract
+prices at the same instant reject the whole lane. Odds aliases are built once
+per response, with bounded streaming outcomes and unchanged atomic optional-lane
+commit. Original provider normalizers and stored generations remain exact.

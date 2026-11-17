@@ -173,6 +173,17 @@ No additional provider request, model fit, calibration, paid inference, writer
 or schedule is introduced. Activation requires the protected release checks and
 ordinary production writer/reader verification.
 
+
+Price consistency has one normalized economic authority. Each current BDL record,
+Owls prop and Odds outcome is normalized separately before any cross-record
+normalizer deduplication; the exact execution-contract census then sees every
+quote. Raw shape, fixture and actor-ownership validation remains before mapping,
+but does not approximate price contracts. Distinct ordinary and milestone offers
+and equivalent numeric representations survive; contradictory same-contract
+prices at the same instant reject the whole lane. Odds aliases are built once
+per response, with bounded streaming outcomes and unchanged atomic optional-lane
+commit. Original provider normalizers and stored generations remain exact.
+
 ## November 16 exact event support and cross-sport actor retention R46
 
 Shared generation is `player_props_ai_2026_11_16_r46_event_support_and_actor_retention`;

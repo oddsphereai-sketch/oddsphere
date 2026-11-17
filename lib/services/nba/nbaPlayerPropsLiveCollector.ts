@@ -266,11 +266,21 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
       creditsUsed += headerInteger(response.headers, "x-requests-last") ?? ODDS_MARKETS.length;
       creditsRemaining = headerInteger(response.headers, "x-requests-remaining") ?? creditsRemaining;
       const exactResponse=assertNbaReferenceResponse(response.body,eventId,game);
-      oddsRows.push(...normalizeTheOddsApiNbaPlayerProps({
-        events: [exactResponse], fetchedAt,
-        canonicalGames: { [eventId]: game.canonicalGameId },
-        canonicalPlayers: canonicalNames(observations,args.canonicalPlayersByName,capturedPlayerIdentityEntries),
-      }).rows.map(row => ({ ...row, receivedAt: oddsReceivedAt })));
+      const canonicalGames={ [eventId]: game.canonicalGameId };
+      const canonicalPlayers=canonicalNames(observations,args.canonicalPlayersByName,capturedPlayerIdentityEntries);
+      // Preserve every outcome until the shared economic-contract census. The
+      // original full-response normalizer dedupes before callers can see a
+      // conflicting alias; one-outcome granules cannot erase another price.
+      for(const bookValue of array(exactResponse.bookmakers)){
+        const book=object(bookValue)!;
+        for(const marketValue of array(book.markets)){
+          const market=object(marketValue)!;
+          for(const outcome of array(market.outcomes))oddsRows.push(...normalizeTheOddsApiNbaPlayerProps({
+            events:[{...exactResponse,bookmakers:[{...book,markets:[{...market,outcomes:[outcome]}]}]}],
+            fetchedAt,canonicalGames,canonicalPlayers,
+          }).rows.map(row=>({...row,receivedAt:oddsReceivedAt})));
+        }
+      }
     }
     assertNbaCurrentQuotePrices(oddsRows);observations.push(...oddsRows);
     }catch{findings.push("the_odds_api_player_props_capture_failed");}
