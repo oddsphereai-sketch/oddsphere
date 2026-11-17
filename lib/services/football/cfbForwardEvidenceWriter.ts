@@ -193,7 +193,7 @@ import { fetchCfbOwlsProvider } from "./cfbOwlsProvider";
 import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_11_08_r155_owner_approved_tracking_corrections" as const;
+  "cfb_forward_evidence_writer_2026_11_16_r156_current_fixture_recovery" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -2204,10 +2204,21 @@ export function cfbTrackingCandidatesForRun(
       isCfbPublishedT60AccuracyLockPayload(payload) ||
       isCfbCoordinatorIntegrationPreviousT60AccuracyLockPayload(payload)
     ).sort(latestPayloadFirst)[0];
+    // An opening packet may retain an expired placeholder kickoff while a
+    // newer fixture is still pregame. Freezing it early would block real T-60
+    // prices. Existing official/public T-60 locks retain their authority.
+    const known = rows.filter((payload) => Number.isFinite(Date.parse(payload.capturedAt)) && Date.parse(payload.capturedAt) <= nowMs)
+      .sort(latestPayloadFirst);
+    const fixture = known[0];
+    const sameFixture = (payload: CfbForwardEvidencePayload) => Boolean(fixture) &&
+      Number.isFinite(Date.parse(fixture.game.scheduledStart)) &&
+      Date.parse(payload.game.scheduledStart) === Date.parse(fixture.game.scheduledStart) &&
+      payload.game.home.id === fixture.game.home.id && payload.game.away.id === fixture.game.away.id;
+    const unambiguousFixture = fixture && known.filter((payload) => Date.parse(payload.capturedAt) === Date.parse(fixture.capturedAt)).every(sameFixture);
     const recovery = rows.filter((payload) => {
       const gameStart = Date.parse(payload.game.scheduledStart);
       const capturedAt = Date.parse(payload.capturedAt);
-      return isEligiblePublishedPregameRecoveryPayload(payload) &&
+      return unambiguousFixture && sameFixture(payload) && isEligiblePublishedPregameRecoveryPayload(payload) &&
         Number.isFinite(gameStart) &&
         Number.isFinite(capturedAt) &&
         gameStart <= nowMs &&

@@ -5,10 +5,33 @@ import type {CbbContextualFeatureInput} from "./contextualForecastFeatures";
 import type {CbbContextualMarketInterpretation} from "./contextualMarketInterpretation";
 import type {createCbbContextualScoreLaw} from "./contextualScoreLawResearch";
 import type {CbbQuote} from "./types";
+import {chooseCbbSupportedTargetBook} from "./provisionalBoard";
 
 export const CBB_SAME_CONTRACT_EXECUTION_RELEASE="cbb_same_contract_execution_2026_11_16_r1" as const;
 const BOOKS=["draftkings","fanduel","betmgm","caesars"] as const;
 type Quote=CbbQuote&{orientationVerified?:boolean};
+export const CBB_VERIFIED_EXECUTION_RECOVERY_RELEASE="cbb_verified_execution_2026_11_16_r2_owned_current_receipts" as const;
+
+/** Keep valid original contracts. One invalid preferred book cannot suppress
+ * another independently verified current pair. Existing domain policy stays
+ * with the caller; this runs only inside the incumbent's one-law runtime. */
+export function recoverCbbVerifiedExecutionTargets(args:{input:CbbContextualFeatureInput;
+ interpretation:CbbContextualMarketInterpretation;targets:readonly Quote[];candidates:readonly Quote[]}){
+ const current=new Map<string,Quote>();
+ for(const q of [...args.candidates].sort((a,b)=>Date.parse(b.fetchedAt)-Date.parse(a.fetchedAt)||JSON.stringify(a).localeCompare(JSON.stringify(b)))){
+  if(cbbContextualExecutionProof(q,args.input,args.interpretation).problem)continue;
+  const key=cbbPathBookFamily(q.sportsbook)+":"+q.market;if(!current.has(key))current.set(key,q);
+ }
+ const qualified=[...current.values()],book=chooseCbbSupportedTargetBook(qualified),changes:{market:CbbQuote["market"];reason:string;oldBook:string|null;newBook:string;oldLine:number|null;newLine:number|null}[]=[];
+ const targets=(["moneyline","spread","total"]as const).flatMap(market=>{
+  const old=args.targets.find(q=>q.market===market),problem=old?cbbContextualExecutionProof(old,args.input,args.interpretation).problem:"missing_execution_pair";
+  if(old&&!problem)return[old];
+  const preferred=qualified.some(q=>q.market===market&&q.sportsbook===book)?book:chooseCbbSupportedTargetBook(qualified.filter(q=>q.market===market)),q=qualified.find(q=>q.market===market&&q.sportsbook===preferred);
+  if(!q)return old?[old]:[];
+  changes.push({market,reason:problem!,oldBook:old?.sportsbook??null,newBook:q.sportsbook,oldLine:old?.line??null,newLine:q.line});return[q];
+ });
+ return{release:CBB_VERIFIED_EXECUTION_RECOVERY_RELEASE,targets,changes};
+}
 
 export function selectCbbSameContractExecution(args:{input:CbbContextualFeatureInput;
  interpretation:CbbContextualMarketInterpretation;law:ReturnType<typeof createCbbContextualScoreLaw>;
