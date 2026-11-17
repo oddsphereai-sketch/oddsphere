@@ -91,6 +91,19 @@ export function validateScenarioOpportunities(sport:GamePacket["sport"],law:Acce
 /** Exact supplied event requirements shared by admission and prospective navigation.
  * It reads only the already supplied prompt quotes, never executionQuotes. */
 export type SourceForecastEventConstraint={market:string;line:number;contract:'two_way'|'milestone';inclusive:boolean;origin:'independent_prior'|'priced_event';sourceId:string;rule:'both_sides_positive'|'priced_complement_or_push';oneWayYes:boolean};
+type JointConstraint={first:string;second:string;markets:string[]};
+function jointConstraints(player:Player,history:ReturnType<typeof readerLogWindows>):JointConstraint[]{
+ const qualified=qualifiedForecastMarkets(player);
+ return history.observedPairOrderings.flatMap(pair=>{
+  const markets=qualified.filter(m=>COMBOS[m]?.includes(pair.first)&&COMBOS[m]?.includes(pair.second));
+  return markets.length?[{first:pair.first,second:pair.second,markets}]:[];
+ });
+}
+/** Exact existing source-pair predicates for both admission and request navigation. */
+export function sourceForecastJointConstraints(packet:GamePacket,player:Player):JointConstraint[]{
+ const logs=player.evidence.filter(e=>e.kind==='recent_games'&&e.value&&typeof e.value==='object'&&!Array.isArray(e.value)&&e.value.box);
+ return jointConstraints(player,readerLogWindows(packet.sport,logs,packet.cutoff));
+}
 export function sourceForecastEventConstraints(packet:GamePacket,player:Player,lawRelease:string):SourceForecastEventConstraint[]{
  const constraints:SourceForecastEventConstraint[]=[],qualified=qualifiedForecastMarkets(player);
  for(const prior of independentPriorEvents(player)){
@@ -144,9 +157,8 @@ export function sourceForecastIssues(packet:GamePacket,player:Player,law:Accepte
       &&priorMeans.every(n=>n>=0))issues.push({code:"nonpositive_yardage_contradicts_source",markets,example:`${primitive}: source mean=${historical.mean}, no positive forecast outcome`,
         detail:`${player.id} ${primitive} has no positive outcome despite positive supplied production. Verify canonical net-yard units; do not turn missing data into zero/negative certainty.`});
   }
-  for(const pair of history.observedPairOrderings){
-    const markets=qualified.filter(m=>COMBOS[m]?.includes(pair.first)&&COMBOS[m]?.includes(pair.second));
-    if(!markets.length)continue;
+  for(const pair of jointConstraints(player,history)){
+    const markets=pair.markets;
     let concordant=false,discordant=false;
     for(let i=0;i<law.weights.length;i++)for(let j=i+1;j<law.weights.length;j++){
       if(!law.weights[i]||!law.weights[j])continue;

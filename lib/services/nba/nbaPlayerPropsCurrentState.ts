@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {NBA_PLAYER_PROPS_CURRENT_STATE_RELEASE} from './nbaPlayerPropsCurrentStateContract';
+export {NBA_PLAYER_PROPS_CURRENT_STATE_RELEASE} from './nbaPlayerPropsCurrentStateContract';
 import { fetchNbaBdlHistoricalRows } from "./balldontlieNbaHistorical";
 import {
   decodeNbaPlayerPropsPrivatePayload,
@@ -13,8 +15,6 @@ import {
   type NbaHistoricalPlayerBox,
 } from "./nbaPointInTimeFeatures";
 
-export const NBA_PLAYER_PROPS_CURRENT_STATE_RELEASE =
-  "nba_player_props_current_state_2026_10_21_r2_regular_and_ist" as const;
 const RETENTION_DAYS = 550;
 
 export type NbaPlayerPropsPlayerIdentity = Readonly<{

@@ -10,6 +10,7 @@ import {PROPS_AI_RELEASE,PROPS_AI_PRIMARY_MODEL,propsReviewHasMemberExecutionCon
 import {sourceForecastIssues,sourceMeanAdmissionSupport} from '../lib/playerPropsAi/forecastSanity';
 import {numericSourceNavigation} from '../lib/playerPropsAi/numericSourceNavigation';
 import {sourceAwareDiagnosticCorrection} from '../lib/playerPropsAi/sourceAwareCorrectionFeedback';
+import {reviewCorrectionFeedback} from '../lib/playerPropsAi/reviewCorrectionFeedback';
 import {completeDiagnosticCorrection} from '../lib/playerPropsAi/completeCorrectionFeedback';
 import {independentPriorEvents} from '../lib/playerPropsAi/priorEvents';
 import {jointReviewRequest,parseJointReview,parseJointPlayerReview} from '../lib/playerPropsAi/request';
@@ -71,7 +72,10 @@ const mixedOutcomes=Object.fromEntries(primitives('mlb',mixedPlayer).map(stat=>[
 const mixedIssues=sourceForecastIssues(mixed,mixedPlayer,mixedLaw);assert.equal(mixedIssues.length,1);assert.deepEqual(mixedIssues[0].markets,['batter_singles']);
 const mixedAliases=new Map([...evidenceAliases(mixed)].map(([a,id])=>[id,a]));const mixedDraft={wireRelease:PROPS_AI_WIRE_RELEASE,players:{p0:verifiedReaderFixture(mixed,'p0',{priorRead:Object.fromEntries(independentPriorEvents(mixedPlayer).map(e=>[mixedAliases.get(e.sourceId)!,e.preferredOutcome])),evidenceIds:[mixedAliases.get(mixedPlayer.evidence[0].id)!],gaps:[],confidence:[0,1],exceptions:['forecast_declined',null],law:encodeCanonicalScenarioLaw('mlb',mixedPlayer,{weights:v(1),outcomes:mixedOutcomes})})}};
 assert.deepEqual(parseJointReview(mixed,mixedDraft).players[0].sourceDeclinedMarkets,['batter_singles']);assert.deepEqual(JSON.parse(jointReviewRequest(mixed,PROPS_AI_PRIMARY_MODEL,7000).input).numericSourceNavigation.players[0].canonicalMeanConstraints.find((c:{statistic:string})=>c.statistic==='batter_singles').affectedMarketIndices,[0]);
-const expectedCorrectionText=next.text;
+const dispatchedCorrection=reviewCorrectionFeedback(p,bad);assert.equal(dispatchedCorrection.status,'ready');
+if(dispatchedCorrection.status!=='ready')throw Error('Expected complete dispatched correction');
+assert(dispatchedCorrection.text.startsWith(next.text),'The existing supported-scope diagnostic must remain complete');
+const expectedCorrectionText=dispatchedCorrection.text;
 async function main(){let phase=0;const requests:ReturnType<typeof jointReviewRequest>[]=[],receipts:Record<string,unknown>[]=[];
  const job={job_key:'synthetic-source-continuation',sport:'nfl',game_id:p.gameId,game_day:'2030-06-01',stage:'final',scheduled_start:p.start,lock_at:p.lock,state:'pending',model:PROPS_AI_PRIMARY_MODEL,requested_tier:'default'} as PropsAiJob;
  const store={claim:async()=>({claimed:true,token:'synthetic',job}),send:async(_k:string,_t:string,n:number)=>{phase=n;return{id:`synthetic-${n}`,model:PROPS_AI_PRIMARY_MODEL,requested_tier:'default',reserved_micro:100000};},receipt:async(_id:string,_t:string,actual:number|null,_r:string|null,usage:Record<string,unknown>)=>{assert(actual!==null&&actual>0);receipts.push(usage);},fallback:async()=>true,finish:async(_k:string,_t:string,result:unknown,error:unknown)=>{assert(result);assert.equal(error,null);return{...job,state:'completed',result};}} as unknown as PropsAiReviewStore;

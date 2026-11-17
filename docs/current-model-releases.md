@@ -1,3 +1,39 @@
+## November 17 bounded correction context and captured identity R47
+
+Shared generation is `player_props_ai_2026_11_17_r47_correction_draft_context`;
+NBA writer is `nba_player_props_private_writer_2026_11_17_r28_correction_draft_context`
+and NFL writer is `nfl_player_props_writer_2026_11_17_r108_correction_draft_context`.
+NBA live source is `player_props_ai_nba_source_2026_11_17_r3_captured_identity_without_head`.
+
+The existing second request can include a complete numeric reference for every
+failed actor from its known original primary draft. It is explicitly UNACCEPTED,
+not evidence or an approved forecast. Both raw and JSON-escaped feedback must
+fit the unchanged 1,984 ASCII-byte allowance. Complete diagnostics take priority;
+if every affected reference cannot fit, no partial vector or finding is dropped.
+No returned number is automatically retained, spliced, clamped or excepted. All
+original factual, physical, source-mean, event-tail and dependence guards apply.
+The same canonical joint-pair predicates now drive admission and navigation.
+
+NBA preparation can retain a current offered actor's separately captured
+current-season identity even when its offered market has no priced native head.
+Only an exact offered ID/name, matching latest played-game/box team, original
+cache availability and matchup association qualify. It does not assert current
+roster confirmation, participation or health. Supplied conflicts, unknown teams,
+future/unavailable/prior-season/ambiguous records remain held. The original
+association is archived; no missing market-specific model head is manufactured.
+The live path reuses the collector's existing exact full-team-name catalog;
+legacy cached adapters keep their original alias semantics.
+
+R46 and earlier accepted reviews and all stored locks remain exact under their
+original contracts. Law R3/grade R5/selection R8, native MLB R44, models, output
+caps, exactly two phases/slots, provider calls, shared sport lease, schema and
+$50/$60 limits remain unchanged. Synthetic controls preserve supported Over and
+Under recovery and quantify newly eligible identity coverage without a blanket
+demotion. Two new consecutive fresh triple whole-product CLEAR rounds and all
+mandatory local/hosted/protected gates are required. Deployment and offline
+checks remain separate from ordinary live generation/publication proof. See
+`docs/model-audits/2026-11-17-props-correction-context-predeclaration.md`.
+
 ## November 16 prospective CBB withdrawn-fixture lock guard
 
 Lock sweep is `cbb_pregame_lock_sweep_2026_11_16_r2_published_fixture_census`;
