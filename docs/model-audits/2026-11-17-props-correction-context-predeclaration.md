@@ -148,3 +148,10 @@ AI market reports as well as execution. Calendar-only dates remain calendar
 values; two supplied precise datetime values must agree. A legacy precise date
 without datetime remains supported. Documented NBA date/datetime shapes are at
 https://nba.balldontlie.io/ (Games example/attributes); no provider API was called.
+
+Capture and execution share the authoritative `quoteBook` and
+`executionContractKey` namespace, including punctuation-equivalent book names.
+Equal-economic aliases remain valid; conflicting aliases reject atomically.
+Schedule duplicates retain an actually supplied precise record over a calendar-
+only record in either order; two precise clocks still must agree, and original
+calendar-only fallback remains when no precise record was supplied.

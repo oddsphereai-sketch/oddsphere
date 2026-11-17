@@ -6,7 +6,7 @@ export const quoteContract=(q:Pick<Quote,"side"|"offerContract">)=>q.offerContra
 /** Contract purpose only, not quote freshness, source qualification or full row eligibility.
  * NBA members execute ordinary Over/Under; Yes/milestones remain source references. */
 export const isSupportedMemberExecutionContract=(sport:GamePacket["sport"],q:Pick<Quote,"side"|"offerContract">)=>sport!=="nba"||quoteContract(q)==="two_way";
-export const executionContractKey=(q:Quote)=>JSON.stringify([q.playerId,q.market,q.provider,quoteBook(q.book),q.line,quoteContract(q)]);
+export const executionContractKey=(q:Pick<Quote,"playerId"|"market"|"provider"|"book"|"line"|"side"|"offerContract">)=>JSON.stringify([q.playerId,q.market,q.provider,quoteBook(q.book),q.line,quoteContract(q)]);
 /** A retained change is evidence, not a second executable offer. Keep simultaneous lines. */
 export function latestExecutionQuotes(rows:readonly Quote[],now:string,maxAgeMs=15*60000):Quote[]{
   const at=Date.parse(now),latest=new Map<string,Quote>(),ambiguous=new Set<string>();
