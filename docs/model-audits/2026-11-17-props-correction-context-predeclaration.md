@@ -96,3 +96,10 @@ used to guess the person. ID-rich source rows remain intact; unresolved retail
 identity holds before paid review and reference-only missing identity remains an
 explicit limitation. Positive unique-ID controls restore both provider lanes
 without any extra source requests, phases, budgets or forecast/grade changes.
+
+Round88 additionally proved a producer loss before that join: per-ID current
+display precedence erased a prior label owner. Alias ownership now comes from
+both raw captured prior/current player arrays before display precedence. The
+actual writer statements feed collector-to-packet regressions for renamed
+collisions in both orders and both provider lanes, plus unique-name recovery.
+No source request, name inference or closed-job replay is added.

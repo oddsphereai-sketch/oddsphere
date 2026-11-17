@@ -155,7 +155,8 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   if(!priorState)throw new Error("NBA props prior state missing after readiness check");
 
   const players = new Map([...priorState.players, ...(currentState?.players ?? [])].map((row) => [row.playerId, row]));
-  const canonicalPlayerIdentityEntries=[...players.values()].flatMap(player=>player.playerName?[[player.playerName,`nba-bdl-player:${player.playerId}`] as const]:[]);
+  // Keep every captured name owner before per-ID display-label precedence.
+  const canonicalPlayerIdentityEntries=[...priorState.players,...(currentState?.players??[])].flatMap(player=>player.playerName?[[player.playerName,`nba-bdl-player:${player.playerId}`] as const]:[]);
   const canonicalPlayersByName=resolveNbaPlayerAliases(canonicalPlayerIdentityEntries);
   const live = await collectNbaPlayerPropsLiveMarket({
     slateDate: args.slateDate,
