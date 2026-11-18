@@ -1,3 +1,4 @@
+import {eventTailNavigation} from './eventTailNavigation';
 import {PROPS_AI_WIRE_RELEASE} from './scenarioCoordinates';
 /** Prospective NBA navigation of the exact same source. No law/grade repair. */
 import {COMBOS, type GamePacket, type Json} from './evidenceContract';
@@ -116,7 +117,8 @@ function issueCategory(issue:ForecastSanityIssue,means:Partial<Record<Statistic,
   if(issue.code==='unsupported_zero_probability_tail'||issue.code==='unsupported_priced_event_certainty'){
     const kind=issue.code==='unsupported_zero_probability_tail'?'prior':'priced';
     const events=issue.events;if(!events?.length||events.some(e=>!Object.hasOwn(MARKET_NAMES,e.market)||!Number.isFinite(e.line)||!['two_way','milestone'].includes(e.contract)))return null;
-    return `${kind} tails ${unique(events.map(e=>`${MARKET_NAMES[e.market]}@${e.line}${e.contract==='milestone'?'(at-least)':''}`)).join(',')}`;
+    const navigation=eventTailNavigation(issue,law);
+    return navigation?`${kind} tails ${navigation}`:null;
   }
   return null;
 }

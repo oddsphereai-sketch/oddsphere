@@ -88,7 +88,7 @@ jobs:
           node --import tsx scripts/test-player-props-ai-canonical-book-pairing.ts
           node --import tsx scripts/test-player-props-ai-nba-reference-identity.ts
       - name: Prove exact source event support and cross-sport known-receipt actor retention
-        run: node --import tsx scripts/test-player-props-ai-event-support-retention.ts
+        run: node --import tsx scripts/test-player-props-ai-event-support-retention.ts && node --import tsx scripts/test-player-props-ai-event-tail-navigation.ts
       - name: Prove explicit reviewer abstentions reach cross-sport pricing without changing stored generations
         run: node --import tsx scripts/test-player-props-ai-explicit-abstention.ts
       - name: Prove verified factual readings, admission and exact NBA movement without changing legacy locks

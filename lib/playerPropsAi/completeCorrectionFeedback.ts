@@ -1,3 +1,5 @@
+import {eventTailNavigation} from './eventTailNavigation';
+import {validateLaw} from './law';
 /** Future correction navigation only. Never changes a law, source or admission. */
 import type {GamePacket} from './evidenceContract';
 import {PROPS_AI_WIRE_RELEASE} from './scenarioCoordinates';
@@ -33,7 +35,14 @@ export function completeDiagnosticCorrection(packet:GamePacket,draft:unknown):Re
   const entries:string[]=[];
   for(const finding of source){
    if(!codes.has(finding.code)||!finding.markets.length||finding.markets.some(m=>!player.markets.includes(m))||typeof finding.example!=='string'||!finding.example.length||!/^[\x20-\x7e]+$/.test(finding.example))return unavailable('diagnostic_unavailable',packet.players.map(p=>p.id));
-   entries.push(`M${finding.markets.map(m=>player.markets.indexOf(m)).join(',')}: ${finding.example}`);
+   let detail=finding.example;
+   if(['unsupported_zero_probability_tail','unsupported_priced_event_certainty'].includes(finding.code)){
+    const rawLaw=inspection.canonical.players[player.id]?.law;
+    let law=null;try{law=rawLaw?validateLaw(packet.sport,player,rawLaw):null;}catch{return unavailable('diagnostic_unavailable',packet.players.map(p=>p.id));}
+    const navigation=eventTailNavigation(finding,law);if(!navigation)return unavailable('diagnostic_unavailable',packet.players.map(p=>p.id));
+    detail=finding.example+' ('+navigation+')';
+   }
+   entries.push(`M${finding.markets.map(m=>player.markets.indexOf(m)).join(',')}: ${detail}`);
   }
   for(const finding of coordinates){
    if(finding.code==='source_claims')entries.push('verified source reading selections: reselect required actor-local claim IDs');
