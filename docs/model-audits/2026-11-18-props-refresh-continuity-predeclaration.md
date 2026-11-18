@@ -29,6 +29,7 @@ unknown write ACKs fence additional writes. Read-time expiry protects crashes.
 Pending native/AI display cannot supply a new first lock without an actual
 source-bound handoff. Existing stored locks always render verbatim, even when
 optional new metadata is unavailable or legacy duplicates exist. No lock repair.
+Known failed lookups, zero-ready sources and callback rejections invalidate only the affected pending display BEFORE the callback returns; independent pending games keep their exact old display.
 Private process flags/clocks never enter client props; only existing evaluatedAt
 is displayed. No new writer, DB/schema, schedule, paid/source/model request,
 slot/phase/outputcap/deadline/lease/budget, law/price/grade/stake rule change.
@@ -46,3 +47,5 @@ promotion/demotion rules and external inputs are unchanged. The board impact is
 retaining eligible old display during pending callbacks, not making new AI rows
 or reconstructing missing source facts. Actual board impact/retention/locks and
 accuracy remain unproved until normal production. No paid proof may be bought.
+
+Unpublished round124/ff7025 was NOT CLEAR: a false lookup callback returned before pending invalidation. Targeted same-queue failure metadata now precedes false lookup/zero-ready acknowledgement and callback rejection propagation; unknown write ACK fencing and the outer catch remain. New actual writer/member controls prove failed B is hidden while independent C remains visible mid-invocation. No rejected round counts as CLEAR.

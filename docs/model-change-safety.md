@@ -22,6 +22,7 @@ unknown write ACKs fence additional writes. Read-time expiry protects crashes.
 Pending native/AI display cannot supply a new first lock without an actual
 source-bound handoff. Existing stored locks always render verbatim, even when
 optional new metadata is unavailable or legacy duplicates exist. No lock repair.
+Known failed lookups, zero-ready sources and callback rejections invalidate only the affected pending display BEFORE the callback returns; independent pending games keep their exact old display.
 Private process flags/clocks never enter client props; only existing evaluatedAt
 is displayed. No new writer, DB/schema, schedule, paid/source/model request,
 slot/phase/outputcap/deadline/lease/budget, law/price/grade/stake rule change.
@@ -6686,3 +6687,5 @@ writer/reader immutability, zero current-board grade impact, all required local/
 hosted gates, fresh-main integration safety and ordinary production proof.
 
 Round122 was NOT CLEAR on unpublished ad49: resolved per-game clocks were lost, and an unready exit could leave pending display. The corrected candidate stores every actual source callback publication clock permanently, separates the bounded15minute pending interval from existing90minute LKG age, refuses legacy reconstruction, invalidates pending display on failure, and expires it on reads after crash. Two NEW fresh triple CLEAR rounds are required. Member transportR2 enforces only new unlocked pending expiry; exact legacy stored locks retain precedence. Every card shows its original evaluated-as-of time; no old price is presented as newly evaluated.
+
+Unpublished round124/ff7025 was NOT CLEAR: a false lookup callback returned before pending invalidation. Targeted same-queue failure metadata now precedes false lookup/zero-ready acknowledgement and callback rejection propagation; unknown write ACK fencing and the outer catch remain. New actual writer/member controls prove failed B is hidden while independent C remains visible mid-invocation. No rejected round counts as CLEAR.

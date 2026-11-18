@@ -420,9 +420,9 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     trackingConflicts+=tracking.conflicts;
     return snapshot;
   };
-  const invalidatePendingDisplay=async()=>{
-    if(publicationWriteFailed||!previous?.diagnostics.publicationContinuity?.games.some(p=>p.pending&&!p.failed))return;
-    const now=new Date().toISOString(),snapshot={...previous,generatedAt:now,diagnostics:{...previous.diagnostics,publicationContinuity:{...previous.diagnostics.publicationContinuity,games:previous.diagnostics.publicationContinuity.games.map(p=>p.pending?{...p,failed:true}:p)}}};
+  const invalidatePendingDisplay=async(onlyGameId?:string)=>{
+    if(publicationWriteFailed||!previous?.diagnostics.publicationContinuity?.games.some(p=>p.pending&&!p.failed&&(!onlyGameId||p.gameId===onlyGameId)))return;
+    const now=new Date().toISOString(),snapshot={...previous,generatedAt:now,diagnostics:{...previous.diagnostics,publicationContinuity:{...previous.diagnostics.publicationContinuity,games:previous.diagnostics.publicationContinuity.games.map(p=>p.pending&&(!onlyGameId||p.gameId===onlyGameId)?{...p,failed:true}:p)}}};
     // A metadata-only failure receipt keeps every original payload, clock and
     // existing lock. It cannot authorize an empty board or a new first lock.
     await commit(snapshot,now,undefined,undefined,true);
@@ -490,6 +490,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
           // write this game from an absence that has not been established.
           unresolvedReviewAuthority.add(gameId);
           unavailableReviewAuthority.add(gameId);
+          await invalidatePendingDisplay(gameId);
           return;
         }
         unavailableReviewAuthority.delete(gameId);
@@ -524,7 +525,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
         // rows. Preserve the original LKG clock until a complete representation
         // is ready; this is neither an empty-source withdrawal nor a fresh review.
         if(readyRows.size===0&&packet.sourceOfferSetStatus!=="empty"){
-          candidate=durableBase;unreadyGames.add(gameId);return;
+          candidate=durableBase;unreadyGames.add(gameId);unavailableReviewAuthority.add(gameId);await invalidatePendingDisplay(gameId);return;
         }
         candidate=buildNbaPlayerPropsMemberSnapshot({...candidate,generatedAt:observedAt,
           decisions:[...candidate.decisions.filter(row=>row.gameId!==gameId),...readyRows.values()],
@@ -536,8 +537,12 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       });
       // Runtime reports callback errors as operational fallback. Keep a sticky
       // failure so its later return cannot claim a successful final write.
-      publicationQueue=work.catch(error=>{if(!publicationFailed){publicationFailed=true;publicationFailure=error;}});
-      return work;
+      const handled=work.catch(async error=>{
+        try{await invalidatePendingDisplay(packet.sourceGameId??packet.gameId);}catch{/* Preserve original error; unknown ACK fences all later writes. */}
+        throw error;
+      });
+      publicationQueue=handled.catch(error=>{if(!publicationFailed){publicationFailed=true;publicationFailure=error;}});
+      return handled;
     };
     const contexts=await args.client.from("lab_response_snapshots").select("payload,generated_at").eq("sport","nba").like("snapshot_key","%current-only::live-copy%").order("generated_at",{ascending:false}).limit(4);
     assertSourceWindow();
