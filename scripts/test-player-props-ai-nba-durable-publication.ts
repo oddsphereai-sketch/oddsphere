@@ -162,7 +162,7 @@ async function main(){
   const swallowed=harness({games:3,shiftMs:7200000});swallowed.setTick(completed);
   await swallowed.run(async args=>{for(const p of swallowed.packets)await ready(args,p,swallowed.review(p));return outcome;});
   swallowed.setTick('2026-11-10T22:29:00Z');swallowed.refreshSource('2026-11-10T22:29:00Z');
-  await assert.rejects(swallowed.run(async args=>{await ready(args,swallowed.packets[0],swallowed.review(swallowed.packets[0]));const invalid={...swallowed.packets[1],sourceInputRelease:'synthetic-invalid-source'};await assert.rejects(args.onSourceReady!(invalid,null,completed,true),/source identity/);return{...outcome,findings:['synthetic-caught-source-callback']};}),/source identity/);
+  await assert.rejects(swallowed.run(async args=>{await ready(args,swallowed.packets[0],swallowed.review(swallowed.packets[0]));const invalid={...swallowed.packets[1],sourceInputRelease:'synthetic-invalid-source'};await assert.rejects(async()=>{await args.onSourceReady!(invalid,null,completed,true);},/source identity/);return{...outcome,findings:['synthetic-caught-source-callback']};}),/source identity/);
   const invalidated=await swallowed.read();assert.equal(invalidated.diagnostics.publicationContinuity!.games.filter(c=>c.pending).length,2);assert(invalidated.diagnostics.publicationContinuity!.games.filter(c=>c.pending).every(c=>c.failed));assert(!nbaPlayerPropsPublicationContinuity.nbaVisiblePublicationRows(invalidated,'2026-11-10T22:29:00Z').some(r=>r.gameId!=='nba-bdl:1'));
   for(const kind of ['lookup','unready','source_rejected']as const){
     const immediate=harness({games:3,shiftMs:7200000});immediate.setTick(completed);
@@ -170,7 +170,7 @@ async function main(){
     immediate.setTick('2026-11-10T22:29:00Z');immediate.refreshSource('2026-11-10T22:29:00Z');
     const run=immediate.run(async args=>{await ready(args,immediate.packets[0],immediate.review(immediate.packets[0]));
       if(kind==='lookup')await args.onReviewObserved?.(immediate.packets[1],null,false);
-      if(kind==='source_rejected')await assert.rejects(args.onSourceReady!({...immediate.packets[1],sourceInputRelease:'invalid'},null,completed,true),/source identity/);
+      if(kind==='source_rejected')await assert.rejects(async()=>{await args.onSourceReady!({...immediate.packets[1],sourceInputRelease:'invalid'},null,completed,true);},/source identity/);
       if(kind==='unready'){const blocked=structuredClone(immediate.packets[1]);for(const actor of blocked.players)actor.evidence.push({id:actor.id+':out',kind:'availability',source:'synthetic own current',availableAt:blocked.cutoff,value:{canonicalGameId:blocked.gameId,scheduledStart:blocked.start,context:{away:{team:'BOS',known:true,players:[{name:actor.name,status:'out',reportedAt:blocked.cutoff}]},home:{team:'NYK',known:true,players:[]}}}});await args.onSourceReady?.(blocked,null,completed,true);}
       const during=await immediate.read(),visible=nbaPlayerPropsPublicationContinuity.nbaVisiblePublicationRows(during,'2026-11-10T22:29:00Z');assert(!visible.some(r=>r.gameId==='nba-bdl:2'),'Affected failure held BEFORE callback acknowledgement');assert.equal(visible.filter(r=>r.gameId==='nba-bdl:3').length,3,'Independent still-pending game retains exact original display');assert(during.diagnostics.publicationContinuity!.games.find(c=>c.gameId==='nba-bdl:2')!.failed);return outcome;
     });
