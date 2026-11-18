@@ -23,14 +23,14 @@ export type CbbRecommendationRiskContext={marginLocationSd:number;totalLocationS
  * Net win-minus-loss, rather than payout EV, owns this confidence assessment.
  * No extra score law, probability integration, provider or inference call. */
 export function assessCbbOutcomeConfidenceRisk(args:{risk:ReturnType<ReturnType<typeof createCbbRecommendationRiskEvaluator>>;
- winProbability:number;loseProbability:number}){
+ winProbability:number;loseProbability:number;workingDownside?:typeof cbbWorkingNormalExpectedDownside}){
  const {risk,winProbability:p,loseProbability:loss}=args;
  const nominal=p-loss,observations=risk.scenarios.map(s=>({...s,value:s.winProbability-s.loseProbability}));
  const axis=(coordinate:"margin"|"total",sign:1|-1)=>observations.find(s=>coordinate==="margin"?
   Math.sign(s.marginShift)===sign&&s.totalShift===0:Math.sign(s.totalShift)===sign&&s.marginShift===0)?.value??nominal;
  const marginSensitivity=(axis("margin",1)-axis("margin",-1))/2,totalSensitivity=(axis("total",1)-axis("total",-1))/2;
  const workingSensitivityScale=Math.abs(marginSensitivity)+Math.abs(totalSensitivity);
- const expectedDownside=cbbWorkingNormalExpectedDownside(nominal,workingSensitivityScale);
+ const expectedDownside=(args.workingDownside??cbbWorkingNormalExpectedDownside)(nominal,workingSensitivityScale);
  const assessedNetWinProbability=nominal-expectedDownside,N=risk.context.calibrationGames;
  const stressedNetWinProbability=(N*assessedNetWinProbability-(p+loss))/(N+1);
  const numericalErrorEstimate=4*risk.numericalErrorEstimate;
@@ -39,7 +39,7 @@ export function assessCbbOutcomeConfidenceRisk(args:{risk:ReturnType<ReturnType<
   assessedNetWinProbability,stressedNetWinProbability,numericalErrorEstimate,
   supported:risk.priceCanSupportRecommendation&&stressedNetWinProbability>numericalErrorEstimate};
 }
-export function createCbbRecommendationRiskEvaluator(args:{latent:CbbContextualLatentGaussian;context:CbbRecommendationRiskContext;numerics?:CbbScoreLawNumerics;assessmentTier?:"lean"|"best"}){
+export function createCbbRecommendationRiskEvaluator(args:{latent:CbbContextualLatentGaussian;context:CbbRecommendationRiskContext;numerics?:CbbScoreLawNumerics;assessmentTier?:"lean"|"best";workingDownside?:typeof cbbWorkingNormalExpectedDownside}){
  const {context:c}=args;
  const assessmentTier=args.assessmentTier??"lean",radius=CBB_CONTEXTUAL_RECOMMENDATION_RISK_POLICY.locationRadiiMarginalStandardErrors[assessmentTier];
  if(!Number.isSafeInteger(c.calibrationGames)||c.calibrationGames<1||![c.marginLocationSd,c.totalLocationSd].every(x=>Number.isFinite(x)&&x>=0))
@@ -84,7 +84,7 @@ export function createCbbRecommendationRiskEvaluator(args:{latent:CbbContextualL
   const workingValueSensitivityScale=Math.abs(marginValueSensitivity)+Math.abs(totalValueSensitivity);
   const linearizationResiduals=observations.map(s=>({marginShift:s.marginShift,totalShift:s.totalShift,
    residual:s.expectedValue-target.expectedValue-Math.sign(s.marginShift)*marginValueSensitivity-Math.sign(s.totalShift)*totalValueSensitivity}));
-  const expectedDownsidePenalty=cbbWorkingNormalExpectedDownside(target.expectedValue,workingValueSensitivityScale);
+  const expectedDownsidePenalty=(args.workingDownside??cbbWorkingNormalExpectedDownside)(target.expectedValue,workingValueSensitivityScale);
   const riskAdjustedExpectedValue=target.expectedValue-expectedDownsidePenalty;
   const decisionRiskExpectedValue=assessmentTier==="lean"?(c.calibrationGames*riskAdjustedExpectedValue-target.resolvedMass)/(c.calibrationGames+1):minimumStressedValue;
   // The working downside transform is Lipschitz in its mean and scale. Keep

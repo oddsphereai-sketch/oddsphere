@@ -1,0 +1,77 @@
+{
+  "declaredAt": "2026-11-18T14:39:35.429Z",
+  "release": "cbb_joint_residual_research_2026_11_18_r2_grouped_native_innovations",
+  "authority": "offline_only_no_production_activation",
+  "base": "76e3de25c539b89d7dfcce1f22407c659b9bee1a",
+  "scope": {
+    "sport": "CBB",
+    "markets": [
+      "moneyline",
+      "spread",
+      "total"
+    ],
+    "axes": [
+      "margin",
+      "total"
+    ],
+    "changes": [
+      "two training-fitted residual means and predictive variances",
+      "one exact joint score-law covariance calibration"
+    ],
+    "preserved": [
+      "original source admission and receipts",
+      "current interpreted decisions and exact price policies",
+      "shared leased sole writer remains unused",
+      "all stored member locks and tracking",
+      "prior failed trials and their outcomes"
+    ]
+  },
+  "method": {
+    "coordinate": "observed per-axis professional economic center median else consumer median else independent; origin only, unrestricted learned residual",
+    "level": "one independent relative point plus one relative economic center per physical book; no duplicate line or logodds trends",
+    "context": "only native innovations admitted by cbbOutcomeIsInnovation with Margin odd and Total even parity; Total retains even cross-path/cross-pressure innovations",
+    "model": "per-axis Gaussian Bayesian linear regression; one coefficient precision per semantic feature group; analytic marginal-likelihood BFGS, one zero-log-precision start, max300iterations; includes fitted observation noise and coefficient covariance",
+    "totalIntercept": "one learned residual constant, coefficient prior precision fitted with other groups",
+    "normalizer": "training-only observed RMS, missing coordinates zero without fabricating observations",
+    "calibration": "one exact rounded conditioned nonnegative/no-tie score-cell likelihood fit of logMarginScale/logTotalScale/oddCorrelationBeta; max50000law evaluations"
+  },
+  "cohorts": {
+    "training": "same274 source/label-clock-qualified Nov6–12 games as retained earlier trial; no test labels",
+    "calibration": "same110 Nov13–14 source/label-clock-qualified games, excluded from mean fits",
+    "diagnostic": "same111 Nov15–17 games; aggregate incumbent and earlier candidate outcomes already inspected; explicitly development only, never untouched qualification",
+    "prospective": "exact61 Nov18 morning sources previously frozen at13:14UTC; predictions frozen before starts and outcomes, no refit or in-flight replacement",
+    "future": "further independent dates needed for recommendation-value and uncertainty qualification"
+  },
+  "evaluation": {
+    "allMarkets": [
+      "accuracy",
+      "Brier",
+      "logloss",
+      "calibration gap",
+      "exact offered-price units/ROI",
+      "paired game-cluster intervals",
+      "side changes",
+      "all promotions and demotions",
+      "net board impact"
+    ],
+    "commonAvailability": "separate110 originally wager-evaluated games and one historically Held Quinnipiac counterfactual; never overwrite stored history",
+    "rejection": "any unresolved numerical fit/identity failure, material other-market regression, unqualified new actionable value or board contraction without demonstrated promotion qualification blocks live release",
+    "noMultipleTrialReselection": true
+  },
+  "bounds": {
+    "meanFits": 2,
+    "calibrationFits": 1,
+    "providerCalls": 0,
+    "paidAiCalls": 0,
+    "dbWrites": 0,
+    "productionChanges": 0,
+    "scheduleChanges": 0
+  },
+  "liveChampion": {
+    "model": "cbb_contextual_outcome_2026_11_06_r7_economic_total_retained_margin",
+    "calibration": "cbb_contextual_covariance_2026_11_06_r7_economic_total_retained_margin",
+    "decision": "cbb_outcome_decision_2026_11_16_r15_owned_current_receipts",
+    "grade": "cbb_contextual_outcome_grade_2026_11_16_r14_owned_current_receipts",
+    "writerLease": "prediction_pipeline:cbb"
+  }
+}

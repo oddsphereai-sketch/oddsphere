@@ -879,6 +879,34 @@ See `model-audits/2026-11-11-player-props-bounded-source-hash.md`.
 
 # Model change safety protocol
 
+## November 18 CBB joint accuracy research R2 — no production authorization
+
+The owner directed continued work on actual Moneyline, Spread and Total accuracy,
+without forced Best Angles. The scoped research release is
+`cbb_joint_residual_research_2026_11_18_r2_grouped_native_innovations`.
+The predeclaration, numerical supplement and result under
+`docs/model-audits/2026-11-18-cbb-joint-accuracy-r2-*` bind one Margin fit, one
+Total fit and one disjoint exact-law calibration. Previously inspected diagnostic
+outcomes cannot qualify this candidate as untouched performance. Preserve failed
+trials, all originally Held markets and all prediction failures in their censuses.
+The same61 future source predictions are frozen before results; do not refit or
+choose between the equivalent numerical variants after outcomes arrive.
+
+The optional downside implementation is used only by explicit offline replay.
+Production defaults, legacy reader proofs, source admission, price policies,
+grade boundaries, active model versions, sole leased writer and stored locks
+remain unchanged. Synthetic coefficient recovery, coordinate/fixture reflection,
+positive-integrand tail integration and strict final identity/clock joins are
+required. Raw source evidence and fitted artifacts stay private and out of git.
+
+This research delivery does not authorize activation or waive predictive gates.
+Any later production candidate must separately version its full model/runtime
+family, qualify independent outcome and exact-price recommendation performance,
+report balanced promotions/demotions and market mix, preserve default legacy
+readers and immutable writers, and complete fresh-main protected release plus
+ordinary writer/source/reader/lock verification. Insufficient evidence keeps
+the candidate offline; an improved replay is not a live accuracy fix.
+
 ## November 6 CBB verified-school pipeline handoff R55
 
 Publisher `cbb_member_pipeline_2026_11_06_r55_verified_school_pipeline_handoff`

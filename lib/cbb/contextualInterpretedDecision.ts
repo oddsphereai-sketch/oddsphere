@@ -1,7 +1,7 @@
 /** One-law offline composition. Interpretation is supplied by the same forecast
  * call, never independently re-created by the grade path. No writer or fallback.
  * Price references are ancillary quote economics, not a second game forecast. */
-import {createCbbContextualScoreLaw,type CbbContextualLatentGaussian,type CbbScoreLawNumerics} from "./contextualScoreLawResearch";
+import {createCbbContextualScoreLaw,type CbbContextualLatentGaussian,type CbbScoreLawNumerics,type cbbWorkingNormalExpectedDownside} from "./contextualScoreLawResearch";
 import {createCbbJointSourceReferencePricer} from "./contextualSourceReferenceResearch";
 import {cbbEvidenceReceiptBounds,cbbAvailabilityUpperBoundMs} from "./marketReceiptTime";
 import {cbbPathBookFamily} from "./marketBehaviorPath";
@@ -94,13 +94,15 @@ export function cbbContextualExecutionProof(q:Quote,input:CbbContextualFeatureIn
  return {problem:null,columnProof};
 }
 export function buildCbbInterpretedDecision(args:{input:CbbContextualFeatureInput;interpretation:CbbContextualMarketInterpretation;
- latent:CbbContextualLatentGaussian;targets:readonly Quote[];numerics?:CbbScoreLawNumerics;recommendationRisk?:CbbRecommendationRiskContext}){
+ latent:CbbContextualLatentGaussian;targets:readonly Quote[];numerics?:CbbScoreLawNumerics;recommendationRisk?:CbbRecommendationRiskContext;
+ /** Offline numerical research only. Default and stored legacy readers keep the original implementation. */
+ workingDownside?:typeof cbbWorkingNormalExpectedDownside}){
  const {input,interpretation:receipt}=args,at=Date.parse(input.asOf);
  if(receipt.release!==CBB_CONTEXTUAL_MARKET_INTERPRETATION_RELEASE||receipt.gameId!==input.independent.gameId||receipt.asOf!==input.asOf)throw Error("CBB decision interpretation/forecast identity mismatch");
  if(new Set(args.targets.map(q=>q.market)).size!==args.targets.length)throw Error("CBB decision requires one execution target per market");
  const law=createCbbContextualScoreLaw(args.latent,args.numerics),summary=law.summary(),references=createCbbJointSourceReferencePricer({gameId:receipt.gameId,asOf:input.asOf,finalLatent:args.latent,finalLaw:law,lawNumerics:args.numerics});
- const riskEvaluator=args.recommendationRisk?createCbbRecommendationRiskEvaluator({latent:args.latent,context:args.recommendationRisk,numerics:args.numerics,assessmentTier:"lean"}):null;
- const bestRiskEvaluator=args.recommendationRisk?createCbbRecommendationRiskEvaluator({latent:args.latent,context:args.recommendationRisk,numerics:args.numerics,assessmentTier:"best"}):null;
+ const riskEvaluator=args.recommendationRisk?createCbbRecommendationRiskEvaluator({latent:args.latent,context:args.recommendationRisk,numerics:args.numerics,assessmentTier:"lean",workingDownside:args.workingDownside}):null;
+ const bestRiskEvaluator=args.recommendationRisk?createCbbRecommendationRiskEvaluator({latent:args.latent,context:args.recommendationRisk,numerics:args.numerics,assessmentTier:"best",workingDownside:args.workingDownside}):null;
  const markets=(["moneyline","spread","total"] as const).map(market=>{
   const target=args.targets.find(q=>q.market===market),proof=target?cbbContextualExecutionProof(target,input,receipt):{problem:"missing_execution_pair"};
   if(!target||proof.problem)return {market,target:target??null,grade:"Held" as const,reason:proof.problem,selection:null,probability:null,loseProbability:null,pushProbability:null,price:null,expectedValue:null,stake:0};
@@ -115,7 +117,7 @@ export function buildCbbInterpretedDecision(args:{input:CbbContextualFeatureInpu
    opposingPrice:selection==="first"?target.secondPrice:target.firstPrice,minimumWinProbability:CBB_INTERPRETED_GRADE_POLICY.confidenceLeanMinimumWinProbability,
    probabilityErrorEstimate:grading.probabilityErrorEstimate});
   const leanRisk=riskEvaluator&&(grading.valueSignResolvedPositive||confidencePrice.qualified)?riskEvaluator(riskTarget):null;
-  const confidenceRisk=confidencePrice.qualified&&leanRisk?assessCbbOutcomeConfidenceRisk({risk:leanRisk,winProbability:probability,loseProbability}):null;
+  const confidenceRisk=confidencePrice.qualified&&leanRisk?assessCbbOutcomeConfidenceRisk({risk:leanRisk,winProbability:probability,loseProbability,workingDownside:args.workingDownside}):null;
   const confidenceLeanAssessment={price:confidencePrice,risk:confidenceRisk,supported:confidencePrice.qualified&&confidenceRisk?.supported===true};
   const bestAngleAssessment=leanRisk?.supported&&grading.grade==="Best Angle"&&bestRiskEvaluator?bestRiskEvaluator(riskTarget):null;
   const recommendationRisk=leanRisk?{...leanRisk,bestAngleAssessment}:null;
