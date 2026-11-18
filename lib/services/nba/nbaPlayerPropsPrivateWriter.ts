@@ -474,6 +474,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     candidate=lifecycle.snapshot;
     return lifecycle;
   };
+  try{
   if(integrated&&priorState&&currentState){
     const lastObservation=new Map<string,{packetHash:string;reviewHash:string|null;lookupAvailable:boolean}>();
     const observe=(packet:GamePacket,review:AcceptedGameReview|null,lookupAvailable:boolean):Promise<void>=>{
@@ -540,18 +541,18 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     };
     const contexts=await args.client.from("lab_response_snapshots").select("payload,generated_at").eq("sport","nba").like("snapshot_key","%current-only::live-copy%").order("generated_at",{ascending:false}).limit(4);
     assertSourceWindow();
-    try{aiReviewOutcome=await reviewPropsForSite({client:args.client,sport:"nba",writerRunId:args.writerRunId,deadline:Math.min(Date.parse(now)+480000,args.aiDeadline??Infinity),
+    aiReviewOutcome=await reviewPropsForSite({client:args.client,sport:"nba",writerRunId:args.writerRunId,deadline:Math.min(Date.parse(now)+480000,args.aiDeadline??Infinity),
       onSourceAudit:audit=>{sourceAudits.set(audit.gameId,audit);},
       games:games.map(g=>({id:g.gameId,start:g.scheduledStart,away:g.awayTeam,home:g.homeTeam})),
       load:(game,window)=>liveNbaPacket({game,window,snapshot:aiBaseline,market:mergedMarket.history,currentObservations:live.observations,prior:priorState,current:currentState!,context:contexts.error?[]:contexts.data as EnrichedSource["nbaContext"],participationReports}),
       onSourceReady:(packet,review,_at,lookupAvailable)=>observe(packet,review,lookupAvailable),
       onReviewObserved:(packet,review,lookupAvailable)=>observe(packet,review,lookupAvailable),
-      onReviewReady:(packet,review)=>observe(packet,review,true)});}catch(error){await publicationQueue;try{await invalidatePendingDisplay();}catch{/* Original failure and read-time TTL remain authoritative. */}throw error;}
+      onReviewReady:(packet,review)=>observe(packet,review,true)});
   }
   if(aiReviewOutcome)for(const gameId of propsAiFinalSourceHolds(aiReviewOutcome,games.map(game=>game.gameId)))unresolvedReviewAuthority.add(gameId);
   await publicationQueue;
   if(publicationFailed)throw publicationFailure;
-  if(unreadyGames.size){await invalidatePendingDisplay();throw new Error(`NBA current source has no ready forecast; last-known-good preserved:${[...unreadyGames].sort().join(",")}`);}
+  if(unreadyGames.size){throw new Error(`NBA current source has no ready forecast; last-known-good preserved:${[...unreadyGames].sort().join(",")}`);}
   for(const gameId of unresolvedReviewAuthority)unavailableReviewAuthority.add(gameId);
   if(unresolvedReviewAuthority.size){
     await invalidatePendingDisplay();
@@ -599,6 +600,11 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       ...(settlement?.corrected ? [`official_stat_corrections_recorded:${settlement.corrected}`] : []),
     ],
   };
+  }catch(error){
+    await publicationQueue;
+    try{await invalidatePendingDisplay();}catch{/* Preserve original failure; read-time expiry covers unavailable cleanup. */}
+    throw error;
+  }
 }
 
 export function nbaPlayerPropsScheduleGameMatches(

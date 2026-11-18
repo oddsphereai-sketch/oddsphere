@@ -33,8 +33,8 @@ Private process flags/clocks never enter client props; only existing evaluatedAt
 is displayed. No new writer, DB/schema, schedule, paid/source/model request,
 slot/phase/outputcap/deadline/lease/budget, law/price/grade/stake rule change.
 
-Unpublished round122/ad49 was NOT CLEAR: clocks vanished after resolution and
-unready exits retained pending display. Those flaws receive no credit. Corrected
+Unpublished round122/ad49 and round123/d128 were NOT CLEAR: clocks vanished after resolution and
+unready exits retained pending display. Round123 caught the swallowed-callback failure path and actionable RadarCard missing asof; one outer leased-phase catch and the shared quote tile now cover all paths/surfaces. Those flaws receive no credit. Corrected
 all-game clock, cleanup/read-expiry, paired Over/Under, actual writer/codec/
 withdrawal/CAS/ACK/first-lock/legacy immutability controls, two NEW consecutive
 fresh triple whole-product CLEAR rounds, all local/hosted mocked realPG gates
