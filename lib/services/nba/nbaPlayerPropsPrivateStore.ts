@@ -1,4 +1,5 @@
-import {assertNbaWithdrawalAuthority,nbaLockScope,type NbaWithdrawalAuthority} from "../../playerPropsAi/nbaLockAuthority";
+import {assertNbaWithdrawalAuthority,type NbaWithdrawalAuthority} from "../../playerPropsAi/nbaLockAuthority";
+import {assertNbaStoredLocksUnambiguous,assertNbaLockedPayloadsPreserved} from './nbaPlayerPropsLockIntegrity';
 import {digest} from "../../playerPropsAi/evidence";
 import { stringifyPropsAiCoverage, parsePropsAiCoverage } from "../../playerPropsAi/coverageCodec";
 import { createHash } from "node:crypto";
@@ -90,6 +91,7 @@ export async function writeNbaPlayerPropsPrivateSnapshot(args: {
   withdrawalAuthority?:NbaWithdrawalAuthority;
 }): Promise<{ written: true; jsonBytes: number; gzipBytes: number;serverAdmittedAt?:string;serverWriteCompletedAt?:string }> {
   if (args.snapshot.publicEnabled !== false) throw new Error("NBA props private store refuses public snapshots.");
+  assertNbaStoredLocksUnambiguous(args.snapshot.decisions);
   if(args.withdrawalAuthority){
     if(!args.writerRunId||!args.expectedSnapshot)throw new Error("NBA withdrawal requires the existing leased canonical writer");
     assertNbaWithdrawalAuthority(args.withdrawalAuthority,args.snapshot,args.expectedSnapshot);
@@ -101,8 +103,7 @@ export async function writeNbaPlayerPropsPrivateSnapshot(args: {
     if(args.expectedSnapshot===undefined)throw new Error("NBA guarded publication requires its canonical prior snapshot");
     if(args.expectedSnapshot&&!canonicalSnapshotReceipts.has(args.expectedSnapshot))throw new Error("NBA guarded publication prior did not originate in the canonical reader");
     if(args.expectedSnapshot&&canonicalSnapshotReceipts.get(args.expectedSnapshot)!.digest!==digest(args.expectedSnapshot))throw new Error("NBA canonical prior snapshot changed after its read");
-    const rows=new Map(args.snapshot.decisions.map(row=>[nbaLockScope(row),row]));
-    for(const row of args.expectedSnapshot?.decisions??[])if(row.lockedAt!==null&&digest(row)!==digest(rows.get(nbaLockScope(row))??null))throw new Error("NBA guarded publication refuses a changed or omitted stored lock");
+    assertNbaLockedPayloadsPreserved(args.expectedSnapshot?.decisions??[],args.snapshot.decisions);
   }
   const envelope = encode(args.snapshot, "candidate_snapshot");
   const starts = args.snapshot.games.map((game) => Date.parse(game.scheduledStart)).filter(Number.isFinite);

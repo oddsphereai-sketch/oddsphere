@@ -9,7 +9,7 @@ import type {GamePacket,Quote} from './evidenceContract';
 import type {AcceptedGameReview} from './reviewer';
 import {digest,instant,validatePacket} from './evidence';
 import {criticalContextHashes} from './criticalContext';
-import {reviewedReaderContextCurrent} from './readerClaimFreshness';
+import {createReviewedReaderContextMatcher} from './readerClaimFreshness';
 import {playerParticipationEligibility} from './participationEligibility';
 import {executionQuotes,quoteBook,quoteContract} from './executionQuotes';
 import {siteAiDecisions} from './publication';
@@ -39,10 +39,11 @@ function numericRow(row:Row){return Number.isFinite(row.projection)&&Number.isFi
 function observe(packet:GamePacket,review:AcceptedGameReview|null,lookupAvailable:boolean,clock:()=>string):NbaLockHandoff{
  const observedAt=clock(),source=clone(packet);validatePacket(source);assert.equal(source.sport,'nba');assert(instant(source.cutoff)<=instant(observedAt),'NBA source was not available at its observation');
  if(review){assert(review.issuedAt&&instant(review.issuedAt)<=instant(observedAt),'NBA review was not available at observation');assert.equal(review.sourceGameId??review.gameId,gameId(source));assert(sameTime(review.start,source.start)&&sameTime(review.lock,source.lock));assert.equal(review.inputHash??review.inputEvidence.digest,review.inputEvidence.digest);}
+ const contextMatches=review?createReviewedReaderContextMatcher(source,review):()=>false;
  const contexts=criticalContextHashes(source),actors:Actor[]=source.players.map(player=>{
   const row=review?.players.find(r=>r.playerId===player.id),scopes=review?.marketScopes[player.id]??[];
   return{actorId:player.id,contextHash:contexts[player.id],review:review?{release:review.release,inputHash:review.inputHash??review.inputEvidence.digest,stage:review.stage,issuedAt:review.issuedAt!,lawHash:row?.law?.hash??null}:null,
-   scopes:[...new Set([...player.markets,...scopes])].map(market=>({market,status:(!lookupAvailable?'review_lookup_unavailable':!review?'review_authority_missing':!row?'unreviewed_actor':!reviewedReaderContextCurrent(source,review,player.id)?'context_changed':!scopes.includes(market)?'unreviewed_scope':!row.law||row.sourceDeclinedMarkets?.includes(market)?'declined':'qualified')as Status}))};
+   scopes:[...new Set([...player.markets,...scopes])].map(market=>({market,status:(!lookupAvailable?'review_lookup_unavailable':!review?'review_authority_missing':!row?'unreviewed_actor':!contextMatches(player.id)?'context_changed':!scopes.includes(market)?'unreviewed_scope':!row.law||row.sourceDeclinedMarkets?.includes(market)?'declined':'qualified')as Status}))};
  });
  return{observations:[seal({gameId:gameId(source),start:source.start,lock:source.lock,cutoff:source.cutoff,observedAt,order:++observationOrder,sourcePacketHash:digest(source),completeExecution:Array.isArray(source.executionQuotes),quotes:clone(executionQuotes(source,observedAt)),actors})],proofs:[]};
 }
