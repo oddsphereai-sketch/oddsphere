@@ -1,3 +1,4 @@
+import {retainNbaPendingPublication} from './nbaPlayerPropsPublicationContinuity';
 import {resolveNbaPlayerAliases} from './nbaPlayerPropsPlayerIdentity';
 import {currentNbaTeamId} from './nbaPlayerPropsTeamIdentity';
 import {summarizePropsAiRuntimeHealth,propsAiFinalSourceHolds} from '../../playerPropsAi/runtimeHealth';
@@ -8,7 +9,7 @@ import {reviewPropsForSite,type SiteReviewOutcome} from "../../playerPropsAi/sit
 import {liveNbaPacket} from "../../playerPropsAi/liveSources";
 import {applyNbaSiteAi,restoreNbaNativeGame} from "../../playerPropsAi/siteBindings";
 import {siteAiDecisions} from "../../playerPropsAi/publication";
-import {observeNbaSourceAuthority,captureNbaHandoffBundle,mergeNbaHandoffs,nbaLockScope,captureNbaWithdrawalAuthority,NBA_PROPS_WITHDRAWAL_AUTHORITY_RELEASE,type NbaLockHandoff} from "../../playerPropsAi/nbaLockAuthority";
+import {observeNbaSourceAuthority,captureNbaHandoffBundle,mergeNbaHandoffs,captureNbaWithdrawalAuthority,NBA_PROPS_WITHDRAWAL_AUTHORITY_RELEASE,type NbaLockHandoff} from "../../playerPropsAi/nbaLockAuthority";
 import type {GamePacket} from "../../playerPropsAi/evidenceContract";
 import type {AcceptedGameReview} from "../../playerPropsAi/reviewer";
 import type {CapturedNbaParticipationReport} from "../../playerPropsAi/participationEligibility";
@@ -51,7 +52,7 @@ import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
 import { buildNbaPlayerPropsMemberPrices } from "./nbaPlayerPropsMemberPrices";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_11_18_r35_exact_benchmark_context" as const;
+  "nba_player_props_private_writer_2026_11_18_r36_pending_display_continuity" as const;
 
 export function nbaPlayerPropsForecastIsPublishable(
   row: Pick<NbaPlayerPropsForwardDecision, "independentProjection" | "finalProjection">,
@@ -397,20 +398,9 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   type WithdrawalReceipt={release:typeof NBA_PROPS_WITHDRAWAL_AUTHORITY_RELEASE;gameId:string;start:string;cutoff:string;observedAt:string;sourcePacketHash:string};
   const receipts=(snapshot:NbaPlayerPropsMemberSnapshot|null)=>(snapshot as (NbaPlayerPropsMemberSnapshot&{sourceWithdrawals?:WithdrawalReceipt[]})|null)?.sourceWithdrawals??[];
   type PublicationSource={packet:GamePacket;frame:NbaLockHandoff};
-  const holdUnresolvedGames=(snapshot:NbaPlayerPropsMemberSnapshot,knownGameId:string|null=null)=>{
-    // A whole-board header must not turn an unresolved other game's old
-    // unlocked rows into a new prelock source. Retain only already stored locks
-    // for held games; the currently known callback may publish its own game.
-    const storedLocks=new Map((previous?.decisions??[]).filter(row=>row.lockedAt!==null).map(row=>[nbaLockScope(row),row]));
-    const decisions=snapshot.decisions.flatMap(row=>{
-      if(!unresolvedReviewAuthority.has(row.gameId)||row.gameId===knownGameId)return[row];
-      const locked=storedLocks.get(nbaLockScope(row));
-      return locked?[locked]:[];
-    });
-    if(decisions.length===snapshot.decisions.length&&decisions.every((row,index)=>row===snapshot.decisions[index]))return snapshot;
-    const filtered=buildNbaPlayerPropsMemberSnapshot({...snapshot,decisions,inputRows:snapshot.diagnostics.inputRows});
-    return{...snapshot,...filtered,diagnostics:{...snapshot.diagnostics,...filtered.diagnostics}};
-  };
+  const unavailableReviewAuthority=new Set<string>();
+  const holdUnresolvedGames=(snapshot:NbaPlayerPropsMemberSnapshot,knownGameId:string|null=null)=>retainNbaPendingPublication({
+    snapshot,previous,pending:unresolvedReviewAuthority,unavailable:unavailableReviewAuthority,knownGameId,now:snapshot.generatedAt});
   const commit=async(snapshot:NbaPlayerPropsMemberSnapshot,publicationNow:string,source?:PublicationSource,
     withdrawalAuthority?:Parameters<typeof writeNbaPlayerPropsPrivateSnapshot>[0]['withdrawalAuthority'])=>{
     snapshot=holdUnresolvedGames(snapshot,source?(source.packet.sourceGameId??source.packet.gameId):null);
@@ -456,8 +446,8 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     }
     // The current callback then advances its complete game while retaining the
     // other canonical payloads, including the checkpoint's exact first locks.
-    const scoped=(snapshot:NbaPlayerPropsMemberSnapshot)=>gameId?buildNbaPlayerPropsMemberSnapshot({...snapshot,
-      games:snapshot.games.filter(g=>g.gameId===gameId),decisions:snapshot.decisions.filter(r=>r.gameId===gameId),inputRows:snapshot.diagnostics.inputRows}):snapshot;
+    const scoped=(snapshot:NbaPlayerPropsMemberSnapshot)=>gameId?{...buildNbaPlayerPropsMemberSnapshot({...snapshot,
+      games:snapshot.games.filter(g=>g.gameId===gameId),decisions:snapshot.decisions.filter(r=>r.gameId===gameId),inputRows:snapshot.diagnostics.inputRows}),diagnostics:{...snapshot.diagnostics,...(snapshot.diagnostics.publicationContinuity?{publicationContinuity:{...snapshot.diagnostics.publicationContinuity,pending:snapshot.diagnostics.publicationContinuity.pending.filter(p=>p.gameId===gameId)}}:{})}}:snapshot;
     const lifecycle={...advanceNbaPlayerPropsCandidateLifecycle({now:publicationNow,previous:previous?scoped(previous):null,candidate:scoped(candidate),
       ...(integrated?{lockHandoff:mergeNbaHandoffs(lockFrames)}:{})})};
     if(gameId)lifecycle.snapshot=buildNbaPlayerPropsMemberSnapshot({...candidate,generatedAt:publicationNow,
@@ -470,6 +460,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     // An already empty board needs no refreshed publication clock. This also
     // avoids laundering old withdrawal evidence through a later final sweep.
     if(previous&&previous.decisions.length===0&&lifecycle.snapshot.decisions.length===0){candidate=previous;return{...lifecycle,snapshot:previous};}
+    lifecycle.snapshot=holdUnresolvedGames(lifecycle.snapshot,gameId);
     const withdrawalAuthority=withdrawn&&source&&previous&&previous.decisions.some(row=>row.gameId===gameId&&row.lockedAt===null)?captureNbaWithdrawalAuthority({packet:source.packet,source:source.frame,
       currentObservations:live.observations,collectorFindings:live.findings,previous,candidate:lifecycle.snapshot}):undefined;
     lifecycle.snapshot=await commit(lifecycle.snapshot,publicationNow,source,withdrawalAuthority);
@@ -490,8 +481,10 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
           // an unknown write ACK. Never capture native/first-lock authority or
           // write this game from an absence that has not been established.
           unresolvedReviewAuthority.add(gameId);
+          unavailableReviewAuthority.add(gameId);
           return;
         }
+        unavailableReviewAuthority.delete(gameId);
         const packetHash=digest(packet),reviewHash=review?digest(review):null,last=lastObservation.get(gameId);
         if(last?.packetHash===packetHash&&last.reviewHash===reviewHash&&last.lookupAvailable){
           // This exact source/review already has a successful canonical ACK.
@@ -552,6 +545,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   await publicationQueue;
   if(publicationFailed)throw publicationFailure;
   if(unreadyGames.size)throw new Error(`NBA current source has no ready forecast; last-known-good preserved:${[...unreadyGames].sort().join(",")}`);
+  for(const gameId of unresolvedReviewAuthority)unavailableReviewAuthority.add(gameId);
   if(unresolvedReviewAuthority.size){
     // Retained healthy games can still advance through the normal first-lock
     // checkpoint, but the generic tail must not reintroduce fresh native rows

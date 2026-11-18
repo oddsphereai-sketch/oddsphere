@@ -99,6 +99,7 @@ export type NbaPlayerPropsMemberSnapshot = Readonly<{
   decisions: readonly NbaPlayerPropsMemberDecision[];
   diagnostics: Readonly<{
     /** Future private source provenance only; stored decision/lock payloads stay exact. */
+    publicationContinuity?:import('./nbaPlayerPropsPublicationContinuity').NbaPropsPublicationContinuity;
     sourceContextAudits?:ReturnType<typeof buildPropsSourceContextAuditSlate>;
     sourceContextAuditRetention?:'prior_metadata_unavailable';
     /** Internal process health only; excluded from member transport. */

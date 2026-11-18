@@ -1,3 +1,4 @@
+import * as nbaPlayerPropsPublicationContinuity from '../lib/services/nba/nbaPlayerPropsPublicationContinuity';
 import * as nbaPlayerPropsPlayerIdentity from '../lib/services/nba/nbaPlayerPropsPlayerIdentity';
 import * as nbaPlayerPropsTeamIdentity from '../lib/services/nba/nbaPlayerPropsTeamIdentity';
 import * as runtimeHealth from '../lib/playerPropsAi/runtimeHealth';
@@ -68,7 +69,7 @@ function harness(options:{games?:number;staggered?:boolean;emptyLive?:boolean;em
    return{data:{written:true,status:'written',checksum:(args.p_record.payload as {checksum:string}).checksum,server_admitted_at:admitted,server_write_completed_at:tick},error:null};
   }finally{activeWrites--;}
  }};
- const modules:Record<string,unknown>={nbaPlayerPropsPlayerIdentity,nbaPlayerPropsTeamIdentity,runtimeHealth,completionWindow,sourceContextAudit,
+ const modules:Record<string,unknown>={nbaPlayerPropsPublicationContinuity,nbaPlayerPropsPlayerIdentity,nbaPlayerPropsTeamIdentity,runtimeHealth,completionWindow,sourceContextAudit,
   nbaSourceIdentity,evidence,siteBindings:bindings,publication,nbaPlayerPropsLifecycle:lifecycle,nbaPlayerPropsProductContract:product,
   nbaLockAuthority:{...authority,observeNbaSourceAuthority:authority.testNbaSourceAuthority(()=>tick),captureNbaHandoffBundle:authority.testNbaHandoffCapture(()=>tick)},
   siteConfig:{propsAiSiteConfig:()=>({integrated:true})},espnNbaInjuries:{canonicalNbaAbbreviation:(s:string)=>s,fetchEspnNbaGameInjuries:async(id:string|number)=>options.allOut?{eventId:String(id),teams:new Map([['BOS',[{name:'Synthetic a',status:'out',reported_at:null},{name:'Synthetic b',status:'out',reported_at:null}]],['NYK',[]]])}:null},nbaPlayerPropsSettlementStore:{},
@@ -116,11 +117,11 @@ async function main(){
     const rows=(await recovered.read()).decisions;assert.equal(rows.length,3);assert(rows.every(row=>row.aiReview));assert(!rows.some(row=>row.lockedAt!==null));
   }
   const queuedRecovery=priorAi();queuedRecovery.setTick(completed);await queuedRecovery.run(async args=>{const packet=queuedRecovery.packets[0];await Promise.all([args.onSourceReady!(packet,null,completed,false),ready(args,packet,queuedRecovery.review())]);return outcome;});assert.equal((await queuedRecovery.read()).decisions.filter(row=>row.aiReview).length,3);
-  // The new header for known A omits unresolved/unobserved unlocked B. It
-  // cannot relabel B's old price as a fresh source for a later first lock.
+  // While A progresses, exact B remains visible with its ORIGINAL publication
+  // clock and a private non-authority marker; failures/end-of-run/lock still hold B.
   for(const callback of ['unknown','unobserved','late_unknown'] as const){
     const mixed=priorAi(2,true),original=mixed.previous;let expectedA:Snapshot['decisions']=[];
-    mixed.setTick(completed);const result=await mixed.run(async args=>{await ready(args,mixed.packets[0],mixed.review(mixed.packets[0]));expectedA=(await mixed.read()).decisions.filter(row=>row.gameId==='nba-bdl:1');assert.equal(expectedA.length,3);assert(!(await mixed.read()).decisions.some(row=>row.gameId==='nba-bdl:2'));if(callback!=='unobserved'){if(callback==='late_unknown')mixed.setTick('2026-11-10T22:31:00Z');await args.onReviewObserved?.(mixed.packets[1],null,false);}return outcome;});
+    mixed.setTick(completed);const result=await mixed.run(async args=>{await ready(args,mixed.packets[0],mixed.review(mixed.packets[0]));expectedA=(await mixed.read()).decisions.filter(row=>row.gameId==='nba-bdl:1');assert.equal(expectedA.length,3);assert.deepEqual((await mixed.read()).decisions.filter(row=>row.gameId==='nba-bdl:2'),original.decisions.filter(row=>row.gameId==='nba-bdl:2'),'Pending other game keeps exact original display without fresh authority');assert.equal((await mixed.read()).diagnostics.publicationContinuity?.pending.find(p=>p.gameId==='nba-bdl:2')?.publishedAt,original.generatedAt);if(callback!=='unobserved'){if(callback==='late_unknown')mixed.setTick('2026-11-10T22:31:00Z');await args.onReviewObserved?.(mixed.packets[1],null,false);}return outcome;});
     const stored=await mixed.read();assert.equal(stored.decisions.filter(row=>row.gameId==='nba-bdl:1').length,3);assert(!stored.decisions.some(row=>row.gameId==='nba-bdl:2'));assert(result.aiReviewRuntime?.findings.some(f=>f==='lock_prior_authority_unavailable:nba-bdl:2'));assert.equal(original.decisions.filter(row=>row.gameId==='nba-bdl:2'&&row.aiReview).length,3,'Original stored-source fixture is unchanged');
     mixed.setTick('2026-11-11T00:31:00Z');await mixed.run(async()=>outcome);const restarted=await mixed.read();assert(!restarted.decisions.some(row=>row.gameId==='nba-bdl:2'),'A later invocation cannot reconstruct missing B at/after its lock');assertFirstHeldA(restarted.decisions,expectedA);
   }

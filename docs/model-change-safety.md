@@ -1,3 +1,30 @@
+## November18 bounded NBA refresh display continuity
+
+NBA sole writer is `nba_player_props_private_writer_2026_11_18_r36_pending_display_continuity`;
+lifecycle is `nba_player_props_lifecycle_candidate_2026_11_18_r7_pending_display_not_authority`;
+private display provenance is `nba_props_publication_continuity_2026_11_18_r1_prior_display_only`.
+Shared AI generationR53, NFLwriterR114, original laws/requests/source capsules,
+source and numerical validation, pricing/grades/selection, lease, cadence, paired
+slots, provider/model calls, output caps, deadlines and budgets are unchanged.
+
+Actual ordinary refreshes briefly removed other unlocked games while serial
+source callbacks were pending. During that bounded interval only, keep their
+exact prior canonical rows, original publication clocks and a private pending
+marker. Never substitute a new candidate, source claim or quote. Prior display
+expires after15minutes and cannot cross a changed window, slate boundary,
+explicit lookup failure, end-of-run unresolved authority or lock. A pending
+display cannot supply a native or AI first lock, including after codec restart
+or a later sibling header. An actual source-bound handoff remains required.
+Existing stored locked payloads retain unconditional exact precedence.
+
+All private metadata stays outside member transport. No new writer, refresh,
+source/model call, schema migration, paid test, third review or replay.
+Both meaningful supported Over and Under paths and all prior lock/withdrawal/
+source/CAS/ACK controls remain required. Two NEW consecutive fresh triple
+whole-product CLEAR rounds, full local/hosted mocked-realPG checks, fresh-main
+strict protected release and ordinary live page/retention/lock proof precede
+completion. See `docs/model-audits/2026-11-18-props-refresh-continuity-predeclaration.md`.
+
 ## November18 exact NBA benchmark freshness R53
 
 Shared generation is `player_props_ai_2026_11_18_r53_exact_benchmark_context`;
