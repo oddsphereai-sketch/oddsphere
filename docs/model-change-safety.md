@@ -1,3 +1,22 @@
+## November 18 exact filtered-player identity completeness
+
+NBA collector is `nba_player_props_live_collector_2026_11_18_r10_complete_filtered_identity`;
+sole NBA writer is `nba_player_props_private_writer_2026_11_18_r33_complete_filtered_identity`.
+The existing bounded current-player lookup reconciles every explicitly requested
+ID exactly once before consuming a well-formed documented metadata cursor.
+No page is followed, actor omitted, request retried, team inferred from a past
+box score, provider budget increased or evidence/price/numerical guard waived.
+Malformed, missing, unexpected, duplicate or conflicting identities remain held.
+Shared generation R51, source R4, law R4/grade R6/selection R9, NFL writer R112,
+native MLB R44, accepted legacy reviews, locked payloads, schedules, slots,
+phases, deadlines, output caps, grades, stakes and public transport are unchanged.
+Existing valid responses remain byte-identical in their derived source/context
+and member decisions. Synthetic supported Over and Under recovery is paired;
+actual affected-game recovery requires ordinary production evidence.
+Do not label the retained Wednesday cache as the original lookup response or
+claim its root cause proved before an actual receipt is available.
+See `docs/model-audits/2026-11-18-nba-props-filtered-player-identity-predeclaration.md`.
+
 ## November 17 exact missing event-tail navigation R51
 
 Shared generation is `player_props_ai_2026_11_17_r51_event_tail_navigation`;

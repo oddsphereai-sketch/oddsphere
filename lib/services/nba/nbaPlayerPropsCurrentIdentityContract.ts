@@ -1,6 +1,7 @@
 import {quoteBook,executionContractKey} from '../../playerPropsAi/executionQuotes';
 /** Current collection boundary only. Original normalizers and stored rows stay exact. */
 import {canonicalNbaPropsTeam} from './nbaPlayerPropsTeamIdentity';
+import {assertNoDeclaredContinuation} from '../../providers/playerPropsResponseCompleteness';
 type Row=Record<string,unknown>;
 function fail(field:string):never{throw new Error(`NBA current identity contract invalid: ${field}`);}
 function object(value:unknown,field:string):Row{if(value===null||typeof value!=='object'||Array.isArray(value))fail(field);return value as Row;}
@@ -68,6 +69,23 @@ export function validatedNbaQuoteRecords(body:unknown,requestedGame:string,openi
 export function validatedNbaPlayerRecords(body:unknown,requestedIds:readonly string[]):Row[]{
  const rows=records(body);if(rows.length!==requestedIds.length)fail('metadata cardinality');
  const found=new Set<string>();for(const row of rows){const id=identifier(row.id,'metadata player.id',true)!;if(!requestedIds.includes(id)||found.has(id))fail('metadata requested IDs');found.add(id);name(row);teams(row,undefined,true);}
+ return rows;
+}
+/** The player query owns an explicit finite ID set. A cursor does not make a
+ * complete response incomplete once every requested unique ID is reconciled.
+ * No cursor is followed, and incomplete or conflicting identity still fails. */
+export function validatedNbaFilteredPlayerResponse(body:unknown,requestedIds:readonly string[]):Row[]{
+ if(!requestedIds.length||requestedIds.length>100||new Set(requestedIds).size!==requestedIds.length
+   ||requestedIds.some(id=>identifier(id,'requested metadata player.id',true)!==id))fail('metadata requested ID set');
+ const rows=validatedNbaPlayerRecords(body,requestedIds),response=object(body,'response');
+ const meta=optionalObject(response.meta,'metadata')??{};
+ if(meta.per_page!==undefined&&(!Number.isSafeInteger(meta.per_page)||Number(meta.per_page)<rows.length||Number(meta.per_page)>100))fail('metadata page capacity');
+ if(meta.next_cursor!==undefined&&meta.next_cursor!==null
+   &&(!Number.isSafeInteger(meta.next_cursor)||Number(meta.next_cursor)<=0))fail('metadata cursor');
+ // Only the documented cursor on a proved-complete filtered result is consumed.
+ // Preserve all other envelope/continuation checks and never mutate its bytes.
+ const {next_cursor:cursor,...remainingMeta}=meta;void cursor;
+ assertNoDeclaredContinuation({...response,meta:remainingMeta},'NBA complete filtered player identity');
  return rows;
 }
 type ReferenceKind='owls'|'odds';

@@ -1,4 +1,4 @@
-import {validatedNbaScheduleRecords,validatedNbaQuoteRecords,validatedNbaPlayerRecords,validatedNbaReferenceEvents,assertNbaReferenceResponse,assertNbaCurrentQuotePrices} from './nbaPlayerPropsCurrentIdentityContract';
+import {validatedNbaScheduleRecords,validatedNbaQuoteRecords,validatedNbaFilteredPlayerResponse,validatedNbaReferenceEvents,assertNbaReferenceResponse,assertNbaCurrentQuotePrices} from './nbaPlayerPropsCurrentIdentityContract';
 import {resolveNbaPlayerAliases} from './nbaPlayerPropsPlayerIdentity';
 import {quoteBook} from '../../playerPropsAi/executionQuotes';
 import {sameNbaSourceActorName} from '../../playerPropsAi/nbaSourceIdentity';
@@ -16,7 +16,7 @@ import type {
 } from "./nbaPlayerPropsContract";
 
 export const NBA_PLAYER_PROPS_LIVE_COLLECTOR_RELEASE =
-  "nba_player_props_live_collector_2026_11_17_r9_reference_identity_receipts" as const;
+  "nba_player_props_live_collector_2026_11_18_r10_complete_filtered_identity" as const;
 const BDL_BASE = "https://api.balldontlie.io";
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_SPORT = "basketball_nba";
@@ -168,8 +168,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
         headers: { Authorization: args.ballDontLieApiKey, Accept: "application/json" },
         fetchImpl,
       });
-      assertNoDeclaredContinuation(response.body,"NBA current player identity");
-      const identities=validatedNbaPlayerRecords(response.body,ids);
+      const identities=validatedNbaFilteredPlayerResponse(response.body,ids);
       const availableAt=new Date().toISOString();
       for(const player of identities)currentProfiles.set(String(player.id),{player,availableAt});
       observations = applyResolvedPlayerIdentities(observations, identities,availableAt);
@@ -318,8 +317,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
     bdlRequests+=1;
     try{
       const response=await requestJson({url:url.toString(),headers:{Authorization:args.ballDontLieApiKey,Accept:'application/json'},fetchImpl});
-      assertNoDeclaredContinuation(response.body,'NBA reference current player identity');
-      const players=validatedNbaPlayerRecords(response.body,ids),availableAt=new Date().toISOString();
+      const players=validatedNbaFilteredPlayerResponse(response.body,ids),availableAt=new Date().toISOString();
       for(const player of players)currentProfiles.set(String(player.id),{player,availableAt});
     }catch{findings.push(`balldontlie_reference_identity_lookup_failed:${ids.length}`);}
   }
