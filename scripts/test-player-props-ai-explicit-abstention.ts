@@ -84,6 +84,6 @@ assert(unknown);row.exceptions=[unknown.id,null];
 assert.deepEqual(parseJointReview(packet,draft).players[0].sourceDeclinedMarkets,[],'Own status silence remains a caveat, not automatic abstention');controls++;
 row.exceptions=['invented_reason',null];assert.throws(()=>parseJointReview(packet,draft),/source|claim|reason/i);controls++;
 for(const release of ['player_props_ai_2026_11_16_r44_hibner_official_alias',PROPS_AI_RELEASE]){assert(propsReviewHasVerifiedReaderClaims(release));assert(propsReviewHasMemberExecutionContracts(release));controls+=2;}
-assert.equal(PROPS_AI_RELEASE,'player_props_ai_2026_11_17_r51_event_tail_navigation');
+assert.equal(PROPS_AI_RELEASE,'player_props_ai_2026_11_18_r52_joint_dependence_navigation');
 console.log(JSON.stringify({explicitAbstention:true,controls,allSports:3,qualifiedOverAndUnderControls:supportedPromotions,abstainedCurrentOffersRemoved:declinedRows,
  scopeLocal:true,originalLawExact:true,originalR44ReaderPrecedenceExact:true,networkOrPaidCalls:0}));

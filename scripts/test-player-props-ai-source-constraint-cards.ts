@@ -2,6 +2,8 @@ import {PROPS_AI_WIRE_RELEASE} from "../lib/playerPropsAi/scenarioCoordinates";
 import {verifiedReaderFixture} from "./lib/player-props-ai-reader-fixture";
 /** Synthetic source navigation/feedback proof. No provider/model/token-count I/O. */
 import assert from 'node:assert/strict';
+import {reviewCorrectionFeedback} from '../lib/playerPropsAi/reviewCorrectionFeedback';
+import {withOriginalDraftCorrectionContext} from '../lib/playerPropsAi/originalDraftCorrectionContext';
 import {sourceConstraintCards,namedSourceCorrection,NAMED_SOURCE_CORRECTION_MAX_BYTES} from '../lib/playerPropsAi/sourceConstraintCards';
 import {PRODUCT_RELEASE,CATALOG,type GamePacket,type Evidence,type Player,type Json} from '../lib/playerPropsAi/evidenceContract';
 import {encodeCanonicalScenarioLaw} from '../lib/playerPropsAi/generativeCoordinates';
@@ -57,7 +59,7 @@ for(const [first,second]of jointPairs)for(const direction of ['concordant','oppo
  const accepted=validateLaw('nba',input.players[0],deficient),issuesBefore=sourceForecastIssues(input,input.players[0],accepted),result=namedSourceCorrection(input,draft);
  assert.equal(result.status,'ready');if(result.status==='ready'){
   const missing=direction==='both'?'concordant and opposing':direction;
-  assert(result.text.includes(`joint ${first}/${second} missing ${missing}`));
+  assert(result.text.includes(`joint ${first}/${second}`)&&result.text.includes(`missing ${missing}`));
   assert(result.text.includes('both weights>0'));assert(result.text.includes('(x[i]-x[j])*(y[i]-y[j])>0'));assert(result.text.includes('<0 is opposing'));assert(result.text.includes('ties/zero weights do not count'));assert(result.text.includes('Keep same-index joint scenarios'));
   assert(/^[\x00-\x7f]*$/.test(result.text));assert.equal(result.bytes,Buffer.byteLength(result.text,'utf8'));assert(result.bytes<=NAMED_SOURCE_CORRECTION_MAX_BYTES);
  }
@@ -76,3 +78,19 @@ for(let count=1;count<=8;count++){
  const original=namedSourceCorrection(p,draft,false),updated=namedSourceCorrection(p,draft);
  if(original.status==='ready'){assert.equal(updated.status,'ready','Optional event detail cannot block an existing full second phase');if(updated.status==='ready'){assert.deepEqual(updated.affectedActorIds,original.affectedActorIds);assert(updated.bytes<=1984);for(let i=0;i<count;i++)assert(updated.text.includes('P'+i+':'));}}
 }
+
+// R52 prospective diagnostics count the SAME rejected canonical scenario pairs.
+// They neither change a law nor present candidate counts as source evidence.
+const monotoneLaw:PlayerLaw={weights:[1,1,1,...v(0).slice(3)],outcomes:{points:[10,20,30,...v(20).slice(3)],rebounds:[4,7,10,...v(7).slice(3)],assists:[2,4,6,...v(4).slice(3)],threes:[0,1,2,...v(1).slice(3)]}};
+const monotoneDraft={wireRelease:PROPS_AI_WIRE_RELEASE,players:{a:row(input,input.players[0],monotoneLaw)}},monotoneBefore=digest(monotoneDraft),jointCounted=namedSourceCorrection(input,monotoneDraft);
+assert.equal(jointCounted.status,'ready');if(jointCounted.status==='ready'){assert(jointCounted.text.includes('joint points/rebounds (+3,-0,=0) missing opposing'));assert(jointCounted.text.includes("Missing '-' needs opposing relative ranks; unchanged rejected vectors fail"));}
+const legacyJoint=namedSourceCorrection(input,monotoneDraft,true,false);assert.equal(legacyJoint.status,'ready');if(legacyJoint.status==='ready')assert(!legacyJoint.text.includes('counts active pair signs'));
+assert.equal(digest(monotoneDraft),monotoneBefore,'Navigation cannot repair a failed forecast');
+const inert=structuredClone(monotoneDraft);inert.players.a.law!.outcomes.rebounds[15]=10000;inert.players.a.law!.outcomes.assists[15]=0;const inertFeedback=namedSourceCorrection(input,inert);assert.equal(inertFeedback.status,'ready');if(inertFeedback.status==='ready')assert(inertFeedback.text.includes('joint rebounds/assists (+3,-0,=0)'),'Zero-weight values never become pair witnesses');
+const constantFeedback=namedSourceCorrection(input,bad);assert.equal(constantFeedback.status,'ready');if(constantFeedback.status==='ready')assert(constantFeedback.text.includes('(+0,-0,=120)'),'All16 positive-weight constant scenarios have120 tied pairs');
+for(let count=1;count<=12;count++){
+ const p=packet(Array.from({length:count},(_,i)=>player('joint-cap-'+i))),draft={wireRelease:PROPS_AI_WIRE_RELEASE,players:Object.fromEntries(p.players.map(actor=>[actor.id,row(p,actor,monotoneLaw)]))},r51=namedSourceCorrection(p,draft,true,false),oldReferenced=withOriginalDraftCorrectionContext(p,draft,r51),updated=reviewCorrectionFeedback(p,draft);
+ if(oldReferenced.status==='ready'){assert.equal(updated.status,'ready','Optional pair detail cannot remove an existing correction');if(updated.status==='ready'){for(let i=0;i<count;i++)assert(updated.text!.includes('P'+i+':'),'Every original affected actor remains');assert(updated.bytes<=1984);assert(Buffer.byteLength(JSON.stringify(updated.text).slice(1,-1),'utf8')<=1984||!oldReferenced.text?.includes('UNACCEPTED prior numeric draft'));}}
+ if(oldReferenced.status==='ready'&&oldReferenced.text.includes('UNACCEPTED prior numeric draft')){assert.equal(updated.status,'ready');if(updated.status==='ready')assert(updated.text.includes('UNACCEPTED prior numeric draft'),'Previously fitting exact numeric references retain priority over optional pair counts');}
+}
+console.log('R52 joint-pair counters and unchanged-law/rank navigation, canonical coordinates, zero-weight/tie/permutation immutability and complete R51 feedback/numeric-reference fallback passed. No I/O or generated proof.');
