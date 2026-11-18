@@ -4,6 +4,15 @@ Shared generation is `player_props_ai_2026_11_18_r53_exact_benchmark_context`;
 NBA writer is `nba_player_props_private_writer_2026_11_18_r35_exact_benchmark_context`;
 NFL writer is `nfl_player_props_writer_2026_11_18_r114_exact_benchmark_context`.
 Private compatibility is `player_props_ai_nba_benchmark_freshness_2026_11_18_r1_exact_metric_sets`.
+NBA lifecycle is `nba_player_props_lifecycle_candidate_2026_11_18_r6_stored_lock_integrity`;
+lock integrity is `nba_player_props_lock_integrity_2026_11_18_r1_opaque_stored_authority`.
+A stored scope with duplicate/conflicting locked authority (including an unlocked
+shadow) remains byte-exact through the opaque reader, but lifecycle/publication
+refuse it before deduplication or an RPC. No automatic historical repair occurs;
+actual corrupt records would require owner review. Unique existing locks and
+normal first-lock paths are unchanged. Round119 was NOT CLEAR on this baseline
+boundary; two fresh triple CLEAR rounds after its correction are required.
+
 Original R1 context hashes, source audits/capsules, old R51/R52 reviews, wire/law
 parsing and every locked payload remain exact. No submitted input is transformed.
 

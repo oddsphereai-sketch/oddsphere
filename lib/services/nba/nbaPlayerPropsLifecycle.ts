@@ -6,9 +6,10 @@ import {
 import { currentSlateDate } from "../../dates/slateDate";
 import { nbaPlayerPropsCadenceStage, type NbaPlayerPropsCadenceStage } from "./nbaPlayerPropsSourcePolicy";
 import {prepareNbaLockHandoff,nbaLockScope,type NbaLockHandoff,type NbaLockDiagnostic} from "../../playerPropsAi/nbaLockAuthority";
+import {assertNbaStoredLocksUnambiguous} from './nbaPlayerPropsLockIntegrity';
 
 export const NBA_PLAYER_PROPS_LIFECYCLE_CANDIDATE_RELEASE =
-  "nba_player_props_lifecycle_candidate_2026_11_10_r5_prelock_ai_authority" as const;
+  "nba_player_props_lifecycle_candidate_2026_11_18_r6_stored_lock_integrity" as const;
 export const NBA_PLAYER_PROPS_WRITER_LEASE_GROUP = "prediction_pipeline:nba" as const;
 export const NBA_PLAYER_PROPS_LOCK_LEAD_MINUTES = 60;
 
@@ -97,6 +98,8 @@ export function advanceNbaPlayerPropsCandidateLifecycle(args: {
   ) {
     throw new Error("NBA props candidate lifecycle cannot operate on a public snapshot.");
   }
+  assertNbaStoredLocksUnambiguous(args.previous?.decisions??[]);
+  assertNbaStoredLocksUnambiguous(args.candidate.decisions);
   const previousByScope = new Map((args.previous?.decisions ?? []).map((row) => [decisionScope(row), row]));
   const candidateScopes = new Set(args.candidate.decisions.map(decisionScope));
   const handoff=args.lockHandoff?prepareNbaLockHandoff({...args.lockHandoff,nextRows:args.candidate.decisions,previousRows:args.previous?.decisions??[],previousGeneratedAt:args.previous?.generatedAt,now:args.now}):null;

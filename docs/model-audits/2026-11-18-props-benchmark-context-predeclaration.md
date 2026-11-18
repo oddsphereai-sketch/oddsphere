@@ -26,3 +26,17 @@ rounds on unchanged candidate, fresh-main integration/strict protected expected-
 PR merge, actual Ready-www/source and ordinary publication/retention/lock proof.
 No extra paid tests. Roll back future compatibility on any genuine changed fact
 accepted, lost original binding, changed lock, unexpected board loss or load growth.
+
+Round119 was NOT CLEAR: a synthetic duplicate appended to an actual historical
+locked payload survives the opaque R8 decoder/canonical reader, then the prior
+lifecycle and Map-based client guard could silently collapse it. The same boundary
+exists in baseline; no actual live duplicate or lock loss was found. The correction
+versions lifecycle R6 and a shared lock-integrity guard R1: reject ambiguous stored
+locked scopes before transformation and before any guarded publication. Readers
+continue rendering the exact opaque stored payload. Never deduplicate, replace,
+reconstruct or correct a corrupt public record; actual corruption would require
+owner review. Unique original locks and all normal first-lock behavior stay exact.
+After this correction, two NEW fresh triple CLEAR rounds are required; round119
+cannot count. Tests must exercise the real decoder, canonical receipt, lifecycle,
+guarded write and public reader, including duplicate, conflicting and unlocked
+shadow records, and prove rejection before a mocked publish RPC.
