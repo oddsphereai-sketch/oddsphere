@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Isolated Node CJS/VM harness loads builtins and mocks browser-only imports; no production import or network. */
 globalThis.fetch=()=>{throw Error('Card-asof controls forbid network');};
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),{createRequire}=require('node:module');
 const root=process.cwd(),rq=createRequire(root+'/package.json'),ts=rq('typescript'),React=rq('react'),render=rq('react-dom/server').renderToStaticMarkup;
