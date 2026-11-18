@@ -1,3 +1,60 @@
+## November 18 CBB grouped joint outcome R8 — owner-approved provisional release
+
+Target model `cbb_contextual_outcome_2026_11_18_r8_grouped_native_residual`,
+calibration `cbb_contextual_covariance_2026_11_18_r8_disjoint_grouped_native`,
+evidence `cbb_contextual_outcome_evidence_2026_11_18_r8_grouped_native_residual`,
+engine `cbb_grouped_outcome_2026_11_18_r1_native_innovation_residual`, decision
+`cbb_outcome_decision_2026_11_18_r16_grouped_native_outcome`, grade
+`cbb_contextual_outcome_grade_2026_11_18_r15_grouped_native_outcome`, publisher
+`cbb_member_pipeline_2026_11_18_r59_grouped_native_outcome`, adapter
+`cbb_member_adapter_2026_11_18_r41_grouped_native_outcome`, tracking
+`cbb_tracking_writer_2026_11_18_r43_grouped_native_outcome`.
+
+The owner approved provisional activation of the exact tested R2 fits, accepting
+known diagnostic/Total limitations while retaining the required frozen-pick
+postgame evaluation. No refit, play quota, price/grade policy change, provider call
+or second writer is introduced. The existing `prediction_pipeline:cbb` writer
+loads one private immutable 312075-byte compressed artifact (907679 logical model
+JSON bytes), object SHA256
+`75a40f3022e658641154716b6931093ae48d4a40ff921052973269cc6196bc34`.
+274 mean-training and 110 disjoint calibration games remain explicitly separate.
+
+The packaged runtime reproduced all61 frozen candidate scores, probabilities,
+sides, prices and grades exactly. That morning board has ML21Lean/1Best,
+Spread19Lean and Total1Lean:42actionables versus44 for the same-source R7 board.
+These are source-fixed development/forward forecasts, not proven new outcomes.
+Existing genuine R7/R1 manifests, historical decision/grade families, raw
+evidence and locked DTOs retain exact precedence and are never reforecast.
+Production remains R7 until protected merge, deployment and normal-writer proof.
+See the bounded owner exception in `docs/model-change-safety.md`.
+
+## November 18 CBB joint accuracy research R2 — preserved pre-approval research
+
+Candidate `cbb_joint_residual_research_2026_11_18_r2_grouped_native_innovations`
+fits separate Margin and Total residuals with training-only normalization and
+learned semantic-group shrinkage, then one exact joint covariance calibration.
+It has no production import, artifact loader, writer, schedule or activation.
+Active CBB numerical model/calibration R7, decision R15, interpreted/grade R14,
+publisher R58 and every locked record remain unchanged.
+
+The diagnostic 110 originally wager-evaluated November 15–17 games improve ML
+83–27 to86–24, Spread45–65 to60–50 and Total45–65 to52–58. These outcomes were
+already inspected during development; they are not untouched qualification.
+Actionables move ML24→29, Spread20→48 and Total36→0: a material market-mix
+change, not a validated Total wagering head. All promotions, demotions,
+replacement wagers, price returns and game-cluster intervals remain reported.
+Spread improvement intervals still cross zero. Do not activate from this replay.
+
+Both original and numerically supplemented November18 forecasts are frozen for
+the same61 morning sources before outcomes. They have identical scores,
+probabilities, sides and grades. A positive-tail Normal-downside supplement
+resolves one diagnostic numerical failure without refitting either mean or the
+calibration; the initial failure is preserved. Existing production callers and
+legacy readers retain the original downside implementation by default.
+Independent final-score evaluation preserves pending games and identity errors;
+no stored forecast is rewritten and no automatic promotion is implemented.
+See `docs/model-audits/2026-11-18-cbb-joint-accuracy-r2-result.json`.
+
 ## November 18 exact filtered-player identity completeness
 
 NBA collector is `nba_player_props_live_collector_2026_11_18_r10_complete_filtered_identity`;

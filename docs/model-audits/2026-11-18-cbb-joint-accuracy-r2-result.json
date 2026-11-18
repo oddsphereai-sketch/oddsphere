@@ -1,0 +1,1196 @@
+{
+  "at": "2026-11-18T14:56:14.646Z",
+  "status": "IMPLEMENTED_OFFLINE_PENDING_INDEPENDENT_QUALIFICATION",
+  "release": "cbb_joint_residual_research_2026_11_18_r2_grouped_native_innovations",
+  "productionChanges": 0,
+  "base": "76e3de25c539b89d7dfcce1f22407c659b9bee1a",
+  "scope": "Moneyline/Spread/Total one coherent score law; no price-policy or grade-threshold changes",
+  "researchAuthority": "Development outcomes and prospective morning-source predictions are not official member T60 wagers",
+  "fits": {
+    "trainingGames": 274,
+    "calibrationGames": 110,
+    "diagnosticGames": 111,
+    "meanFits": 2,
+    "calibrationFits": 1,
+    "statuses": {
+      "margin": "converged",
+      "total": "converged",
+      "calibration": "converged"
+    }
+  },
+  "diagnostic": {
+    "status": "DEVELOPMENT_ONLY_NOT_LIVE_QUALIFICATION",
+    "originalWagerEligibleGames": 110,
+    "markets": {
+      "moneyline": {
+        "byMode": {
+          "published": {
+            "all": {
+              "rows": 110,
+              "settled": 110,
+              "wins": 83,
+              "losses": 27,
+              "pushes": 0,
+              "units": -9.02688151842396,
+              "roi": -0.08206255925839963,
+              "conditionalBrier": 0.15022259904009078,
+              "conditionalLogLoss": 0.43888978422217656,
+              "threeOutcomeBrier": 0.3004451980801817,
+              "calibrationGap": 0.02954844058266881,
+              "grades": {
+                "No Play": 79,
+                "Lean": 24,
+                "Watchlist": 7
+              }
+            },
+            "actionable": {
+              "rows": 24,
+              "settled": 24,
+              "wins": 11,
+              "losses": 13,
+              "pushes": 0,
+              "units": -6.773254638677538,
+              "roi": -0.28221894327823077,
+              "conditionalBrier": 0.2827927769609235,
+              "conditionalLogLoss": 0.7671911744223577,
+              "threeOutcomeBrier": 0.5655855539218475,
+              "calibrationGap": 0.1775850217319876,
+              "grades": {
+                "Lean": 24
+              }
+            }
+          },
+          "baseline": {
+            "all": {
+              "rows": 110,
+              "settled": 110,
+              "wins": 83,
+              "losses": 27,
+              "pushes": 0,
+              "units": -9.02688151842396,
+              "roi": -0.08206255925839963,
+              "conditionalBrier": 0.15022259904009078,
+              "conditionalLogLoss": 0.43888978422217656,
+              "threeOutcomeBrier": 0.3004451980801817,
+              "calibrationGap": 0.02954844058266881,
+              "grades": {
+                "No Play": 79,
+                "Lean": 24,
+                "Watchlist": 7
+              }
+            },
+            "actionable": {
+              "rows": 24,
+              "settled": 24,
+              "wins": 11,
+              "losses": 13,
+              "pushes": 0,
+              "units": -6.773254638677538,
+              "roi": -0.28221894327823077,
+              "conditionalBrier": 0.2827927769609235,
+              "conditionalLogLoss": 0.7671911744223577,
+              "threeOutcomeBrier": 0.5655855539218475,
+              "calibrationGap": 0.1775850217319876,
+              "grades": {
+                "Lean": 24
+              }
+            }
+          },
+          "candidate": {
+            "all": {
+              "rows": 110,
+              "settled": 110,
+              "wins": 86,
+              "losses": 24,
+              "pushes": 0,
+              "units": -3.1895893250001626,
+              "roi": -0.02899626659091057,
+              "conditionalBrier": 0.14356565044742164,
+              "conditionalLogLoss": 0.42135620762626536,
+              "threeOutcomeBrier": 0.2871313008948434,
+              "calibrationGap": 0.013668552467719253,
+              "grades": {
+                "Lean": 29,
+                "No Play": 78,
+                "Watchlist": 3
+              }
+            },
+            "actionable": {
+              "rows": 29,
+              "settled": 29,
+              "wins": 18,
+              "losses": 11,
+              "pushes": 0,
+              "units": 0.367631068831624,
+              "roi": 0.012676933407987034,
+              "conditionalBrier": 0.2436363670829962,
+              "conditionalLogLoss": 0.6844437667354698,
+              "threeOutcomeBrier": 0.487272734165993,
+              "calibrationGap": 0.018943117362757445,
+              "grades": {
+                "Lean": 29
+              }
+            }
+          }
+        },
+        "pairedBrier": {
+          "delta": -0.006656948592669129,
+          "gameCluster95": [
+            -0.012848771243814134,
+            -0.0005059160957811581
+          ],
+          "bootstrapDraws": 4000
+        },
+        "pairedLogLoss": {
+          "delta": -0.017533576595911256,
+          "gameCluster95": [
+            -0.03267833168172246,
+            -0.0019339032955010028
+          ],
+          "bootstrapDraws": 4000
+        },
+        "pairedActionUnits": {
+          "delta": 0.06491714279553783,
+          "gameCluster95": [
+            -0.0188189969190565,
+            0.15221686740530008
+          ],
+          "bootstrapDraws": 4000
+        },
+        "promotions": {
+          "rows": 14,
+          "settled": 14,
+          "wins": 11,
+          "losses": 3,
+          "pushes": 0,
+          "units": 4.619310680131117,
+          "roi": 0.3299507628665084,
+          "conditionalBrier": 0.208250830161483,
+          "conditionalLogLoss": 0.6117306589112921,
+          "threeOutcomeBrier": 0.41650166032296587,
+          "calibrationGap": -0.16244867227127058,
+          "grades": {
+            "Lean": 14
+          }
+        },
+        "demotions": {
+          "rows": 9,
+          "settled": 9,
+          "wins": 4,
+          "losses": 5,
+          "pushes": 0,
+          "units": -2.3745162038486334,
+          "roi": -0.26383513376095924,
+          "conditionalBrier": 0.2819598376262171,
+          "conditionalLogLoss": 0.7623564736773254,
+          "threeOutcomeBrier": 0.5639196752524346,
+          "calibrationGap": 0.16557430677403218,
+          "grades": {
+            "Lean": 9
+          }
+        },
+        "replacementWagers": {
+          "rows": 2,
+          "settled": 2,
+          "wins": 1,
+          "losses": 1,
+          "pushes": 0,
+          "units": -0.019607843137254943,
+          "roi": -0.009803921568627472,
+          "conditionalBrier": 0.25845120089973916,
+          "conditionalLogLoss": 0.71010026608277,
+          "threeOutcomeBrier": 0.5169024017994784,
+          "calibrationGap": 0.027430492777138715,
+          "grades": {
+            "Lean": 2
+          }
+        },
+        "sideChanges": 7,
+        "netAction": 5
+      },
+      "spread": {
+        "byMode": {
+          "published": {
+            "all": {
+              "rows": 110,
+              "settled": 110,
+              "wins": 45,
+              "losses": 65,
+              "pushes": 0,
+              "units": -23.943833226051257,
+              "roi": -0.21767121114592053,
+              "conditionalBrier": 0.2547628214736065,
+              "conditionalLogLoss": 0.7027190562402563,
+              "threeOutcomeBrier": 0.5095287306096479,
+              "calibrationGap": 0.11750252126187083,
+              "grades": {
+                "Watchlist": 85,
+                "Lean": 20,
+                "No Play": 5
+              }
+            },
+            "actionable": {
+              "rows": 20,
+              "settled": 20,
+              "wins": 11,
+              "losses": 9,
+              "pushes": 0,
+              "units": 0.8843614564842184,
+              "roi": 0.04421807282421092,
+              "conditionalBrier": 0.2485494354941598,
+              "conditionalLogLoss": 0.6904223378059988,
+              "threeOutcomeBrier": 0.4970988709883197,
+              "calibrationGap": 0.009816038236192148,
+              "grades": {
+                "Lean": 20
+              }
+            }
+          },
+          "baseline": {
+            "all": {
+              "rows": 110,
+              "settled": 110,
+              "wins": 45,
+              "losses": 65,
+              "pushes": 0,
+              "units": -23.943833226051257,
+              "roi": -0.21767121114592053,
+              "conditionalBrier": 0.2547628214736065,
+              "conditionalLogLoss": 0.7027190562402563,
+              "threeOutcomeBrier": 0.5095287306096479,
+              "calibrationGap": 0.11750252126187083,
+              "grades": {
+                "Watchlist": 85,
+                "Lean": 20,
+                "No Play": 5
+              }
+            },
+            "actionable": {
+              "rows": 20,
+              "settled": 20,
+              "wins": 11,
+              "losses": 9,
+              "pushes": 0,
+              "units": 0.8843614564842184,
+              "roi": 0.04421807282421092,
+              "conditionalBrier": 0.2485494354941598,
+              "conditionalLogLoss": 0.6904223378059988,
+              "threeOutcomeBrier": 0.4970988709883197,
+              "calibrationGap": 0.009816038236192148,
+              "grades": {
+                "Lean": 20
+              }
+            }
+          },
+          "candidate": {
+            "all": {
+              "rows": 110,
+              "settled": 110,
+              "wins": 60,
+              "losses": 50,
+              "pushes": 0,
+              "units": 3.841092760350202,
+              "roi": 0.03491902509409275,
+              "conditionalBrier": 0.24732674551728392,
+              "conditionalLogLoss": 0.6878155113314145,
+              "threeOutcomeBrier": 0.49468770880602314,
+              "calibrationGap": -0.0047628600585275516,
+              "grades": {
+                "Watchlist": 52,
+                "Lean": 46,
+                "No Play": 10,
+                "Best Angle": 2
+              }
+            },
+            "actionable": {
+              "rows": 48,
+              "settled": 48,
+              "wins": 30,
+              "losses": 18,
+              "pushes": 0,
+              "units": 9.287128868950791,
+              "roi": 0.1934818514364748,
+              "conditionalBrier": 0.2418465416179567,
+              "conditionalLogLoss": 0.6768742659582344,
+              "threeOutcomeBrier": 0.48377149896216515,
+              "calibrationGap": -0.05638578035162156,
+              "grades": {
+                "Lean": 46,
+                "Best Angle": 2
+              }
+            }
+          }
+        },
+        "pairedBrier": {
+          "delta": -0.007436075956322537,
+          "gameCluster95": [
+            -0.019029178873636927,
+            0.00432274429086325
+          ],
+          "bootstrapDraws": 4000
+        },
+        "pairedLogLoss": {
+          "delta": -0.014903544908841732,
+          "gameCluster95": [
+            -0.03839221031868035,
+            0.009136933796815133
+          ],
+          "bootstrapDraws": 4000
+        },
+        "pairedActionUnits": {
+          "delta": 0.07638879465878703,
+          "gameCluster95": [
+            -0.07357153071998655,
+            0.2301109765987662
+          ],
+          "bootstrapDraws": 4000
+        },
+        "promotions": {
+          "rows": 41,
+          "settled": 41,
+          "wins": 26,
+          "losses": 15,
+          "pushes": 0,
+          "units": 8.661015115349935,
+          "roi": 0.21124427110609598,
+          "conditionalBrier": 0.24139420300895703,
+          "conditionalLogLoss": 0.6759926130770152,
+          "threeOutcomeBrier": 0.4828802097949893,
+          "calibrationGap": -0.06221717249474079,
+          "grades": {
+            "Lean": 39,
+            "Best Angle": 2
+          }
+        },
+        "demotions": {
+          "rows": 13,
+          "settled": 13,
+          "wins": 8,
+          "losses": 5,
+          "pushes": 0,
+          "units": 2.1253131731392605,
+          "roi": 0.16348562870302003,
+          "conditionalBrier": 0.24418252388029235,
+          "conditionalLogLoss": 0.681734638210339,
+          "threeOutcomeBrier": 0.4883650477605848,
+          "calibrationGap": -0.05041075723605193,
+          "grades": {
+            "Lean": 13
+          }
+        },
+        "replacementWagers": {
+          "rows": 7,
+          "settled": 7,
+          "wins": 4,
+          "losses": 3,
+          "pushes": 0,
+          "units": 0.6261137536008574,
+          "roi": 0.08944482194297963,
+          "conditionalBrier": 0.24449595347066855,
+          "conditionalLogLoss": 0.6820382328339479,
+          "threeOutcomeBrier": 0.48899190694133704,
+          "calibrationGap": -0.022230483513351995,
+          "grades": {
+            "Lean": 7
+          }
+        },
+        "sideChanges": 51,
+        "netAction": 28
+      },
+      "total": {
+        "byMode": {
+          "published": {
+            "all": {
+              "rows": 110,
+              "settled": 110,
+              "wins": 45,
+              "losses": 65,
+              "pushes": 0,
+              "units": -23.878014095405398,
+              "roi": -0.21707285541277635,
+              "conditionalBrier": 0.2638403300485788,
+              "conditionalLogLoss": 0.7213097643279835,
+              "threeOutcomeBrier": 0.5276806600971576,
+              "calibrationGap": 0.1422608742564499,
+              "grades": {
+                "Watchlist": 70,
+                "Lean": 36,
+                "No Play": 4
+              }
+            },
+            "actionable": {
+              "rows": 36,
+              "settled": 36,
+              "wins": 15,
+              "losses": 21,
+              "pushes": 0,
+              "units": -7.4501903088859605,
+              "roi": -0.2069497308023878,
+              "conditionalBrier": 0.27858843600404337,
+              "conditionalLogLoss": 0.7516622065883455,
+              "threeOutcomeBrier": 0.5571768720080874,
+              "calibrationGap": 0.17721332458561906,
+              "grades": {
+                "Lean": 36
+              }
+            }
+          },
+          "baseline": {
+            "all": {
+              "rows": 110,
+              "settled": 110,
+              "wins": 45,
+              "losses": 65,
+              "pushes": 0,
+              "units": -23.878014095405398,
+              "roi": -0.21707285541277635,
+              "conditionalBrier": 0.2638403300485788,
+              "conditionalLogLoss": 0.7213097643279835,
+              "threeOutcomeBrier": 0.5276806600971576,
+              "calibrationGap": 0.1422608742564499,
+              "grades": {
+                "Watchlist": 70,
+                "Lean": 36,
+                "No Play": 4
+              }
+            },
+            "actionable": {
+              "rows": 36,
+              "settled": 36,
+              "wins": 15,
+              "losses": 21,
+              "pushes": 0,
+              "units": -7.4501903088859605,
+              "roi": -0.2069497308023878,
+              "conditionalBrier": 0.27858843600404337,
+              "conditionalLogLoss": 0.7516622065883455,
+              "threeOutcomeBrier": 0.5571768720080874,
+              "calibrationGap": 0.17721332458561906,
+              "grades": {
+                "Lean": 36
+              }
+            }
+          },
+          "candidate": {
+            "all": {
+              "rows": 110,
+              "settled": 110,
+              "wins": 52,
+              "losses": 58,
+              "pushes": 0,
+              "units": -11.636076081728264,
+              "roi": -0.10578250983389331,
+              "conditionalBrier": 0.2503335625193876,
+              "conditionalLogLoss": 0.6938129230143083,
+              "threeOutcomeBrier": 0.5006671250387753,
+              "calibrationGap": 0.036223431810121165,
+              "grades": {
+                "Watchlist": 89,
+                "No Play": 21
+              }
+            },
+            "actionable": {
+              "rows": 0,
+              "settled": 0,
+              "wins": 0,
+              "losses": 0,
+              "pushes": 0,
+              "units": 0,
+              "roi": null,
+              "conditionalBrier": null,
+              "conditionalLogLoss": null,
+              "threeOutcomeBrier": null,
+              "calibrationGap": null,
+              "grades": {}
+            }
+          }
+        },
+        "pairedBrier": {
+          "delta": -0.013506767529191156,
+          "gameCluster95": [
+            -0.025803308668741035,
+            -0.0017688365581065189
+          ],
+          "bootstrapDraws": 4000
+        },
+        "pairedLogLoss": {
+          "delta": -0.0274968413136754,
+          "gameCluster95": [
+            -0.05251243934862906,
+            -0.0036215469994768353
+          ],
+          "bootstrapDraws": 4000
+        },
+        "pairedActionUnits": {
+          "delta": 0.06772900280805419,
+          "gameCluster95": [
+            -0.02951180352366123,
+            0.17168328304691943
+          ],
+          "bootstrapDraws": 4000
+        },
+        "promotions": {
+          "rows": 0,
+          "settled": 0,
+          "wins": 0,
+          "losses": 0,
+          "pushes": 0,
+          "units": 0,
+          "roi": null,
+          "conditionalBrier": null,
+          "conditionalLogLoss": null,
+          "threeOutcomeBrier": null,
+          "calibrationGap": null,
+          "grades": {}
+        },
+        "demotions": {
+          "rows": 36,
+          "settled": 36,
+          "wins": 15,
+          "losses": 21,
+          "pushes": 0,
+          "units": -7.4501903088859605,
+          "roi": -0.2069497308023878,
+          "conditionalBrier": 0.27858843600404337,
+          "conditionalLogLoss": 0.7516622065883455,
+          "threeOutcomeBrier": 0.5571768720080874,
+          "calibrationGap": 0.17721332458561906,
+          "grades": {
+            "Lean": 36
+          }
+        },
+        "replacementWagers": {
+          "rows": 0,
+          "settled": 0,
+          "wins": 0,
+          "losses": 0,
+          "pushes": 0,
+          "units": 0,
+          "roi": null,
+          "conditionalBrier": null,
+          "conditionalLogLoss": null,
+          "threeOutcomeBrier": null,
+          "calibrationGap": null,
+          "grades": {}
+        },
+        "sideChanges": 53,
+        "netAction": -36
+      }
+    },
+    "fullSamePolicy": {
+      "moneyline": {
+        "byMode": {
+          "published": {
+            "all": {
+              "rows": 111,
+              "settled": 110,
+              "wins": 83,
+              "losses": 27,
+              "pushes": 0,
+              "units": -9.02688151842396,
+              "roi": -0.08206255925839963,
+              "conditionalBrier": 0.15022259904009078,
+              "conditionalLogLoss": 0.43888978422217656,
+              "threeOutcomeBrier": 0.3004451980801817,
+              "calibrationGap": 0.02954844058266881,
+              "grades": {
+                "No Play": 79,
+                "Lean": 24,
+                "Held": 1,
+                "Watchlist": 7
+              }
+            },
+            "actionable": {
+              "rows": 24,
+              "settled": 24,
+              "wins": 11,
+              "losses": 13,
+              "pushes": 0,
+              "units": -6.773254638677538,
+              "roi": -0.28221894327823077,
+              "conditionalBrier": 0.2827927769609235,
+              "conditionalLogLoss": 0.7671911744223577,
+              "threeOutcomeBrier": 0.5655855539218475,
+              "calibrationGap": 0.1775850217319876,
+              "grades": {
+                "Lean": 24
+              }
+            }
+          },
+          "baseline": {
+            "all": {
+              "rows": 111,
+              "settled": 111,
+              "wins": 83,
+              "losses": 28,
+              "pushes": 0,
+              "units": -10.02688151842396,
+              "roi": -0.09033226593174738,
+              "conditionalBrier": 0.15201929375820855,
+              "conditionalLogLoss": 0.4429972214405588,
+              "threeOutcomeBrier": 0.3040385875164172,
+              "calibrationGap": 0.034609417972779166,
+              "grades": {
+                "No Play": 79,
+                "Lean": 25,
+                "Watchlist": 7
+              }
+            },
+            "actionable": {
+              "rows": 25,
+              "settled": 25,
+              "wins": 11,
+              "losses": 14,
+              "pushes": 0,
+              "units": -7.773254638677538,
+              "roi": -0.3109301855471015,
+              "conditionalBrier": 0.2854672943925331,
+              "conditionalLogLoss": 0.772296140063968,
+              "threeOutcomeBrier": 0.5709345887850668,
+              "calibrationGap": 0.19413429809810506,
+              "grades": {
+                "Lean": 25
+              }
+            }
+          },
+          "candidate": {
+            "all": {
+              "rows": 111,
+              "settled": 111,
+              "wins": 86,
+              "losses": 25,
+              "pushes": 0,
+              "units": -4.189589325000162,
+              "roi": -0.03774404797297443,
+              "conditionalBrier": 0.14540605865529505,
+              "conditionalLogLoss": 0.4255879841760507,
+              "threeOutcomeBrier": 0.2908121173105902,
+              "calibrationGap": 0.018858825983153804,
+              "grades": {
+                "Lean": 30,
+                "No Play": 78,
+                "Watchlist": 3
+              }
+            },
+            "actionable": {
+              "rows": 30,
+              "settled": 30,
+              "wins": 18,
+              "losses": 12,
+              "pushes": 0,
+              "units": -0.632368931168376,
+              "roi": -0.0210789643722792,
+              "conditionalBrier": 0.24711018689760858,
+              "conditionalLogLoss": 0.6913317546660355,
+              "threeOutcomeBrier": 0.49422037379521766,
+              "calibrationGap": 0.037971310540030334,
+              "grades": {
+                "Lean": 30
+              }
+            }
+          }
+        },
+        "pairedBrier": {
+          "delta": -0.00661323510291354,
+          "gameCluster95": [
+            -0.012676636328458054,
+            -0.0005299226313782359
+          ],
+          "bootstrapDraws": 4000
+        },
+        "pairedLogLoss": {
+          "delta": -0.017409237264508267,
+          "gameCluster95": [
+            -0.031705169505234436,
+            -0.0015464285475723677
+          ],
+          "bootstrapDraws": 4000
+        },
+        "pairedActionUnits": {
+          "delta": 0.0643323036712537,
+          "gameCluster95": [
+            -0.018074021848220056,
+            0.14633614261191272
+          ],
+          "bootstrapDraws": 4000
+        },
+        "promotions": {
+          "rows": 14,
+          "settled": 14,
+          "wins": 11,
+          "losses": 3,
+          "pushes": 0,
+          "units": 4.619310680131117,
+          "roi": 0.3299507628665084,
+          "conditionalBrier": 0.208250830161483,
+          "conditionalLogLoss": 0.6117306589112921,
+          "threeOutcomeBrier": 0.41650166032296587,
+          "calibrationGap": -0.16244867227127058,
+          "grades": {
+            "Lean": 14
+          }
+        },
+        "demotions": {
+          "rows": 9,
+          "settled": 9,
+          "wins": 4,
+          "losses": 5,
+          "pushes": 0,
+          "units": -2.3745162038486334,
+          "roi": -0.26383513376095924,
+          "conditionalBrier": 0.2819598376262171,
+          "conditionalLogLoss": 0.7623564736773254,
+          "threeOutcomeBrier": 0.5639196752524346,
+          "calibrationGap": 0.16557430677403218,
+          "grades": {
+            "Lean": 9
+          }
+        },
+        "replacementWagers": {
+          "rows": 2,
+          "settled": 2,
+          "wins": 1,
+          "losses": 1,
+          "pushes": 0,
+          "units": -0.019607843137254943,
+          "roi": -0.009803921568627472,
+          "conditionalBrier": 0.25845120089973916,
+          "conditionalLogLoss": 0.71010026608277,
+          "threeOutcomeBrier": 0.5169024017994784,
+          "calibrationGap": 0.027430492777138715,
+          "grades": {
+            "Lean": 2
+          }
+        },
+        "sideChanges": 7,
+        "netAction": 5
+      },
+      "spread": {
+        "byMode": {
+          "published": {
+            "all": {
+              "rows": 111,
+              "settled": 110,
+              "wins": 45,
+              "losses": 65,
+              "pushes": 0,
+              "units": -23.943833226051257,
+              "roi": -0.21767121114592053,
+              "conditionalBrier": 0.2547628214736065,
+              "conditionalLogLoss": 0.7027190562402563,
+              "threeOutcomeBrier": 0.5095287306096479,
+              "calibrationGap": 0.11750252126187083,
+              "grades": {
+                "Watchlist": 85,
+                "Lean": 20,
+                "Held": 1,
+                "No Play": 5
+              }
+            },
+            "actionable": {
+              "rows": 20,
+              "settled": 20,
+              "wins": 11,
+              "losses": 9,
+              "pushes": 0,
+              "units": 0.8843614564842184,
+              "roi": 0.04421807282421092,
+              "conditionalBrier": 0.2485494354941598,
+              "conditionalLogLoss": 0.6904223378059988,
+              "threeOutcomeBrier": 0.4970988709883197,
+              "calibrationGap": 0.009816038236192148,
+              "grades": {
+                "Lean": 20
+              }
+            }
+          },
+          "baseline": {
+            "all": {
+              "rows": 111,
+              "settled": 111,
+              "wins": 46,
+              "losses": 65,
+              "pushes": 0,
+              "units": -23.034742316960347,
+              "roi": -0.2075202010536968,
+              "conditionalBrier": 0.2546179583114136,
+              "conditionalLogLoss": 0.702428877968014,
+              "threeOutcomeBrier": 0.5092389764684834,
+              "calibrationGap": 0.112042571046153,
+              "grades": {
+                "Watchlist": 86,
+                "Lean": 20,
+                "No Play": 5
+              }
+            },
+            "actionable": {
+              "rows": 20,
+              "settled": 20,
+              "wins": 11,
+              "losses": 9,
+              "pushes": 0,
+              "units": 0.8843614564842184,
+              "roi": 0.04421807282421092,
+              "conditionalBrier": 0.2485494354941598,
+              "conditionalLogLoss": 0.6904223378059988,
+              "threeOutcomeBrier": 0.4970988709883197,
+              "calibrationGap": 0.009816038236192148,
+              "grades": {
+                "Lean": 20
+              }
+            }
+          },
+          "candidate": {
+            "all": {
+              "rows": 111,
+              "settled": 111,
+              "wins": 61,
+              "losses": 50,
+              "pushes": 0,
+              "units": 4.750183669441109,
+              "roi": 0.04279444747244242,
+              "conditionalBrier": 0.2471971013519373,
+              "conditionalLogLoss": 0.6875559666941323,
+              "threeOutcomeBrier": 0.4944281122071186,
+              "calibrationGap": -0.009068011671897969,
+              "grades": {
+                "Watchlist": 53,
+                "Lean": 46,
+                "No Play": 10,
+                "Best Angle": 2
+              }
+            },
+            "actionable": {
+              "rows": 48,
+              "settled": 48,
+              "wins": 30,
+              "losses": 18,
+              "pushes": 0,
+              "units": 9.287128868950791,
+              "roi": 0.1934818514364748,
+              "conditionalBrier": 0.2418465416179567,
+              "conditionalLogLoss": 0.6768742659582344,
+              "threeOutcomeBrier": 0.48377149896216515,
+              "calibrationGap": -0.05638578035162156,
+              "grades": {
+                "Lean": 46,
+                "Best Angle": 2
+              }
+            }
+          }
+        },
+        "pairedBrier": {
+          "delta": -0.007420856959476254,
+          "gameCluster95": [
+            -0.018648775332862945,
+            0.003985669958690767
+          ],
+          "bootstrapDraws": 4000
+        },
+        "pairedLogLoss": {
+          "delta": -0.014872911273881366,
+          "gameCluster95": [
+            -0.037672038280938874,
+            0.00838481891348396
+          ],
+          "bootstrapDraws": 4000
+        },
+        "pairedActionUnits": {
+          "delta": 0.07570060731951868,
+          "gameCluster95": [
+            -0.08033967877986546,
+            0.22680417322361063
+          ],
+          "bootstrapDraws": 4000
+        },
+        "promotions": {
+          "rows": 41,
+          "settled": 41,
+          "wins": 26,
+          "losses": 15,
+          "pushes": 0,
+          "units": 8.661015115349935,
+          "roi": 0.21124427110609598,
+          "conditionalBrier": 0.24139420300895703,
+          "conditionalLogLoss": 0.6759926130770152,
+          "threeOutcomeBrier": 0.4828802097949893,
+          "calibrationGap": -0.06221717249474079,
+          "grades": {
+            "Lean": 39,
+            "Best Angle": 2
+          }
+        },
+        "demotions": {
+          "rows": 13,
+          "settled": 13,
+          "wins": 8,
+          "losses": 5,
+          "pushes": 0,
+          "units": 2.1253131731392605,
+          "roi": 0.16348562870302003,
+          "conditionalBrier": 0.24418252388029235,
+          "conditionalLogLoss": 0.681734638210339,
+          "threeOutcomeBrier": 0.4883650477605848,
+          "calibrationGap": -0.05041075723605193,
+          "grades": {
+            "Lean": 13
+          }
+        },
+        "replacementWagers": {
+          "rows": 7,
+          "settled": 7,
+          "wins": 4,
+          "losses": 3,
+          "pushes": 0,
+          "units": 0.6261137536008574,
+          "roi": 0.08944482194297963,
+          "conditionalBrier": 0.24449595347066855,
+          "conditionalLogLoss": 0.6820382328339479,
+          "threeOutcomeBrier": 0.48899190694133704,
+          "calibrationGap": -0.022230483513351995,
+          "grades": {
+            "Lean": 7
+          }
+        },
+        "sideChanges": 51,
+        "netAction": 28
+      },
+      "total": {
+        "byMode": {
+          "published": {
+            "all": {
+              "rows": 111,
+              "settled": 110,
+              "wins": 45,
+              "losses": 65,
+              "pushes": 0,
+              "units": -23.878014095405398,
+              "roi": -0.21707285541277635,
+              "conditionalBrier": 0.2638403300485788,
+              "conditionalLogLoss": 0.7213097643279835,
+              "threeOutcomeBrier": 0.5276806600971576,
+              "calibrationGap": 0.1422608742564499,
+              "grades": {
+                "Watchlist": 70,
+                "Held": 1,
+                "Lean": 36,
+                "No Play": 4
+              }
+            },
+            "actionable": {
+              "rows": 36,
+              "settled": 36,
+              "wins": 15,
+              "losses": 21,
+              "pushes": 0,
+              "units": -7.4501903088859605,
+              "roi": -0.2069497308023878,
+              "conditionalBrier": 0.27858843600404337,
+              "conditionalLogLoss": 0.7516622065883455,
+              "threeOutcomeBrier": 0.5571768720080874,
+              "calibrationGap": 0.17721332458561906,
+              "grades": {
+                "Lean": 36
+              }
+            }
+          },
+          "baseline": {
+            "all": {
+              "rows": 111,
+              "settled": 111,
+              "wins": 46,
+              "losses": 65,
+              "pushes": 0,
+              "units": -22.968923186314484,
+              "roi": -0.2069272359127431,
+              "conditionalBrier": 0.2634033331488451,
+              "conditionalLogLoss": 0.7204303687796598,
+              "threeOutcomeBrier": 0.5268066662976902,
+              "calibrationGap": 0.13679869885414964,
+              "grades": {
+                "Watchlist": 71,
+                "Lean": 36,
+                "No Play": 4
+              }
+            },
+            "actionable": {
+              "rows": 36,
+              "settled": 36,
+              "wins": 15,
+              "losses": 21,
+              "pushes": 0,
+              "units": -7.4501903088859605,
+              "roi": -0.2069497308023878,
+              "conditionalBrier": 0.27858843600404337,
+              "conditionalLogLoss": 0.7516622065883455,
+              "threeOutcomeBrier": 0.5571768720080874,
+              "calibrationGap": 0.17721332458561906,
+              "grades": {
+                "Lean": 36
+              }
+            }
+          },
+          "candidate": {
+            "all": {
+              "rows": 111,
+              "settled": 111,
+              "wins": 52,
+              "losses": 59,
+              "pushes": 0,
+              "units": -12.636076081728262,
+              "roi": -0.11383852325881318,
+              "conditionalBrier": 0.2503341396172379,
+              "conditionalLogLoss": 0.6938140896672336,
+              "threeOutcomeBrier": 0.5006682792344759,
+              "calibrationGap": 0.04040517983349312,
+              "grades": {
+                "Watchlist": 90,
+                "No Play": 21
+              }
+            },
+            "actionable": {
+              "rows": 0,
+              "settled": 0,
+              "wins": 0,
+              "losses": 0,
+              "pushes": 0,
+              "units": 0,
+              "roi": null,
+              "conditionalBrier": null,
+              "conditionalLogLoss": null,
+              "threeOutcomeBrier": null,
+              "calibrationGap": null,
+              "grades": {}
+            }
+          }
+        },
+        "pairedBrier": {
+          "delta": -0.013069193531607223,
+          "gameCluster95": [
+            -0.025309891031171244,
+            -0.0016739482198137423
+          ],
+          "bootstrapDraws": 4000
+        },
+        "pairedLogLoss": {
+          "delta": -0.02661627911242631,
+          "gameCluster95": [
+            -0.05146290096436304,
+            -0.0033873388563745474
+          ],
+          "bootstrapDraws": 4000
+        },
+        "pairedActionUnits": {
+          "delta": 0.06711883161158523,
+          "gameCluster95": [
+            -0.02896393476103622,
+            0.1669058480652684
+          ],
+          "bootstrapDraws": 4000
+        },
+        "promotions": {
+          "rows": 0,
+          "settled": 0,
+          "wins": 0,
+          "losses": 0,
+          "pushes": 0,
+          "units": 0,
+          "roi": null,
+          "conditionalBrier": null,
+          "conditionalLogLoss": null,
+          "threeOutcomeBrier": null,
+          "calibrationGap": null,
+          "grades": {}
+        },
+        "demotions": {
+          "rows": 36,
+          "settled": 36,
+          "wins": 15,
+          "losses": 21,
+          "pushes": 0,
+          "units": -7.4501903088859605,
+          "roi": -0.2069497308023878,
+          "conditionalBrier": 0.27858843600404337,
+          "conditionalLogLoss": 0.7516622065883455,
+          "threeOutcomeBrier": 0.5571768720080874,
+          "calibrationGap": 0.17721332458561906,
+          "grades": {
+            "Lean": 36
+          }
+        },
+        "replacementWagers": {
+          "rows": 0,
+          "settled": 0,
+          "wins": 0,
+          "losses": 0,
+          "pushes": 0,
+          "units": 0,
+          "roi": null,
+          "conditionalBrier": null,
+          "conditionalLogLoss": null,
+          "threeOutcomeBrier": null,
+          "calibrationGap": null,
+          "grades": {}
+        },
+        "sideChanges": 54,
+        "netAction": -36
+      }
+    }
+  },
+  "numericalSupplement": {
+    "initialDiagnosticFailure": {
+      "gameId": 10883313,
+      "reason": "Normal expected-downside tail subtraction cancels under tiny fitted location sensitivity"
+    },
+    "afterSupplementGames": 111,
+    "afterSupplementFailures": 0,
+    "previous110SuccessfulGamesProbabilitySideGradeDifferences": 0,
+    "prospective61ProbabilitySideGradeDifferences": 0,
+    "sourceAndFittedModelUnchanged": true,
+    "productionDefaultUnchanged": true
+  },
+  "prospective": {
+    "frozenAt": "2026-11-18T14:51:04.346Z",
+    "games": 61,
+    "failures": 0,
+    "modelSha256": "c574257f60635d81d93d1d0833725d3f843a6e098e9671189a882ba558b914fa",
+    "predictionSha256": "bfe000e14d6e32c8cf77387fb32c6b6be2a867e7aa90478d3fe6180c0b59147e",
+    "pendingGames": 61,
+    "outcomesAttached": 0
+  },
+  "limitations": [
+    "Nov15–17 aggregate outcomes were already inspected, so diagnostic improvements cannot justify a live release.",
+    "Spread paired Brier/logloss intervals cross zero.",
+    "No Total action qualifies in the historical diagnostic; Total directional accuracy52/110 remains unqualified for wagering.",
+    "The61-game prospective slate is a single morning capture, not actual T60 snapshots; multiple independent dates and recommendation value must be assessed.",
+    "Coefficient and observation uncertainty are included; fitted empirical-Bayes hyperparameter uncertainty is not fully integrated.",
+    "One historically Held Quinnipiac game10883238 is separate from the110 originally wager-evaluated cohort; no history is corrected."
+  ],
+  "privateArchive": "/Users/danielmengel/Projects/oddsphere/ops-local/learning-lab/cbb-joint-accuracy-20261118-r2",
+  "evidenceFootprint": {
+    "files": 610,
+    "bytes": 132429490,
+    "rawSourcesCommitted": false
+  },
+  "paidAiCalls": 0,
+  "providerCalls": 0,
+  "dbWrites": 0,
+  "historyWrites": 0,
+  "newWriter": false,
+  "newSchedule": false,
+  "verification": {
+    "pureSyntheticChecks": 58,
+    "coefficientRecoveryAndPosteriorUncertainty": true,
+    "nativeIdentityMissingnessReflectionTranslation": true,
+    "positiveTailIndependentIntegration": true,
+    "strictFrozenFinalIdentityAndClockJoins": true,
+    "supplementExactPreviouslySuccessfulHistoricalGames": 110,
+    "supplementExactProspectiveGames": 61,
+    "typecheck": "PASS (6144MiB heap; initial default-heap attempts exhausted heap)",
+    "focusedExistingDecisionBoardCodecRiskAndWriterReaderLocks": "PASS",
+    "fullVerifyModelChange": "PASS",
+    "optionalMarketBrainPostgres": "SKIPPED (URL unset; no Market Brain behavior changed)",
+    "eslint": "PASS",
+    "privateEvidenceCommitted": false
+  }
+}

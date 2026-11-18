@@ -2,10 +2,11 @@
  * training artifact is promoted by this exact release manifest; no refresh,
  * fallback model, provider collection or persistence is introduced here. */
 import legacyReleaseManifest from "../../cbb/artifacts/contextual-outcome-r1-manifest.json";
-import releaseManifest from "../../cbb/artifacts/contextual-outcome-r7-manifest.json";
-import {CBB_CONTEXTUAL_COMPOSITE_OUTCOME_RELEASE as CBB_COMPOSITE_OUTCOME_RELEASE,validateCbbCompositeOutcomeArtifact,type CbbCompositeOutcomeArtifact} from "../../cbb/contextualCompositeOutcomeForecast";
+import previousReleaseManifest from "../../cbb/artifacts/contextual-outcome-r7-manifest.json";
+import releaseManifest from "../../cbb/artifacts/contextual-outcome-r8-manifest.json";
+import {CBB_GROUPED_OUTCOME_RELEASE,validateCbbGroupedOutcomeArtifact,type CbbGroupedOutcomeArtifact} from "../../cbb/groupedOutcomeForecast";
 import {CBB_OUTCOME_DECISION_RELEASE,forecastCbbOutcomeDecision} from "../../cbb/contextualOutcomeDecision";
-import {buildCbbContextualOutcomeBoard,CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_EXECUTION_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PRICE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_RESISTANCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_EXECUTION_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_PRICE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_RESISTANCE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE,type CbbOutcomeDecision} from "../../cbb/contextualOutcomeBoard";
+import {buildCbbContextualOutcomeBoard,CBB_CONTEXTUAL_OUTCOME_OWNED_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_OWNED_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_EXECUTION_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PRICE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_RESISTANCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_EXECUTION_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_PRICE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_RESISTANCE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE,type CbbOutcomeDecision} from "../../cbb/contextualOutcomeBoard";
 import {freezeCbbContextualForecastArtifact,cbbContextualForecastObjectSha256,assertCbbContextualForecastCalibrationBinding} from "../../cbb/contextualForecastCalibrationBinding";
 import {CBB_PRIVATE_OUTCOME_ARTIFACT_RELEASE,createCbbPrivateOutcomeArtifactLoader,type decodeCbbPrivateOutcomeArtifact,type CbbPrivateOutcomeManifest} from "./cbbOutcomeArtifactEnvelope";
 import {createCbbOutcomeArtifactDownload} from "./cbbOutcomeArtifactStorage";
@@ -13,9 +14,9 @@ import {encodeCbbContextualEvidence,decodeCbbContextualEvidence,type CbbContextu
 import type {CbbContextualAssembledInput,assembleCbbContextualReaderInput} from "./cbbContextualReaderInput";
 import type {CbbForecast,CbbQuote} from "../../cbb/types";
 
-export const CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE="cbb_contextual_outcome_2026_11_06_r7_economic_total_retained_margin" as const;
-export const CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE="cbb_contextual_covariance_2026_11_06_r7_economic_total_retained_margin" as const;
-export const CBB_CONTEXTUAL_OUTCOME_EVIDENCE_RELEASE="cbb_contextual_outcome_evidence_2026_11_06_r7_economic_total_retained_margin" as const;
+export const CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE="cbb_contextual_outcome_2026_11_18_r8_grouped_native_residual" as const;
+export const CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE="cbb_contextual_covariance_2026_11_18_r8_disjoint_grouped_native" as const;
+export const CBB_CONTEXTUAL_OUTCOME_EVIDENCE_RELEASE="cbb_contextual_outcome_evidence_2026_11_18_r8_grouped_native_residual" as const;
 /** Genuine economic Total and retained Margin component-bound artifact, pinned exactly. */
 export const CBB_CONTEXTUAL_OUTCOME_MANIFEST=Object.freeze(releaseManifest as CbbPrivateOutcomeManifest);
 function activeManifest():CbbPrivateOutcomeManifest|null{return CBB_CONTEXTUAL_OUTCOME_MANIFEST;}
@@ -24,16 +25,16 @@ export function cbbContextualOutcomeReadinessMetadata(){
  return manifest?{status:"pinned" as const,model:CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE,calibration:CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE,
   engine:manifest.engineRelease,objectSha256:manifest.modelObjectSha256,availableBy:manifest.availableBy}:
  {status:"pending" as const,model:CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE,calibration:CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE,
-  engine:CBB_COMPOSITE_OUTCOME_RELEASE,objectSha256:null,availableBy:null};
+  engine:CBB_GROUPED_OUTCOME_RELEASE,objectSha256:null,availableBy:null};
 }
 export const CBB_CONTEXTUAL_OUTCOME_LEGACY_MODEL_RELEASE="cbb_contextual_outcome_2026_11_05_r1" as const;
 /** One immutable authority for current and historical contextual identities.
  * Legacy entries decode stored decisions only; they never load or run a model. */
 type ContextualRelease={
- readonly modelRelease:typeof CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE|typeof CBB_CONTEXTUAL_OUTCOME_LEGACY_MODEL_RELEASE;
- readonly calibrationRelease:typeof CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE|"cbb_contextual_covariance_2026_11_05_r1";
- readonly evidenceRelease:typeof CBB_CONTEXTUAL_OUTCOME_EVIDENCE_RELEASE|"cbb_contextual_outcome_evidence_2026_11_05_r1";
- readonly modelUsed:"cbb_contextual_outcome_r1"|"cbb_contextual_outcome_r7";readonly manifest:CbbPrivateOutcomeManifest;
+ readonly modelRelease:typeof CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE|"cbb_contextual_outcome_2026_11_06_r7_economic_total_retained_margin"|typeof CBB_CONTEXTUAL_OUTCOME_LEGACY_MODEL_RELEASE;
+ readonly calibrationRelease:typeof CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE|"cbb_contextual_covariance_2026_11_06_r7_economic_total_retained_margin"|"cbb_contextual_covariance_2026_11_05_r1";
+ readonly evidenceRelease:typeof CBB_CONTEXTUAL_OUTCOME_EVIDENCE_RELEASE|"cbb_contextual_outcome_evidence_2026_11_06_r7_economic_total_retained_margin"|"cbb_contextual_outcome_evidence_2026_11_05_r1";
+ readonly modelUsed:"cbb_contextual_outcome_r1"|"cbb_contextual_outcome_r7"|"cbb_contextual_outcome_r8";readonly manifest:CbbPrivateOutcomeManifest;
 };
 const candidateManifest=activeManifest();
 const contextualReleases:readonly ContextualRelease[]=Object.freeze([
@@ -41,9 +42,13 @@ const contextualReleases:readonly ContextualRelease[]=Object.freeze([
   calibrationRelease:"cbb_contextual_covariance_2026_11_05_r1" as const,
   evidenceRelease:"cbb_contextual_outcome_evidence_2026_11_05_r1" as const,
   modelUsed:"cbb_contextual_outcome_r1" as const,manifest:Object.freeze(legacyReleaseManifest as CbbPrivateOutcomeManifest)}),
+ Object.freeze({modelRelease:"cbb_contextual_outcome_2026_11_06_r7_economic_total_retained_margin" as const,
+  calibrationRelease:"cbb_contextual_covariance_2026_11_06_r7_economic_total_retained_margin" as const,
+  evidenceRelease:"cbb_contextual_outcome_evidence_2026_11_06_r7_economic_total_retained_margin" as const,
+  modelUsed:"cbb_contextual_outcome_r7" as const,manifest:Object.freeze(previousReleaseManifest as CbbPrivateOutcomeManifest)}),
  ...(candidateManifest?[Object.freeze({modelRelease:CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE,
   calibrationRelease:CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE,evidenceRelease:CBB_CONTEXTUAL_OUTCOME_EVIDENCE_RELEASE,
-  modelUsed:"cbb_contextual_outcome_r7" as const,manifest:candidateManifest})]:[]),
+  modelUsed:"cbb_contextual_outcome_r8" as const,manifest:candidateManifest})]:[]),
 ]);
 export function resolveCbbContextualOutcomeRelease(modelRelease:string|undefined){
  return contextualReleases.find(release=>release.modelRelease===modelRelease)??null;
@@ -61,9 +66,9 @@ function same(a:unknown,b:unknown):boolean{if(a===b)return true;if(!a||!b||typeo
  * only loadCbbContextualOutcomeRuntime's immutable checked-in manifest. */
 export function createCbbContextualOutcomeRuntime(args:{manifest:CbbPrivateOutcomeManifest;loaded:Loaded;mode?:"future"|"retrospective_development"}){
  const manifest=Object.freeze({...args.manifest}),{loaded}=args,mode=args.mode??"future";
- if(!("legacyMarginModel" in loaded.model))throw Error("CBB active runtime requires the retained-Margin/direct-Total composite artifact");
- const model=freezeCbbContextualForecastArtifact(loaded.model as CbbCompositeOutcomeArtifact),calibration=structuredClone(loaded.calibration);
- validateCbbCompositeOutcomeArtifact(model);
+ if(!("models" in loaded.model))throw Error("CBB active runtime requires the pinned grouped native outcome artifact");
+ const model=freezeCbbContextualForecastArtifact(loaded.model as CbbGroupedOutcomeArtifact),calibration=structuredClone(loaded.calibration);
+ validateCbbGroupedOutcomeArtifact(model);
  if(manifest.envelopeRelease!==CBB_PRIVATE_OUTCOME_ARTIFACT_RELEASE||manifest.runtimeModelRelease!==CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE||model.release!==manifest.engineRelease||model.methodSha256!==manifest.methodSha256||
   cbbContextualForecastObjectSha256(model)!==manifest.modelObjectSha256||calibration.calibrationMethodSha256!==manifest.calibrationMethodSha256||
   loaded.modelJSONSha256!==manifest.modelJSONSha256||loaded.calibrationJSONSha256!==manifest.calibrationJSONSha256||loaded.availableBy!==manifest.availableBy)
@@ -117,7 +122,7 @@ export function readCbbContextualOutcomeEvidence(board:StoredBoard){
  const manifest=release.manifest;
  if(board.calibrationRelease!==release.calibrationRelease)throw Error("CBB contextual evidence calibration release differs");
  const storedGrade=board.gradeRelease;
- if(!storedGrade||![CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_EXECUTION_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PRICE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_RESISTANCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE].includes(storedGrade as typeof CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE))throw Error("CBB contextual evidence grade release differs");
+ if(!storedGrade||![CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_OWNED_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_OWNED_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_EXECUTION_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PRICE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_RESISTANCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE].includes(storedGrade as typeof CBB_CONTEXTUAL_OUTCOME_BOARD_GRADE_RELEASE))throw Error("CBB contextual evidence grade release differs");
  const context=board.marketContext as {originalIndependent?:unknown;contextualOutcomeEvidence?:unknown};
  const original=context.originalIndependent as CbbForecast|undefined;
  if(!original)throw Error("CBB contextual evidence lacks original independent identity");
@@ -127,7 +132,7 @@ export function readCbbContextualOutcomeEvidence(board:StoredBoard){
  if(trace.release!==release.evidenceRelease||!same(trace.independent,original)||!same(decoded.finalScore,board.score))throw Error("CBB contextual stored evidence differs from the public score or original input");
  const decision={...trace.decision,interpretation:decoded.interpretation,finalScore:decoded.finalScore,marketDecisions:decoded.marketDecisions} as CbbOutcomeDecision;
  const allowedDecisions:readonly string[]=release.modelRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_MODEL_RELEASE?
-  [CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE]:[CBB_OUTCOME_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_EXECUTION_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_PRICE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_RESISTANCE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE];
+  [CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE]:release.modelUsed==="cbb_contextual_outcome_r8"?[CBB_OUTCOME_DECISION_RELEASE]:[CBB_CONTEXTUAL_OUTCOME_OWNED_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_EXECUTION_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_PRICE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_RESISTANCE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE];
  if(!allowedDecisions.includes(decision.release))throw Error("CBB contextual stored decision does not belong to its model release");
  if(decision.artifact.objectSha256!==identity.artifactObjectSha256||decision.artifact.release!==manifest.engineRelease||
   decision.artifact.methodSha256!==manifest.methodSha256||decision.calibration.forecastArtifactObjectSha256!==identity.artifactObjectSha256||
