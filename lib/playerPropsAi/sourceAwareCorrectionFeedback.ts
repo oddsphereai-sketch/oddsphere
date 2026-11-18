@@ -6,7 +6,7 @@ import {numericSourceConstraints} from './numericSourceNavigation';
 import {parseJointPlayerReview} from './request';
 
 export const SOURCE_AWARE_CORRECTION_RELEASE='player_props_correction_feedback_2026_11_16_r2_supported_scope_continuation' as const;
-export function sourceAwareDiagnosticCorrection(packet:GamePacket,draft:unknown,enrich=true){
+function buildSourceAwareDiagnosticCorrection(packet:GamePacket,draft:unknown,enrich:boolean){
  const base=completeDiagnosticCorrection(packet,draft,enrich);
  if(base.status!=='ready')return base;
  let inspection:ReturnType<typeof inspectGenerativeDraft>;
@@ -35,4 +35,12 @@ export function sourceAwareDiagnosticCorrection(packet:GamePacket,draft:unknown,
  const bytes=Buffer.byteLength(text,'utf8');
  if(!/^[\x00-\x7f]*$/.test(text)||bytes>COMPLETE_CORRECTION_MAX_BYTES)return{status:'unavailable' as const,reason:'feedback_exceeds_cushion' as const,bytes,affectedActorIds:base.affectedActorIds};
  return{...base,text,bytes};
+}
+
+/** The complete original finding set AND valid-decline guidance take priority
+ * over optional detail, at the outermost source-aware composition boundary. */
+export function sourceAwareDiagnosticCorrection(packet:GamePacket,draft:unknown,enrich=true){
+ if(!enrich)return buildSourceAwareDiagnosticCorrection(packet,draft,false);
+ const rich=buildSourceAwareDiagnosticCorrection(packet,draft,true);
+ return rich.status==='unavailable'&&rich.reason==='feedback_exceeds_cushion'?buildSourceAwareDiagnosticCorrection(packet,draft,false):rich;
 }
