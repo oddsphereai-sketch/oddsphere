@@ -1,0 +1,14 @@
+{
+  "declaredAt": "2026-11-18T14:50:08.258Z",
+  "authority": "offline_only",
+  "candidate": "cbb_joint_residual_research_2026_11_18_r2_grouped_native_innovations",
+  "finding": "One of111 diagnostic games10883313 throws negative Gaussian interval in the working Normal expected-downside risk transform under tiny fitted location sensitivity; candidate score law and fitted means are not retuned.",
+  "scope": "Positive continued fraction for the identical Normal downside expectation at z>=12; retain existing arithmetic below12, with independent positive-integrand integration tests. Production callers and locked readers retain their original default.",
+  "meanRefits": 0,
+  "calibrationRefits": 0,
+  "outcomeFitting": 0,
+  "probabilityChanges": 0,
+  "comparison": "Rerun same111 diagnostic and same61 future sources with the same frozen model bytes. Preserve initial failed diagnostic and original61 prospective forecasts. Explicitly check source hashes, score/probability/side/grade equality on all previously successful cases; any side/grade discrepancy remains reported and cannot be hidden.",
+  "prospective": "Supplement forecasts will be frozen separately before starts/outcomes. Do not choose between variants after results.",
+  "publication": "No live model activation. Shared numerical injection points are default-preserving and have no production callsite using this offline helper."
+}
