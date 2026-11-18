@@ -1,3 +1,32 @@
+## November18 exact NBA benchmark freshness R53
+
+Shared generation is `player_props_ai_2026_11_18_r53_exact_benchmark_context`;
+NBA writer is `nba_player_props_private_writer_2026_11_18_r35_exact_benchmark_context`;
+NFL writer is `nfl_player_props_writer_2026_11_18_r114_exact_benchmark_context`.
+Private compatibility is `player_props_ai_nba_benchmark_freshness_2026_11_18_r1_exact_metric_sets`.
+Original R1 context hashes, source audits/capsules, old R51/R52 reviews, wire/law
+parsing and every locked payload remain exact. No submitted input is transformed.
+
+A bounded, invocation-local original-input decoder binds the actual immutable
+review and actor proof. Only exact known native NBA point-in-time matchup facts
+may compare as one set when different offered markets group/repeat them. Every
+key, label, value, unit and provenance remains bound. Unknown shapes, conflicting
+values, missing/added actual facts and real role/stat/medical/identity changes
+remain held. Effective availability must independently match. Current execution
+quotes and reviewed/declined scope eligibility retain their existing guards.
+No automatic law/grade repair, source request, paid test, new review/phase/slot,
+provider/model/output cap/deadline/cadence/budget/schema or lease change.
+NFL/MLB freshness is unchanged. Existing old proof hashes are never rewritten;
+this is new unlocked publication compatibility, not new old-review admission.
+
+Seven actual ordinary callback actors reproduced grouping-only context changes;
+all original packets remain private and immutable. Exact same-source board impact,
+paired Over/Under recovery, negative real-change and original-lock controls are
+required, alongside full local/hosted mocked real-PG checks, two NEW consecutive
+fresh triple whole-product CLEAR rounds, protected fresh-main merge and actual
+Ready-www plus ordinary publication/refresh/lock proof. No live success from tests.
+See `docs/model-audits/2026-11-18-props-benchmark-context-predeclaration.md`.
+
 ## November18 prospective joint-dependence correction navigation R52
 
 Shared generation is `player_props_ai_2026_11_18_r52_joint_dependence_navigation`;

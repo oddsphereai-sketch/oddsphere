@@ -10,6 +10,7 @@ import {currentBatterLineup} from './readerClaims';
 import {playerParticipationEligibility} from './participationEligibility';
 import {PROPS_AI_READER_CLAIMS_RELEASE,propsReviewHasVerifiedReaderClaims} from './releases';
 import {readerCanonicalContextHash,PROPS_AI_READER_CONTEXT_RELEASE} from './readerContext';
+import {nbaBenchmarkContextHash,originalNbaBenchmarkPacket} from './nbaBenchmarkContext';
 
 const object=(value:unknown):Record<string,unknown>=>value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};
 const status=(value:string)=>value.trim().toLowerCase().replace(/[_-]+/g,' ').replace(/\s+/g,' ');
@@ -27,15 +28,35 @@ export function readerAvailabilityContextHash(packet:GamePacket,playerId:string)
  * future claim's admitted effective availability state. Missing R31 proof is
  * unavailable, never permission to reconstruct an older accepted observation.
  */
-export function reviewedReaderContextCurrent(packet:GamePacket,review:AcceptedGameReview,playerId:string){
+export function createReviewedReaderContextMatcher(packet:GamePacket,review:AcceptedGameReview){
+ let original:GamePacket|null|undefined;
+ const results=new Map<string,boolean>();
+ return(playerId:string):boolean=>{
+ if(results.has(playerId))return results.get(playerId)!;
+ const result=compare(playerId);results.set(playerId,result);return result;
+ };
+ function compare(playerId:string){
  const player=packet.players.find(p=>p.id===playerId);if(!player)return false;
  // The established hash is actor-local; avoid rehashing the complete slate
  // for every actor when publication evaluates their scopes independently.
  if(!propsReviewHasVerifiedReaderClaims(review.release))return review.criticalContextHashes?.[playerId]===criticalContextHashes({...packet,players:[player]})[playerId];
  const proof=object(review.players.find(p=>p.playerId===playerId)?.sourceReadProofs);
- return proof.release===PROPS_AI_READER_CLAIMS_RELEASE&&proof.contextRelease===PROPS_AI_READER_CONTEXT_RELEASE
+ const bound=proof.release===PROPS_AI_READER_CLAIMS_RELEASE&&proof.contextRelease===PROPS_AI_READER_CONTEXT_RELEASE
   &&typeof proof.originalCriticalContextHash==='string'&&proof.originalCriticalContextHash===review.criticalContextHashes?.[playerId]
-  &&typeof proof.canonicalContextHash==='string'&&proof.canonicalContextHash===readerCanonicalContextHash(packet,playerId)
+  &&typeof proof.canonicalContextHash==='string'
   &&typeof proof.availabilityContextHash==='string'
   &&proof.availabilityContextHash===readerAvailabilityContextHash(packet,playerId);
+ if(!bound)return false;
+ if(proof.canonicalContextHash===readerCanonicalContextHash(packet,playerId))return true;
+ if(packet.sport!=='nba')return false;
+ if(original===undefined)original=originalNbaBenchmarkPacket(packet,review);
+ if(!original||proof.canonicalContextHash!==readerCanonicalContextHash(original,playerId)
+  ||proof.originalCriticalContextHash!==criticalContextHashes({...original,players:original.players.filter(p=>p.id===playerId)})[playerId]
+  ||proof.availabilityContextHash!==readerAvailabilityContextHash(original,playerId))return false;
+ const old=nbaBenchmarkContextHash(original,playerId),current=nbaBenchmarkContextHash(packet,playerId);
+ return old!==null&&current!==null&&old===current;
+ }
+}
+export function reviewedReaderContextCurrent(packet:GamePacket,review:AcceptedGameReview,playerId:string){
+ return createReviewedReaderContextMatcher(packet,review)(playerId);
 }

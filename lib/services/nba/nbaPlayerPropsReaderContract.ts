@@ -127,6 +127,17 @@ const COMBINATION_COMPONENTS: Partial<Record<NbaPlayerPropMarket, NbaPlayerPropM
   rebounds_assists: ["rebounds", "assists"],
 };
 
+/** Exact existing point-in-time metric contract, for private source comparison.
+ * Unknown annotations/units/provenance are not equivalent benchmark facts. */
+export function isNbaPlayerPropsContextMetric(value: unknown, area: "role" | "matchup"): value is NbaPlayerPropsReaderMetric {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  if (Object.keys(row).sort().join("|") !== "format|key|label|provenance|value"
+    || row.provenance !== "point_in_time_model_input" || typeof row.value !== "number" || !Number.isFinite(row.value)) return false;
+  const specs = area === "role" ? ROLE : Object.values(MATCHUP).flatMap(rows => rows ?? []);
+  return specs.some(spec => row.key === spec.key && row.label === spec.label && row.format === spec.format);
+}
+
 export function buildNbaPlayerPropsReaderResearchView(args: {
   feature: NbaPlayerPropFeatureRow;
   projection: NbaPlayerPropsIndependentProjection;
