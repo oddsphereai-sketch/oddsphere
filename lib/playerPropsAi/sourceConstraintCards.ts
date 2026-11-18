@@ -1,3 +1,4 @@
+import {eventTailNavigation} from './eventTailNavigation';
 import {PROPS_AI_WIRE_RELEASE} from './scenarioCoordinates';
 /** Prospective NBA navigation of the exact same source. No law/grade repair. */
 import {COMBOS, type GamePacket, type Json} from './evidenceContract';
@@ -91,7 +92,7 @@ export type NamedSourceCorrection =
   |{status:'unavailable';reason:string;bytes:number;affectedActorIds:string[]};
 const unavailable=(reason:string,affectedActorIds:string[],bytes=0):NamedSourceCorrection=>({status:'unavailable',reason,bytes,affectedActorIds});
 
-function issueCategory(issue:ForecastSanityIssue,means:Partial<Record<Statistic,number>>,law:AcceptedPlayerLaw|null):string|null{
+function issueCategory(issue:ForecastSanityIssue,means:Partial<Record<Statistic,number>>,law:AcceptedPlayerLaw|null,enrich=true):string|null{
   if(issue.markets.some(m=>!Object.hasOwn(MARKET_NAMES,m)))return null;
   if(issue.code==='forecast_mean_outside_supplied_support'){
     const match=issue.example?.match(MEAN_EXAMPLE);if(!match)return null;
@@ -116,7 +117,8 @@ function issueCategory(issue:ForecastSanityIssue,means:Partial<Record<Statistic,
   if(issue.code==='unsupported_zero_probability_tail'||issue.code==='unsupported_priced_event_certainty'){
     const kind=issue.code==='unsupported_zero_probability_tail'?'prior':'priced';
     const events=issue.events;if(!events?.length||events.some(e=>!Object.hasOwn(MARKET_NAMES,e.market)||!Number.isFinite(e.line)||!['two_way','milestone'].includes(e.contract)))return null;
-    return `${kind} tails ${unique(events.map(e=>`${MARKET_NAMES[e.market]}@${e.line}${e.contract==='milestone'?'(at-least)':''}`)).join(',')}`;
+    const navigation=enrich?eventTailNavigation(issue,law):null;
+    return navigation?`${kind} tails ${navigation}`:`${kind} tails ${unique(events.map(e=>`${MARKET_NAMES[e.market]}@${e.line}${e.contract==='milestone'?'(at-least)':''}`)).join(',')}`;
   }
   return null;
 }
@@ -130,7 +132,7 @@ function coordinateCategory(code:string):string|null{
 
 /** Complete ASCII feedback. No source/player/provider prose enters instructions.
  * This byte bound applies to the WHOLE returned text, not merely its examples. */
-export function namedSourceCorrection(packet:GamePacket,draft:unknown):NamedSourceCorrection{
+function buildNamedSourceCorrection(packet:GamePacket,draft:unknown,enrich:boolean):NamedSourceCorrection{
   if(packet.sport!=='nba')return unavailable('not_applicable',[]);
   const raw=object(draft),players=object(raw?.players);
   if(!raw||raw.wireRelease!==PROPS_AI_WIRE_RELEASE||Object.keys(raw).sort().join('|')!=='players|wireRelease'||!players||Object.keys(players).sort().join('|')!==packet.players.map(p=>p.id).sort().join('|')||packet.players.some(p=>!object(players[p.id])))return unavailable('not_applicable',packet.players.map(p=>p.id));
@@ -143,7 +145,7 @@ export function namedSourceCorrection(packet:GamePacket,draft:unknown):NamedSour
     affectedActorIds.push(player.id);
     const rawLaw=inspection.canonical.players[player.id]?.law,accepted=rawLaw?validateLaw('nba',player,rawLaw):null;
     const means:Partial<Record<Statistic,number>>=accepted?Object.fromEntries(STATISTICS.filter(stat=>accepted.outcomes[stat]).map(stat=>[stat,lawForecast(accepted,stat,0).mean])):{};
-    const categories=source.map(issue=>issueCategory(issue,means,accepted)),coordinate=coords.filter(c=>c.code!=='source_claims').map(c=>coordinateCategory(c.code));
+    const categories=source.map(issue=>issueCategory(issue,means,accepted,enrich)),coordinate=coords.filter(c=>c.code!=='source_claims').map(c=>coordinateCategory(c.code));
     const fields=format.map(f=>f.field==='assessment'?'assessment':/^reader[0-7]$/.test(f.field)?READER_AREAS[Number(f.field.slice(6))].replaceAll('_',' '):null);
     if(categories.some(c=>c===null)||coordinate.some(c=>c===null)||fields.some(f=>f===null))return unavailable('not_applicable',packet.players.filter((p,i)=>inspection.source.some(s=>s.playerId===p.id&&s.unhandled.length)||inspection.coordinates.some(c=>c.playerId===p.id)||inspection.format.some(f=>f.playerIndex===i)).map(p=>p.id));
     const clauses=[...unique(categories as string[]),...(coordinate.length?[`coordinates ${unique(coordinate as string[]).join(',')}`]:[]),
@@ -156,4 +158,11 @@ export function namedSourceCorrection(packet:GamePacket,draft:unknown):NamedSour
   if(!/^[\x00-\x7f]*$/.test(text))return unavailable('feedback_exceeds_cushion',affectedActorIds,bytes);
   if(bytes>NAMED_SOURCE_CORRECTION_MAX_BYTES)return unavailable('feedback_exceeds_cushion',affectedActorIds,bytes);
   return{status:'ready',text,bytes,affectedActorIds};
+}
+
+/** Optional detail cannot remove an existing complete corrective request. */
+export function namedSourceCorrection(packet:GamePacket,draft:unknown,enrich=true):NamedSourceCorrection{
+ if(!enrich)return buildNamedSourceCorrection(packet,draft,false);
+ const rich=buildNamedSourceCorrection(packet,draft,true);
+ return rich.status==='unavailable'&&rich.reason==='feedback_exceeds_cushion'?buildNamedSourceCorrection(packet,draft,false):rich;
 }

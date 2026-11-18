@@ -85,3 +85,18 @@ async function main(){let phase=0;const requests:ReturnType<typeof jointReviewRe
  assert.equal(requests[0].input,requests[1].input);assert(requests[1].instructions.endsWith(expectedCorrectionText));assert.equal(receipts[0].nextCorrectionText,expectedCorrectionText);assert.equal(digest({p,bad,good}),before);
  console.log(JSON.stringify({numericSourceContinuation:true,canonicalEnvelopesExact:true,fullActorMarketInventory:true,validUnsupportedDeclinesRetained:true,supportedScopesRemainQualified:3,unavailableScopesDeclined:2,actualReviewerPrimary:1,actualReviewerCorrection:1,unchanged1984AsciiBound:true,oldR42Membership:true,networkOrPaidCalls:0}));}
 void main().catch(e=>{console.error(e);process.exitCode=1;});
+
+// Availability belongs to the WHOLE corrective request, including retained
+// valid-decline guidance and any previously fitting original draft reference.
+for(let count=1;count<=6;count++)for(let mask=1;mask<=7;mask++){
+ const input=packet(count),candidate=draft(input);
+ for(const actor of input.players)candidate.players[actor.id].law=encodeCanonicalScenarioLaw('nfl',actor,{weights:v(1),outcomes:{passing_attempts:mask&1?v(32):v(22,28),passing_completions:mask&2?v(20):v(16,18),passing_yards:mask&4?v(240):v(180,220),passing_tds:v(0,1),interceptions:v(0,1)}});
+ const legacy=sourceAwareDiagnosticCorrection(input,candidate,false),updated=sourceAwareDiagnosticCorrection(input,candidate),full=reviewCorrectionFeedback(input,candidate);
+ if(legacy.status==='ready'){
+  assert.equal(updated.status,'ready','Optional detail cannot displace the full valid-decline continuation');assert.equal(full.status,'ready','Actual correction dispatch must preserve legacy availability');
+  if(updated.status==='ready'&&full.status==='ready'){
+   assert.deepEqual(updated.affectedActorIds,legacy.affectedActorIds);assert(updated.text.includes('Previously valid explicit declines'));assert(updated.bytes<=1984);assert(full.bytes<=1984);
+   const request=jointReviewRequest(input,PROPS_AI_PRIMARY_MODEL,7000,'known rejected candidate',full.text);assert(request.instructions.endsWith(full.text));
+  }
+ }
+}

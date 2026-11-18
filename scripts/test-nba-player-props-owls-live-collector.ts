@@ -1,8 +1,11 @@
+import {mock} from 'node:test';
 import assert from "node:assert/strict";
 import {liveNbaPacket} from "../lib/playerPropsAi/liveSources";
 
 import { collectNbaPlayerPropsLiveMarket } from "../lib/services/nba/nbaPlayerPropsLiveCollector";
 
+// A fixed same-Eastern-day fixture must not cross midnight with the wall clock.
+mock.timers.enable({apis:['Date'],now:new Date('2030-11-17T17:00:00Z')});
 const start = new Date(Date.now() + 6 * 60 * 60_000).toISOString();
 const observedAt = new Date().toISOString();
 const urls: string[] = [];
