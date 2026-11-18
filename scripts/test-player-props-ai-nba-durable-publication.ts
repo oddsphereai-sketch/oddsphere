@@ -1,3 +1,4 @@
+import * as nbaPlayerPropsPublicationContinuity from '../lib/services/nba/nbaPlayerPropsPublicationContinuity';
 import * as nbaPlayerPropsPlayerIdentity from '../lib/services/nba/nbaPlayerPropsPlayerIdentity';
 import * as nbaPlayerPropsTeamIdentity from '../lib/services/nba/nbaPlayerPropsTeamIdentity';
 import * as runtimeHealth from '../lib/playerPropsAi/runtimeHealth';
@@ -34,7 +35,7 @@ const initial='2026-11-10T22:24:00.000Z',completed='2026-11-10T22:26:00.000Z',af
 const weights=[1,4,5,...Array(13).fill(0)];
 const fail=()=>{throw Error('injected_unrelated_game_timeout_after_ready');};
 const outcome={status:'active',games:[],findings:[]};
-function harness(options:{games?:number;staggered?:boolean;emptyLive?:boolean;emptyGameIds?:string[];findings?:string[];allOut?:boolean;previous?:(snapshot:Snapshot,packets:GamePacket[])=>Snapshot}={}){
+function harness(options:{shiftMs?:number;games?:number;staggered?:boolean;emptyLive?:boolean;emptyGameIds?:string[];findings?:string[];allOut?:boolean;previous?:(snapshot:Snapshot,packets:GamePacket[])=>Snapshot}={}){
  let emptyLive=options.emptyLive??false;
  let tick=initial,writes=0,rpcs=0,activeWrites=0,maxActiveWrites=0;
  const packets=Array.from({length:options.games??1},(_,i)=>{
@@ -42,6 +43,7 @@ function harness(options:{games?:number;staggered?:boolean;emptyLive?:boolean;em
   return{...f.packet,gameId:id,sourceInputRelease:PROPS_AI_NBA_CURRENT_SOURCE_RELEASE,sourceOfferSetStatus:'nonempty' as const,players:f.packet.players.map(p=>({...p,id:ids.get(p.id)!})),quotes:f.packet.quotes.map(q=>({...q,id:`${id}:${q.id}`,playerId:ids.get(q.playerId)!})),executionQuotes:f.packet.executionQuotes!.map(q=>({...q,id:`${id}:${q.id}`,playerId:ids.get(q.playerId)!}))};
  });
  if(options.staggered)for(let i=1;i<packets.length;i++){packets[i].start=new Date(Date.parse(packets[i].start)+i*7200000).toISOString();packets[i].lock=new Date(Date.parse(packets[i].lock)+i*7200000).toISOString();}
+ if(options.shiftMs)for(const p of packets){p.start=new Date(Date.parse(p.start)+options.shiftMs).toISOString();p.lock=new Date(Date.parse(p.lock)+options.shiftMs).toISOString();}
  const nativeRows=packets.flatMap((p,i)=>[nbaAuthorityFixture(initial).row('a'),nbaAuthorityFixture(initial).row('a','rebounds')].map(r=>({...r,decisionKey:`${p.gameId}:${r.decisionKey}`,gameId:p.gameId,scheduledStart:p.start,playerId:`nba-bdl-player:${i*2+1}`})));
  const games=packets.map(p=>({gameId:p.gameId,scheduledStart:p.start,homeTeam:'NYK',awayTeam:'BOS'}));
  const baseline=product.buildNbaPlayerPropsMemberSnapshot({mode:'private_forward_candidate',generatedAt:initial,slateDate,games,decisions:nativeRows,inputRows:6*packets.length});
@@ -68,7 +70,7 @@ function harness(options:{games?:number;staggered?:boolean;emptyLive?:boolean;em
    return{data:{written:true,status:'written',checksum:(args.p_record.payload as {checksum:string}).checksum,server_admitted_at:admitted,server_write_completed_at:tick},error:null};
   }finally{activeWrites--;}
  }};
- const modules:Record<string,unknown>={nbaPlayerPropsPlayerIdentity,nbaPlayerPropsTeamIdentity,runtimeHealth,completionWindow,sourceContextAudit,
+ const modules:Record<string,unknown>={nbaPlayerPropsPublicationContinuity,nbaPlayerPropsPlayerIdentity,nbaPlayerPropsTeamIdentity,runtimeHealth,completionWindow,sourceContextAudit,
   nbaSourceIdentity,evidence,siteBindings:bindings,publication,nbaPlayerPropsLifecycle:lifecycle,nbaPlayerPropsProductContract:product,
   nbaLockAuthority:{...authority,observeNbaSourceAuthority:authority.testNbaSourceAuthority(()=>tick),captureNbaHandoffBundle:authority.testNbaHandoffCapture(()=>tick)},
   siteConfig:{propsAiSiteConfig:()=>({integrated:true})},espnNbaInjuries:{canonicalNbaAbbreviation:(s:string)=>s,fetchEspnNbaGameInjuries:async(id:string|number)=>options.allOut?{eventId:String(id),teams:new Map([['BOS',[{name:'Synthetic a',status:'out',reported_at:null},{name:'Synthetic b',status:'out',reported_at:null}]],['NYK',[]]])}:null},nbaPlayerPropsSettlementStore:{},
@@ -116,11 +118,11 @@ async function main(){
     const rows=(await recovered.read()).decisions;assert.equal(rows.length,3);assert(rows.every(row=>row.aiReview));assert(!rows.some(row=>row.lockedAt!==null));
   }
   const queuedRecovery=priorAi();queuedRecovery.setTick(completed);await queuedRecovery.run(async args=>{const packet=queuedRecovery.packets[0];await Promise.all([args.onSourceReady!(packet,null,completed,false),ready(args,packet,queuedRecovery.review())]);return outcome;});assert.equal((await queuedRecovery.read()).decisions.filter(row=>row.aiReview).length,3);
-  // The new header for known A omits unresolved/unobserved unlocked B. It
-  // cannot relabel B's old price as a fresh source for a later first lock.
+  // While A progresses, exact B remains visible with its ORIGINAL publication
+  // clock and a private non-authority marker; failures/end-of-run/lock still hold B.
   for(const callback of ['unknown','unobserved','late_unknown'] as const){
     const mixed=priorAi(2,true),original=mixed.previous;let expectedA:Snapshot['decisions']=[];
-    mixed.setTick(completed);const result=await mixed.run(async args=>{await ready(args,mixed.packets[0],mixed.review(mixed.packets[0]));expectedA=(await mixed.read()).decisions.filter(row=>row.gameId==='nba-bdl:1');assert.equal(expectedA.length,3);assert(!(await mixed.read()).decisions.some(row=>row.gameId==='nba-bdl:2'));if(callback!=='unobserved'){if(callback==='late_unknown')mixed.setTick('2026-11-10T22:31:00Z');await args.onReviewObserved?.(mixed.packets[1],null,false);}return outcome;});
+    mixed.setTick(completed);const result=await mixed.run(async args=>{await ready(args,mixed.packets[0],mixed.review(mixed.packets[0]));expectedA=(await mixed.read()).decisions.filter(row=>row.gameId==='nba-bdl:1');assert.equal(expectedA.length,3);assert(!(await mixed.read()).decisions.some(row=>row.gameId==='nba-bdl:2'),'Legacy publication has no per-game provenance: bootstrap remains fail closed');if(callback!=='unobserved'){if(callback==='late_unknown')mixed.setTick('2026-11-10T22:31:00Z');await args.onReviewObserved?.(mixed.packets[1],null,false);}return outcome;});
     const stored=await mixed.read();assert.equal(stored.decisions.filter(row=>row.gameId==='nba-bdl:1').length,3);assert(!stored.decisions.some(row=>row.gameId==='nba-bdl:2'));assert(result.aiReviewRuntime?.findings.some(f=>f==='lock_prior_authority_unavailable:nba-bdl:2'));assert.equal(original.decisions.filter(row=>row.gameId==='nba-bdl:2'&&row.aiReview).length,3,'Original stored-source fixture is unchanged');
     mixed.setTick('2026-11-11T00:31:00Z');await mixed.run(async()=>outcome);const restarted=await mixed.read();assert(!restarted.decisions.some(row=>row.gameId==='nba-bdl:2'),'A later invocation cannot reconstruct missing B at/after its lock');assertFirstHeldA(restarted.decisions,expectedA);
   }
@@ -142,6 +144,38 @@ async function main(){
   const readyPostlock=priorAi();readyPostlock.setTick(completed);await readyPostlock.run(async args=>{await ready(args,readyPostlock.packets[0],readyPostlock.review());readyPostlock.setTick(after);return{...outcome,findings:['current_source_reload_unavailable_after_ready_lock:nba-bdl:1:synthetic']};});assert.equal((await readyPostlock.read()).decisions.filter(row=>row.aiReview&&row.lockedAt!==null).length,3,'A timely actual ready ACK keeps its distinct postlock reload classification');
   const lockedHeld=harness({games:2,staggered:true,previous:(base,packets)=>{const ai=packets.reduce((snapshot,packet)=>bindings.applyNbaSiteAi(snapshot,packet,publication.siteAiDecisions(packet,nbaAuthorityReview(packet),initial),initial),base);return product.buildNbaPlayerPropsMemberSnapshot({...ai,decisions:ai.decisions.map(row=>row.gameId==='nba-bdl:2'?{...row,lockedAt:'2026-11-10T21:00:00Z'}:row),inputRows:6});}});const lockedHeldOriginal=lockedHeld.previous.decisions.filter(row=>row.gameId==='nba-bdl:2');assert.equal(lockedHeldOriginal.length,3);lockedHeld.setTick(completed);await lockedHeld.run(async args=>{await args.onReviewObserved?.(lockedHeld.packets[1],null,false);await ready(args,lockedHeld.packets[0],lockedHeld.review(lockedHeld.packets[0]));return outcome;});assert.deepEqual((await lockedHeld.read()).decisions.filter(row=>row.gameId==='nba-bdl:2'),lockedHeldOriginal,'Already stored locked rows remain exact even when their lookup is unknown');
   const lateUnknown=priorAi();let lateAcknowledged:Snapshot|undefined;lateUnknown.setTick(completed);await assert.rejects(lateUnknown.run(async args=>{await ready(args,lateUnknown.packets[0],lateUnknown.review());lateAcknowledged=await lateUnknown.read();lateUnknown.setTick(after);await args.onReviewObserved?.(lateUnknown.packets[0],null,false);return outcome;}),/review publication authority unavailable/);assert.deepEqual(await lateUnknown.read(),lateAcknowledged,'A delayed unknown callback cannot manufacture a first lock or refresh the canonical clock');assert((await lateUnknown.read()).decisions.every(row=>row.lockedAt===null));
+  // Actual multi-invocation source clocks persist after all games resolve;
+  // sibling/tail headers never become an earlier game's source publication.
+  const clocks=harness({games:2,staggered:true,shiftMs:7200000});
+  await clocks.run(async args=>{clocks.setTick('2026-11-10T22:26:00Z');await ready(args,clocks.packets[0],clocks.review(clocks.packets[0]));clocks.setTick('2026-11-10T22:28:00Z');await ready(args,clocks.packets[1],clocks.review(clocks.packets[1]));return outcome;});
+  const firstClocks=(await clocks.read()).diagnostics.publicationContinuity!.games;assert.equal(Date.parse(firstClocks.find(c=>c.gameId==='nba-bdl:1')!.publishedAt),Date.parse('2026-11-10T22:26:00Z'));
+  await clocks.run(async args=>{clocks.setTick('2026-11-10T22:42:00Z');clocks.refreshSource('2026-11-10T22:42:00Z');await ready(args,clocks.packets[1],clocks.review(clocks.packets[1]));const current=await clocks.read(),a=current.diagnostics.publicationContinuity!.games.find(c=>c.gameId==='nba-bdl:1')!;assert.equal(Date.parse(a.publishedAt),Date.parse('2026-11-10T22:26:00Z'));assert.equal(a.pending,true);assert.equal(Date.parse(a.pendingSince!),Date.parse('2026-11-10T22:42:00Z'));assert.equal(current.decisions.filter(r=>r.gameId==='nba-bdl:1').length,3);await ready(args,clocks.packets[0],clocks.review(clocks.packets[0]));return outcome;});
+  // Warm actual source clocks, then independently unready B and unobserved C:
+  // failure metadata must immediately hide both exact pending payloads.
+  const unready=harness({games:3,shiftMs:7200000});unready.setTick(completed);
+  await unready.run(async args=>{for(const packet of unready.packets)await ready(args,packet,unready.review(packet));return outcome;});
+  const priorUnready=await unready.read();unready.setTick('2026-11-10T22:29:00Z');
+  await assert.rejects(unready.run(async args=>{await ready(args,unready.packets[0],unready.review(unready.packets[0]));const blocked=structuredClone(unready.packets[1]);for(const actor of blocked.players)actor.evidence.push({id:actor.id+':out-now',kind:'availability',source:'synthetic current own source',availableAt:blocked.cutoff,value:{canonicalGameId:blocked.gameId,scheduledStart:blocked.start,context:{away:{team:'BOS',known:true,players:[{name:actor.name,status:'out',reportedAt:blocked.cutoff}]},home:{team:'NYK',known:true,players:[]}}}});await args.onSourceReady?.(blocked,null,completed,true);return outcome;}),/no ready forecast/);
+  const failure=await unready.read();assert(failure.diagnostics.publicationContinuity!.games.filter(c=>c.pending).every(c=>c.failed));assert(!nbaPlayerPropsPublicationContinuity.nbaVisiblePublicationRows(failure,'2026-11-10T22:29:00Z').some(r=>r.gameId!=='nba-bdl:1'));assert.deepEqual(failure.decisions.filter(r=>r.gameId==='nba-bdl:3'),priorUnready.decisions.filter(r=>r.gameId==='nba-bdl:3'),'Failure receipt does not rewrite old rows or fabricate empty-source authority');
+  // Swallowed source callback failure still invalidates pending display through
+  // the outer leased-phase catch, without touching any unknown write ACK.
+  const swallowed=harness({games:3,shiftMs:7200000});swallowed.setTick(completed);
+  await swallowed.run(async args=>{for(const p of swallowed.packets)await ready(args,p,swallowed.review(p));return outcome;});
+  swallowed.setTick('2026-11-10T22:29:00Z');swallowed.refreshSource('2026-11-10T22:29:00Z');
+  await assert.rejects(swallowed.run(async args=>{await ready(args,swallowed.packets[0],swallowed.review(swallowed.packets[0]));const invalid={...swallowed.packets[1],sourceInputRelease:'synthetic-invalid-source'};await assert.rejects(async()=>{await args.onSourceReady!(invalid,null,completed,true);},/source identity/);return{...outcome,findings:['synthetic-caught-source-callback']};}),/source identity/);
+  const invalidated=await swallowed.read();assert.equal(invalidated.diagnostics.publicationContinuity!.games.filter(c=>c.pending).length,2);assert(invalidated.diagnostics.publicationContinuity!.games.filter(c=>c.pending).every(c=>c.failed));assert(!nbaPlayerPropsPublicationContinuity.nbaVisiblePublicationRows(invalidated,'2026-11-10T22:29:00Z').some(r=>r.gameId!=='nba-bdl:1'));
+  for(const kind of ['lookup','unready','source_rejected']as const){
+    const immediate=harness({games:3,shiftMs:7200000});immediate.setTick(completed);
+    await immediate.run(async args=>{for(const p of immediate.packets)await ready(args,p,immediate.review(p));return outcome;});
+    immediate.setTick('2026-11-10T22:29:00Z');immediate.refreshSource('2026-11-10T22:29:00Z');
+    const run=immediate.run(async args=>{await ready(args,immediate.packets[0],immediate.review(immediate.packets[0]));
+      if(kind==='lookup')await args.onReviewObserved?.(immediate.packets[1],null,false);
+      if(kind==='source_rejected')await assert.rejects(async()=>{await args.onSourceReady!({...immediate.packets[1],sourceInputRelease:'invalid'},null,completed,true);},/source identity/);
+      if(kind==='unready'){const blocked=structuredClone(immediate.packets[1]);for(const actor of blocked.players)actor.evidence.push({id:actor.id+':out',kind:'availability',source:'synthetic own current',availableAt:blocked.cutoff,value:{canonicalGameId:blocked.gameId,scheduledStart:blocked.start,context:{away:{team:'BOS',known:true,players:[{name:actor.name,status:'out',reportedAt:blocked.cutoff}]},home:{team:'NYK',known:true,players:[]}}}});await args.onSourceReady?.(blocked,null,completed,true);}
+      const during=await immediate.read(),visible=nbaPlayerPropsPublicationContinuity.nbaVisiblePublicationRows(during,'2026-11-10T22:29:00Z');assert(!visible.some(r=>r.gameId==='nba-bdl:2'),'Affected failure held BEFORE callback acknowledgement');assert.equal(visible.filter(r=>r.gameId==='nba-bdl:3').length,3,'Independent still-pending game retains exact original display');assert(during.diagnostics.publicationContinuity!.games.find(c=>c.gameId==='nba-bdl:2')!.failed);return outcome;
+    });
+    if(kind==='lookup')await run;else await assert.rejects(run,kind==='unready'?/no ready forecast/:/source identity/);
+  }
   console.log(JSON.stringify({nbaReviewAuthority:true,newActualScenarios:18,unknownReadNeverNativeWithdrawal:true,heldOtherGameNotNewFirstLock:true,knownSameGameRecovery:true,writeAckUncertaintyStickyForErrorNullUndefined:true,originalStoredLocksExact:true,allNetworkAndSQLMocked:true}));
   // Negative prefix proof is separately frozen at /private/tmp before editing.
   // Fault after ready: canonical row values must already exist when sibling dies.

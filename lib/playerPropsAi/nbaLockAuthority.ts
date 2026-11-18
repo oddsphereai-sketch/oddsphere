@@ -98,7 +98,7 @@ function durablePrevious(row:Row,generatedAt:string|undefined,now:string){
   return instant(now)>=lock&&row.modelRelease===e.release&&row.decisionRelease===(e.selectionRelease??e.publicationRelease)&&row.marketEvidenceMode==='ai_joint_law'&&row.gradePolicySource==='ai_source_review'&&instant(row.evaluatedAt)<=instant(generatedAt)&&instant(generatedAt)<lock&&instant(e.reviewedAt)<=instant(row.evaluatedAt)&&instant(p.pricedAt)<=instant(row.evaluatedAt)&&instant(p.pricedAt)>=instant(q.receivedAt)&&instant(row.evaluatedAt)-instant(q.receivedAt)<=15*60000&&instant(q.observedAt)<=instant(q.receivedAt)&&instant(q.receivedAt)<lock&&q.receivedAtProvenance==='provider_response'&&q.opening===false&&q.live===false&&publicEvent(row,q)&&sameTime(e.quoteConfirmedAt,q.receivedAt)&&e.selectedSide===row.side&&Boolean(e.lawHash)&&Boolean(e.inputHash);
  }catch{return false;}
 }
-export function prepareNbaLockHandoff(args:NbaLockHandoff&{nextRows:readonly Row[];previousRows:readonly Row[];previousGeneratedAt?:string;now:string}){
+export function prepareNbaLockHandoff(args:NbaLockHandoff&{nextRows:readonly Row[];previousRows:readonly Row[];previousGeneratedAt?:string;previousPendingGameIds?:readonly string[];previousPublishedAtByGame?:Readonly<Record<string,string>>;now:string}){
  const existingLocks=new Set(args.previousRows.filter(r=>r.lockedAt!==null).map(nbaLockScope));
  const rows=[...args.nextRows,...args.previousRows].filter(r=>!existingLocks.has(nbaLockScope(r))),games=new Set(rows.map(r=>r.gameId));
  const overrides=new Map<string,Row|null>(),diagnostics:NbaLockDiagnostic[]=[];
@@ -117,7 +117,8 @@ export function prepareNbaLockHandoff(args:NbaLockHandoff&{nextRows:readonly Row
    const selected=reviewed??eligible.find(p=>p.kind==='native');
    overrides.set(scope,selected?.row??null);diagnostics.push({scope,kind:selected?.kind??'unavailable',status});continue;
   }
-  if(prior?.aiReview){const valid=durablePrevious(prior,args.previousGeneratedAt,args.now);overrides.set(scope,valid?prior:null);diagnostics.push({scope,kind:valid?'previous_prelock_publication':'unavailable',status:valid?'qualified':'missing_prelock_execution_evidence'});}
+  if(args.previousPendingGameIds?.includes(row.gameId)){overrides.set(scope,null);diagnostics.push({scope,kind:'unavailable',status:'pending_display_is_not_source_authority'});continue;}
+  if(prior?.aiReview){const valid=durablePrevious(prior,args.previousPublishedAtByGame?.[row.gameId]??args.previousGeneratedAt,args.now);overrides.set(scope,valid?prior:null);diagnostics.push({scope,kind:valid?'previous_prelock_publication':'unavailable',status:valid?'qualified':'missing_prelock_execution_evidence'});}
   else if(row.aiReview){overrides.set(scope,null);diagnostics.push({scope,kind:'unavailable',status:'candidate_not_observed_prelock'});}
  }
  return{overrides,diagnostics};

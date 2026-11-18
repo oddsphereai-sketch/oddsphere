@@ -293,6 +293,7 @@ function MarketQuoteTile({ row }: { row: Row }) {
     <span className="block text-[10px] font-black uppercase tracking-wider text-sky-300">Market offer</span>
     <strong className="mt-1 block text-lg font-black text-white sm:text-xl">{row.line.toFixed(1)} <span className="text-sm text-gray-400">· {price(row.americanPrice)}</span></strong>
     <span className="mt-1 block text-[9px] text-gray-500">{book(row.sportsbook)} · evaluated quote</span>
+    <span className="mt-1 block text-[9px] text-gray-500">As of {localTime(row.evaluatedAt)}</span>
   </span>;
 }
 function ProbabilityBar({ title, value, tone }: { title: string; value: number; tone: string }) { return <div><div className="flex justify-between text-xs"><span className="text-gray-500">{title}</span><strong className="text-white">{percent(value)}</strong></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-800"><span className={`block h-full ${tone}`} style={{ width: `${Math.max(0, Math.min(100, value * 100))}%` }} /></div></div>; }

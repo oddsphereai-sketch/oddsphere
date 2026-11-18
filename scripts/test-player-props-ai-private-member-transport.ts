@@ -1,3 +1,4 @@
+import * as nbaPublicationContinuity from '../lib/services/nba/nbaPlayerPropsPublicationContinuity';
 /** Actual server pages and their client props. All reads and network are mocked. */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -26,7 +27,7 @@ function load(path: string, dependencies: Record<string, unknown>, env: Record<s
   return loadedModule.exports;
 }
 
-const transport = load("lib/services/nba/nbaPlayerPropsMemberTransport.server.ts", { "server-only": {} });
+const transport = load("lib/services/nba/nbaPlayerPropsMemberTransport.server.ts", { "server-only": {},"./nbaPlayerPropsPublicationContinuity":nbaPublicationContinuity });
 const build = transport.buildNbaPlayerPropsMemberClientSnapshot as typeof BuildTransport;
 const fixture = JSON.parse(readFileSync("lib/services/nba/fixtures/nbaPlayerPropsProductPreview.json", "utf8"));
 fixture.decisions[0].lockedAt = "2026-11-10T21:00:00Z";
