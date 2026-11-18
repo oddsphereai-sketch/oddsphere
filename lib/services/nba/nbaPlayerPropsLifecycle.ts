@@ -1,4 +1,4 @@
-import {nbaPendingPublicationGames} from './nbaPlayerPropsPublicationContinuity';
+import {nbaPendingPublicationGames,nbaPublicationClocks} from './nbaPlayerPropsPublicationContinuity';
 import {
   buildNbaPlayerPropsMemberSnapshot,
   type NbaPlayerPropsMemberDecision,
@@ -104,7 +104,7 @@ export function advanceNbaPlayerPropsCandidateLifecycle(args: {
   const previousByScope = new Map((args.previous?.decisions ?? []).map((row) => [decisionScope(row), row]));
   const candidateScopes = new Set(args.candidate.decisions.map(decisionScope));
   const pendingDisplay=nbaPendingPublicationGames(args.previous);
-  const handoff=args.lockHandoff||pendingDisplay.length?prepareNbaLockHandoff({...(args.lockHandoff??{observations:[],proofs:[]}),nextRows:args.candidate.decisions,previousRows:args.previous?.decisions??[],previousGeneratedAt:args.previous?.generatedAt,previousPendingGameIds:pendingDisplay,now:args.now}):null;
+  const handoff=args.lockHandoff||pendingDisplay.length?prepareNbaLockHandoff({...(args.lockHandoff??{observations:[],proofs:[]}),nextRows:args.candidate.decisions,previousRows:args.previous?.decisions??[],previousGeneratedAt:args.previous?.generatedAt,previousPendingGameIds:pendingDisplay,previousPublishedAtByGame:Object.fromEntries([...nbaPublicationClocks(args.previous)].map(([id,c])=>[id,c.publishedAt])),now:args.now}):null;
   const output: NbaPlayerPropsMemberDecision[] = [];
   let recomputedUnlocked = 0;
   let frozenAtLock = 0;

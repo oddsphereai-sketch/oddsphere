@@ -402,8 +402,8 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   const holdUnresolvedGames=(snapshot:NbaPlayerPropsMemberSnapshot,knownGameId:string|null=null)=>retainNbaPendingPublication({
     snapshot,previous,pending:unresolvedReviewAuthority,unavailable:unavailableReviewAuthority,knownGameId,now:snapshot.generatedAt});
   const commit=async(snapshot:NbaPlayerPropsMemberSnapshot,publicationNow:string,source?:PublicationSource,
-    withdrawalAuthority?:Parameters<typeof writeNbaPlayerPropsPrivateSnapshot>[0]['withdrawalAuthority'])=>{
-    snapshot=holdUnresolvedGames(snapshot,source?(source.packet.sourceGameId??source.packet.gameId):null);
+    withdrawalAuthority?:Parameters<typeof writeNbaPlayerPropsPrivateSnapshot>[0]['withdrawalAuthority'],priorDisplayFailureOnly=false)=>{
+    if(!priorDisplayFailureOnly)snapshot=holdUnresolvedGames(snapshot,source?(source.packet.sourceGameId??source.packet.gameId):null);
     try{await writeNbaPlayerPropsPrivateSnapshot({client:args.client,snapshot,
       source:NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE,...(integrated?{writerRunId:args.writerRunId,expectedSnapshot:previous}:{}),
       ...(source?{publicationBefore:source.packet.lock,sourceCutoff:source.packet.cutoff}:{}),
@@ -419,6 +419,13 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       slateDate:args.slateDate,evaluatedAt:publicationNow,snapshot});
     trackingConflicts+=tracking.conflicts;
     return snapshot;
+  };
+  const invalidatePendingDisplay=async()=>{
+    if(publicationWriteFailed||!previous?.diagnostics.publicationContinuity?.games.some(p=>p.pending&&!p.failed))return;
+    const now=new Date().toISOString(),snapshot={...previous,generatedAt:now,diagnostics:{...previous.diagnostics,publicationContinuity:{...previous.diagnostics.publicationContinuity,games:previous.diagnostics.publicationContinuity.games.map(p=>p.pending?{...p,failed:true}:p)}}};
+    // A metadata-only failure receipt keeps every original payload, clock and
+    // existing lock. It cannot authorize an empty board or a new first lock.
+    await commit(snapshot,now,undefined,undefined,true);
   };
   const persist=async(publicationNow:string,source?:PublicationSource)=>{
     const gameId=source?(source.packet.sourceGameId??source.packet.gameId):null;
@@ -447,7 +454,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     // The current callback then advances its complete game while retaining the
     // other canonical payloads, including the checkpoint's exact first locks.
     const scoped=(snapshot:NbaPlayerPropsMemberSnapshot)=>gameId?{...buildNbaPlayerPropsMemberSnapshot({...snapshot,
-      games:snapshot.games.filter(g=>g.gameId===gameId),decisions:snapshot.decisions.filter(r=>r.gameId===gameId),inputRows:snapshot.diagnostics.inputRows}),diagnostics:{...snapshot.diagnostics,...(snapshot.diagnostics.publicationContinuity?{publicationContinuity:{...snapshot.diagnostics.publicationContinuity,pending:snapshot.diagnostics.publicationContinuity.pending.filter(p=>p.gameId===gameId)}}:{})}}:snapshot;
+      games:snapshot.games.filter(g=>g.gameId===gameId),decisions:snapshot.decisions.filter(r=>r.gameId===gameId),inputRows:snapshot.diagnostics.inputRows}),diagnostics:{...snapshot.diagnostics,...(snapshot.diagnostics.publicationContinuity?{publicationContinuity:{...snapshot.diagnostics.publicationContinuity,games:snapshot.diagnostics.publicationContinuity.games.filter(p=>p.gameId===gameId)}}:{})}}:snapshot;
     const lifecycle={...advanceNbaPlayerPropsCandidateLifecycle({now:publicationNow,previous:previous?scoped(previous):null,candidate:scoped(candidate),
       ...(integrated?{lockHandoff:mergeNbaHandoffs(lockFrames)}:{})})};
     if(gameId)lifecycle.snapshot=buildNbaPlayerPropsMemberSnapshot({...candidate,generatedAt:publicationNow,
@@ -533,20 +540,21 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     };
     const contexts=await args.client.from("lab_response_snapshots").select("payload,generated_at").eq("sport","nba").like("snapshot_key","%current-only::live-copy%").order("generated_at",{ascending:false}).limit(4);
     assertSourceWindow();
-    aiReviewOutcome=await reviewPropsForSite({client:args.client,sport:"nba",writerRunId:args.writerRunId,deadline:Math.min(Date.parse(now)+480000,args.aiDeadline??Infinity),
+    try{aiReviewOutcome=await reviewPropsForSite({client:args.client,sport:"nba",writerRunId:args.writerRunId,deadline:Math.min(Date.parse(now)+480000,args.aiDeadline??Infinity),
       onSourceAudit:audit=>{sourceAudits.set(audit.gameId,audit);},
       games:games.map(g=>({id:g.gameId,start:g.scheduledStart,away:g.awayTeam,home:g.homeTeam})),
       load:(game,window)=>liveNbaPacket({game,window,snapshot:aiBaseline,market:mergedMarket.history,currentObservations:live.observations,prior:priorState,current:currentState!,context:contexts.error?[]:contexts.data as EnrichedSource["nbaContext"],participationReports}),
       onSourceReady:(packet,review,_at,lookupAvailable)=>observe(packet,review,lookupAvailable),
       onReviewObserved:(packet,review,lookupAvailable)=>observe(packet,review,lookupAvailable),
-      onReviewReady:(packet,review)=>observe(packet,review,true)});
+      onReviewReady:(packet,review)=>observe(packet,review,true)});}catch(error){await publicationQueue;try{await invalidatePendingDisplay();}catch{/* Original failure and read-time TTL remain authoritative. */}throw error;}
   }
   if(aiReviewOutcome)for(const gameId of propsAiFinalSourceHolds(aiReviewOutcome,games.map(game=>game.gameId)))unresolvedReviewAuthority.add(gameId);
   await publicationQueue;
   if(publicationFailed)throw publicationFailure;
-  if(unreadyGames.size)throw new Error(`NBA current source has no ready forecast; last-known-good preserved:${[...unreadyGames].sort().join(",")}`);
+  if(unreadyGames.size){await invalidatePendingDisplay();throw new Error(`NBA current source has no ready forecast; last-known-good preserved:${[...unreadyGames].sort().join(",")}`);}
   for(const gameId of unresolvedReviewAuthority)unavailableReviewAuthority.add(gameId);
   if(unresolvedReviewAuthority.size){
+    await invalidatePendingDisplay();
     // Retained healthy games can still advance through the normal first-lock
     // checkpoint, but the generic tail must not reintroduce fresh native rows
     // for games whose review authority was never established.

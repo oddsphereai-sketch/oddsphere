@@ -1,24 +1,48 @@
-# NBA refresh display continuity — prospective predeclaration
+# NBA refresh continuity — prospective predeclaration
 
-Base2514c23081c2562996ddc07f80ff89d439f2605a, isolated codex worktree.
-Actual20:13 canonical90rows/1game and20:14 public161rows followed a full12game
-1032row display. A repeated20:43 canonical again had90rows/1game. These are
-inflight publication coverage failures, not closed AI review failures.
+Base2514c23081c2562996ddc07f80ff89d439f2605a; dedicated codex worktree.
+Actual20:13canonical90cards/1game and20:14page161cards followed1032cards/12games;
+20:15page713 and20:43canonical90 demonstrate partial live display during ordinary
+serial callbacks. This is a publication continuity failure, not failed AI review.
 
-The existing writer initializes every prelock game as unresolved and removes
-all its unlocked rows when another source-ready game commits. Preserve only
-exact prior canonical display while pending, with immutable per-game original
-publication clock and a private non-authority marker. Reject old/changed-window/
-lookup-failed/end-of-run/at-lock fallbacks. No pending display can become a first
-lock without an actual current source-bound handoff. Never reprice/reforecast it.
+## November18 bounded NBA refresh display continuity
 
-No automatic source, law, grade or decline repair; no provider/model request,
-paid test, additional review, replay, new schedule, budget or DB/schema change.
-Existing502historical unique locks and opaque corrupt-reader preservation stay
-exact. Test paired Over/Under recovery, in-flight full-slate retention, codec
-restart/no clock laundering,15minute expiry, actual failed lookups/withdrawals,
-source/lock deadlines, no unknown first locks, immutable locks and shared CAS.
-Root full focused/model/build/type/lint plus exact hosted real disposablePG with
-all AI mocked, two new consecutive fresh triple whole-product CLEAR rounds and
-strict latest-main protected release are mandatory. Actual live proof only on
-normal production; no extra paid proof.
+NBA sole writer is `nba_player_props_private_writer_2026_11_18_r36_pending_display_continuity`;
+lifecycle is `nba_player_props_lifecycle_candidate_2026_11_18_r7_pending_display_not_authority`;
+private provenance is `nba_props_publication_continuity_2026_11_18_r1_prior_display_only`;
+member transport is `nba_player_props_member_transport_2026_11_18_r2_pending_display_expiry`;
+member surface is `nba_player_props_member_surface_2026_11_18_r2_original_asof`.
+AI generationR53/NFL114/source/law4/grade6/selection9 and all old reviews stay exact.
+
+The actual serial refresh temporarily dropped other unlocked games. Retain only
+exact prior canonical rows while their callbacks are pending, within the existing
+90minute LKG publication-age ceiling and a separate nonrenewable15minute pending
+interval. Preserve every actual per-game source-callback publication clock after
+resolution and across siblings/restarts. Missing legacy game clocks are never
+reconstructed from a slate header or row evaluation: normal source callbacks
+bootstrap them prospectively. Every card displays its original evaluated-as-of
+time; an old display is not a newly evaluated source, quote, review or first lock.
+
+Changed windows/slates, explicit lookup failure, expiry and lock reject carry.
+Failure/unready exits invalidate pending display through the same guarded queue;
+unknown write ACKs fence additional writes. Read-time expiry protects crashes.
+Pending native/AI display cannot supply a new first lock without an actual
+source-bound handoff. Existing stored locks always render verbatim, even when
+optional new metadata is unavailable or legacy duplicates exist. No lock repair.
+Private process flags/clocks never enter client props; only existing evaluatedAt
+is displayed. No new writer, DB/schema, schedule, paid/source/model request,
+slot/phase/outputcap/deadline/lease/budget, law/price/grade/stake rule change.
+
+Unpublished round122/ad49 was NOT CLEAR: clocks vanished after resolution and
+unready exits retained pending display. Those flaws receive no credit. Corrected
+all-game clock, cleanup/read-expiry, paired Over/Under, actual writer/codec/
+withdrawal/CAS/ACK/first-lock/legacy immutability controls, two NEW consecutive
+fresh triple whole-product CLEAR rounds, all local/hosted mocked realPG gates
+and strict fresh-main protected actualReady plus ordinary live proof are required.
+See `docs/model-audits/2026-11-18-props-refresh-continuity-predeclaration.md`.
+
+Same-source accepted numerical/grade/price values are unchanged; actionable
+promotion/demotion rules and external inputs are unchanged. The board impact is
+retaining eligible old display during pending callbacks, not making new AI rows
+or reconstructing missing source facts. Actual board impact/retention/locks and
+accuracy remain unproved until normal production. No paid proof may be bought.

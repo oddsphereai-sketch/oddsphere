@@ -2,28 +2,37 @@
 
 NBA sole writer is `nba_player_props_private_writer_2026_11_18_r36_pending_display_continuity`;
 lifecycle is `nba_player_props_lifecycle_candidate_2026_11_18_r7_pending_display_not_authority`;
-private display provenance is `nba_props_publication_continuity_2026_11_18_r1_prior_display_only`.
-Shared AI generationR53, NFLwriterR114, original laws/requests/source capsules,
-source and numerical validation, pricing/grades/selection, lease, cadence, paired
-slots, provider/model calls, output caps, deadlines and budgets are unchanged.
+private provenance is `nba_props_publication_continuity_2026_11_18_r1_prior_display_only`;
+member transport is `nba_player_props_member_transport_2026_11_18_r2_pending_display_expiry`;
+member surface is `nba_player_props_member_surface_2026_11_18_r2_original_asof`.
+AI generationR53/NFL114/source/law4/grade6/selection9 and all old reviews stay exact.
 
-Actual ordinary refreshes briefly removed other unlocked games while serial
-source callbacks were pending. During that bounded interval only, keep their
-exact prior canonical rows, original publication clocks and a private pending
-marker. Never substitute a new candidate, source claim or quote. Prior display
-expires after15minutes and cannot cross a changed window, slate boundary,
-explicit lookup failure, end-of-run unresolved authority or lock. A pending
-display cannot supply a native or AI first lock, including after codec restart
-or a later sibling header. An actual source-bound handoff remains required.
-Existing stored locked payloads retain unconditional exact precedence.
+The actual serial refresh temporarily dropped other unlocked games. Retain only
+exact prior canonical rows while their callbacks are pending, within the existing
+90minute LKG publication-age ceiling and a separate nonrenewable15minute pending
+interval. Preserve every actual per-game source-callback publication clock after
+resolution and across siblings/restarts. Missing legacy game clocks are never
+reconstructed from a slate header or row evaluation: normal source callbacks
+bootstrap them prospectively. Every card displays its original evaluated-as-of
+time; an old display is not a newly evaluated source, quote, review or first lock.
 
-All private metadata stays outside member transport. No new writer, refresh,
-source/model call, schema migration, paid test, third review or replay.
-Both meaningful supported Over and Under paths and all prior lock/withdrawal/
-source/CAS/ACK controls remain required. Two NEW consecutive fresh triple
-whole-product CLEAR rounds, full local/hosted mocked-realPG checks, fresh-main
-strict protected release and ordinary live page/retention/lock proof precede
-completion. See `docs/model-audits/2026-11-18-props-refresh-continuity-predeclaration.md`.
+Changed windows/slates, explicit lookup failure, expiry and lock reject carry.
+Failure/unready exits invalidate pending display through the same guarded queue;
+unknown write ACKs fence additional writes. Read-time expiry protects crashes.
+Pending native/AI display cannot supply a new first lock without an actual
+source-bound handoff. Existing stored locks always render verbatim, even when
+optional new metadata is unavailable or legacy duplicates exist. No lock repair.
+Private process flags/clocks never enter client props; only existing evaluatedAt
+is displayed. No new writer, DB/schema, schedule, paid/source/model request,
+slot/phase/outputcap/deadline/lease/budget, law/price/grade/stake rule change.
+
+Unpublished round122/ad49 was NOT CLEAR: clocks vanished after resolution and
+unready exits retained pending display. Those flaws receive no credit. Corrected
+all-game clock, cleanup/read-expiry, paired Over/Under, actual writer/codec/
+withdrawal/CAS/ACK/first-lock/legacy immutability controls, two NEW consecutive
+fresh triple whole-product CLEAR rounds, all local/hosted mocked realPG gates
+and strict fresh-main protected actualReady plus ordinary live proof are required.
+See `docs/model-audits/2026-11-18-props-refresh-continuity-predeclaration.md`.
 
 ## November18 exact NBA benchmark freshness R53
 
@@ -6675,3 +6684,5 @@ postponement/result corrections require separate owner approval. Validate valid
 due captures alongside withdrawn IDs, source failures/clocks, midnight coverage,
 writer/reader immutability, zero current-board grade impact, all required local/
 hosted gates, fresh-main integration safety and ordinary production proof.
+
+Round122 was NOT CLEAR on unpublished ad49: resolved per-game clocks were lost, and an unready exit could leave pending display. The corrected candidate stores every actual source callback publication clock permanently, separates the bounded15minute pending interval from existing90minute LKG age, refuses legacy reconstruction, invalidates pending display on failure, and expires it on reads after crash. Two NEW fresh triple CLEAR rounds are required. Member transportR2 enforces only new unlocked pending expiry; exact legacy stored locks retain precedence. Every card shows its original evaluated-as-of time; no old price is presented as newly evaluated.

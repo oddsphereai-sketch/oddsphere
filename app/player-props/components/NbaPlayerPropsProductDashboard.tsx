@@ -141,7 +141,7 @@ function BoardRow({ row, onSelect }: { row: Row; onSelect: (key: string) => void
       <PlayerVisual row={row} />
       <span className="min-w-0 flex-1 pt-0.5">
         <span className="flex items-start justify-between gap-3">
-          <span className="min-w-0"><strong className="block truncate text-base font-black text-white">{row.playerName}</strong><span className="mt-0.5 block text-[10px] text-gray-500">{row.team} vs {row.opponent} · {gameTime(row.scheduledStart)}</span></span>
+          <span className="min-w-0"><strong className="block truncate text-base font-black text-white">{row.playerName}</strong><span className="mt-0.5 block text-[10px] text-gray-500">{row.team} vs {row.opponent} · {gameTime(row.scheduledStart)}</span><span className="mt-0.5 block text-[10px] font-normal text-gray-500">As of {localTime(row.evaluatedAt)}</span></span>
           <GradeBadge grade={row.grade} />
         </span>
         <span className="mt-3 inline-flex rounded-md border border-violet-400/25 bg-violet-400/[0.08] px-2.5 py-1 text-sm font-black text-violet-100">{marketLabel(row.market)}</span>

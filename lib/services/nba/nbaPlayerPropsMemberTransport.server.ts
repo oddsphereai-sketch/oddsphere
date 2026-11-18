@@ -1,8 +1,9 @@
+import {nbaVisiblePublicationRows} from './nbaPlayerPropsPublicationContinuity';
 import "server-only";
 import type { NbaPlayerPropsMemberSnapshot } from "./nbaPlayerPropsProductContract";
 
 export const NBA_PLAYER_PROPS_MEMBER_TRANSPORT_RELEASE =
-  "nba_player_props_member_transport_2026_11_11_r1_public_allowlist" as const;
+  "nba_player_props_member_transport_2026_11_18_r2_pending_display_expiry" as const;
 
 type MemberDiagnostics = Pick<NbaPlayerPropsMemberSnapshot["diagnostics"],
   "inputRows" | "canonicalMarkets" | "actionable" | "bestAngles" | "leans"
@@ -18,7 +19,8 @@ export type NbaPlayerPropsMemberClientSnapshot = Omit<NbaPlayerPropsMemberSnapsh
 export function buildNbaPlayerPropsMemberClientSnapshot(
   snapshot: NbaPlayerPropsMemberSnapshot,
 ): NbaPlayerPropsMemberClientSnapshot {
-  const diagnostics = snapshot.diagnostics;
+  const rows=nbaVisiblePublicationRows(snapshot,new Date().toISOString());
+  const diagnostics=rows===snapshot.decisions?snapshot.diagnostics:{...snapshot.diagnostics,canonicalMarkets:rows.length,bestAngles:rows.filter(r=>r.grade==='Best Angle').length,leans:rows.filter(r=>r.grade==='Lean').length,actionable:rows.filter(r=>r.grade==='Best Angle'||r.grade==='Lean').length,watchlists:rows.filter(r=>r.grade==='Watchlist').length,noPlays:rows.filter(r=>r.grade==='No Play').length,sportsbooks:[...new Set(rows.map(r=>r.sportsbook))].sort()};
   return {
     memberTransportRelease: NBA_PLAYER_PROPS_MEMBER_TRANSPORT_RELEASE,
     productRelease: snapshot.productRelease,
@@ -29,7 +31,7 @@ export function buildNbaPlayerPropsMemberClientSnapshot(
     generatedAt: snapshot.generatedAt,
     slateDate: snapshot.slateDate,
     games: snapshot.games,
-    decisions: snapshot.decisions,
+    decisions: rows,
     diagnostics: {
       inputRows: diagnostics.inputRows,
       canonicalMarkets: diagnostics.canonicalMarkets,
