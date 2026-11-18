@@ -5,7 +5,7 @@ import {normalCdf} from "../lib/cbb/model";
 import {buildCbbInterpretedDecision} from "../lib/cbb/contextualInterpretedDecision";
 import {buildCbbContextualMarketInterpretation} from "../lib/cbb/contextualMarketInterpretation";
 import {CBB_OUTCOME_DECISION_RELEASE,cbbOutcomeIndependentInputSha256} from "../lib/cbb/contextualOutcomeDecision";
-import {buildCbbContextualOutcomeBoard,CBB_CONTEXTUAL_OUTCOME_EXECUTION_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_EXECUTION_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PRICE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_PRICE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_RESISTANCE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_RESISTANCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,type CbbOutcomeDecision} from "../lib/cbb/contextualOutcomeBoard";
+import {buildCbbContextualOutcomeBoard,CBB_CONTEXTUAL_OUTCOME_OWNED_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_EXECUTION_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_EXECUTION_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PRICE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_PRICE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_RESISTANCE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_RESISTANCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_PREVIOUS_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_GRADE_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_GRADE_RELEASE,type CbbOutcomeDecision} from "../lib/cbb/contextualOutcomeBoard";
 import {CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE,CBB_CONTEXTUAL_OUTCOME_CALIBRATION_RELEASE,CBB_CONTEXTUAL_OUTCOME_LEGACY_MODEL_RELEASE,CBB_CONTEXTUAL_OUTCOME_MANIFEST,loadCbbContextualOutcomeRuntime,resolveCbbContextualOutcomeRelease,readCbbContextualOutcomeEvidence,type CbbReleasedOutcomeBoard} from "../lib/services/cbb/cbbContextualOutcomeRuntime";
 import {encodeCbbContextualEvidence,decodeCbbContextualEvidence} from "../lib/services/cbb/cbbContextualEvidenceCodec";
 import {adaptCbbProvisionalGame} from "../lib/services/cbb/adaptCbbProvisionalToDailyEdge";
@@ -28,6 +28,7 @@ const independent:CbbForecast={release:CBB_FULL_D1_SCORE_RELEASE,gameId:game.id,
 const quote=(market:CbbMarket):CbbContextualQuote=>({provider:"owls",gameId:game.id,sportsbook:"draftkings",market,line:market==="moneyline"?null:market==="spread"?-3.5:36.5,firstPrice:market==="moneyline"?-900:-110,secondPrice:market==="moneyline"?600:-110,providerObservedAt:"2026-11-06T17:58:00Z",fetchedAt:"2026-11-06T17:59:00Z",requestedAt:"2026-11-06T17:58:59Z",phase:"current",orientationVerified:true,sourceEventId:"event9001"});
 const targets=[quote("moneyline"),quote("spread"),quote("total")];
 function releasedBoard(priced=true,customTargets=targets,latent={marginMean:5,totalMean:25,marginSd:11,totalSd:15,correlation:.1},legacyContextual=false,modelRelease:string=testedRelease.modelRelease,previousContextual=false,confidenceContextual=false,resistanceContextual=false,priceContextual=false,executionContextual=false):CbbReleasedOutcomeBoard{
+ if(modelRelease===CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE&&[previousContextual,confidenceContextual,resistanceContextual,priceContextual,executionContextual].some(Boolean))modelRelease="cbb_contextual_outcome_2026_11_06_r7_economic_total_retained_margin";
  const release=resolveCbbContextualOutcomeRelease(modelRelease);assert(release);const manifest=release.manifest;
  const input:CbbContextualFeatureInput={independent,asOf:at,startsAt:start,currentQuotes:priced?customTargets:[]},d=buildCbbInterpretedDecision({input,interpretation:buildCbbContextualMarketInterpretation(input),latent,targets:priced?customTargets:[],
   recommendationRisk:legacyContextual?undefined:{marginLocationSd:0,totalLocationSd:0,calibrationGames:137}});
@@ -36,7 +37,7 @@ function releasedBoard(priced=true,customTargets=targets,latent={marginMean:5,to
  if(legacyContextual){for(const row of d.marketDecisions)delete (row as {recommendationRisk?:unknown}).recommendationRisk;}
  // Fixed-law metadata exercises the stored receipt contract. It makes no claim
  // that these synthetic points were produced by the private fitted artifact.
- const decision={release:executionContextual?CBB_CONTEXTUAL_OUTCOME_EXECUTION_DECISION_RELEASE:priceContextual?CBB_CONTEXTUAL_OUTCOME_PRICE_DECISION_RELEASE:resistanceContextual?CBB_CONTEXTUAL_OUTCOME_RESISTANCE_DECISION_RELEASE:confidenceContextual?CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_DECISION_RELEASE:legacyContextual?CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE:previousContextual?CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE:modelRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_MODEL_RELEASE?CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE:CBB_OUTCOME_DECISION_RELEASE,authority:"offline_research_only",mode:"future",gameId:game.id,asOf:at,fixtureIdentity:{homeId:71,awayId:72},independentInputSha256:cbbOutcomeIndependentInputSha256(independent),
+ const decision={release:executionContextual?CBB_CONTEXTUAL_OUTCOME_EXECUTION_DECISION_RELEASE:priceContextual?CBB_CONTEXTUAL_OUTCOME_PRICE_DECISION_RELEASE:resistanceContextual?CBB_CONTEXTUAL_OUTCOME_RESISTANCE_DECISION_RELEASE:confidenceContextual?CBB_CONTEXTUAL_OUTCOME_CONFIDENCE_DECISION_RELEASE:legacyContextual?CBB_CONTEXTUAL_OUTCOME_LEGACY_DECISION_RELEASE:previousContextual?CBB_CONTEXTUAL_OUTCOME_PREVIOUS_DECISION_RELEASE:modelRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_MODEL_RELEASE?CBB_CONTEXTUAL_OUTCOME_LEGACY_RISK_DECISION_RELEASE:release.modelUsed==="cbb_contextual_outcome_r7"?CBB_CONTEXTUAL_OUTCOME_OWNED_DECISION_RELEASE:CBB_OUTCOME_DECISION_RELEASE,authority:"offline_research_only",mode:"future",gameId:game.id,asOf:at,fixtureIdentity:{homeId:71,awayId:72},independentInputSha256:cbbOutcomeIndependentInputSha256(independent),
   artifact:{release:manifest.engineRelease,methodSha256:manifest.methodSha256,trainingRowsSha256:"a".repeat(64),availableBy:manifest.availableBy,objectSha256:manifest.modelObjectSha256,...(modelRelease===CBB_CONTEXTUAL_OUTCOME_LEGACY_MODEL_RELEASE?{factorObjectSha256:"b".repeat(64)}:{})},
   interpretation:d.interpretation,finalScore:d.finalScore,finalUncertainty:d.finalUncertainty,gameOutcome:{selection:d.finalScore.homeWinProbability>=.5?"first":"second",probability:Math.max(d.finalScore.homeWinProbability,1-d.finalScore.homeWinProbability)},marketDecisions:d.marketDecisions,gradePolicy:d.policy,
   workingForecast:{},calibration:{forecastArtifactObjectSha256:manifest.modelObjectSha256,calibrationMethodSha256:manifest.calibrationMethodSha256},numericalTrace:{workingLatentLocations:latent,finalLatentDistribution:latent,law:d.lawNumerics,reference:d.sourceReferenceNumerics},interpretationMeaning:"Synthetic frozen joint-law receipt",limits:"No model-fit claim"} as unknown as CbbOutcomeDecision;
@@ -50,6 +51,7 @@ const reversed=(v:unknown):unknown=>Array.isArray(v)?v.map(reversed):v&&typeof v
 export async function testCbbContextualOutcomeLocks(){
  let network=0;const previousFetch=globalThis.fetch;globalThis.fetch=async()=>{network++;throw Error("unexpected network");};
  try{
+  await import("./test-cbb-grouped-outcome-release");
   const currentRelease=testedRelease,legacyRelease=resolveCbbContextualOutcomeRelease(CBB_CONTEXTUAL_OUTCOME_LEGACY_MODEL_RELEASE)!;
   assert(Object.isFrozen(currentRelease)&&Object.isFrozen(currentRelease.manifest)&&Object.isFrozen(legacyRelease)&&Object.isFrozen(legacyRelease.manifest));
   assert.equal(resolveCbbContextualOutcomeRelease("unrecognized_contextual_model"),null);
@@ -57,7 +59,7 @@ export async function testCbbContextualOutcomeLocks(){
   assert.throws(()=>cbbLockedModelRelease({release:"private_rejected_candidate",modelRelease:"cbb_contextual_outcome_2026_11_06_r2_whole_market_context"}),/locked model release is unknown/);
   assert.equal(legacyRelease.manifest.runtimeModelRelease,CBB_CONTEXTUAL_OUTCOME_LEGACY_MODEL_RELEASE);
   assert.equal(legacyRelease.calibrationRelease,"cbb_contextual_covariance_2026_11_05_r1");assert.equal(legacyRelease.modelUsed,"cbb_contextual_outcome_r1");
-  if(CBB_CONTEXTUAL_OUTCOME_MANIFEST){assert.equal(currentRelease.manifest.runtimeModelRelease,CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE);assert.equal(currentRelease.modelUsed,"cbb_contextual_outcome_r7");assert.notEqual(currentRelease.manifest.modelObjectSha256,legacyRelease.manifest.modelObjectSha256);}
+  if(CBB_CONTEXTUAL_OUTCOME_MANIFEST){assert.equal(currentRelease.manifest.runtimeModelRelease,CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE);assert.equal(currentRelease.modelUsed,"cbb_contextual_outcome_r8");assert.notEqual(currentRelease.manifest.modelObjectSha256,legacyRelease.manifest.modelObjectSha256);}
   else{assert.equal(resolveCbbContextualOutcomeRelease(CBB_CONTEXTUAL_OUTCOME_MODEL_RELEASE),null);await assert.rejects(loadCbbContextualOutcomeRuntime(),/manifest pending/);}
   assert.equal(resolveCbbContextualOutcomeRelease("cbb_contextual_outcome_2026_11_06_r3_independent_evidence_components"),null,"Unreleased held R3 is not a production legacy");
   assert.equal(resolveCbbContextualOutcomeRelease("cbb_contextual_outcome_2026_11_06_r4_direct_outcome"),null,"Failed unpublished R4 is not a production legacy");
@@ -143,6 +145,16 @@ export async function testCbbContextualOutcomeLocks(){
   }
   assert.equal((await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:lock},db)).written,false);
   assert.equal(JSON.stringify(r1Lock),r1Bytes,"Active R7 writer cannot replace any R1 frozen score, probability, grade, price or evidence");
+  const r7Release=resolveCbbContextualOutcomeRelease("cbb_contextual_outcome_2026_11_06_r7_economic_total_retained_margin")!;
+  assert.equal(r7Release.manifest.modelObjectSha256,"ba5b5624b009384b3a90b7c939cde860cd1525d21713bf45da63f840990ca7f8");
+  const r7Board=releasedBoard(true,passTargets,{marginMean:16,totalMean:146,marginSd:11,totalSd:15,correlation:.1},false,r7Release.modelRelease);
+  stored=null;await writeCbbMemberGame({game,candidate:r7Board,homeLogo:null,awayLogo:null,now:at,marketQuotes:passTargets},db);
+  const r7Lock=(await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:lock},db)).record,r7Bytes=JSON.stringify(r7Lock);
+  assertCbbContextualLockedRecord(r7Lock);tracked.length=0;assert.equal(await writeLockedCbbTracking(r7Lock,tracking),3);
+  assert(tracked.every(row=>row.model_version===r7Release.modelRelease&&row.model_used===r7Release.modelUsed));
+  assert.equal((await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:lock},db)).written,false);
+  assert.deepEqual(cbbMemberGameForReader(r7Lock,{...game,status:"post",status_state:"final",home_score:90,away_score:70}).markets,r7Lock.memberGame.markets);
+  assert.equal(JSON.stringify(r7Lock),r7Bytes,"R8 writer and reader preserve the exact R7 law, grade, evidence and locked DTO");
   // New risk-based priced passes can retain positive nominal EV. They remain
   // complete forecasts without recommendation confidence or wager exposure.
   const extremeTargets=[{...targets[0],firstPrice:-100000,secondPrice:5000},...targets.slice(1)];
@@ -248,6 +260,6 @@ export async function testCbbContextualOutcomeLocks(){
    assert.deepEqual(cbbMemberGameForReader(r14Lock,game),r14Lock.memberGame);
    assert.equal(network,0,"No artifact fetch/provider path was used for adapter, locking, reading or tracking");
  }finally{globalThis.fetch=previousFetch;}
- console.log(`PASS contextual outcome lock integration: ${CBB_CONTEXTUAL_OUTCOME_MANIFEST?"active R7 plus legacy R1":"pending R7 fails closed; genuine R1 only"}, exact own-manifest/codec/DTO/tracking identities, priced pass and Watch boundaries, lock writer+reader precedence, no tracking reforecast or upgrade, zero real IO`);
+ console.log(`PASS contextual outcome lock integration: ${CBB_CONTEXTUAL_OUTCOME_MANIFEST?"active R8 plus exact legacy R7/R1":"pending R7 fails closed; genuine R1 only"}, exact own-manifest/codec/DTO/tracking identities, priced pass and Watch boundaries, lock writer+reader precedence, no tracking reforecast or upgrade, zero real IO`);
 }
 if(process.argv[1]?.endsWith("test-cbb-contextual-outcome-locks.ts"))testCbbContextualOutcomeLocks().catch(e=>{console.error(e);process.exitCode=1;});

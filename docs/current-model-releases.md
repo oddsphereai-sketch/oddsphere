@@ -1,4 +1,34 @@
-## November 18 CBB joint accuracy research R2 — offline, not activated
+## November 18 CBB grouped joint outcome R8 — owner-approved provisional release
+
+Target model `cbb_contextual_outcome_2026_11_18_r8_grouped_native_residual`,
+calibration `cbb_contextual_covariance_2026_11_18_r8_disjoint_grouped_native`,
+evidence `cbb_contextual_outcome_evidence_2026_11_18_r8_grouped_native_residual`,
+engine `cbb_grouped_outcome_2026_11_18_r1_native_innovation_residual`, decision
+`cbb_outcome_decision_2026_11_18_r16_grouped_native_outcome`, grade
+`cbb_contextual_outcome_grade_2026_11_18_r15_grouped_native_outcome`, publisher
+`cbb_member_pipeline_2026_11_18_r59_grouped_native_outcome`, adapter
+`cbb_member_adapter_2026_11_18_r41_grouped_native_outcome`, tracking
+`cbb_tracking_writer_2026_11_18_r43_grouped_native_outcome`.
+
+The owner approved provisional activation of the exact tested R2 fits, accepting
+known diagnostic/Total limitations while retaining the required frozen-pick
+postgame evaluation. No refit, play quota, price/grade policy change, provider call
+or second writer is introduced. The existing `prediction_pipeline:cbb` writer
+loads one private immutable 312075-byte compressed artifact (907679 logical model
+JSON bytes), object SHA256
+`75a40f3022e658641154716b6931093ae48d4a40ff921052973269cc6196bc34`.
+274 mean-training and 110 disjoint calibration games remain explicitly separate.
+
+The packaged runtime reproduced all61 frozen candidate scores, probabilities,
+sides, prices and grades exactly. That morning board has ML21Lean/1Best,
+Spread19Lean and Total1Lean:42actionables versus44 for the same-source R7 board.
+These are source-fixed development/forward forecasts, not proven new outcomes.
+Existing genuine R7/R1 manifests, historical decision/grade families, raw
+evidence and locked DTOs retain exact precedence and are never reforecast.
+Production remains R7 until protected merge, deployment and normal-writer proof.
+See the bounded owner exception in `docs/model-change-safety.md`.
+
+## November 18 CBB joint accuracy research R2 — preserved pre-approval research
 
 Candidate `cbb_joint_residual_research_2026_11_18_r2_grouped_native_innovations`
 fits separate Margin and Total residuals with training-only normalization and

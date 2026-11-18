@@ -5,7 +5,8 @@ import {gzipSync,gunzipSync} from "node:zlib";
 import {validateCbbOutcomeArtifact,type CbbOutcomeArtifact} from "../../cbb/contextualOutcomeForecast";
 import {validateCbbCompositeOutcomeArtifact,type CbbCompositeOutcomeArtifact} from "../../cbb/contextualCompositeOutcomeForecast";
 import type {CbbOutcomeArtifact as CbbDirectOutcomeArtifact} from "../../cbb/economicTotalForecast";
-type TransportModel=CbbOutcomeArtifact|CbbCompositeOutcomeArtifact;
+import {validateCbbGroupedOutcomeArtifact,type CbbGroupedOutcomeArtifact} from "../../cbb/groupedOutcomeForecast";
+type TransportModel=CbbOutcomeArtifact|CbbCompositeOutcomeArtifact|CbbGroupedOutcomeArtifact;
 function isComposite(model:TransportModel):model is CbbCompositeOutcomeArtifact{return "legacyMarginModel" in model;}
 import {assertCbbContextualForecastCalibrationBinding,freezeCbbContextualForecastArtifact,type CbbContextualForecastCalibrationBinding} from "../../cbb/contextualForecastCalibrationBinding";
 
@@ -50,10 +51,11 @@ type CalibrationFile={schema:string;availableBy:string;fullModel:{fileSha256:str
  calibration:{status:string;parameters:unknown};binding:CbbContextualForecastCalibrationBinding|null};
 function components(modelJSON:string,calibrationJSON:string){
  const model=JSON.parse(modelJSON) as TransportModel,calibration=JSON.parse(calibrationJSON) as CalibrationFile;
- if(isComposite(model)){internSchemas(model.legacyMarginModel);internSchemas(model.directTotalModel);validateCbbCompositeOutcomeArtifact(model);}
+ if("models"in model){validateCbbGroupedOutcomeArtifact(model);}
+ else if(isComposite(model)){internSchemas(model.legacyMarginModel);internSchemas(model.directTotalModel);validateCbbCompositeOutcomeArtifact(model);}
  else{internSchemas(model);validateCbbOutcomeArtifact(model);}
  const modelJSONSha256=sha(modelJSON),modelObjectSha256=sha(JSON.stringify(model));
- need(isComposite(model)?model.legacyMarginModel.margin.optimizer.converged&&model.directTotalModel.total.optimizer.converged:
+ need("models"in model?model.models.margin.status==="converged"&&model.models.total.status==="converged":isComposite(model)?model.legacyMarginModel.margin.optimizer.converged&&model.directTotalModel.total.optimizer.converged:
   model.margin.optimizer.converged&&model.total.optimizer.converged&&model.factorArtifact.margin.optimizer.converged&&model.factorArtifact.total.optimizer.converged,"unresolved fit");
  need(calibration.schema==="cbb_outcome_joint_calibration_v1"&&calibration.binding&&calibration.calibration?.status==="converged"&&
   calibration.fullModel?.fileSha256===modelJSONSha256&&calibration.fullModel.objectSha256===modelObjectSha256&&

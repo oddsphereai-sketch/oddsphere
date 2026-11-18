@@ -1,0 +1,115 @@
+{
+  "at": "2026-11-18T15:45:18.865Z",
+  "status": "OWNER_APPROVED_PROVISIONAL_RELEASE_PENDING_PRODUCTION",
+  "base": "76e3de25c539b89d7dfcce1f22407c659b9bee1a",
+  "sourceResearchPr": 1124,
+  "model": "cbb_contextual_outcome_2026_11_18_r8_grouped_native_residual",
+  "frozenResearchSha256": "c574257f60635d81d93d1d0833725d3f843a6e098e9671189a882ba558b914fa",
+  "privateManifest": {
+    "envelopeRelease": "cbb_private_outcome_artifact_2026_11_06_r2_schema_dictionary",
+    "logicalModelJSONBytes": 907679,
+    "runtimeModelRelease": "cbb_contextual_outcome_2026_11_18_r8_grouped_native_residual",
+    "engineRelease": "cbb_grouped_outcome_2026_11_18_r1_native_innovation_residual",
+    "methodSha256": "2fe480b336e0de42b466d85f120b5fb51f653d18920ef828ee9106f3368788c9",
+    "modelJSONSha256": "75a40f3022e658641154716b6931093ae48d4a40ff921052973269cc6196bc34",
+    "modelObjectSha256": "75a40f3022e658641154716b6931093ae48d4a40ff921052973269cc6196bc34",
+    "calibrationJSONSha256": "4d0645e253c1d420b1bed186398f7451100cdb9e8fcda72cde90786ec156dd2a",
+    "calibrationMethodSha256": "c27ab973cb5d3a870940960c25c367060f16b73da6a8e904c5943255bf672d75",
+    "compressedSha256": "20e65e4546fda78ec1ef3d51b1943e24f4c9a9a77d6f2ad0e89e1fbf3b10f30d",
+    "uncompressedSha256": "d9374df3bb6081d9199592e0cbeb2ca23b8787ca4320df35f56287c8911f165e",
+    "compressedBytes": 312075,
+    "uncompressedBytes": 915333,
+    "availableBy": "2026-11-18T15:18:14.279Z"
+  },
+  "artifactAccess": {
+    "at": "2026-11-18T15:19:44.509Z",
+    "authenticatedHashAndSizeVerified": true,
+    "publicStatus": 400,
+    "sha256": "20e65e4546fda78ec1ef3d51b1943e24f4c9a9a77d6f2ad0e89e1fbf3b10f30d",
+    "bytes": 312075,
+    "existingKeysOverwritten": 0,
+    "predictionWrites": 0
+  },
+  "frozen61RuntimeProof": {
+    "sameScoresProbabilitiesSidesPricesGrades": true,
+    "executionDifferences": [],
+    "newFits": 0
+  },
+  "currentSource": {
+    "capture": "2026-11-18T15:39:19.999Z",
+    "games": 61,
+    "errors": [],
+    "counts": {
+      "old": {
+        "moneyline.No Play": 39,
+        "spread.Watchlist": 53,
+        "total.Watchlist": 38,
+        "moneyline.Lean": 20,
+        "total.Lean": 22,
+        "total.No Play": 1,
+        "spread.Lean": 2,
+        "spread.No Play": 6,
+        "moneyline.Watchlist": 2
+      },
+      "next": {
+        "moneyline.Lean": 18,
+        "spread.Lean": 24,
+        "total.Watchlist": 48,
+        "moneyline.No Play": 40,
+        "spread.Watchlist": 35,
+        "moneyline.Best Angle": 2,
+        "total.No Play": 13,
+        "spread.No Play": 2,
+        "moneyline.Watchlist": 1
+      }
+    },
+    "changes": {
+      "moneyline": {
+        "promotions": 7,
+        "demotions": 7,
+        "replacementWagers": 0,
+        "sideChanges": 1,
+        "tierPromotions": 2
+      },
+      "spread": {
+        "promotions": 24,
+        "demotions": 2,
+        "replacementWagers": 0,
+        "sideChanges": 35,
+        "tierPromotions": 0
+      },
+      "total": {
+        "promotions": 0,
+        "demotions": 22,
+        "replacementWagers": 0,
+        "sideChanges": 35,
+        "tierPromotions": 0
+      }
+    },
+    "oldActions": 44,
+    "newActions": 44,
+    "allLocksBeforeReleaseRemainOriginal": true
+  },
+  "qualityLimitations": [
+    "110-game development comparison is already seen, not independent forward qualification.",
+    "Spread probability-score intervals cross zero; Total wagering remains unqualified.",
+    "Owner explicitly requested provisional release now while continuing Total work.",
+    "Original61 morning forecasts remain untouched for postgame evaluation; current-source impact is a separate operational snapshot."
+  ],
+  "verification": {
+    "mandatoryModelChange": "PASS",
+    "fullCbbContextualSuite": "PASS",
+    "groupedEngineTransportAndOwnGameGuards": "PASS",
+    "existingR1AndR7LockedWriterReaderPrecedence": "PASS",
+    "sourceFixed61ExactRuntimeParity": "PASS",
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "productionBuild": "PASS (supported Webpack builder; Turbopack rejected local node_modules symlink)",
+    "optionalMarketBrainPostgres": "SKIPPED (URL unset; unchanged Market Brain)"
+  },
+  "writerLease": "prediction_pipeline:cbb",
+  "newWriter": false,
+  "newSchedule": false,
+  "paidProviderCalls": 0,
+  "historicalWrites": 0
+}

@@ -1,8 +1,9 @@
 /** Pure offline learner. No production writer imports this module. */
 import {createHash} from "node:crypto";
-import type {Coordinates,Axis} from "./coordinates";
+import {RELEASE,validate,type ResidualModel} from "../../../lib/cbb/groupedResidualPrediction";
+import type {Coordinates} from "./coordinates";
+export {predict,RELEASE,type ResidualModel} from "../../../lib/cbb/groupedResidualPrediction";
 
-export const RELEASE = "cbb_joint_residual_research_2026_11_18_r2_grouped_native_innovations";
 export type TrainingRow = Coordinates & {target: number};
 type Matrix = number[][];
 const dot = (a: readonly number[],b: readonly number[]) => a.reduce((s,v,j) => s+v*b[j],0);
@@ -25,21 +26,6 @@ function solve(l: Matrix,b: number[]): number[] {
   for (let i=b.length-1;i>=0;i--) {let v=y[i]; for (let j=i+1;j<b.length;j++) v-=l[j][i]*x[j]; x[i]=v/l[i][i];}
   return x;
 }
-function validate(row: Coordinates) {
-  if (!Number.isSafeInteger(row.gameId) || row.gameId<=0 || !Number.isFinite(row.origin) ||
-      !["margin","total"].includes(row.axis) || new Set(row.names).size !== row.names.length ||
-      [row.groups,row.values,row.known].some(xs => xs.length !== row.names.length) ||
-      !row.values.every(Number.isFinite) || row.known.some((k,j) => typeof k !== "boolean" || !k && row.values[j] !== 0))
-    throw Error("Invalid regression identity or observed/missing coordinate");
-}
-export type ResidualModel = {
-  release: typeof RELEASE; axis: Axis; status: string; iterations: number;
-  names: string[]; groups: string[]; scales: number[]; active: number[];
-  coefficients: number[]; covariance: Matrix; noiseVariance: number;
-  fittedPrecisions: Record<string,number>; trainingIds: number[]; trainingSha256: string;
-  initialObjective: number; objective: number; maxGradientPerGame: number;
-};
-
 /** One deterministic grouped marginal-likelihood fit; no parameter grid. */
 export function fit(rows: readonly TrainingRow[]): ResidualModel {
   if (rows.length<100 || new Set(rows.map(r => r.gameId)).size !== rows.length) throw Error("Insufficient/duplicate training games");
@@ -107,16 +93,4 @@ export function fit(rows: readonly TrainingRow[]): ResidualModel {
     fittedPrecisions:Object.fromEntries(groupNames.map((g,j) => [g,state.alphas[j]])),
     trainingIds:rows.map(r => r.gameId),trainingSha256:original,initialObjective,objective:state.objective,
     maxGradientPerGame:Math.max(...state.gradient.map(Math.abs))/n};
-}
-
-export function predict(model: ResidualModel,row: Coordinates) {
-  validate(row);
-  if (model.release!==RELEASE || model.status!=="converged" || model.axis!==row.axis || model.trainingIds.includes(row.gameId) ||
-      hash({names:model.names,groups:model.groups})!==hash({names:row.names,groups:row.groups}))
-    throw Error("Regression release, own-game exclusion or feature binding mismatch");
-  const x=model.active.map(j => row.values[j]/model.scales[j]);
-  const residual=dot(x,model.coefficients);
-  const locationVariance=x.reduce((s,v,j) => s+v*dot(model.covariance[j],x),0);
-  if (!(locationVariance>=0 && Number.isFinite(locationVariance) && model.noiseVariance>0)) throw Error("Invalid predictive variance");
-  return {mean:row.origin+residual,sd:Math.sqrt(model.noiseVariance+locationVariance),locationVariance,residual};
 }

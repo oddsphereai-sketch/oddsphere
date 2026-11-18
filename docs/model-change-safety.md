@@ -879,6 +879,47 @@ See `model-audits/2026-11-11-player-props-bounded-source-hash.md`.
 
 # Model change safety protocol
 
+## Owner-approved provisional exception: CBB grouped joint outcome R8 — November 18
+
+After reviewing the exact R2 replacement, its already-seen 110-game comparison,
+unqualified Total wager performance and the 61 frozen prospective forecasts, the
+owner explicitly directed: “this is still way better than what we have” and
+“let's get this live,” while continuing Total work and forbidding forced plays.
+This approves provisional activation of that exact frozen candidate, not a claim
+of independent qualification or permission to tune against today's outcomes.
+The earlier request to check the frozen cohort after finals remains required.
+
+The exception is bounded to the two frozen mean fits and one disjoint later
+joint calibration in research artifact SHA256
+`c574257f60635d81d93d1d0833725d3f843a6e098e9671189a882ba558b914fa`.
+No refit, outcome-based variant selection, source-share preset, point correction,
+grade quota, threshold change, new writer, schedule or paid request is approved.
+Normal numerical risk uses the tested positive-tail implementation; legacy R1/R7
+readers keep their original arithmetic and exact manifests. The current writer
+continues under `prediction_pipeline:cbb`; only unlocked/future rows advance.
+
+Model/calibration/evidence advance to R8, outer decision R16, grade R15,
+publisher R59, adapter R41 and tracking R43. One authoritative shared coordinate
+and frozen-model prediction implementation serves research and production.
+The binding truthfully attests 274 mean-training games and 110 separate later
+calibration games; it must not claim all training games received crossfit labels.
+
+Known development evidence: ML83–27→86–24, Spread45–65→60–50 and Total45–65→52–58
+on 110 originally wager-evaluated games. Actionables24/20/36→29/48/0, with tested
+ML/Spread promotions and demotions, all replacements and exact-price returns
+reported. Total wagering remains unqualified and spread score intervals cross
+zero. These limitations are explicitly accepted for this provisional candidate;
+they are not a reusable relaxation for another candidate, sport or market.
+
+All engineering and publication gates remain mandatory: exact private artifact
+hash/readback/access proof, immutable writer plus legacy reader tests, same-source
+whole-market board impact, focused/full model tests, production build, fresh-main
+integration and protected checks, exact-tree PR merge, actual production source,
+ordinary writer/coverage/reader/lock verification. After finals evaluate the
+original frozen morning cohort without refitting or rewriting public records.
+Hold or roll back future R8 publication on coherence, coverage, lock, load or
+writer failures; preserve every existing locked payload throughout.
+
 ## November 18 CBB joint accuracy research R2 — no production authorization
 
 The owner directed continued work on actual Moneyline, Spread and Total accuracy,
