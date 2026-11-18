@@ -1,3 +1,32 @@
+## November18 prospective joint-dependence correction navigation R52
+
+Shared generation is `player_props_ai_2026_11_18_r52_joint_dependence_navigation`;
+NBA sole writer is `nba_player_props_private_writer_2026_11_18_r34_joint_dependence_navigation`;
+NFL sole writer is `nfl_player_props_writer_2026_11_18_r113_joint_dependence_navigation`.
+NBA collector R10/source R4, law R4, grade R6, selection R9, native MLB R44,
+original R51 and older accepted reviews and all immutable locked payloads remain exact.
+
+Only future NBA correction navigation changes: existing canonical dependency
+findings show positive/negative/tied products across positive-weight scenario
+pairs and clarify opposing relative ranks. These are counts of the unaccepted
+candidate, never source support or forecast targets. No law/weight/exception is
+modified automatically. All factual/numeric/physical/coverage admission stays strict.
+The fixed1,984-byte cushion, complete original findings and previously fitting
+numeric references retain priority; optional detail falls back to original R51
+navigation before its existing tail-detail fallback. NFL/MLB navigation, models,
+reasoning, wire/schema, output caps, paired slots/phases, deadlines, provider calls,
+shared sport lease, budgets, price/grade/stake formulas and cadence are unchanged.
+
+Two Wednesday early slots closed failed after primary and correction responses;
+both corrected drafts retained their original invalid numeric laws. The actual
+correction requests included existing findings and numeric context, so no missing
+correction or transport/credit/timing cause is claimed. Original bytes/rejections
+remain private and unchanged. Future normal correction success is unproved.
+See `docs/model-audits/2026-11-18-props-joint-dependence-navigation-predeclaration.md`.
+Two new consecutive fresh triple whole-product CLEAR rounds and all mandatory
+local/hosted mocked-realPG/protected/fresh-main/actualReady gates precede release.
+No extra paid tests, review replay, source request or historical correction.
+
 ## November 18 exact filtered-player identity completeness
 
 NBA collector is `nba_player_props_live_collector_2026_11_18_r10_complete_filtered_identity`;

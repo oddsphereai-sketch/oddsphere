@@ -92,7 +92,7 @@ export type NamedSourceCorrection =
   |{status:'unavailable';reason:string;bytes:number;affectedActorIds:string[]};
 const unavailable=(reason:string,affectedActorIds:string[],bytes=0):NamedSourceCorrection=>({status:'unavailable',reason,bytes,affectedActorIds});
 
-function issueCategory(issue:ForecastSanityIssue,means:Partial<Record<Statistic,number>>,law:AcceptedPlayerLaw|null,enrich=true):string|null{
+function issueCategory(issue:ForecastSanityIssue,means:Partial<Record<Statistic,number>>,law:AcceptedPlayerLaw|null,enrich=true,jointEnrich=enrich):string|null{
   if(issue.markets.some(m=>!Object.hasOwn(MARKET_NAMES,m)))return null;
   if(issue.code==='forecast_mean_outside_supplied_support'){
     const match=issue.example?.match(MEAN_EXAMPLE);if(!match)return null;
@@ -105,14 +105,14 @@ function issueCategory(issue:ForecastSanityIssue,means:Partial<Record<Statistic,
     const pair=issue.example?.split(':')[0].split('/');if(!pair||pair.length!==2||!pair.every(statistic))return null;
     const first=law?.outcomes[pair[0]],second=law?.outcomes[pair[1]];
     if(!law||!first||!second)return null;
-    let concordant=false,opposing=false;
+    let concordant=0,opposing=0,ties=0;
     for(let i=0;i<law.weights.length;i++)for(let j=i+1;j<law.weights.length;j++){
       if(!law.weights[i]||!law.weights[j])continue;
       const product=(first[i]-first[j])*(second[i]-second[j]);
-      if(product>0)concordant=true;if(product<0)opposing=true;
+      if(product>0)concordant++;else if(product<0)opposing++;else ties++;
     }
     const missing=[...(!concordant?['concordant']:[]),...(!opposing?['opposing']:[])];
-    return missing.length?`joint ${pair.join('/')} missing ${missing.join(' and ')}`:null;
+    return missing.length?`joint ${pair.join('/')}${jointEnrich?` (+${concordant},-${opposing},=${ties})`:''} missing ${missing.join(' and ')}`:null;
   }
   if(issue.code==='unsupported_zero_probability_tail'||issue.code==='unsupported_priced_event_certainty'){
     const kind=issue.code==='unsupported_zero_probability_tail'?'prior':'priced';
@@ -132,7 +132,7 @@ function coordinateCategory(code:string):string|null{
 
 /** Complete ASCII feedback. No source/player/provider prose enters instructions.
  * This byte bound applies to the WHOLE returned text, not merely its examples. */
-function buildNamedSourceCorrection(packet:GamePacket,draft:unknown,enrich:boolean):NamedSourceCorrection{
+function buildNamedSourceCorrection(packet:GamePacket,draft:unknown,enrich:boolean,jointEnrich=enrich):NamedSourceCorrection{
   if(packet.sport!=='nba')return unavailable('not_applicable',[]);
   const raw=object(draft),players=object(raw?.players);
   if(!raw||raw.wireRelease!==PROPS_AI_WIRE_RELEASE||Object.keys(raw).sort().join('|')!=='players|wireRelease'||!players||Object.keys(players).sort().join('|')!==packet.players.map(p=>p.id).sort().join('|')||packet.players.some(p=>!object(players[p.id])))return unavailable('not_applicable',packet.players.map(p=>p.id));
@@ -145,7 +145,7 @@ function buildNamedSourceCorrection(packet:GamePacket,draft:unknown,enrich:boole
     affectedActorIds.push(player.id);
     const rawLaw=inspection.canonical.players[player.id]?.law,accepted=rawLaw?validateLaw('nba',player,rawLaw):null;
     const means:Partial<Record<Statistic,number>>=accepted?Object.fromEntries(STATISTICS.filter(stat=>accepted.outcomes[stat]).map(stat=>[stat,lawForecast(accepted,stat,0).mean])):{};
-    const categories=source.map(issue=>issueCategory(issue,means,accepted,enrich)),coordinate=coords.filter(c=>c.code!=='source_claims').map(c=>coordinateCategory(c.code));
+    const categories=source.map(issue=>issueCategory(issue,means,accepted,enrich,jointEnrich)),coordinate=coords.filter(c=>c.code!=='source_claims').map(c=>coordinateCategory(c.code));
     const fields=format.map(f=>f.field==='assessment'?'assessment':/^reader[0-7]$/.test(f.field)?READER_AREAS[Number(f.field.slice(6))].replaceAll('_',' '):null);
     if(categories.some(c=>c===null)||coordinate.some(c=>c===null)||fields.some(f=>f===null))return unavailable('not_applicable',packet.players.filter((p,i)=>inspection.source.some(s=>s.playerId===p.id&&s.unhandled.length)||inspection.coordinates.some(c=>c.playerId===p.id)||inspection.format.some(f=>f.playerIndex===i)).map(p=>p.id));
     const clauses=[...unique(categories as string[]),...(coordinate.length?[`coordinates ${unique(coordinate as string[]).join(',')}`]:[]),
@@ -154,15 +154,18 @@ function buildNamedSourceCorrection(packet:GamePacket,draft:unknown,enrich:boole
   }
   if(!affectedActorIds.length)return unavailable('not_applicable',[]);
   const prefix='\nP labels are zero-based player order in the named cards. Recheck listed categories against exact sources. Reader errors require verified claim IDs and bounded judgments, never factual prose. Joint x/y pairs need indices i!=j with both weights>0: (x[i]-x[j])*(y[i]-y[j])>0 is concordant (higher-together), <0 is opposing; ties/zero weights do not count. Keep same-index joint scenarios. Tails need opposing event mass. Correct the law or select a supported exception reason; never invent, clip, or waive a check.\n';
-  const text=prefix+rows.join('\n'),bytes=Buffer.byteLength(text,'utf8');
+  const jointMeaning=jointEnrich&&rows.some(row=>/joint .*\(\+/.test(row))?"Rejected-draft (+,-,=) counts active pair signs. Missing '-' needs opposing relative ranks; unchanged rejected vectors fail.\n":'';
+  const text=prefix+jointMeaning+rows.join('\n'),bytes=Buffer.byteLength(text,'utf8');
   if(!/^[\x00-\x7f]*$/.test(text))return unavailable('feedback_exceeds_cushion',affectedActorIds,bytes);
   if(bytes>NAMED_SOURCE_CORRECTION_MAX_BYTES)return unavailable('feedback_exceeds_cushion',affectedActorIds,bytes);
   return{status:'ready',text,bytes,affectedActorIds};
 }
 
 /** Optional detail cannot remove an existing complete corrective request. */
-export function namedSourceCorrection(packet:GamePacket,draft:unknown,enrich=true):NamedSourceCorrection{
- if(!enrich)return buildNamedSourceCorrection(packet,draft,false);
- const rich=buildNamedSourceCorrection(packet,draft,true);
- return rich.status==='unavailable'&&rich.reason==='feedback_exceeds_cushion'?buildNamedSourceCorrection(packet,draft,false):rich;
+export function namedSourceCorrection(packet:GamePacket,draft:unknown,enrich=true,jointEnrich=enrich):NamedSourceCorrection{
+ if(!enrich)return buildNamedSourceCorrection(packet,draft,false,false);
+ const rich=buildNamedSourceCorrection(packet,draft,true,jointEnrich);
+ if(rich.status!=='unavailable'||rich.reason!=='feedback_exceeds_cushion')return rich;
+ const original=buildNamedSourceCorrection(packet,draft,true,false);
+ return original.status==='unavailable'&&original.reason==='feedback_exceeds_cushion'?buildNamedSourceCorrection(packet,draft,false,false):original;
 }
