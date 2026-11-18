@@ -69,3 +69,10 @@ const four=packet(Array.from({length:4},(_,i)=>player(`failure-${i}`))),fourDraf
 
 assert.equal(NAMED_SOURCE_CORRECTION_MAX_BYTES,1984);assert.equal(PROPS_AI_MAX_INPUT_PER_REQUEST,145000);assert.equal(PROPS_AI_MAX_OUTPUT_PER_REQUEST,7000);assert.equal(PROPS_AI_MONTHLY_CAP_MICRO_USD,60000000);assert.equal(PROPS_AI_PART_CONCURRENCY,16);assert.equal(inspectGenerativeDraft(input,bad).coordinates.filter(c=>c.code!=="source_claims").length,0);assert.equal(digest(input),before,'No raw source, law, scope or budget input is changed');
 console.log('NBA source constraint cards passed: exact cited stats/prior events/all-area fact references, honest missing and legacy unknown inputs, complete named actor/category feedback, ASCII whole-text byte refusal, injection isolation, unchanged source hashes/budget constants and NFL/MLB no-op. No I/O or paid calls.');
+
+// Complete generic feedback takes priority over optional event-tail detail.
+for(let count=1;count<=8;count++){
+ const p=packet(Array.from({length:count},(_,i)=>player('fallback'+i))),draft={wireRelease:PROPS_AI_WIRE_RELEASE,players:Object.fromEntries(p.players.map(actor=>[actor.id,row(p,actor,invalidLaw)]))};
+ const original=namedSourceCorrection(p,draft,false),updated=namedSourceCorrection(p,draft);
+ if(original.status==='ready'){assert.equal(updated.status,'ready','Optional event detail cannot block an existing full second phase');if(updated.status==='ready'){assert.deepEqual(updated.affectedActorIds,original.affectedActorIds);assert(updated.bytes<=1984);for(let i=0;i<count;i++)assert(updated.text.includes('P'+i+':'));}}
+}

@@ -6,8 +6,8 @@ import {numericSourceConstraints} from './numericSourceNavigation';
 import {parseJointPlayerReview} from './request';
 
 export const SOURCE_AWARE_CORRECTION_RELEASE='player_props_correction_feedback_2026_11_16_r2_supported_scope_continuation' as const;
-export function sourceAwareDiagnosticCorrection(packet:GamePacket,draft:unknown){
- const base=completeDiagnosticCorrection(packet,draft);
+export function sourceAwareDiagnosticCorrection(packet:GamePacket,draft:unknown,enrich=true){
+ const base=completeDiagnosticCorrection(packet,draft,enrich);
  if(base.status!=='ready')return base;
  let inspection:ReturnType<typeof inspectGenerativeDraft>;
  try{inspection=inspectGenerativeDraft(packet,draft);}catch{return{status:'unavailable' as const,reason:'diagnostic_unavailable' as const,bytes:0,affectedActorIds:base.affectedActorIds};}

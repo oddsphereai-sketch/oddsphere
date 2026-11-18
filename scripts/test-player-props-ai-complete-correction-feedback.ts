@@ -69,3 +69,8 @@ async function actualReviewer(sport:'nfl'|'mlb'='nfl',count=1,qb=false){
  console.log(JSON.stringify({actualReviewerCompleteFeedback:true,sport,qbKnownBoundedCoordinate:qb,primaryRequests:1,correctionRequests:1,allKnownFindingsActuallySent:true,exactOriginalInputRetained:true,bothKnownReceiptsSettled:true,noAdditionalAttempt:true,networkAndPaidCalls:0}));
 }
 void (async()=>{await actualReviewer('nfl');await actualReviewer('mlb');await actualReviewer('nfl',40);await actualReviewer('nfl',1,true);})().catch(error=>{console.error(error);process.exitCode=1;});
+
+for(const sport of ['nfl','mlb'] as const)for(let count=1;count<=8;count++){
+ const p=packet(sport,count),d=draft(p),old=completeDiagnosticCorrection(p,d,false),next=completeDiagnosticCorrection(p,d);
+ if(old.status==='ready'){assert.equal(next.status,'ready','Optional exact tail detail cannot block the complete original non-NBA correction');if(next.status==='ready')assert.deepEqual(next.affectedActorIds,old.affectedActorIds);}
+}

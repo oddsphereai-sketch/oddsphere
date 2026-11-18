@@ -21,7 +21,7 @@ export function completeCorrectionCoordinate(code:string,statistics:readonly str
 /** Every known actor/stat example is retained or the whole correction is refused.
  * Only validator-generated ASCII examples and fixed categories enter instructions;
  * player names, IDs, provider prose and raw exception details remain input data. */
-export function completeDiagnosticCorrection(packet:GamePacket,draft:unknown):Result{
+function buildCompleteDiagnosticCorrection(packet:GamePacket,draft:unknown,enrich:boolean):Result{
  if(packet.sport==='nba')return unavailable('not_applicable');
  const raw=object(draft),players=object(raw?.players);
  if(!raw||raw.wireRelease!==PROPS_AI_WIRE_RELEASE||Object.keys(raw).sort().join('|')!=='players|wireRelease'||!players||Object.keys(players).sort().join('|')!==packet.players.map(p=>p.id).sort().join('|')||packet.players.some(p=>!object(players[p.id])))return unavailable('not_applicable');
@@ -36,11 +36,10 @@ export function completeDiagnosticCorrection(packet:GamePacket,draft:unknown):Re
   for(const finding of source){
    if(!codes.has(finding.code)||!finding.markets.length||finding.markets.some(m=>!player.markets.includes(m))||typeof finding.example!=='string'||!finding.example.length||!/^[\x20-\x7e]+$/.test(finding.example))return unavailable('diagnostic_unavailable',packet.players.map(p=>p.id));
    let detail=finding.example;
-   if(['unsupported_zero_probability_tail','unsupported_priced_event_certainty'].includes(finding.code)){
+   if(enrich&&['unsupported_zero_probability_tail','unsupported_priced_event_certainty'].includes(finding.code)){
     const rawLaw=inspection.canonical.players[player.id]?.law;
     let law=null;try{law=rawLaw?validateLaw(packet.sport,player,rawLaw):null;}catch{return unavailable('diagnostic_unavailable',packet.players.map(p=>p.id));}
-    const navigation=eventTailNavigation(finding,law);if(!navigation)return unavailable('diagnostic_unavailable',packet.players.map(p=>p.id));
-    detail=finding.example+' ('+navigation+')';
+    const navigation=eventTailNavigation(finding,law);if(navigation)detail=finding.example+' ('+navigation+')';
    }
    entries.push(`M${finding.markets.map(m=>player.markets.indexOf(m)).join(',')}: ${detail}`);
   }
@@ -57,4 +56,11 @@ export function completeDiagnosticCorrection(packet:GamePacket,draft:unknown):Re
  const text=prefix+lines.join('\n'),bytes=Buffer.byteLength(text,'utf8');
  if(!/^[\x00-\x7f]*$/.test(text)||bytes>COMPLETE_CORRECTION_MAX_BYTES)return unavailable('feedback_exceeds_cushion',affectedActorIds,bytes);
  return{status:'ready',text,bytes,affectedActorIds};
+}
+
+/** Preserve the original complete finding set when optional detail cannot fit. */
+export function completeDiagnosticCorrection(packet:GamePacket,draft:unknown,enrich=true):Result{
+ if(!enrich)return buildCompleteDiagnosticCorrection(packet,draft,false);
+ const rich=buildCompleteDiagnosticCorrection(packet,draft,true);
+ return rich.status==='unavailable'&&rich.reason==='feedback_exceeds_cushion'?buildCompleteDiagnosticCorrection(packet,draft,false):rich;
 }

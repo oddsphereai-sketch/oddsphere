@@ -17,8 +17,11 @@ yardage and zero-weight outcomes retain their original semantics. This range is
 candidate navigation, not source support, a prescribed outcome or a new prior.
 No returned number, weight, exception, confidence or decline is edited by code.
 All source, numerical, physical, factual and completeness admission remains strict.
-Complete ASCII feedback must fit the unchanged 1,984-byte cushion; otherwise
-it stays unavailable rather than truncating findings or dropping actors.
+Optional navigation uses the unchanged 1,984-byte ASCII cushion. If its extra
+detail cannot fit, retain the complete original diagnostic text; never turn an
+otherwise available correction into an unavailable one. If even the original
+complete diagnostics cannot fit, remain unavailable without truncating findings
+or dropping actors.
 
 Detroit's original closed final received completed primary and correction
 responses but still omitted supported event tails. Hash-verified private replay
