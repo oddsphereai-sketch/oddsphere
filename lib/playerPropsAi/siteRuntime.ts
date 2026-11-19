@@ -1,5 +1,5 @@
 import {retainPropsSourceEvidence} from './sourceEvidenceStore';
-import {propsAiGameAdmission} from "./gameAdmission";
+import {propsAiWorkAdmission} from './workAdmission';
 import {prepareReviewParts} from "./partitions";
 import {jointReviewRequest} from "./request";
 import {countAiInput} from "./openai";
@@ -121,7 +121,7 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
         findings.push("review_deferred_writer_inventory_deadline");
       }
     }
-    const generationSlot=propsAiGenerationPool(16),gameAdmission=propsAiGameAdmission(16);
+    const generationSlot=propsAiGenerationPool(16),workAdmission=propsAiWorkAdmission(16),gameAdmission=workAdmission.game;
     const active=args.games.filter(g=>etDate(g.start)===etDate(now)&&instant(g.start)-3600000>instant(clock()));
     const latestForPacket=(packet:GamePacket,reviews:AcceptedGameReview[],at:string)=>reviews.filter(r=>(r.sourceGameId??r.gameId)===packet.gameId&&instant(r.start)===instant(packet.start)&&instant(r.lock)===instant(packet.lock)&&r.issuedAt&&instant(r.issuedAt)<=instant(at)&&instant(r.issuedAt)<instant(packet.lock)).sort((a,b)=>Number(b.stage==="final")-Number(a.stage==="final")||instant(b.issuedAt!)-instant(a.issuedAt!))[0]??null;
     // The NFL writer can bind its actual fresh native construction to the exact
@@ -210,8 +210,9 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
         };
         armCountDeadline();
         const pendingCounts=new Set<Promise<number>>();
-        const prepared=await Promise.all(preparable.map(async job=>{
+        await Promise.all(preparable.map(async job=>{
           const native=nativeByFundedId.get(job.game_id)!;
+          const ownCounts=new Set<Promise<number>>();
           try{
             // Recheck the actual boundary after all cohort source hooks. The
             // archived scheduled input is the exact source already observed.
@@ -219,7 +220,7 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
             const packet=sourcePackets.get(job.job_key)!;
             if(packet.sourceOfferSetStatus==='empty'&&(packet.sport==='nba'||packet.sport==='nfl'&&packet.sourceInputRelease===NFL_PLAYER_PROPS_EMPTY_CURRENT_RELEASE)){findings.push(`review_deferred_empty_current_offers:${native.id}`);return null;}
             const fundedPacket={...packet,sourceGameId:native.id,gameId:job.game_id};
-            const parts=await prepareReviewParts(fundedPacket,{key:config.key,fetchImpl:args.fetchImpl,onCountStage:parts=>{
+            const parts=await (async()=>{try{return await prepareReviewParts(fundedPacket,{key:config.key,fetchImpl:args.fetchImpl,onCountStage:parts=>{
               const stageDeadline=Math.min(deadline,Date.now()+instant(job.lock_at)-instant(clock()))-propsAiTwoPhaseCompletionWindowMs(parts)-10000;
               // An already infeasible larger game stays pending; it must not
               // cancel a sibling whose smaller complete window still fits.
@@ -229,27 +230,24 @@ export async function reviewPropsForSite(args:{client:SupabaseClient;sport:Sport
             },count:(part,model)=>{
               // The API checks remaining time after this callback leaves the
               // shared pool, so waiting cannot start a late count request.
-              const pending=generationSlot(()=>countAiInput(jointReviewRequest(part,model,PROPS_AI_MAX_OUTPUT_PER_REQUEST),{key:config.key,fetchImpl:args.fetchImpl,deadline:()=>countDeadline,signal:countAbort.signal}));
+              const pending=workAdmission.count(()=>countAiInput(jointReviewRequest(part,model,PROPS_AI_MAX_OUTPUT_PER_REQUEST),{key:config.key,fetchImpl:args.fetchImpl,deadline:()=>countDeadline,signal:countAbort.signal}));
+              ownCounts.add(pending);void pending.then(()=>ownCounts.delete(pending),()=>ownCounts.delete(pending));
               pendingCounts.add(pending);void pending.then(()=>pendingCounts.delete(pending),()=>pendingCounts.delete(pending));return pending;
-            }});
-            return {job,native,packet,fundedPacket,parts};
-          }catch(error){findings.push(`source_or_review_unavailable:${native.id}:${propsAiFailureCode(error)}`);return null;}
-        })).finally(async()=>{
-          // A failed Promise.all inside partition preparation can leave sibling
-          // counts in flight. Await every started/queued count before generation;
-          // their real abort signals share the same bounded preparation cutoff.
-          try{while(pendingCounts.size)await Promise.allSettled([...pendingCounts]);}
-          finally{detachTimeout();countAbort.abort(new Error("input_count_preparation_closed"));}
-        });
-        await Promise.all(prepared.map(async preparedGame=>{
-          if(!preparedGame)return;
-          const {job,native,packet,fundedPacket,parts}=preparedGame;
-          try{
+            }});}finally{
+              // A rejected partition can leave counts queued/in flight. Drain
+              // THIS game's exact requests before reserving its paid wave.
+              while(ownCounts.size)await Promise.allSettled([...ownCounts]);
+            }})();
             const result=await runPropsReview({packet:fundedPacket,job,store,key:config.key,writerRunId:args.writerRunId!,generationSlot,gameAdmission,prepare:async()=>parts,preferStronger:job.stage==="final"&&packet.players.some(p=>p.missing.length>0),fetchImpl:args.fetchImpl,clock,deadline});
             if(result.status==="completed"&&"review" in result&&result.review){newlyCompletedReviews++;const completed=result.review;localCompleted.set(native.id,{packet,review:completed});const observedAt=clock();await handoffWithEvidence(packet,completed,observedAt,async()=>{await auditSource(packet,completed,observedAt,true);await args.onReviewObserved?.(packet,completed,true);if(args.onReviewReady){const before=instant(clock());await args.onReviewReady(packet,completed);const acknowledged=instant(clock()),lockAt=instant(packet.lock);if(before<lockAt&&acknowledged<lockAt)readyHandoffBeforeLock.set(native.id,lockAt);}});}
             if(result.status!=="completed")findings.push(`review_unavailable:${native.id}:${"reason" in result?result.reason:result.status}`);
           }catch(error){findings.push(`source_or_review_unavailable:${native.id}:${propsAiFailureCode(error)}`);}
-        }));
+        })).finally(async()=>{
+          // No queued/orphan count may survive the cohort or leased runtime.
+          // Ready reservations and counts share the same16 physical work units.
+          try{while(pendingCounts.size)await Promise.allSettled([...pendingCounts]);}
+          finally{detachTimeout();countAbort.abort(new Error("input_count_preparation_closed"));}
+        });
     }
     // Native source identity is stored in each accepted result; avoids fragile cross-provider IDs in readers.
     const rows=await args.client.from("player_props_ai_reviews").select("result").eq("sport",args.sport).eq("state","completed").gte("scheduled_start",now.slice(0,10)).order("completed_at",{ascending:false}).limit(ACCEPTED_REVIEW_READ_LIMIT);

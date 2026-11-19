@@ -32,5 +32,5 @@ for(const c of cases){
 assert(!sameNflPropActorName('Matt Other','Matthew Other','33934589'));assert(!sameNflPropActorName('Matt Hibner','Matthew Hibner','33934590'));controls+=2;
 assert(!sameNflPropActorName('Benjamin Synthetic','Ben Synthetic','synthetic-unverified'),'Unproved name equivalence remains held');assert(!sameNflPropActorName('Cameron Other','Cam Ward','13873931'));assert(!sameNflPropActorName('Zonovan Other','Bam Knight','697'));controls+=3;
 assert.equal(PROPS_AI_NFL_ALIAS_RELEASE,'player_props_ai_nfl_alias_catalog_2026_11_16_r2_hibner_official_names');assert(propsReviewHasMemberExecutionContracts('player_props_ai_2026_11_16_r43_numeric_source_continuation'));controls+=2;
-assert.equal(PROPS_AI_RELEASE,'player_props_ai_2026_11_18_r54_exact_counts_complete_numeric_retry');assert(propsReviewHasMemberExecutionContracts('player_props_ai_2026_11_15_r40_complete_correction_feedback'));controls+=2;
+assert.equal(PROPS_AI_RELEASE,'player_props_ai_2026_11_19_r55_ready_game_admission');assert(propsReviewHasMemberExecutionContracts('player_props_ai_2026_11_15_r40_complete_correction_feedback'));controls+=2;
 console.log(JSON.stringify({officialAliases:true,controls,threeProspectiveExactIdBoundPairs:true,unknownAliasRemainsHeld:true,currentSourcePacketVersioned:true,originalSourceAndGuardsUnchanged:true,noNetworkOrPaidCalls:true}));

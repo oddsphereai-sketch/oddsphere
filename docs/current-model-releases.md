@@ -1,3 +1,29 @@
+## November19 ready whole-game admission R55
+
+Prospective shared generation is `player_props_ai_2026_11_19_r55_ready_game_admission`;
+sole NBA writer is `nba_player_props_private_writer_2026_11_19_r38_ready_game_admission`,
+sole NFL writer is `nfl_player_props_writer_2026_11_19_r116_ready_game_admission`.
+A prepared game drains its OWN counts then reserves its complete generation wave
+from the same16 work units as other games' count requests. Ready-game FIFO
+reservations precede unstarted counts. Source callbacks for all same/earlier-lock
+games still complete first; each later-lock cohort waits for the prior cohort.
+Actual count and generation HTTP together remain bounded by16. Every started/
+queued count settles before the cohort returns; game permits remain held through
+both phases, receipts and finish. Every existing actual-clock, full240s admission,
+claim/send guard and output/input bound remains. R54 numeric correction is intact.
+
+No player, market, exact source, selected partition, count, model, numerical law,
+quote, grade, schedule, slot, phase, writer deadline, schema, shared sport lease or
+spending limit change. Old generations including R54 and stored locks stay exact.
+NativeMLB44/law4/grade6/selection9 remain unchanged. No extra paid tests.
+The unchanged current runtime's virtual full-part example delayed a ready game
+to230000ms while an unrelated game rebalanced. This is a prospective scheduling
+repair, not a proved Philadelphia historical cause or future latency guarantee.
+Release requires TWO new consecutive fresh triple whole-product CLEAR rounds and
+all mandatory local/hosted mocked-realPG/fresh-main protected/actualReady gates;
+ordinary publication/lock evidence must follow. See
+`docs/model-audits/2026-11-19-props-ready-game-admission-predeclaration.md`.
+
 ## November18 exact count reuse and complete numeric correction R54
 
 Shared generation is `player_props_ai_2026_11_18_r54_exact_counts_complete_numeric_retry`;
