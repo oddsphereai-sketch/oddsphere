@@ -18,6 +18,9 @@ No player/market omission or broad nickname heuristic. The separate fallible
 season-state write could bypass diagnostic archival; bounded idempotent finally
 storage preserves original errors and skips only exact unchanged cached state.
 No new API/model/paid test/SQL/operator replay, schedule/slot/lease/budget change.
+Native member R62/lifecycle R44 applies the new policy to retained same-numerical
+R39 and olderR38 TD rows before current stamping; no AI/different-model retag,
+original locks exact. Round132 on d1e23 was NOT CLEAR and earns no clean credit.
 Same-source impact, source/fault/restart/locks, full model/focused/types/lint/build,
 hosted actualPG with all AI mocked and TWO new consecutive fresh triple whole-
 product CLEAR rounds are mandatory before a protected actual production release.

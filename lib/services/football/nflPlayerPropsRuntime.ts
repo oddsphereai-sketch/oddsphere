@@ -12,7 +12,7 @@ import {
   type NflPlayerPropsMarketEvidenceCapture,
 } from "./nflPlayerPropsMarketEvidenceCapture";
 import { NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE } from "./nflPlayerPropsMemberDecisionSupportRelease";
-import {qualifiesPropsBestForecast} from '../../playerPropsAi/forecastStrength';
+import {qualifyPropsForecastGrade} from '../../playerPropsAi/forecastStrength';
 
 export { NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE } from "./nflPlayerPropsMemberDecisionSupportRelease";
 
@@ -1825,6 +1825,8 @@ export function verifyNflPlayerPropsRuntimeParity(tolerance = 1e-9): void {
 }
 
 export function nflPlayerPropsRuntimePolicy(): Readonly<RuntimeArtifact["decision"]> { return artifact.decision; }
+/** Identity only; continuity must never retag a different numerical model. */
+export function nflPlayerPropsCurrentNumericalReleases(){return{model:artifact.modelRelease,calibration:artifact.calibrationRelease,touchdownModel:artifact.touchdownModelRelease,touchdownCalibration:artifact.touchdownCalibrationRelease};}
 export function nflPlayerPropsRuntimeMarketPolicy(market: NflPlayerPropMarket): { weight: number; qualified: boolean } | null {
   const value = artifact.markets[market];
   return value ? { weight: value.marketResidualWeight, qualified: value.marketResidualQualified } : null;
@@ -2448,11 +2450,11 @@ export function gradeNflPlayerPropsTouchdownCandidate(args: {
  * the original posterior and exact-price value are not changed by a label. */
 export function gradeNflPlayerPropsCrossMarketForecastCandidate(args:Parameters<typeof gradeNflPlayerPropsCrossMarketCandidate>[0]&{winProbability:number;americanPrice:number}):NflPlayerPropsGrade {
   const grade=gradeNflPlayerPropsCrossMarketCandidate(args);
-  return grade==='Best Angle'&&!qualifiesPropsBestForecast(args.winProbability,args.americanPrice)?'Lean':grade;
+  return qualifyPropsForecastGrade(grade,args.winProbability,args.americanPrice);
 }
 export function gradeNflPlayerPropsTouchdownForecastCandidate(args:Parameters<typeof gradeNflPlayerPropsTouchdownCandidate>[0]&{winProbability:number}):NflPlayerPropsGrade {
   const grade=gradeNflPlayerPropsTouchdownCandidate(args);
-  return grade==='Best Angle'&&!qualifiesPropsBestForecast(args.winProbability,args.americanPrice)?'Lean':grade;
+  return qualifyPropsForecastGrade(grade,args.winProbability,args.americanPrice);
 }
 
 function meetsGradeThresholds(

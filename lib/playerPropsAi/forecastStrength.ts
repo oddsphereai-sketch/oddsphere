@@ -15,3 +15,6 @@ export function qualifiesExactPropsBestForecast(win:number,total:number,american
     &&Number.isSafeInteger(american)&&Math.abs(american)>=100
     &&american>=PROPS_BEST_MINIMUM_AMERICAN_PRICE;
 }
+export function qualifyPropsForecastGrade<T extends string>(grade:T,probability:number,american:number):T|'Lean' {
+  return grade==='Best Angle'&&!qualifiesPropsBestForecast(probability,american)?'Lean':grade;
+}

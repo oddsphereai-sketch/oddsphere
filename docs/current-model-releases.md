@@ -21,6 +21,9 @@ is `nfl_player_props_writer_2026_11_19_r117_forecast_strength_source_resilience`
 The existing leased NFL writer skips only the exact already-persisted cached
 season-state object and flushes captured identity failure evidence exactly once
 in a bounded, error-isolated finally path, preserving the primary write error.
+Native member R62/lifecycle R44 also qualifies same-numerical-family retained
+R39 and historical R38 TD rows before a current-policy grade stamp. Different
+numerical families and AI laws cannot be retagged; original locked payloads win.
 No schema, slot, cadence, deadline, budget or provider/model request changes.
 
 Alias catalog R3 binds Drew/Andrew Ogletree ONLY to actual native ID1048 from

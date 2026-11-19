@@ -196,7 +196,7 @@ assert.equal(JSON.stringify(legacyAliasSnapshot), lockedAliasBefore, "reader ali
 const lockedAliasWriter = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 9, evaluatedAt: "2026-11-04T13:00:00Z",
   previous: { ...legacyAliasSnapshot, board: { ...boardRows([resolvedAliasDecision, lockedAlias]), publicationEnabled: true, trackingEnabled: true } }, nextBoard: boardRows([resolvedAliasDecision]) });
 assert.deepEqual(lockedAliasWriter.board.decisions.find(row => row.playerName === "Chigoziem Okonkwo"), lockedAlias, "the writer preserves the complete prior locked alias record even when the current feed omits it");
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_11_15_r61_canonical_lock_precedence");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_11_19_r62_forecast_strength_continuity");
 assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_11_19_r117_forecast_strength_source_resilience");
 assert.equal(NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES, 60);
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_11_08_r43_exact_quote_evidence");
@@ -496,14 +496,49 @@ const coherentContinuity = reconcileNflPlayerPropsProductionSnapshot({
   nextBoard: emptyBoard(),
 });
 assert.equal(coherentContinuity.memberDecisions.length, 1,
-  "only an unchanged-market preceding-release row may bridge one still-fresh unlocked provider omission");
+  "only an unchanged numerical-family row may bridge a still-fresh unlocked omission");
 assert.equal(coherentContinuity.memberDecisions[0]?.gameId, precedingTouchdown.gameId);
 assert.equal(coherentContinuity.memberDecisions[0]?.decisionRelease, NFL_PLAYER_PROPS_DECISION_RELEASE,
-  "an unlocked retained row is stamped into the current decision family instead of mixing releases");
+  "an unlocked retained row must qualify the actual new grade policy before a current stamp");
 assert.equal(coherentContinuity.memberDecisions[0]?.modelRelease, precedingTouchdown.modelRelease,
   "the unchanged touchdown model identity remains truthful");
 assert.equal(coherentContinuity.memberDecisions[0]?.calibrationRelease, precedingTouchdown.calibrationRelease,
   "the unchanged touchdown calibration identity remains truthful");
+
+assert.equal(coherentContinuity.memberDecisions[0]?.grade,"Lean",
+  "A legacy 53% Best cannot be retagged as a current-policy Best");
+assert.equal(coherentContinuity.memberDecisions[0]?.finalProbability,precedingTouchdown.finalProbability);
+assert.equal(coherentContinuity.memberDecisions[0]?.americanPrice,precedingTouchdown.americanPrice);
+const priorR39={...omittedGame,gameId:"game-r39-current-numeric",decisionRelease:"nfl_player_props_decision_2026_10_28_r39_owls_reference_prices"};
+const priorR39WrongModel={...priorR39,gameId:"game-r39-wrong-model",modelRelease:"different-numerical-family"};
+const strongPriorTd={...precedingTouchdown,gameId:"game-r38-strong-td",finalProbability:.75,expectedValue:.575};
+const oldNumericalRows=[precedingTouchdown,priorR39,priorR39WrongModel,strongPriorTd];
+const oldNumericalSnapshot=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:1,evaluatedAt:"2026-08-25T12:00:00.000Z",nextBoard:boardRows(oldNumericalRows)});
+const oldNumericalBytes=JSON.stringify(oldNumericalSnapshot);
+const prospectiveRetention=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:1,evaluatedAt:"2026-08-25T12:30:00.000Z",previous:oldNumericalSnapshot,nextBoard:emptyBoard()});
+assert.equal(prospectiveRetention.memberDecisions.length,3,"Current R39 native numerical family retains continuity; a different model never receives a current tag");
+assert.equal(prospectiveRetention.memberDecisions.find(r=>r.gameId===priorR39.gameId)?.grade,"Lean");
+assert.equal(prospectiveRetention.memberDecisions.find(r=>r.gameId===strongPriorTd.gameId)?.grade,"Best Angle","A genuinely strong legacy forecast at its worthwhile price remains promotable");
+assert(prospectiveRetention.memberDecisions.every(r=>r.decisionRelease===NFL_PLAYER_PROPS_DECISION_RELEASE));
+assert.equal(JSON.stringify(oldNumericalSnapshot),oldNumericalBytes,"Prospective grading never mutates the original stored prior snapshot");
+const preservedOldRows=[precedingTouchdown,priorR39].map(r=>({...r,state:"locked" as const}));
+const oldPublicLocks={...oldNumericalSnapshot,board:{...oldNumericalSnapshot.board,decisions:preservedOldRows},memberDecisions:structuredClone(preservedOldRows)};
+const lockBytes=JSON.stringify(oldPublicLocks);
+const retainedOldLocks=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:1,evaluatedAt:"2026-08-25T12:30:00.000Z",previous:oldPublicLocks,nextBoard:emptyBoard()});
+assert.deepEqual(retainedOldLocks.board.decisions,preservedOldRows);
+assert.deepEqual(retainedOldLocks.memberDecisions,preservedOldRows,"Actual stored R38/R39 Best payloads precede the new future-unlocked grade policy");
+assert.equal(JSON.stringify(oldPublicLocks),lockBytes);
+const forFirstLock={...priorR39,gameId:'r39-new-first-lock',scheduledStart:'2026-08-25T14:00:00.000Z',lockAt:'2026-08-25T13:00:00.000Z',observedAt:'2026-08-25T12:00:00.000Z'};
+const originalBeforeLock=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:1,evaluatedAt:'2026-08-25T12:00:00.000Z',nextBoard:board(forFirstLock)});
+const qualifiedBeforeLock=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:1,evaluatedAt:'2026-08-25T12:30:00.000Z',previous:originalBeforeLock,nextBoard:emptyBoard()});
+const correctFirstLock=reconcileNflPlayerPropsProductionSnapshot({season:2026,week:1,evaluatedAt:'2026-08-25T13:00:00.000Z',previous:qualifiedBeforeLock,nextBoard:emptyBoard()});
+assert.equal(correctFirstLock.memberDecisions[0]?.grade,'Lean');
+assert.equal(correctFirstLock.memberDecisions[0]?.decisionRelease,NFL_PLAYER_PROPS_DECISION_RELEASE);
+const newTracking=buildNflPlayerPropsTrackingRows(correctFirstLock);
+assert.equal(newTracking.length,1);assert.equal(newTracking[0].grade,'Lean');
+assert.equal(newTracking[0].lockedProbability,forFirstLock.finalProbability);
+assert.equal(newTracking[0].decisionRelease,NFL_PLAYER_PROPS_DECISION_RELEASE,
+  'A new first lock and internal tracking cannot persist the superseded low-conviction Best under the current policy');
 
 const replacementLineCycle = reconcileNflPlayerPropsProductionSnapshot({
   season: 2026,

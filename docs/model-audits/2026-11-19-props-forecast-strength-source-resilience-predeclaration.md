@@ -84,3 +84,18 @@ recovers all4 previously unresolved offers in each, preserves every already
 resolved identity and all original bytes. Original17:21raw is still unavailable.
 Sources: https://www.colts.com/team/players-roster/ and
 https://www.colts.com/team/players-roster/andrew-ogletree/ (checkedNov19).
+
+Round132 on original d1e23/tree4e61 was NOT CLEAR: an old R38 native TD
+continuity bridge stamped an omitted53% Best as currentR40 without applying the
+new policy, and it could subsequently enter first-lock tracking. That candidate
+was never released. The corrected native member R62/lifecycle R44 bridge permits
+only the exact unchanged numerical family (R39 ordinary/TD; olderR38 TD only),
+applies the same authoritative forecast-grade qualification before currentR40
+stamping, and leaves every original numerical/quote field intact. It cannot
+relabel an AI law or a different numerical model/calibration. Still-fresh R39
+rows retain continuity rather than disappearing solely because the native
+decision version advanced. Existing public R38/R39 locks remain whole-payload
+exact before any migration. Controls cover weak/strong/steep-price retained
+rows, wrong numerical family refusal, original prior immutability and first-lock
+tracking. TWO NEW consecutive fresh triple CLEAR rounds are still required;
+round132 earns no clean credit.
