@@ -38,3 +38,5 @@ Ready plus ordinary production evidence. No success from a preview or counts.
 See `docs/model-audits/2026-11-18-props-exact-count-complete-correction-predeclaration.md`.
 
 Validation: compare exact parts/stages and full wires against the nonmemoized control; mutation/model/source/order/cross-invocation/refusal controls; all-player failed-numeric checklist, malformed/valid/single-actor/non-NBA/escaped-boundary fallback; actual original CHI primary/correction bytes and law hashes; all old receipt/source/whole-payload lock controls. Run full focused/model/type/lint/webpack and hosted realPG with all AI mocked. Preserve all original private observation anchors and histories.
+
+Unpublished round127 on4a6961b96 was NOT CLEAR: its optional EVERY numeric checklist omitted actors rejected at coordinate validation (for example fractional weights). The corrected union includes numeric coordinate failures while excluding factual source-claim selectors, with mixed weight/unit/bound regressions. No old review credit; two NEW consecutive fresh triple CLEAR rounds are required.

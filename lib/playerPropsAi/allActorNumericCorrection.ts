@@ -10,7 +10,7 @@ type Feedback={status:string;text?:string;bytes:number;affectedActorIds:string[]
 export function withAllActorNumericCorrection<T extends Feedback>(packet:GamePacket,draft:unknown,feedback:T):T{
  if(packet.sport!=='nba'||feedback.status!=='ready'||typeof feedback.text!=='string')return feedback;
  let failed:number[];
- try{const source=inspectGenerativeDraft(packet,draft).source;failed=packet.players.flatMap((p,i)=>source.some(s=>s.playerId===p.id&&s.unhandled.length)?[i]:[]);}catch{return feedback;}
+ try{const inspection=inspectGenerativeDraft(packet,draft);failed=packet.players.flatMap((p,i)=>inspection.source.some(s=>s.playerId===p.id&&s.unhandled.length)||inspection.coordinates.some(c=>c.playerId===p.id&&c.code!=='source_claims')?[i]:[]);}catch{return feedback;}
  if(failed.length<2)return feedback;
  const text=feedback.text+`\nEVERY failed P${failed.join(',')}: fix numeric checks or explicitly except affected scopes.`;
  const bytes=Buffer.byteLength(text,'utf8'),serialized=Buffer.byteLength(JSON.stringify(text).slice(1,-1),'utf8');

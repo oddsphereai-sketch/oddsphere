@@ -35,6 +35,9 @@ rounds, all required local/hosted mocked realPG/fresh-main protected merge and a
 Ready plus ordinary production evidence. No success from a preview or counts.
 See `docs/model-audits/2026-11-18-props-exact-count-complete-correction-predeclaration.md`.
 
+
+Unpublished round127 on4a6961b96 was NOT CLEAR: its optional EVERY numeric checklist omitted actors rejected at coordinate validation (for example fractional weights). The corrected union includes numeric coordinate failures while excluding factual source-claim selectors, with mixed weight/unit/bound regressions. No old review credit; two NEW consecutive fresh triple CLEAR rounds are required.
+
 ## November18 bounded NBA refresh display continuity
 
 NBA sole writer is `nba_player_props_private_writer_2026_11_18_r36_pending_display_continuity`;

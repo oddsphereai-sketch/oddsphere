@@ -56,6 +56,12 @@ async function main(){
  const draft={wireRelease:PROPS_AI_WIRE_RELEASE,players:Object.fromEntries(multiple.players.map(p=>[p.id,f.row(multiple,p,f.invalidLaw)]))};
  const numericBefore=digest({multiple,draft}),base={status:'ready',text:'Complete original findings and references.',bytes:40,affectedActorIds:multiple.players.map(p=>p.id)};
  const guided=withAllActorNumericCorrection(multiple,draft,base);assert(guided.text?.startsWith(base.text));assert(guided.text?.includes('EVERY failed P0,1,2'));assert(guided.text?.includes('explicitly except affected scopes'));assert.deepEqual(guided.affectedActorIds,base.affectedActorIds);assert.equal(digest({multiple,draft}),numericBefore);controls+=5;
+ // A malformed numeric law can have coordinate findings instead of source
+ // findings. It still belongs in the complete original actor checklist.
+ const mixed=structuredClone(draft) as {wireRelease:string;players:Record<string,{law:{weights:number[];outcomes:Record<string,number[]>}}>};
+ for(const mutate of [(r:typeof mixed.players[string])=>{r.law.weights[0]=.5;},(r:typeof mixed.players[string])=>{r.law.outcomes.rebounds[0]=.5;},(r:typeof mixed.players[string])=>{r.law.outcomes.points_excluding_made_threes[0]=-1;}]){
+  const candidate=structuredClone(mixed);mutate(candidate.players.second);const unchanged=digest(candidate),complete=withAllActorNumericCorrection(multiple,candidate,base);assert(complete.text?.includes('EVERY failed P0,1,2'));assert.equal(digest(candidate),unchanged);controls+=2;
+ }
  const full={...base,text:'x'.repeat(1984),bytes:1984};assert.equal(withAllActorNumericCorrection(multiple,draft,full),full,'An existing complete diagnostic/reference must never be displaced');controls++;
  const escaped={...base,text:'"'.repeat(970),bytes:970};assert.equal(withAllActorNumericCorrection(multiple,draft,escaped),escaped,'Actual serialized escaping must fit the same cushion');controls++;
  const unavailable={...base,status:'unavailable'};assert.equal(withAllActorNumericCorrection(multiple,draft,unavailable),unavailable);assert.equal(withAllActorNumericCorrection({...multiple,sport:'nfl'},draft,base),base);assert.equal(withAllActorNumericCorrection(multiple,{},base),base);controls+=3;
