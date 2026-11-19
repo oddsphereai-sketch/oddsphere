@@ -3,8 +3,9 @@ import type {GamePacket} from './evidenceContract';
 import {namedSourceCorrection} from './sourceConstraintCards';
 import {sourceAwareDiagnosticCorrection} from './sourceAwareCorrectionFeedback';
 import {withOriginalDraftCorrectionContext} from './originalDraftCorrectionContext';
+import {withAllActorNumericCorrection} from './allActorNumericCorrection';
 
-export function reviewCorrectionFeedback(packet:GamePacket,draft:unknown){
+function originalCompleteCorrectionFeedback(packet:GamePacket,draft:unknown){
  const feedback=packet.sport==='nba'?namedSourceCorrection(packet,draft):sourceAwareDiagnosticCorrection(packet,draft);
  const result=withOriginalDraftCorrectionContext(packet,draft,feedback);
  // Optional tail detail must not displace a complete original draft reference
@@ -20,4 +21,8 @@ export function reviewCorrectionFeedback(packet:GamePacket,draft:unknown){
   if(referenced!==original)return referenced;
  }
  return result;
+}
+
+export function reviewCorrectionFeedback(packet:GamePacket,draft:unknown){
+ return withAllActorNumericCorrection(packet,draft,originalCompleteCorrectionFeedback(packet,draft));
 }
