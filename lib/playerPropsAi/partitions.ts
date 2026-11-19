@@ -3,6 +3,26 @@ import { digest, invariant, validatePacket } from "./evidence";
 import { jointReviewRequest } from "./request";
 import { countAiInput } from "./openai";
 import { PROPS_AI_NFL_TARGET_ACTORS_PER_PART, PROPS_AI_MAX_INPUT_PER_REQUEST, PROPS_AI_MAX_OUTPUT_PER_REQUEST, PROPS_AI_MAX_PARTS, PROPS_AI_PRIMARY_MODEL, type PropsAiModel } from "./releases";
+import {createHash} from 'node:crypto';
+
+/** One preparation only. Rebalanced bins often leave other whole-player
+ * requests byte-identical. Reuse only an actual count of that exact model wire;
+ * never estimate tokens, share across reviews or bypass a stage/deadline check. */
+export function memoizePropsAiInputCount(count:(packet:GamePacket,model:PropsAiModel)=>Promise<number>){
+  const counts=new Map<string,Promise<number>>();
+  const bound=1+6*PROPS_AI_MAX_PARTS*(PROPS_AI_MAX_PARTS+1)/2;
+  return (packet:GamePacket,model:PropsAiModel)=>{
+    const wire=JSON.stringify(jointReviewRequest(packet,model,PROPS_AI_MAX_OUTPUT_PER_REQUEST));
+    const key=createHash('sha256').update(wire,'utf8').digest('hex');
+    const prior=counts.get(key);if(prior)return prior;
+    // The pool may queue this call. A later caller mutation cannot change the
+    // wire counted under this key; the submitted/review packet stays untouched.
+    const captured=structuredClone(packet);
+    const pending=Promise.resolve().then(()=>count(captured,model));
+    if(counts.size<bound)counts.set(key,pending);
+    return pending;
+  };
+}
 export function playerSubset(packet: GamePacket, ids: string[]): GamePacket {
   const included = new Set(ids);
   const markets: string[] = [], times: string[] = [], sources: string[] = [];
@@ -17,7 +37,7 @@ export function playerSubset(packet: GamePacket, ids: string[]): GamePacket {
 }
 export async function prepareReviewParts(packet: GamePacket, args: { key: string; model?: PropsAiModel; fetchImpl?: typeof fetch; count?: (packet: GamePacket, model: PropsAiModel) => Promise<number>; onCountStage?: (parts:number)=>void }) {
   validatePacket(packet); const model = args.model ?? PROPS_AI_PRIMARY_MODEL;
-  const count = args.count ?? ((p, m) => countAiInput(jointReviewRequest(p, m, PROPS_AI_MAX_OUTPUT_PER_REQUEST), args));
+  const count = memoizePropsAiInputCount(args.count ?? ((p, m) => countAiInput(jointReviewRequest(p, m, PROPS_AI_MAX_OUTPUT_PER_REQUEST), args)));
   // Coverage notes plus joint scenarios need a bounded output envelope too.
   const actorLimit=packet.sport==="nfl"?Math.min(8,Math.max(PROPS_AI_NFL_TARGET_ACTORS_PER_PART,Math.ceil(packet.players.length/8))):8;
   const structurallySafe = (p: GamePacket) => p.players.length <= actorLimit && p.players.reduce((n,player)=>n+player.evidence.length,0)<=800;
