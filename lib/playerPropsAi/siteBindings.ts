@@ -7,10 +7,10 @@ import {isSignalOptionalMemberFeature} from "../mlb/props/researchEnrichment";
 import {assessPropPrice} from "../mlb/props/pricePolicy";
 import type {SiteAiDecision} from "./publication";
 import {executionQuotes,quoteContract,isSupportedMemberExecutionContract} from "./executionQuotes";
-import {gradeAiEvent,gradeAiEventFromMass,gradeAiEventFromExactPairedMass,compareAiEventValuesFromMass} from "./pricing";
+import {gradeAiEvent,gradeAiEventFromMass,gradeAiEventFromExactPairedMass,gradeAiEventFromForecastMass,compareAiEventValuesFromMass} from "./pricing";
 import {MLB_PROPS_STANDARD_STAKE_UNITS} from "../mlb/props/actionabilityPolicy";
 import {nflAiSourceBinding} from "./nflSourceBinding";
-import {PROPS_AI_ESTIMATE_RELEASE,PROPS_AI_NFL_DECISION_RELEASE,propsAiLawHasPairedConfidence,propsAiLawHasExactMass,propsAiLawGradeRelease,propsAiLawSelectionRelease} from "./releases";
+import {PROPS_AI_ESTIMATE_RELEASE,PROPS_AI_NFL_DECISION_RELEASE,propsAiLawHasPairedConfidence,propsAiLawHasExactMass,propsAiLawGradeRelease,propsAiLawSelectionRelease,propsAiLawUsesForecastStrength} from "./releases";
 import type {GamePacket} from "./evidenceContract";
 import {digest,instant} from "./evidence";
 import {PROPS_AI_EXECUTION_EVIDENCE_RELEASE,type PropsAiMemberEvidence} from "./publicationContract";
@@ -48,7 +48,7 @@ function currentEventPrice(packet:GamePacket,c:SiteAiDecision,q:GamePacket["quot
   if(!propsAiLawHasExactMass(c.evidence.lawRelease)&&mass)throw new Error("Legacy law pricing cannot acquire prospective integer mass");
   const future=propsAiLawHasPairedConfidence(c.evidence.lawRelease);
   if(future&&(c.evidence.gradeRelease!==propsAiLawGradeRelease(c.evidence.lawRelease)||c.evidence.selectionRelease!==propsAiLawSelectionRelease(c.evidence.lawRelease)))throw new Error("Exact paired member release mismatch");
-  return mass?(future?gradeAiEventFromExactPairedMass:gradeAiEventFromMass)({...price,win:q.side==="under"?mass.under:mass.over,loss:q.side==="under"?mass.over:mass.under,push:mass.push,total:mass.total})
+  return mass?(propsAiLawUsesForecastStrength(c.evidence.lawRelease)?gradeAiEventFromForecastMass:future?gradeAiEventFromExactPairedMass:gradeAiEventFromMass)({...price,win:q.side==="under"?mass.under:mass.over,loss:q.side==="under"?mass.over:mass.under,push:mass.push,total:mass.total})
     :gradeAiEvent({...price,win:q.side==="under"?c.under:c.over,loss:q.side==="under"?c.over:c.under});
 }
 function currentGrade(packet:GamePacket,c:SiteAiDecision,q:GamePacket["quotes"][number],now:string){
@@ -101,6 +101,9 @@ export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:Game
   const current=executionQuotes(packet,now);
   const available=choices.filter(c=>c.side!=="yes"&&isSupportedMemberExecutionContract("nba",c.quote)&&current.some(q=>q.id===c.quote.id&&digest(q)===digest(c.quote)));
   const eventValue=(a:SiteAiDecision,b:SiteAiDecision)=>{
+    if(propsAiLawUsesForecastStrength(a.evidence.lawRelease)&&propsAiLawUsesForecastStrength(b.evidence.lawRelease)){
+      const tier=Number(b.grade==='Best Angle')-Number(a.grade==='Best Angle');if(tier)return tier;
+    }
     if(!propsAiLawHasExactMass(a.evidence.lawRelease)||!propsAiLawHasExactMass(b.evidence.lawRelease))return b.expectedValue-a.expectedValue;
     const mass=(c:SiteAiDecision)=>{
       if(!c.exactEventMass)throw new Error("Exact-law member selection requires its original integer event mass");
@@ -112,7 +115,10 @@ export function applyNbaSiteAi(snapshot:NbaPlayerPropsMemberSnapshot,packet:Game
   const preferred=(id:string,market:string)=>available.filter(c=>c.playerId===id&&c.market===market).sort((a,b)=>eventValue(a,b)||book(a.book).localeCompare(book(b.book))||a.provider.localeCompare(b.provider)||a.line-b.line||a.side.localeCompare(b.side)||a.quote.id.localeCompare(b.quote.id))[0];
   const decisions=snapshot.decisions.map((row):NbaPlayerPropsMemberDecision=>{
     if(row.lockedAt!==null||row.gameId!==packet.gameId||instant(now)>=instant(packet.lock))return row;
-    const c=choice(available,row.playerId,row.market,row.line,row.sportsbook)??preferred(row.playerId,row.market);if(!c||c.side==="yes")return row;
+    const matched=choice(available,row.playerId,row.market,row.line,row.sportsbook),ranked=preferred(row.playerId,row.market);
+    const promote=ranked&&propsAiLawUsesForecastStrength(ranked.evidence.lawRelease)&&ranked.grade==='Best Angle'
+      &&matched&&propsAiLawUsesForecastStrength(matched.evidence.lawRelease)&&matched.grade!=='Best Angle';
+    const c=promote?ranked:matched??ranked;if(!c||c.side==="yes")return row;
     const player=packet.players.find(player=>player.id===row.playerId);if(!player)return row;
     changed=true;
     return {...row,playerName:player.name,decisionKey:[c.evidence.release,row.gameId,row.playerId,row.market,c.line].join("|"),line:c.line,projection:c.projection,probability:c.probability,side:c.side,grade:c.grade,sportsbook:c.book,americanPrice:c.american,expectedValue:c.expectedValue,

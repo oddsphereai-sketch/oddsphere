@@ -50,7 +50,7 @@ nba.packet.quotes=[...quotes(nba.id,'points',10),...quotes(nba.id,'points',20),.
 nba.packet.quotes.push({...nba.packet.quotes[0],id:'old-quote',receivedAt:'2026-11-10T20:00:00Z',observedAt:'2026-11-10T20:00:00Z'},
  {...nba.packet.quotes[0],id:'opening',opening:true}, {...nba.packet.quotes[0],id:'live',live:true});
 const nbaBefore=JSON.stringify(nba.packet),decisions=siteAiDecisions(nba.packet,nba.review,at);
-assert.equal(decisions.length,4);assert(decisions.some(c=>c.side==='over'&&c.grade==='Best Angle'));assert(decisions.some(c=>c.side==='under'&&c.grade==='Best Angle'));
+assert.equal(decisions.length,4);assert(decisions.some(c=>c.side==='over'&&c.grade==='Lean'));assert(decisions.some(c=>c.side==='under'&&c.grade==='Best Angle'));
 assert(decisions.some(c=>c.push===.2),'Integer push mass is retained exactly');
 for(const c of decisions){
  replay(c,nba.law);

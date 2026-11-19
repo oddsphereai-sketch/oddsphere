@@ -36,7 +36,7 @@ const review={release:PROPS_AI_RELEASE,gameId:"funded",sourceGameId:"native",sta
 const choice=siteAiDecisions(packet,review,now)[0];
 assert.equal(choice.american,-200);assert.equal(choice.quote.id,"new-over");assert.equal(choice.grade,"Watchlist");assert.ok(Math.abs(choice.expectedValue+.1)<1e-12);
 const improved={...packet,executionQuotes:[quote("new-best-over","over",150),quote("new-best-under","under",-170)]};
-assert.equal(siteAiDecisions(improved,review,now)[0].grade,"Best Angle","latest genuinely better price promotes, no directional quota");
+assert.equal(siteAiDecisions(improved,review,now)[0].grade,"Lean","latest genuinely better price restores actionability; 60% is below top conviction");
 assert.equal(siteAiDecisions({...packet,executionQuotes:[]},review,now).length,0,"removed current offers cannot be resurrected from history");
 assert.equal(latestExecutionQuotes([quote("a","over",150),quote("b","over",-200)],now).length,0,"conflicting identical clocks are unknown");
 assert.equal(latestExecutionQuotes([quote("a","over",150,old),quote("b","over",90)],now).length,0,"invalid latest price does not revive old price");
@@ -62,7 +62,7 @@ const mlbChoice={...choice,grade:"Best Angle" as const,market:"batter_hits",quot
 const mlbRow={id:"legacy",providerIds:{gameId:"native",mlbStatsPlayerId:"p",bdlPlayerId:1},market:"batter_hits",line:12.5,book:"one",side:"over",units:0,lockStatus:null,missingFeatures:[],oddsSanity:[]} as unknown as Parameters<typeof applyMlbSiteAi>[0][number];
 const mlbApplied=applyMlbSiteAi([mlbRow],mlb,[mlbChoice],now)[0];assert.equal(mlbApplied.odds,-200);assert.equal(mlbApplied.playGrade,"WATCHLIST");assert.equal(mlbApplied.units,0);
 const mlbPromoted=applyMlbSiteAi([mlbRow],{...mlb,executionQuotes:mlb.quotes.slice(0,2).map(q=>({...q,receivedAt:now,observedAt:now}))},[mlbChoice],now)[0];
-assert.equal(mlbPromoted.playGrade,"BEST_ANGLE");assert.equal(mlbPromoted.units,MLB_PROPS_STANDARD_STAKE_UNITS);
+assert.equal(mlbPromoted.playGrade,"LEAN");assert.equal(mlbPromoted.units,MLB_PROPS_STANDARD_STAKE_UNITS);
 const lockedMlb={...mlbRow,lockStatus:{status:"locked" as const,lockedAt:old}};const lockedRows=[lockedMlb];assert.strictEqual(applyMlbSiteAi(lockedRows,mlb,[mlbChoice],now),lockedRows);
 assert.equal(needsLegacyLockedAiReader({...choice.evidence,publicationRelease:"player_props_ai_site_2026_11_08_r4_familiar_readers"},true),false,"R4 familiar renderer remains authoritative for R4 locks");
 assert.equal(needsLegacyLockedAiReader({...choice.evidence,publicationRelease:"player_props_ai_site_2026_11_07_r3"},true),true);
