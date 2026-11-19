@@ -18,7 +18,8 @@ globalThis.fetch=async()=>{throw Error('Preparation deadline proof forbids netwo
 const originalNow=Date.now,originalTimeout=AbortSignal.timeout,epoch=Date.parse('2030-11-17T17:36:00Z'),iso=(n:number)=>new Date(epoch+n).toISOString(),v=(n:number)=>Array<number>(16).fill(n);
 type DbResult={data:unknown;error:null};
 type Timer={at:number;run:()=>void;cancelled?:boolean};
-async function exercise(mode:'unpackable'|'orphan'|'full_parts'|'small_window'|'staged_abort'|'small_with_large'){
+async function exercise(mode:'unpackable'|'orphan'|'full_parts'|'small_window'|'staged_abort'|'small_with_large'|'correction'){
+ let fallbacks=0;let activeGenerations=0;const ownCounts={healthy:0,bad:0};
  let now=0,activeCounts=0,countCalls=0,aborted=0,generation=0,sent=0,receipts=0,firstGenerationAt:number|null=null,badCountCalls=0;
  const fullParts=mode==='full_parts'||mode==='staged_abort',budgetMs=fullParts?480000:mode==='small_window'||mode==='small_with_large'?330000:300000;
  let healthyCountCalls=0,activeHooks=0,readyHooks=0,observedHooks=0,peakCounts=0;
@@ -52,34 +53,34 @@ async function exercise(mode:'unpackable'|'orphan'|'full_parts'|'small_window'|'
  };return query;},rpc:async(name:string,args:Record<string,unknown>={})=>{
   if(name==='player_props_ai_plan_v4')return{data:{funded:true,budget:{}},error:null};if(name==='player_props_ai_reap')return{data:0,error:null};
   const job=jobs.find(j=>j.job_key===args.p_key);
-  if(name==='player_props_ai_claim'){assert(job);assert.equal(activeCounts,0,'No claim can race orphan/default count HTTP');assert.equal(activeHooks,0,'Source publication hooks must finish before preparation/claim');assert.equal(job.state,'pending');assert(Array.isArray(args.p_requests));assert.equal(args.p_requests.length,fullParts?16:1);assert(budgetMs-now>=240000,'No paid claim before actual whole-game feasibility');claimEvents.push({game:job.game_id,at:now});job.state='running';job.parts=args.p_requests.length;job.input_hash=String(args.p_hash);return{data:{claimed:true,token:'synthetic',job:{...job,model:'gpt-6-luna',requested_tier:'default'}},error:null};}
+  if(name==='player_props_ai_claim'){assert(job);assert.equal(ownCounts[job.game_id==='espn:nfl:healthy'?'healthy':'bad'],0,'Own queued/orphan counts must drain before claim');assert(activeCounts+activeGenerations<=16);assert.equal(activeHooks,0,'Source publication hooks must finish before preparation/claim');assert.equal(job.state,'pending');assert(Array.isArray(args.p_requests));assert.equal(args.p_requests.length,fullParts?16:1);assert(budgetMs-now>=240000,'No paid claim before actual whole-game feasibility');claimEvents.push({game:job.game_id,at:now});job.state='running';job.parts=args.p_requests.length;job.input_hash=String(args.p_hash);return{data:{claimed:true,token:'synthetic',job:{...job,model:'gpt-6-luna',requested_tier:'default'}},error:null};}
   if(name==='player_props_ai_send'){assert(job);return{data:{id:`synthetic-attempt-${++sent}`,model:'gpt-6-luna',requested_tier:'default',reserved_micro:100000},error:null};}
   if(name==='player_props_ai_receipt'){receipts++;return{data:null,error:null};}
-  if(name==='player_props_ai_fallback')throw Error('The healthy prevalidated draft must not buy a fallback');
+  if(name==='player_props_ai_fallback'){assert.equal(mode,'correction');assert.equal(++fallbacks,1);return{data:true,error:null};}
   if(name==='player_props_ai_finish'){assert(job);assert(args.p_result,'Only the healthy complete game may finish');const review={...(args.p_result as AcceptedGameReview),issuedAt:iso(now),inputHash:job.input_hash!};Object.assign(job,{state:'completed',result:review});completed.set(job.game_id,review);return{data:{...job},error:null};}
   throw Error('Unexpected synthetic RPC '+name);
  }} as unknown as SupabaseClient;
  const healthy=packets.get('native-healthy')!;
  function wire(ids:string[]){
   const part=playerSubset(healthy,ids),facts=readerEvidence(part),aliases=evidenceAliases(part);
-  return{wireRelease:PROPS_AI_WIRE_RELEASE,players:Object.fromEntries(part.players.map(p=>[p.id,verifiedReaderFixture(part,p.id,{assessment:'The supplied evidence supports a conditional forecast.',priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[p.id][area].status,factIds:facts[p.id][area].facts.slice(0,1).map(f=>f.id),effect:'uncertain',observation:'The supplied context requires appropriate caution.'}])),evidenceIds:[[...aliases].find(([,id])=>id===p.evidence[0].id)![0]],gaps:[],confidence:[2],exceptions:[null],law:encodeCanonicalScenarioLaw('nfl',p,{weights:v(1),outcomes:{receptions:[4,8,...v(6).slice(2)]}})})]))};
+  return{wireRelease:PROPS_AI_WIRE_RELEASE,players:Object.fromEntries(part.players.map(p=>[p.id,verifiedReaderFixture(part,p.id,{assessment:'The supplied evidence supports a conditional forecast.',priorRead:{},coverage:Object.fromEntries(READER_AREAS.map(area=>[area,{status:facts[p.id][area].status,factIds:facts[p.id][area].facts.slice(0,1).map(f=>f.id),effect:'uncertain',observation:'The supplied context requires appropriate caution.'}])),evidenceIds:[[...aliases].find(([,id])=>id===p.evidence[0].id)![0]],gaps:[],confidence:[2],exceptions:[null],law:encodeCanonicalScenarioLaw('nfl',p,{weights:v(1),outcomes:{receptions:mode==='correction'&&!fallbacks?v(50):[4,8,...v(6).slice(2)]}})})]))};
  }
  const fetchImpl:typeof fetch=async(url,options)=>{
   const body=JSON.parse(String(options?.body)),signal=options?.signal??undefined;
   if(String(url).endsWith('/input_tokens')){
    const ids=Object.keys(body.text.format.schema.properties.players.properties),bad=ids.some(id=>id.startsWith('native-bad'));
-   countCalls++;activeCounts++;peakCounts=Math.max(peakCounts,activeCounts);assert(activeCounts<=16);countEvents.push({at:now,game:bad?'bad':'healthy'});
+   countCalls++;activeCounts++;ownCounts[bad?'bad':'healthy']++;peakCounts=Math.max(peakCounts,activeCounts);assert(activeCounts+activeGenerations<=16);countEvents.push({at:now,game:bad?'bad':'healthy'});
    try{
     if(!bad){healthyCountCalls++;const delay=mode==='staged_abort'?(healthyCountCalls===1?40000:healthyCountCalls===5?8000:1):mode==='small_with_large'?40000:1;await wait(delay,signal);return Response.json({input_tokens:fullParts&&ids.length>1?145001:1000});}
     badCountCalls++;
     if(mode==='orphan'&&badCountCalls===1)return Response.json({error:'synthetic first sibling refusal'},{status:500});
     try{await wait(mode==='orphan'?999999:mode==='small_with_large'?1:40000,signal);}catch(error){aborted++;throw error;}
     return Response.json({input_tokens:145001});
-   }finally{activeCounts--;}
+   }finally{activeCounts--;ownCounts[bad?'bad':'healthy']--;}
   }
-  assert.equal(String(url),'https://api.openai.com/v1/responses','No provider/calendar network is allowed');assert.equal(activeCounts,0);generation++;const responseNumber=generation;firstGenerationAt??=now;
-  const ids=Object.keys(body.text.format.schema.properties.players.properties);assert(ids.every(id=>id.startsWith('native-healthy')));await wait(10000,signal);
-  return Response.json({id:`synthetic-response-${responseNumber}`,model:'gpt-6-luna',status:'completed',service_tier:'default',usage:{input_tokens:1000,output_tokens:200},output:[{content:[{type:'output_text',text:JSON.stringify(wire(ids))}]}]});
+  assert.equal(String(url),'https://api.openai.com/v1/responses','No provider/calendar network is allowed');assert.equal(ownCounts.healthy,0);if(mode==='correction'&&fallbacks)assert(activeCounts>0,'Actual funded correction overlaps only unrelated counts within the shared capacity');activeGenerations++;assert(activeCounts+activeGenerations<=16);generation++;const responseNumber=generation;firstGenerationAt??=now;
+  const ids=Object.keys(body.text.format.schema.properties.players.properties);assert(ids.every(id=>id.startsWith('native-healthy')));try{await wait(10000,signal);
+  return Response.json({id:`synthetic-response-${responseNumber}`,model:'gpt-6-luna',status:'completed',service_tier:'default',usage:{input_tokens:1000,output_tokens:200},output:[{content:[{type:'output_text',text:JSON.stringify(wire(ids))}]}]});}finally{activeGenerations--;}
  };
  try{
   let done=false;const promise=reviewPropsForSite({client,sport:'nfl',writerRunId:'synthetic-owner',games:definitions.map(g=>({id:g.native,start:iso(g.lock+3600000),away:g.away,home:g.home})),deadline:epoch+budgetMs,clock:()=>iso(now),fetchImpl,
@@ -94,7 +95,7 @@ async function exercise(mode:'unpackable'|'orphan'|'full_parts'|'small_window'|'
    for(const timer of timers.filter(t=>!t.cancelled&&t.at===now)){timer.cancelled=true;timer.run();}
   }
   assert(done);const result=await promise;
-  assert.equal(activeCounts,0);assert.equal(activeHooks,0);assert.equal(readyHooks,1);assert(observedHooks>=2);assert(healthyCountCalls>0);assert(peakCounts<=16);assert.equal(generation,fullParts?16:1);assert.equal(sent,generation);assert.equal(receipts,generation);assert.equal(claimEvents.length,1);assert.equal(claimEvents[0].game,'espn:nfl:healthy');
+  assert.equal(activeCounts,0);assert.equal(activeGenerations,0);assert.equal(activeHooks,0);assert.equal(readyHooks,1);assert(observedHooks>=2);assert(healthyCountCalls>0);assert(peakCounts<=16);assert.equal(generation,fullParts?16:mode==='correction'?2:1);assert.equal(fallbacks,mode==='correction'?1:0);assert.equal(sent,generation);assert.equal(receipts,generation);assert.equal(claimEvents.length,1);assert.equal(claimEvents[0].game,'espn:nfl:healthy');
   assert.equal(jobs.find(j=>j.game_id==='espn:nfl:bad')!.state,'pending');assert.equal(jobs.find(j=>j.game_id==='espn:nfl:short')!.state,'pending');
   assert.equal(completed.size,1);assert(result.games.some(g=>g.game.id==='native-healthy'&&g.authorityReview));assert(result.findings.some(f=>f==='review_preparation_deferred_lock:espn:nfl:short'));
   if(fullParts){const full=completed.get('espn:nfl:healthy')!;assert.equal(full.players.length,16);assert.equal(full.partProvenance.length,16);assert.equal(new Set(full.partProvenance.map(p=>p.responseId)).size,16);}
@@ -105,11 +106,11 @@ async function exercise(mode:'unpackable'|'orphan'|'full_parts'|'small_window'|'
   for(const g of ['healthy','bad'])assert(purposes.some(e=>e.game===`native-${g}`&&e.purpose==='scheduled_review'&&e.jobKey===jobs.find(j=>j.game_id===`espn:nfl:${g}`)!.job_key));
   assert(!purposes.some(e=>e.game==='native-short'&&e.purpose==='scheduled_review'),'A too-short job does not block or perform a scheduled preparation for healthy later locks');
   assert(purposes.filter(e=>e.purpose!=='scheduled_review').every(e=>e.jobKey===undefined));
-  if(mode==='orphan'){assert.equal(aborted,2);assert(firstGenerationAt!>=45000,'Orphan sibling counts are drained through real timeout abortion before generation');}
+  if(mode==='orphan'){assert.equal(aborted,2);assert(firstGenerationAt!<45000,'A healthy one-part game reserves free capacity without waiting for unrelated orphan counts');}
   else if(mode==='small_with_large'){assert.equal(aborted,0);assert(firstGenerationAt!>=40000&&firstGenerationAt!<45000,'An unpackable sibling defers only its game; the valid in-flight one-part count completes');assert(result.findings.some(f=>f.startsWith('source_or_review_unavailable:native-bad:')));}
-  else if(mode!=='staged_abort'){assert(aborted>0);assert.equal(firstGenerationAt,countCutoff,'Slow unpackable rebalances stop exactly at their shared stage-aware timeout deadline');}
+  else if(mode!=='staged_abort'){assert(aborted>0);assert(firstGenerationAt<countCutoff,'Ready games enter generation before unrelated slow rebalances reach the shared preparation deadline');}
   if(mode==='small_window'){assert.equal(budgetMs,330000);assert.equal(generation,1,'The original one-part330s omission is repaired without shrinking its full240s completion reserve');}
-  if(mode==='staged_abort'){assert(countEvents.some(e=>e.game==='bad'&&e.at>=40000&&e.at<60000),'A bad sibling count is already in flight before the healthy game discovers all sixteen parts');assert(firstGenerationAt!>=48000&&firstGenerationAt!<=countCutoff,'Full-wave16 opportunity retains its complete240s reserve while count siblings finish or abort before claim');}
+  if(mode==='staged_abort'){assert(countEvents.some(e=>e.game==='bad'&&e.at>=40000&&e.at<60000),'A bad sibling count is already in flight before the healthy game discovers all sixteen parts');assert(firstGenerationAt!>=48000&&firstGenerationAt!<countCutoff,'Full-wave16 opportunity waits for physical count capacity, then reserves its full wave before unrelated queued rebalances');}
   const before=countCalls;for(const timer of timers.filter(t=>!t.cancelled)){timer.cancelled=true;timer.run();}for(let i=0;i<30;i++)await Promise.resolve();assert.equal(countCalls,before);assert.equal(activeCounts,0,'No count HTTP or count-loop continuation remains after runtime returns');
  }finally{Date.now=originalNow;AbortSignal.timeout=originalTimeout;}
 }
@@ -119,8 +120,8 @@ async function main(){
  try{
   let calls=0;const request:AiRequest={model:'gpt-6-luna',instructions:'Synthetic count.',input:'{}',text:{},max_output_tokens:7000,store:false};
   await assert.rejects(countAiInput(request,{key:'synthetic',deadline:Date.now()-1,fetchImpl:async()=>{calls++;throw Error('No expired count may start');}}),/deadline_exhausted/);assert.equal(calls,0);
-  await exercise('unpackable');await exercise('orphan');await exercise('full_parts');await exercise('small_window');await exercise('staged_abort');await exercise('small_with_large');
-  console.log('Actual site preparation deadline passed: adaptive one-part330s admission, discovered sixteen-part240s opportunity, in-flight sibling drainage without artificial second-wave contraction, queued/orphan count drain before claims, global16 count/generation bound, awaited publication hooks and short-lock pending refusal. Virtual time; all SQL/HTTP/counts/models mocked. No paid calls or background requests.');
+  await exercise('unpackable');await exercise('orphan');await exercise('full_parts');await exercise('small_window');await exercise('staged_abort');await exercise('small_with_large');await exercise('correction');
+  console.log('Actual site preparation deadline passed: adaptive one-part330s admission, discovered sixteen-part240s opportunity, in-flight sibling drainage without artificial second-wave contraction, queued/orphan count drain before claims, funded correction with unrelated count HTTP still active, own-game count drainage/ready-game priority and combined global16 count/generation bound, awaited publication hooks and short-lock pending refusal. Virtual time; all SQL/HTTP/counts/models mocked. No paid calls or background requests.');
  }finally{Date.now=originalNow;AbortSignal.timeout=originalTimeout;for(const name of names){if(previous[name]===undefined)delete process.env[name];else process.env[name]=previous[name];}}
 }
 void main().catch(error=>{Date.now=originalNow;AbortSignal.timeout=originalTimeout;console.error(error);process.exitCode=1;});
