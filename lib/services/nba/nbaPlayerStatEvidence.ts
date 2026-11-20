@@ -190,7 +190,10 @@ export async function retainNbaPlayerStatEvidence(args: { client: SupabaseClient
         time(lease.data.lease_expires_at) - time(beforeInsert) < NBA_PLAYER_STAT_EVIDENCE_LIMITS.storageMs + NBA_PLAYER_STAT_EVIDENCE_LIMITS.reconcileMs) throw Error("nba_writer_lease_unavailable");
     const gameById = new Map(args.state.games.map(g => [g.gameId, g]));
     const rows = pending.map(e => {
-      const day = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date(gameById.get(e.payload.gameId)!.startTime));
+      const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" })
+        .formatToParts(new Date(gameById.get(e.payload.gameId)!.startTime));
+      const day = ["year", "month", "day"].map(type => parts.find(part => part.type === type)?.value).join("-");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw Error("evidence_slate_date_unavailable");
       const expires = new Date(time(e.payload.firstRetainedAt) + RETENTION_MS).toISOString();
       return { snapshot_key: e.key, kind: "daily_edge", sport: "nba", slate_date: day, payload: e.payload,
         payload_version: NBA_PLAYER_STAT_EVIDENCE_RELEASE, source: NBA_PLAYER_STAT_EVIDENCE_RELEASE,

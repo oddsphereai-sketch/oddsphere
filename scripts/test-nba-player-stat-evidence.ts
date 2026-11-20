@@ -74,6 +74,7 @@ async function main() {
   const db = new Store();
   const save = (s = state, clock = retainedAt) => retainNbaPlayerStatEvidence({ client: db.client, writerRunId: "lease-1", state: s, gameIds: [100], now: () => clock });
   const first = await save(); assert.equal(first.status, "retained"); assert.equal(first.inserted, 1);
+  assert.ok([...db.rows.values()].every(row => row.slate_date === "2026-11-19"), "both source records use the game's ET day, including UTC-midnight games");
   const key = nbaPlayerStatEvidenceKey(100, packed.bodySha256), original = JSON.stringify(db.rows.get(key));
   const later = { ...state, updatedAt: "2026-11-21T11:30:00Z" };
   const repeat = await save(later, "2026-11-21T12:00:00Z");
