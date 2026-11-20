@@ -1,3 +1,21 @@
+## NBA event-scoped complete evidence R37 — November20
+
+Model/record is `nba_professional_unified_2026_11_20_r37_event_scoped_evidence`,
+marriage `nba_market_marriage_2026_11_20_r39_event_scoped_evidence`, reader
+`nba_reader_publication_2026_11_20_r3_event_scoped_price_evidence`, and price read
+`nba_price_evidence_read_2026_11_20_r1_event_scoped_pages`. Grade R31, numerical
+forecast/market-consequence coefficients, economics and price limits are unchanged.
+
+This fixes a reproduced PostgreSQL57014 ordered-evidence timeout: exact event
+counts, complete keyset pages and exhaustion proofs replace the global IN-list
+ID scan. The same44 scopes return every15,908 saved row at the frozen frontier;
+empty future games remain real absence, and any read/budget failure preserves
+LKG. No new writer, source call, table/index migration, timer or history change.
+R36/R35/R34 knowledge and exact immutable legacy locks retain precedence. Full
+model checks, current-main integration, protected merge and live proof still apply.
+The separate conditional-Total candidate is not enabled by this correctness fix.
+Evidence: `model-audits/2026-11-20-nba-event-evidence-read.md`.
+
 ## November19 forecast strength and exact NFL name admission R56
 
 Prospective generation `player_props_ai_2026_11_19_r56_forecast_strength`, law

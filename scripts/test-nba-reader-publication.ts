@@ -1,3 +1,4 @@
+import "./test-nba-price-evidence-read";
 import assert from "node:assert/strict";
 import {assertNbaReaderEvidenceComplete,advanceNbaEvidencePage,nbaEvidenceHighWaterError,nbaReaderUnavailableResponse,NBA_READER_PUBLICATION_RELEASE,NBA_READER_FAILURE_LOG_RELEASE,nbaReaderFailureLogSuffix,nbaReaderFailureReceipt} from "../lib/services/nba/nbaReaderPublication";
 import {refreshDailyEdgeResponseSnapshot} from "../lib/services/labResponseSnapshotWriter";
