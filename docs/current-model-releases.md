@@ -1,3 +1,24 @@
+## November 20 NBA event-scoped split evidence R38
+
+Model/record `nba_professional_unified_2026_11_20_r38_event_scoped_split_evidence`,
+marriage `nba_market_marriage_2026_11_20_r40_event_scoped_split_evidence`, reader
+`nba_reader_publication_2026_11_20_r4_event_scoped_split_evidence` and split read
+`nba_split_evidence_read_2026_11_20_r1_event_scoped_pages` version only complete
+split-source retrieval. R37/R36/R35/R34 knowledge remains compatible. Grade R31,
+all numerical equations, calibration, source posture/target-exclusion/economics,
+price read R1, stat-observation R1/private-writer R40 and every old lock stay exact.
+
+Full refresh469943 exposed split_observation_lookup_failed. A frozen 18-row
+future scope reproduces PostgreSQL57014 at8.209s; the event reader returns18 at
+the identical frontier in1.842s. All7,306 frozen current-day rows are byte-equivalent
+where the old reader succeeds. No source absence is fabricated. Exact event
+counts, bounded keyset pages and unordered tail proof reject incomplete/failed
+reads without publishing or changing the old complete snapshot. No new source
+API, writer, timer, schema/index, model fit or historical correction. Identical
+complete inputs have zero promotions/demotions. Fresh-base protected publication
+and actual live coverage/lease/model/reader/lock proof remain mandatory. Evidence:
+`model-audits/2026-11-20-nba-split-evidence-read.md`.
+
 ## November 20 NBA normalized player-stat observations R1
 
 The existing NBA private writer is
