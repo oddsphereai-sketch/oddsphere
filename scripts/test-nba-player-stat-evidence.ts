@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NBA_PLAYER_STAT_EVIDENCE_RELEASE, packNbaPlayerStatEvidence, decodeNbaPlayerStatEvidence,
-  nbaPlayerStatEvidenceKey, nbaPlayerStatEvidenceAtCutoff, retainNbaPlayerStatEvidence, type NbaPlayerStatEvidence } from "../lib/services/nba/nbaPlayerStatEvidence";
+  nbaPlayerStatEvidenceKey, nbaPlayerStatEvidenceAtCutoff, retainNbaPlayerStatEvidence, selectNbaPlayerStatEvidenceAtCutoff, type NbaPlayerStatEvidence } from "../lib/services/nba/nbaPlayerStatEvidence";
 import { NBA_PLAYER_PROPS_CURRENT_STATE_RELEASE, writeNbaPlayerPropsCurrentState, collectNbaPlayerPropsCurrentState,
   type NbaPlayerPropsCurrentState } from "../lib/services/nba/nbaPlayerPropsCurrentState";
 import { decodeNbaPlayerPropsPrivatePayload } from "../lib/services/nba/nbaPlayerPropsPrivateStore";
@@ -78,14 +78,29 @@ async function main() {
   const later = { ...state, updatedAt: "2026-11-21T11:30:00Z" };
   const repeat = await save(later, "2026-11-21T12:00:00Z");
   assert.equal(repeat.existing, 1); assert.equal(repeat.inserted, 0); assert.equal(JSON.stringify(db.rows.get(key)), original, "repeat preserves first bytes and clock");
-  const corrected = { ...later, boxes: state.boxes.map((b, i) => i ? b : { ...b, ast: b.ast + 1 }) };
-  assert.equal((await save(corrected, "2026-11-21T12:00:00Z")).inserted, 1);
-  assert.equal(db.rows.size, 2); assert.equal(JSON.stringify(db.rows.get(key)), original, "source corrections append and leave original exact");
+  const corrected = { ...later, updatedAt: "2026-11-22T11:30:00Z", boxes: state.boxes.map((b, i) => i ? b : { ...b, ast: b.ast + 1 }) };
+  assert.equal((await save(corrected, "2026-11-22T12:00:00Z")).inserted, 1);
+  assert.equal(db.rows.size, 5); assert.equal(JSON.stringify(db.rows.get(key)), original, "source corrections append and leave original exact");
+  const beforeRevert = [...db.rows.values()].map(row => structuredClone(row));
+  const sameCollection = await save(corrected, "2026-11-22T12:30:00Z");
+  assert.equal(sameCollection.observationsExisting, 1); assert.equal(sameCollection.observationsInserted, 0);
+  assert.deepEqual([...db.rows.values()], beforeRevert, "the same collection retry preserves its original reference clock");
+  const reversion = await save({ ...state, updatedAt: "2026-11-23T11:30:00Z" }, "2026-11-23T12:00:00Z");
+  assert.equal(reversion.inserted, 0); assert.equal(reversion.observationsInserted, 1);
+  const observations = [...db.rows].filter(([key]) => key.startsWith("nba::stat-seen::")).map(([, row]) => row.payload);
+  const bodies = new Map([...db.rows].filter(([key]) => key.startsWith("nba::player-stat-evidence::")).map(([key, row]) => [key, row.payload]));
+  const select = (cutoff: string, observed = observations) => selectNbaPlayerStatEvidenceAtCutoff({ gameId: 100, targetGameId: 200, cutoff, observations: observed, bodies });
+  assert.equal(select("2026-11-22T12:01:00Z")!.boxes[0]!.ast, state.boxes[0]!.ast + 1);
+  assert.equal(select("2026-11-23T12:01:00Z")!.boxes[0]!.ast, state.boxes[0]!.ast, "reversion selects the old body through the NEW observation");
+  const futureChanged = observations.map(o => { const v = o as { firstRetainedAt: string }; return Date.parse(v.firstRetainedAt) > Date.parse("2026-11-22T12:01:00Z") ? { ...v, bodySha256: "mutated-future" } : o; });
+  assert.deepEqual(select("2026-11-22T12:01:00Z", futureChanged), select("2026-11-22T12:01:00Z"), "future observations cannot change an older cutoff");
+  assert.equal(select("2026-11-19T12:00:00Z"), null);
+  assert.equal(selectNbaPlayerStatEvidenceAtCutoff({ gameId: 100, targetGameId: 100, cutoff: "2026-11-24T00:00:00Z", observations, bodies }), null);
   for (const mode of ["lost_ack", "failure", "collision"] as const) {
     const fault = new Store(); fault.insertMode = mode;
     const result = await retainNbaPlayerStatEvidence({ client: fault.client, writerRunId: "lease-1", state, gameIds: [100], now: () => retainedAt });
     assert.equal(result.status, mode === "lost_ack" ? "retained" : "unavailable");
-    if (mode === "lost_ack") { assert.equal(result.inserted, 0); assert.equal(result.reconciled, 1); }
+    if (mode === "lost_ack") { assert.equal(result.inserted, 0); assert.equal(result.reconciled, 2); }
   }
   for (const mode of ["wrongLease", "expired", "readFails"] as const) {
     const fault = new Store(); fault[mode] = true;
@@ -114,7 +129,7 @@ async function main() {
   const bulk = new Store();
   const bulkReceipt = await retainNbaPlayerStatEvidence({ client: bulk.client, writerRunId: "lease-1", state: manyState, gameIds: games.map(g => g.gameId), now: () => retainedAt });
   assert.equal(bulkReceipt.inserted, 65); assert.equal(bulkReceipt.status, "retained");
-  assert.equal(bulk.calls.filter(c => c.table === "lab_response_snapshots" && c.op === "read").length, 2, "inventory keys stay bounded below URL limits");
+  assert.equal(bulk.calls.filter(c => c.table === "lab_response_snapshots" && c.op === "read").length, 3, "body and reference inventory keys stay bounded below URL limits");
   const crossing = new Store(); let clocks = 0;
   assert.equal((await retainNbaPlayerStatEvidence({ client: crossing.client, writerRunId: "lease-1", state, gameIds: [100],
     now: () => clocks++ === 0 ? retainedAt : "2100-01-01T00:00:00Z" })).reason, "nba_writer_lease_unavailable");

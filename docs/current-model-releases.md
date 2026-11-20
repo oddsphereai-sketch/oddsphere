@@ -10,7 +10,8 @@ new review or numerical promotion is authorized. Daily Edge R37 / marriage R39 /
 reader R3 / grade R31 remain active; the separate Total shadow stays inactive.
 
 Exact repeats preserve original bytes/first-retained clocks; source corrections
-append new hashes. Newly retained cache observations never claim old historical
+append new hashes. Small immutable per-collection references preserve A/B/A
+reversions and reuse old bodies; retries preserve the same collection receipt. Newly retained cache observations never claim old historical
 knowledge or raw HTTP provenance. Storage, codec, run-size, source-window and
 actual leased-run guards are mandatory. Archive trouble is a private finding;
 the valid canonical state and forecasts continue. No member/locked payload is

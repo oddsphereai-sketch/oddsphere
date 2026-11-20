@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NbaPlayerPropsCurrentState } from "./nbaPlayerPropsCurrentState";
 
 export const NBA_PLAYER_STAT_EVIDENCE_RELEASE = "nba_player_stat_evidence_2026_11_20_r1_normalized_observations" as const;
-export const NBA_PLAYER_STAT_EVIDENCE_LIMITS = Object.freeze({ games: 128, batch: 64, rawBytesPerGame: 2_000_000,
+export const NBA_PLAYER_STAT_EVIDENCE_LIMITS = Object.freeze({ games: 128, batch: 48, rawBytesPerGame: 2_000_000,
   gzipBytesPerGame: 256_000, gzipBytesPerRun: 4_000_000, storageMs: 2500, reconcileMs: 1000 });
 const RETENTION_MS = 3653 * 86400000;
 type Body = { provider: "balldontlie"; sourceKind: "normalized_collector_state_not_raw_http";
@@ -16,7 +16,7 @@ export type NbaPlayerStatEvidence = { release: typeof NBA_PLAYER_STAT_EVIDENCE_R
   encoding: "gzip-base64"; rawBytes: number; gzipBytes: number; data: string };
 export type NbaPlayerStatEvidenceReceipt = { release: typeof NBA_PLAYER_STAT_EVIDENCE_RELEASE;
   status: "retained" | "not_requested" | "unavailable"; games: number; inserted: number; existing: number;
-  gzipBytes: number; reconciled?: number; reason?: string };
+  gzipBytes: number; observationsInserted?: number; observationsExisting?: number; reconciled?: number; reason?: string };
 const hash = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
 const time = (s: string) => { const v = Date.parse(s); if (!Number.isFinite(v)) throw Error("invalid_evidence_clock"); return v; };
 function canonical(value: unknown): string {
@@ -96,10 +96,49 @@ export function nbaPlayerStatEvidenceAtCutoff(value: unknown, cutoff: string, ta
   return body.coverage.completeForRotationResearch && body.game.gameId !== targetGameId && time(evidence.firstRetainedAt) <= time(cutoff) && time(body.game.startTime) < time(cutoff) ? body : null;
 }
 
+export type NbaPlayerStatObservation = { release: typeof NBA_PLAYER_STAT_EVIDENCE_RELEASE; kind: "nba_player_stat_observation_v1";
+  gameId: number; season: number; bodyKey: string; bodySha256: string; sourceStateUpdatedAt: string; firstRetainedAt: string };
+export const nbaPlayerStatObservationKey = (o: NbaPlayerStatObservation) => `nba::stat-seen::${o.gameId}::${time(o.sourceStateUpdatedAt)}::${o.bodySha256}`;
+export function decodeNbaPlayerStatObservation(value: unknown): NbaPlayerStatObservation {
+  if (!value || typeof value !== "object") throw Error("invalid_stat_observation");
+  const o = value as NbaPlayerStatObservation;
+  if (o.release !== NBA_PLAYER_STAT_EVIDENCE_RELEASE || o.kind !== "nba_player_stat_observation_v1" ||
+      !Number.isSafeInteger(o.gameId) || o.gameId <= 0 || !Number.isSafeInteger(o.season) || o.season <= 0 ||
+      !/^[a-f0-9]{64}$/.test(o.bodySha256) || o.bodyKey !== nbaPlayerStatEvidenceKey(o.gameId, o.bodySha256) ||
+      time(o.sourceStateUpdatedAt) > time(o.firstRetainedAt)) throw Error("invalid_stat_observation");
+  return o;
+}
+/** The latest known observation selects a version, including a reversion to an
+ * older body. A body alone never establishes which version was current. */
+export function selectNbaPlayerStatEvidenceAtCutoff(args: { gameId: number; targetGameId: number; cutoff: string;
+  observations: readonly unknown[]; bodies: ReadonlyMap<string, unknown> }): Body | null {
+  if (args.gameId === args.targetGameId) return null;
+  try {
+    const cutoff = time(args.cutoff), eligible: NbaPlayerStatObservation[] = [];
+    for (const value of args.observations) {
+      const clock = value as Partial<NbaPlayerStatObservation> | null;
+      if (clock?.gameId !== args.gameId) continue;
+      if (time(clock.firstRetainedAt ?? "") > cutoff) continue;
+      const o = decodeNbaPlayerStatObservation(value); if (time(o.sourceStateUpdatedAt) <= cutoff) eligible.push(o);
+    }
+    if (!eligible.length) return null;
+    const latestAt = Math.max(...eligible.map(o => time(o.sourceStateUpdatedAt)));
+    const latest = eligible.filter(o => time(o.sourceStateUpdatedAt) === latestAt);
+    if (new Set(latest.map(o => o.bodyKey)).size !== 1) return null;
+    const o = latest[0]!, value = args.bodies.get(o.bodyKey);
+    if (value === undefined) return null;
+    const decoded = decodeNbaPlayerStatEvidence(value);
+    if (decoded.evidence.gameId !== args.gameId || decoded.evidence.season !== o.season ||
+        decoded.evidence.bodySha256 !== o.bodySha256 || time(decoded.evidence.firstRetainedAt) > time(o.firstRetainedAt)) return null;
+    return nbaPlayerStatEvidenceAtCutoff(value, args.cutoff, args.targetGameId);
+  } catch { return null; }
+}
+
 /** Existing full-refresh writer only. Storage trouble never invalidates the collected numerical state. */
 export async function retainNbaPlayerStatEvidence(args: { client: SupabaseClient; writerRunId?: string;
   state: NbaPlayerPropsCurrentState; gameIds: readonly number[]; deadlineMs?: number; now?: () => string }): Promise<NbaPlayerStatEvidenceReceipt> {
-  const receipt: NbaPlayerStatEvidenceReceipt = { release: NBA_PLAYER_STAT_EVIDENCE_RELEASE, status: "not_requested", games: args.gameIds.length, inserted: 0, existing: 0, gzipBytes: 0 };
+  const receipt: NbaPlayerStatEvidenceReceipt = { release: NBA_PLAYER_STAT_EVIDENCE_RELEASE, status: "not_requested", games: args.gameIds.length,
+    inserted: 0, existing: 0, observationsInserted: 0, observationsExisting: 0, gzipBytes: 0 };
   if (!args.gameIds.length) return receipt;
   const clock = args.now ?? (() => new Date().toISOString());
   try {
@@ -108,17 +147,22 @@ export async function retainNbaPlayerStatEvidence(args: { client: SupabaseClient
         args.deadlineMs - Date.now() < NBA_PLAYER_STAT_EVIDENCE_LIMITS.storageMs + NBA_PLAYER_STAT_EVIDENCE_LIMITS.reconcileMs)) throw Error("forecast_source_window_reserved");
     if (args.gameIds.length > NBA_PLAYER_STAT_EVIDENCE_LIMITS.games || new Set(args.gameIds).size !== args.gameIds.length) throw Error("evidence_game_limit_or_duplicate");
     const at = clock(), started = performance.now(), signal = AbortSignal.timeout(NBA_PLAYER_STAT_EVIDENCE_LIMITS.storageMs);
-    const prepared: NbaPlayerStatEvidence[] = [];
+    type Entity = { key: string; payload: NbaPlayerStatEvidence | NbaPlayerStatObservation; body: boolean };
+    const prepared: Entity[] = [];
     for (const gameId of args.gameIds) {
       if (performance.now() - started >= NBA_PLAYER_STAT_EVIDENCE_LIMITS.storageMs) throw Error("evidence_storage_deadline");
-      prepared.push(packNbaPlayerStatEvidence({ state: args.state, gameId, retainedAt: at }));
+      const e = packNbaPlayerStatEvidence({ state: args.state, gameId, retainedAt: at });
+      receipt.gzipBytes += e.gzipBytes;
+      if (receipt.gzipBytes > NBA_PLAYER_STAT_EVIDENCE_LIMITS.gzipBytesPerRun) throw Error("evidence_run_bytes_limit");
+      const observation: NbaPlayerStatObservation = { release: NBA_PLAYER_STAT_EVIDENCE_RELEASE, kind: "nba_player_stat_observation_v1",
+        gameId, season: e.season, bodyKey: nbaPlayerStatEvidenceKey(gameId, e.bodySha256), bodySha256: e.bodySha256,
+        sourceStateUpdatedAt: args.state.updatedAt, firstRetainedAt: at };
+      prepared.push({ key: observation.bodyKey, payload: e, body: true }, { key: nbaPlayerStatObservationKey(observation), payload: observation, body: false });
     }
-    receipt.gzipBytes = prepared.reduce((n, e) => n + e.gzipBytes, 0);
-    if (receipt.gzipBytes > NBA_PLAYER_STAT_EVIDENCE_LIMITS.gzipBytesPerRun) throw Error("evidence_run_bytes_limit");
-    const inventory = async (items: readonly NbaPlayerStatEvidence[], readSignal: AbortSignal) => {
+    const inventory = async (items: readonly Entity[], readSignal: AbortSignal) => {
       const found = new Map<string, unknown>();
       for (let i = 0; i < items.length; i += NBA_PLAYER_STAT_EVIDENCE_LIMITS.batch) {
-        const keys = items.slice(i, i + NBA_PLAYER_STAT_EVIDENCE_LIMITS.batch).map(e => nbaPlayerStatEvidenceKey(e.gameId, e.bodySha256));
+        const keys = items.slice(i, i + NBA_PLAYER_STAT_EVIDENCE_LIMITS.batch).map(e => e.key);
         const read = await args.client.from("lab_response_snapshots").select("snapshot_key,payload").in("snapshot_key", keys).abortSignal(readSignal);
         if (read.error || !Array.isArray(read.data)) throw Error("evidence_inventory_unavailable");
         for (const r of read.data) { if (!keys.includes(r.snapshot_key) || found.has(r.snapshot_key)) throw Error("ambiguous_evidence_inventory"); found.set(r.snapshot_key, r.payload); }
@@ -126,35 +170,42 @@ export async function retainNbaPlayerStatEvidence(args: { client: SupabaseClient
       return found;
     };
     const existing = await inventory(prepared, signal);
-    const verify = (expected: NbaPlayerStatEvidence, original: unknown) => {
-      const old = decodeNbaPlayerStatEvidence(original), current = decodeNbaPlayerStatEvidence(expected);
-      if (old.evidence.bodySha256 !== expected.bodySha256 || canonical(old.body) !== canonical(current.body) ||
-          time(old.evidence.firstRetainedAt) > time(clock())) throw Error("existing_evidence_conflict");
+    const verify = (expected: Entity, original: unknown) => {
+      if (expected.body) {
+        const old = decodeNbaPlayerStatEvidence(original), current = decodeNbaPlayerStatEvidence(expected.payload);
+        if (old.evidence.bodySha256 !== current.evidence.bodySha256 || canonical(old.body) !== canonical(current.body) ||
+            time(old.evidence.firstRetainedAt) > time(clock())) throw Error("existing_evidence_conflict");
+      } else {
+        const old = decodeNbaPlayerStatObservation(original), current = decodeNbaPlayerStatObservation(expected.payload);
+        if (canonical({ ...old, firstRetainedAt: current.firstRetainedAt }) !== canonical(current) || time(old.firstRetainedAt) > time(clock())) throw Error("existing_observation_conflict");
+      }
     };
-    const pending = prepared.filter(e => { const old = existing.get(nbaPlayerStatEvidenceKey(e.gameId, e.bodySha256)); if (old === undefined) return true; verify(e, old); receipt.existing++; return false; });
+    const pending = prepared.filter(e => { const old = existing.get(e.key); if (old === undefined) return true; verify(e, old);
+      if (e.body) receipt.existing++; else receipt.observationsExisting!++; return false; });
     if (!pending.length) return { ...receipt, status: "retained" };
-    // Recheck the actual leased run immediately before insert, after encoding and reads.
     const beforeInsert = clock();
     const lease = await args.client.from("cron_job_leases").select("run_id,acquired_at,lease_expires_at")
       .eq("job_name", "prediction_pipeline:nba").eq("run_id", args.writerRunId).gt("lease_expires_at", beforeInsert).abortSignal(signal).maybeSingle();
     if (lease.error || !lease.data || lease.data.run_id !== args.writerRunId || time(lease.data.acquired_at) > time(beforeInsert) ||
         time(lease.data.lease_expires_at) - time(beforeInsert) < NBA_PLAYER_STAT_EVIDENCE_LIMITS.storageMs + NBA_PLAYER_STAT_EVIDENCE_LIMITS.reconcileMs) throw Error("nba_writer_lease_unavailable");
-    const rows = pending.map(e => { const day = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date(decodeNbaPlayerStatEvidence(e).body.game.startTime));
-      const expires = new Date(time(e.firstRetainedAt) + RETENTION_MS).toISOString();
-      return { snapshot_key: nbaPlayerStatEvidenceKey(e.gameId, e.bodySha256), kind: "daily_edge", sport: "nba", slate_date: day,
-        payload: e, payload_version: NBA_PLAYER_STAT_EVIDENCE_RELEASE, source: NBA_PLAYER_STAT_EVIDENCE_RELEASE,
-        generated_at: e.firstRetainedAt, updated_at: e.firstRetainedAt, expires_at: expires, stale_until: expires }; });
+    const gameById = new Map(args.state.games.map(g => [g.gameId, g]));
+    const rows = pending.map(e => {
+      const day = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date(gameById.get(e.payload.gameId)!.startTime));
+      const expires = new Date(time(e.payload.firstRetainedAt) + RETENTION_MS).toISOString();
+      return { snapshot_key: e.key, kind: "daily_edge", sport: "nba", slate_date: day, payload: e.payload,
+        payload_version: NBA_PLAYER_STAT_EVIDENCE_RELEASE, source: NBA_PLAYER_STAT_EVIDENCE_RELEASE,
+        generated_at: e.payload.firstRetainedAt, updated_at: e.payload.firstRetainedAt, expires_at: expires, stale_until: expires };
+    });
     const insert = await args.client.from("lab_response_snapshots").insert(rows).abortSignal(signal);
     if (insert.error) {
-      // A lost ACK or duplicate is never permission to replace the original.
       const remaining = Math.min(NBA_PLAYER_STAT_EVIDENCE_LIMITS.storageMs + NBA_PLAYER_STAT_EVIDENCE_LIMITS.reconcileMs - (performance.now() - started),
         args.deadlineMs === undefined ? Infinity : args.deadlineMs - Date.now());
       if (remaining < 1) throw Error("evidence_reconciliation_deadline");
       const acknowledged = await inventory(pending, AbortSignal.timeout(Math.max(1, Math.floor(Math.min(NBA_PLAYER_STAT_EVIDENCE_LIMITS.reconcileMs, remaining)))));
-      for (const e of pending) { const old = acknowledged.get(nbaPlayerStatEvidenceKey(e.gameId, e.bodySha256)); if (old === undefined) throw Error("evidence_insert_unconfirmed"); verify(e, old); }
+      for (const e of pending) { const old = acknowledged.get(e.key); if (old === undefined) throw Error("evidence_insert_unconfirmed"); verify(e, old); }
       return { ...receipt, status: "retained", reconciled: pending.length };
     }
-    return { ...receipt, status: "retained", inserted: pending.length };
+    return { ...receipt, status: "retained", inserted: pending.filter(e => e.body).length, observationsInserted: pending.filter(e => !e.body).length };
   } catch (error) {
     return { ...receipt, status: "unavailable", reason: error instanceof Error ? error.message : "evidence_storage_unavailable" };
   }

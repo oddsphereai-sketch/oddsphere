@@ -25,7 +25,8 @@ the original bytes and first-retained clock. No update/delete of an archive.
 
 Use existing private lab_response_snapshots keys outside every member/lock namespace,
 maximum 128 games / 4MB compressed / bounded 2.5-second storage window per run.
-At most two grouped 64-key inventory reads, one insert and one ambiguous-ACK reconciliation
+At most six grouped 48-key inventory reads for 128 bodies and 128 references,
+one insert and one ambiguous-ACK reconciliation
 are allowed. Verify the actual active lease run ID before insertion; no run ID or
 an expired/wrong lease means unavailable. Duplicate collisions must verify exact
 original content, not overwrite it. Ten-year source retention is distinct from
@@ -47,3 +48,10 @@ unchanged collected source counts and numerical state, reader/writer lock preced
 focused NBA source tests, TypeScript, lint, full model-change verification, clean
 fresh-main integration and protected PR. All actual publication requires live
 ordinary full-refresh evidence; no success from preview alone.
+
+Pre-release correction: content deduplication alone loses a correction/reversion
+timeline. Immutable collection references are required. Currentness selects the
+latest source-state observation that was actually retained by the cutoff;
+conflicting equal-source-clock versions remain unknown. No earlier valid body
+may hide a later incomplete observation. Target-game and future-reference
+mutation tests must preserve older cutoffs.

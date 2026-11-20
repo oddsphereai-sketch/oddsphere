@@ -9,8 +9,9 @@ provider/AI call, review, phase, timer, writer, schema or budget is introduced.
 
 Only the existing full-refresh source collection supplies exact collected IDs.
 After its original state write succeeds, bounded compressed observations preserve
-all numerical fields; later corrections cannot replace the original. Repeats
-preserve earliest retained metadata. Source-state and first-retained clocks stay
+all numerical fields; later corrections cannot replace the original. Small
+immutable per-collection references preserve correction/reversion chronology
+without duplicating the body; retries preserve original receipt clocks. Source-state and first-retained clocks stay
 distinct, and normalized data is never called raw HTTP. First retention does not
 backdate knowledge. Actual shared NBA lease ownership, bounded reads/insert/
 reconciliation, ten-year explicit retention and source-window headroom protect
