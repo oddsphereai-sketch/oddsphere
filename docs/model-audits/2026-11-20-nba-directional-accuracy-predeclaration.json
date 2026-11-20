@@ -1,0 +1,14 @@
+{
+  "release": "nba_directional_conditional_repair_2026_11_20_r1_shadow",
+  "productionBase": "c184072ed854b1cc468e46c97fd25f398c5c3332",
+  "scope": "NBA Spread/Total source-conditioned forecast correction; no history, thresholds, stakes, writer or scheduler changes",
+  "hypothesis": "A global linear displacement coefficient cannot express matchup-dependent error; test a fixed low-complexity nonlinear residual head at the verified native contract, rather than reversing a losing stretch.",
+  "development": "Reuse exact source-qualified 2023 plus first chronological half 2024 historical joins and prior-season-only independent forecasts; no November outcome enters fitting.",
+  "calibration": "Second chronological half 2024: empirical residual distribution only. No tree recipe or mean refit.",
+  "confirmation": "2025 historical joined source cohort, then November 6-19 frozen production forecasts at exact locked contracts. Previously opened research/production outcomes: explicitly not globally untouched. No selection on these outcomes, no refit after opening.",
+  "model": "One deterministic squared-residual boosted tree head per coordinate: native current economic coordinate offset, 40 iterations, learning rate 0.05, depth 2, minimum 120 samples per leaf, split candidates training deciles, leaf ridge penalty 10. Inputs: native current, native move, independent-minus-native plus released portable point-in-time feature vector (no teams, identity or outcome fields). No hyperparameter tournament.",
+  "comparators": "Released independent, predeclared incumbent displacement proxy (not exact T-60 incumbent), native market coordinate, candidate, and inverse incumbent. Proper scoring, paired bootstrap by game, all side direction and exact available source-price returns separately.",
+  "gates": "A rejected coordinate cannot be released with its accepted peer. Require accuracy/proper scoring, source transport and current frozen-input promotion/demotion evidence, writer/reader lock precedence, full model-change/integration/protected PR/live checks. New globally untouched forward evidence required when retrospective evidence is insufficient. No authorization exception inferred from urgency.",
+  "productionWrites": 0,
+  "providerCalls": 0
+}

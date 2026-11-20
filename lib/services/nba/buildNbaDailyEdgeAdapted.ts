@@ -193,6 +193,10 @@ export async function buildNbaDailyEdgePipeline(
     rosterRegimeRosterOverride?: NbaLiveRosterSnapshot;
     /** Read-only same-input audit hook for the superseded score path without roster-regime correction. */
     retainLegacyRosterRegime?: boolean;
+    /** Offline research only. No writer or member route passes this option. */
+    conditionalTotalShadow?: boolean;
+    /** Frozen-frontier read-only replay. No scheduled caller passes overrides. */
+    readerEvidenceFrontiers?: { price: number; split: number };
     /** Read-only same-input audit hook for a proposed complete current-line board. */
     currentLinesOverrideByExternalId?: ReadonlyMap<number, readonly NbaLineRow[]>;
     /** Exact receipt from the existing leased NBA T-60 collector. */
@@ -364,7 +368,8 @@ export async function buildNbaDailyEdgePipeline(
     let lastSplitId = 0;
     const splitHighWaterRead = await readNbaSplitHighWater(supabase,gameExternalIds.map(String));
     if (splitHighWaterRead.error) readerEvidenceErrors.push("split_observation_high_water_failed");
-    const splitHighWaterId = splitHighWaterRead.id;
+    const splitHighWaterId = options.readerEvidenceFrontiers?.split ?? splitHighWaterRead.id;
+    if (!Number.isSafeInteger(splitHighWaterId) || splitHighWaterId < 0 || splitHighWaterId > splitHighWaterRead.id) readerEvidenceErrors.push("split_observation_high_water_failed");
     const splitFrontierError=nbaEvidenceHighWaterError("split",splitHighWaterId);
     if(splitFrontierError)readerEvidenceErrors.push(splitFrontierError);
     while (lastSplitId < splitHighWaterId) {
@@ -412,7 +417,8 @@ export async function buildNbaDailyEdgePipeline(
   if (gameExternalIds.length > 0) {
     const priceHighWaterRead = await readMarketPriceHighWater(supabase, "nba", gameExternalIds.map(String));
     if (priceHighWaterRead.error) readerEvidenceErrors.push("price_observation_high_water_failed");
-    const priceHighWaterId = priceHighWaterRead.id;
+    const priceHighWaterId = options.readerEvidenceFrontiers?.price ?? priceHighWaterRead.id;
+    if (!Number.isSafeInteger(priceHighWaterId) || priceHighWaterId < 0 || priceHighWaterId > priceHighWaterRead.id) readerEvidenceErrors.push("price_observation_high_water_failed");
     const knownPriceHistory=[...priorKnowledgeByExternalId.values()].some(state=>Object.keys(state.anchors).length>0);
     const priceFrontierError=nbaEvidenceHighWaterError("price",priceHighWaterId,knownPriceHistory);
     if(priceFrontierError)readerEvidenceErrors.push(priceFrontierError);
@@ -529,6 +535,7 @@ export async function buildNbaDailyEdgePipeline(
       history: movementHistory,
       externalGameId: s.game_external_id,
       marketReader: reader,
+      conditionalTotalShadow: options.conditionalTotalShadow,
       independentOverride: selectedIndependent,
       marketContext: {
         eventId: String(s.game_external_id), evaluatedAt: readerEvaluatedAt,
@@ -590,9 +597,11 @@ export async function buildNbaDailyEdgePipeline(
         total: candidate.independent.total,
         margin_home: candidate.independent.marginHome,
       },
+      ...(options.conditionalTotalShadow ? { conditional_total_shadow: candidate.conditionalTotal } : {}),
       market_reader_knowledge_state: candidate.marketConsequence?.state ?? null,
       market_reader_execution_resolution: { excluded: resolvedExecution.exclusions, iterations: resolvedExecution.iterations, cycleMarkets: resolvedExecution.cycleMarkets },
       market_reader_consequence: candidate.marketConsequence === null ? null : {
+        ...(candidate.conditionalTotal?.status === "shadow_applied" ? { totalDiagnosticOnly: true } : {}),
         ...candidate.marketConsequence, state: undefined,
         books: candidate.marketConsequence.books.map(book => ({ ...book, proposals: book.proposals.map(p => ({
           market: p.market, provider: p.provider, anchorCaptureAt: p.anchor.captureAt, currentCaptureAt: p.current.captureAt,
@@ -632,7 +641,8 @@ export async function buildNbaDailyEdgePipeline(
           home_cover: candidate.probabilities.spread_home_cover_prob,
         },
       },
-      market_reader: { ...reader, activeDecisionHead: candidate.marketConsequence?.release ?? null, legacyQualificationsAreDiagnostics: true },
+      market_reader: { ...reader, activeDecisionHead: candidate.marketConsequence?.release ?? null, legacyQualificationsAreDiagnostics: true,
+        ...(candidate.conditionalTotal?.status === "shadow_applied" ? { totalDecisionHead: candidate.conditionalTotal.release } : {}) },
       market_reader_price_postures: pred.audit.professional_grade_context?.namedBookPostures,
       market_reader_decision: candidate.readerDecisionAudit,
     };

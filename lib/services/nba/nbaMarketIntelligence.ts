@@ -489,6 +489,7 @@ function exactLineProbability(opts: {
     v1_probabilities?: {
       margin_sd_used: number;
       total_sd_used: number;
+      total_residual_empirical_used?: import("../../automodel/nba/nbaDistribution").NbaEmpiricalResidualLaw;
       margin_distribution_used?: {
         family: "normal_residual" | "two_component_normal_mixture";
         core_sigma_multiplier: number;
@@ -506,6 +507,7 @@ function exactLineProbability(opts: {
     market_total: opts.total,
     margin_sd_base: candidate.v1_probabilities.margin_sd_used,
     total_sd_base: candidate.v1_probabilities.total_sd_used,
+    total_residual_empirical: candidate.v1_probabilities.total_residual_empirical_used,
     margin_residual_mixture:
       candidate.v1_probabilities.margin_distribution_used?.family === "two_component_normal_mixture"
         ? {

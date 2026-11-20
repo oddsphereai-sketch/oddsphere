@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import "./test-nba-conditional-total-shadow";
 
 import { type NbaPortableModelArtifact } from "../lib/automodel/nba/nbaPortableScoreModel";
 import { runNbaAutoModelV2 } from "../lib/automodel/nba/nbaAutoModelV2";
