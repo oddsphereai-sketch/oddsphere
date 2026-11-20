@@ -1,3 +1,17 @@
+## NBA complete event-scoped evidence correctness — November20
+
+R37 event-scoped evidence / R39 marriage / reader R3 replaces a confirmed failing
+price read with the identical complete source-row set. No numerical equation,
+probability calibration, grade/price/stake rule or provider cadence changes.
+Zero promotions/demotions for identical complete inputs; newer naturally arriving
+source evidence remains evaluated by the existing R31 policy. The bounded read
+must prove exact event counts, page continuity/exhaustion and the frozen global
+frontier; any error preserves the previous complete publication. All original
+locks and R36/R35/R34 knowledge remain byte-authoritative. The normal sole writer,
+shared prediction_pipeline:nba lease, focused/full tests, latest-main protected
+PR and post-deploy refresh/reader/lock proof remain mandatory. This authorizes no
+conditional-Total fit, automatic flip or numerical release from a losing sample.
+
 ## November19 prospective props forecast strength and NFL identity R56
 
 The new predeclaration is

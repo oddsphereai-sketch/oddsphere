@@ -79,6 +79,7 @@ import {
 } from "./adaptNbaToDailyEdgeResponse";
 import { supabase } from "../../db/supabase";
 import { readMarketPriceHighWater } from "../marketPriceHighWater";
+import { readNbaPriceEvidence } from "./nbaPriceEvidenceRead";
 import { loadCompleteCurrentGameLines } from "../currentGameLineReader";
 import {
   selectNbaConsumerExecutionBoard,
@@ -409,50 +410,16 @@ export async function buildNbaDailyEdgePipeline(
 
   const readerPriceRowsByGame = new Map<number, NbaReaderPriceRow[]>();
   if (gameExternalIds.length > 0) {
-    type ReaderPriceDbRow = {
-      id: number;
-      provider: string;
-      provider_event_id: string | null;
-      ingestion_run_id: string | null;
-      canonical_event_id: string;
-      sportsbook: string;
-      sharp_book: boolean;
-      market_type: string;
-      selection_key: string;
-      american_price: number | null;
-      line: number | null;
-      provider_timestamp: string | null;
-      fetched_at: string;
-    };
-    const rows: ReaderPriceDbRow[] = [];
-    let lastPriceId = 0;
     const priceHighWaterRead = await readMarketPriceHighWater(supabase, "nba", gameExternalIds.map(String));
     if (priceHighWaterRead.error) readerEvidenceErrors.push("price_observation_high_water_failed");
     const priceHighWaterId = priceHighWaterRead.id;
     const knownPriceHistory=[...priorKnowledgeByExternalId.values()].some(state=>Object.keys(state.anchors).length>0);
     const priceFrontierError=nbaEvidenceHighWaterError("price",priceHighWaterId,knownPriceHistory);
     if(priceFrontierError)readerEvidenceErrors.push(priceFrontierError);
-    while (lastPriceId < priceHighWaterId) {
-      const page = await supabase
-        .from("market_price_observations_v2")
-        .select("id, provider, provider_event_id, ingestion_run_id, canonical_event_id, sportsbook, sharp_book, market_type, selection_key, american_price, line, provider_timestamp, fetched_at")
-        .eq("league", "nba")
-        .in("canonical_event_id", gameExternalIds.map(String))
-        .gt("id", lastPriceId)
-        .lte("id", priceHighWaterId)
-        .order("id", { ascending: true })
-        .limit(NBA_READER_EVIDENCE_PAGE_SIZE);
-      if (page.error) {
-        readerEvidenceErrors.push("price_observation_lookup_failed");
-        break;
-      }
-      const data = (page.data ?? []) as ReaderPriceDbRow[];
-      const progress=advanceNbaEvidencePage({family:"price",cursor:lastPriceId,highWater:priceHighWaterId,rows:data});
-      if(progress.error){readerEvidenceErrors.push(progress.error);break;}
-      rows.push(...data);
-      lastPriceId=progress.cursor;
-    }
-    readerReadCoverage.prices={highWater:priceHighWaterId,lastRead:lastPriceId,rows:rows.length};
+    const priceEvidence = await readNbaPriceEvidence({ client: supabase, eventIds: gameExternalIds.map(String), highWater: priceHighWaterId });
+    if (priceEvidence.error) readerEvidenceErrors.push(priceEvidence.error);
+    const rows = priceEvidence.rows;
+    readerReadCoverage.prices={highWater:priceHighWaterId,lastRead:priceEvidence.lastRead,rows:rows.length};
     for (const row of rows) {
       const externalId = Number(row.canonical_event_id);
       if (
