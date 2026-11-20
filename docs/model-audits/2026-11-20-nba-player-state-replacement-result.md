@@ -13,7 +13,8 @@ exact-game availability admission, prior/current appearance shrinkage, expected
 participation/minutes, constrained 240-minute allocations, verified-OUT exclusion,
 available-only replacement minutes, original/reference/replacement allocation,
 net/PIE shock and overlap loss. Exactly six paired difference/sum features match
-the prior player-state experiment. It has no fitted score head or live import.
+the prior player-state experiment. It has no live import. The fixed residual
+head implementation below remains unfitted on real historical outcomes.
 The profile uses up to 10 prior-season plus 10 current-season appearances; no
 outcome selected those windows. Absence-duration/first-return history and full
 historical transaction/crosswalk adapters remain additional qualification work;
