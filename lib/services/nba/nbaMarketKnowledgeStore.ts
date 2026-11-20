@@ -32,7 +32,7 @@ export async function loadNbaMarketKnowledgeStates(args: {
   }
   // Carry only these exact compatible predecessors for missing games. All
   // reads retain identical source-state/event validation and unlocked scope.
-  // Current state wins; R35 wins over R34; corrupt state is fatal, not skipped.
+  // Current state wins; nearest compatible predecessor wins; corrupt state is fatal, not skipped.
   if (args.modelRelease === NBA_MODEL_RELEASE) {
     for (const modelRelease of NBA_COMPATIBLE_KNOWLEDGE_MODEL_RELEASES) {
       const missing = [...args.externalIdByDbId].filter(([, externalId]) => !result.has(externalId));

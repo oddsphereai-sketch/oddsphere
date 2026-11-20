@@ -1,3 +1,4 @@
+import "./test-nba-split-evidence-read";
 import "./test-nba-price-evidence-read";
 import assert from "node:assert/strict";
 import {assertNbaReaderEvidenceComplete,advanceNbaEvidencePage,nbaEvidenceHighWaterError,nbaReaderUnavailableResponse,NBA_READER_PUBLICATION_RELEASE,NBA_READER_FAILURE_LOG_RELEASE,nbaReaderFailureLogSuffix,nbaReaderFailureReceipt} from "../lib/services/nba/nbaReaderPublication";
@@ -31,7 +32,7 @@ async function main(){
   const old={as_of:"2026-11-06T19:33:00Z",sport:"nba",date:"2026-11-06",games:[{id:"locked",lockedAt:"2026-11-06T19:00:00Z",grade:"best_angle",price:-300}]};
   let stored:unknown=structuredClone(old),writes=0,expirations=0,version:string|undefined;
   const bytes=JSON.stringify(stored);
-  const saveSnapshot=(async(args:any)=>{writes++;stored=structuredClone(args.payload);version=args.payloadVersion;return{ok:true,snapshotKey:args.snapshotKey,expiresAt:"new-expiry",staleUntil:"new-stale"};}) as NonNullable<Parameters<typeof refreshDailyEdgeResponseSnapshot>[1]>["saveSnapshot"];
+  const saveSnapshot: NonNullable<Parameters<typeof refreshDailyEdgeResponseSnapshot>[1]>["saveSnapshot"] = async(args)=>{writes++;stored=structuredClone(args.payload);version=args.payloadVersion;return{ok:true,snapshotKey:args.snapshotKey,expiresAt:"new-expiry",staleUntil:"new-stale"};};
   for(const code of ["price_observation_high_water_failed","price_observation_lookup_failed","price_observation_id_order_invalid","split_observation_high_water_failed","split_observation_lookup_failed","split_observation_id_order_invalid","price_observation_coverage_incomplete","split_observation_coverage_incomplete"]){
    const buildResponse=async()=>{try{assertNbaReaderEvidenceComplete([code]);throw Error("guard did not run");}catch(error){return nbaReaderUnavailableResponse({date:"2026-11-06",now:"2026-11-06T19:46:00Z",error});}};
    const result=await refreshDailyEdgeResponseSnapshot({sport:"nba",date:"2026-11-06"},{buildResponse,saveSnapshot,expireMemberCache:async()=>{expirations++;}});

@@ -1,5 +1,6 @@
+import {readNbaSplitEvidence} from "./nbaSplitEvidenceRead";
 import {readNbaSplitHighWater} from "./nbaSplitHighWater";
-import {assertNbaReaderEvidenceComplete,advanceNbaEvidencePage,nbaEvidenceHighWaterError,NBA_READER_PUBLICATION_RELEASE} from "./nbaReaderPublication";
+import {assertNbaReaderEvidenceComplete,nbaEvidenceHighWaterError,NBA_READER_PUBLICATION_RELEASE} from "./nbaReaderPublication";
 /**
  * Phase 7G (launch prep) — NBA → adapted Daily Edge response builder.
  *
@@ -120,7 +121,6 @@ import { loadNbaMarketKnowledgeStates } from "./nbaMarketKnowledgeStore";
 import type { NbaPrelockCaptureReceipt } from "./nbaPrelockMarketCapture";
 import { resolveNbaExecutionFixedPoint, type NbaExecutionExclusions } from "./nbaMarketExecution";
 
-const NBA_READER_EVIDENCE_PAGE_SIZE = 1000;
 
 function nbaProviderSeasonForSlate(date: string): number {
   const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(date);
@@ -346,48 +346,15 @@ export async function buildNbaDailyEdgePipeline(
   const readerReadCoverage={release:NBA_READER_PUBLICATION_RELEASE,prices:{highWater:0,lastRead:0,rows:0},splits:{highWater:0,lastRead:0,rows:0}};
   const readerSplitRowsByGame = new Map<number, NbaReaderSplitRow[]>();
   if (gameExternalIds.length > 0) {
-    type ReaderSplitDbRow = {
-      id: number;
-      canonical_event_id: string;
-      provider: string;
-      source_book: string;
-      source_type: string;
-      market_type: string;
-      selection_key: string;
-      bets_pct: number | null;
-      money_pct: number | null;
-      market_line: number | null;
-      source_observed_at: string | null;
-      fetched_at: string;
-    };
-    const rows: ReaderSplitDbRow[] = [];
-    let lastSplitId = 0;
     const splitHighWaterRead = await readNbaSplitHighWater(supabase,gameExternalIds.map(String));
     if (splitHighWaterRead.error) readerEvidenceErrors.push("split_observation_high_water_failed");
     const splitHighWaterId = splitHighWaterRead.id;
     const splitFrontierError=nbaEvidenceHighWaterError("split",splitHighWaterId);
     if(splitFrontierError)readerEvidenceErrors.push(splitFrontierError);
-    while (lastSplitId < splitHighWaterId) {
-      const page = await supabase
-        .from("market_split_observations_v2")
-        .select("id, canonical_event_id, provider, source_book, source_type, market_type, selection_key, bets_pct, money_pct, market_line, source_observed_at, fetched_at")
-        .eq("league", "nba")
-        .in("canonical_event_id", gameExternalIds.map(String))
-        .gt("id", lastSplitId)
-        .lte("id", splitHighWaterId)
-        .order("id", { ascending: true })
-        .limit(NBA_READER_EVIDENCE_PAGE_SIZE);
-      if (page.error) {
-        readerEvidenceErrors.push("split_observation_lookup_failed");
-        break;
-      }
-      const data = (page.data ?? []) as ReaderSplitDbRow[];
-      const progress=advanceNbaEvidencePage({family:"split",cursor:lastSplitId,highWater:splitHighWaterId,rows:data});
-      if(progress.error){readerEvidenceErrors.push(progress.error);break;}
-      rows.push(...data);
-      lastSplitId=progress.cursor;
-    }
-    readerReadCoverage.splits={highWater:splitHighWaterId,lastRead:lastSplitId,rows:rows.length};
+    const splitEvidence = await readNbaSplitEvidence({ client: supabase, eventIds: gameExternalIds.map(String), highWater: splitHighWaterId });
+    if (splitEvidence.error) readerEvidenceErrors.push(splitEvidence.error);
+    const rows = splitEvidence.rows;
+    readerReadCoverage.splits={highWater:splitHighWaterId,lastRead:splitEvidence.lastRead,rows:rows.length};
     for (const row of rows) {
       const externalId = Number(row.canonical_event_id);
       if (!Number.isFinite(externalId) || !["moneyline", "spread", "total"].includes(row.market_type)) continue;

@@ -16,8 +16,13 @@ const context = { eventId: "42", inputFingerprint: "same-independent", evaluated
 const original = reconcileNbaMarketConsequence({ independentMargin: 10, independentTotal: 240,
   law: { marginSigma: 12, totalSigma: 18 }, spreadHome: -5.5, totalLine: 220, context }).state;
 assert.ok(Object.keys(original.anchors).length > 0, "fixture has actual native anchored source contracts");
-const [r35, r34] = NBA_COMPATIBLE_KNOWLEDGE_MODEL_RELEASES;
-assert.equal(r34, "nba_professional_unified_2026_11_04_r34_own_book_pressure");
+const predecessors = NBA_COMPATIBLE_KNOWLEDGE_MODEL_RELEASES;
+assert.deepEqual(predecessors, [
+  "nba_professional_unified_2026_11_20_r37_event_scoped_evidence",
+  "nba_professional_unified_2026_11_04_r36_paid_consumer_book_coverage",
+  "nba_professional_unified_2026_11_04_r35_native_consumer_pairs",
+  "nba_professional_unified_2026_11_04_r34_own_book_pressure",
+]);
 async function run(available: Record<string, unknown>) {
   const visited: string[] = [], lockFilters: unknown[] = [], dates: string[] = [];
   const client = { from: () => { let model = ""; const query = {
@@ -35,20 +40,26 @@ async function run(available: Record<string, unknown>) {
 }
 async function main() {
   const serialized = JSON.stringify(original);
-  const oldest = await run({ [r34]: original });
-  assert.deepEqual(oldest.visited, [NBA_MODEL_RELEASE, r35, r34]);
-  assert.deepEqual(oldest.result.get(42), original);
-  const continued = reconcileNbaMarketConsequence({ independentMargin: 10, independentTotal: 240,
-    law: { marginSigma: 12, totalSigma: 18 }, spreadHome: -5.5, totalLine: 220,
-    context: { ...context, evaluatedAt: "2026-11-04T12:00:00Z", priceRows: [], previousState: oldest.result.get(42)! } }).state;
-  assert.equal(continued.knowledgeAt, original.knowledgeAt);
-  assert.deepEqual(continued.anchors, original.anchors, "R34-only future fixture enters R36 without renewing source clocks/anchors");
-  assert.equal(JSON.stringify(original), serialized);
-  assert.deepEqual((await run({ [r35]: original, [r34]: original })).visited, [NBA_MODEL_RELEASE, r35]);
-  assert.deepEqual((await run({ [NBA_MODEL_RELEASE]: original, [r35]: original, [r34]: original })).visited, [NBA_MODEL_RELEASE]);
-  await assert.rejects(run({ [r35]: { ...original, eventId: "wrong" }, [r34]: original }), /corrupt/);
+  for (const [index, release] of predecessors.entries()) {
+    const carried = await run({ [release]: original });
+    assert.deepEqual(carried.visited, [NBA_MODEL_RELEASE, ...predecessors.slice(0, index + 1)]);
+    assert.deepEqual(carried.result.get(42), original);
+    const continued = reconcileNbaMarketConsequence({ independentMargin: 10, independentTotal: 240,
+      law: { marginSigma: 12, totalSigma: 18 }, spreadHome: -5.5, totalLine: 220,
+      context: { ...context, inputFingerprint: "new-release-same-numeric-input", evaluatedAt: "2026-11-04T12:00:00Z",
+        priceRows: [], previousState: carried.result.get(42)! } }).state;
+    assert.equal(continued.knowledgeAt, original.knowledgeAt);
+    assert.deepEqual(continued.anchors, original.anchors, `${release} retains exact original source clocks/anchors`);
+    assert.deepEqual(continued.unresolvedInputRevisions, original.unresolvedInputRevisions,
+      "release identity alone cannot introduce a numerical input revision");
+    assert.equal(JSON.stringify(original), serialized);
+  }
+  const available = Object.fromEntries(predecessors.map(release => [release, original]));
+  assert.deepEqual((await run(available)).visited, [NBA_MODEL_RELEASE, predecessors[0]]);
+  assert.deepEqual((await run({ ...available, [NBA_MODEL_RELEASE]: original })).visited, [NBA_MODEL_RELEASE]);
+  for (const release of predecessors) await assert.rejects(run({ [release]: { ...original, eventId: "wrong" } }), /corrupt/);
   const absent = await run({ arbitrary_older_release: original });
-  assert.deepEqual(absent.visited, [NBA_MODEL_RELEASE, r35, r34]); assert.equal(absent.result.size, 0);
-  console.log("NBA paid coverage knowledge: bounded R35/R34 continuation, original anchors and current/legacy precedence passed");
+  assert.deepEqual(absent.visited, [NBA_MODEL_RELEASE, ...predecessors]); assert.equal(absent.result.size, 0);
+  console.log("NBA knowledge continuity: all exact R37/R36/R35/R34 predecessors, unchanged anchors and current/nearest precedence passed");
 }
 void main().catch(error => { console.error(error); process.exitCode = 1; });
