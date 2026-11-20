@@ -17,6 +17,7 @@ import type { NbaProfessionalMarketReader } from "./nbaProfessionalMarketReader"
 import { resolveNbaNamedBookPosture, resolveNbaConsequencePosture } from "./nbaNamedBookPosture";
 import { readNbaPricedMarketMovement, type NbaPriceCoordinateLaw } from "./nbaPricedMarketMovement";
 import { NBA_MARKET_CONSEQUENCE_RELEASE, reconcileNbaMarketConsequence, type NbaMarketConsequenceContext } from "./nbaMarketConsequence";
+import { predictNbaConditionalTotalShadow } from "../../automodel/nba/nbaConditionalTotalShadow";
 
 function episodeIncludesSource(episode: { authority: string; selectedSource: string | null; equivalentSources?: readonly string[] } | undefined, book: string) {
   return episode?.authority === "causal_authority" && (episode.selectedSource === book || episode.equivalentSources?.includes(book) === true);
@@ -105,6 +106,8 @@ export function buildNbaProfessionalCandidate(args: {
   marketContext?: NbaMarketConsequenceContext;
   /** Offline incumbent contrast ONLY. The sole production writer never sets this. */
   retainLegacyScoreReconciliation?: boolean;
+  /** Read-only research opt-in. Scheduled writers never enable this candidate. */
+  conditionalTotalShadow?: boolean;
 }) {
   if (!args.artifact.distribution) {
     throw new Error("NBA professional candidate requires calibrated residual distribution state.");
@@ -164,20 +167,34 @@ export function buildNbaProfessionalCandidate(args: {
     .flatMap(b => b.proposals.filter(p => p.market === "spread" && Math.abs(p.observedLocationDelta) > 1e-9)) ?? [];
   const totalEvidence = consequence?.books.filter(b => episodeIncludesSource(consequence.arbitration.total, b.book))
     .flatMap(b => b.proposals.filter(p => p.market === "total" && Math.abs(p.observedLocationDelta) > 1e-9)) ?? [];
-  const final = consequence ? { ...baselineFinal, release: consequence.release,
+  const finalBase = consequence ? { ...baselineFinal, release: consequence.release,
     homeScore: consequence.homeScore, awayScore: consequence.awayScore, marginHome: consequence.margin, total: consequence.total,
     spreadResidual: consensus.spreadHome === null ? null : consequence.margin + consensus.spreadHome,
     totalResidual: consensus.totalLine === null ? null : consequence.total - consensus.totalLine,
     movementQualified: spreadEvidence.length > 0, movementApplied: consequence.marginApplied,
     totalMovementQualified: totalEvidence.length > 0, totalMovementApplied: consequence.totalApplied,
     marketApplied: { margin: consequence.marginApplied, total: consequence.totalApplied } } : baselineFinal;
+  const conditionalTotal = args.conditionalTotalShadow && args.marketReader
+    ? predictNbaConditionalTotalShadow({ independentTotal: independent.total, featureRow: args.featureRow,
+        reader: args.marketReader, evaluatedAt: args.marketContext?.evaluatedAt ?? args.marketReader.evaluatedAt, law: priceLaw }) : null;
+  const totalApplied = conditionalTotal?.status === "shadow_applied";
+  const final = totalApplied ? { ...finalBase,
+    release: conditionalTotal.release,
+    total: conditionalTotal.representativeTotal,
+    homeScore: (conditionalTotal.representativeTotal + finalBase.marginHome) / 2,
+    awayScore: (conditionalTotal.representativeTotal - finalBase.marginHome) / 2,
+    totalResidual: consensus.totalLine === null ? null : conditionalTotal.representativeTotal - consensus.totalLine,
+    totalMovementQualified: false, totalMovementApplied: false,
+    marketApplied: { ...finalBase.marketApplied, total: Math.abs(conditionalTotal.representativeTotal - independent.total) > 1e-9 },
+  } : finalBase;
   const probabilities = computeNbaMarketProbabilities({
     projected_home_margin: final.marginHome,
     projected_total: final.total,
     market_spread_home: consensus.spreadHome,
     market_total: consensus.totalLine,
     margin_sd_base: args.artifact.distribution.marginSigma * (consequence?.marginScale ?? 1),
-    total_sd_base: args.artifact.distribution.totalSigma,
+    total_sd_base: totalApplied ? conditionalTotal.sigma : args.artifact.distribution.totalSigma,
+    total_residual_empirical: totalApplied ? conditionalTotal.residualLaw : undefined,
     margin_residual_mixture: args.artifact.distribution.marginCalibration === undefined
       ? undefined
       : {
@@ -227,6 +244,7 @@ export function buildNbaProfessionalCandidate(args: {
     marketReader: args.marketReader ?? null,
     priceLaw,
     marketConsequence: consequence,
+    conditionalTotal,
     continuousMarketDecision: !args.retainLegacyScoreReconciliation,
     final,
     probabilities,
@@ -247,7 +265,8 @@ export function buildNbaProfessionalCandidate(args: {
       effects: consequence ? {
         moneyline: independentPicks.moneyline !== picks.moneyline ? "flipped_by_causal_market_episode" as const : consequence.actions.margin,
         spread: independentPicks.spread !== picks.spread ? "flipped_by_causal_market_episode" as const : consequence.actions.margin,
-        total: independentPicks.total !== picks.total ? "flipped_by_causal_market_episode" as const : consequence.actions.total,
+        total: totalApplied ? "evaluated_by_conditional_total_shadow" as const
+          : independentPicks.total !== picks.total ? "flipped_by_causal_market_episode" as const : consequence.actions.total,
       } : {
         moneyline: independentPicks.moneyline !== picks.moneyline
           ? "flipped_by_validated_spread_score" as const
@@ -257,7 +276,7 @@ export function buildNbaProfessionalCandidate(args: {
           : final.movementQualified
             ? "confirmed_by_validated_spread_read" as const
             : "unchanged_no_qualified_spread_read" as const,
-        total: independentPicks.total !== picks.total
+        total: totalApplied ? "evaluated_by_conditional_total_shadow" as const : independentPicks.total !== picks.total
           ? "flipped_by_validated_total_read" as const
           : final.totalMovementQualified
             ? "confirmed_by_validated_total_read" as const
@@ -358,7 +377,9 @@ export function applyNbaProfessionalCandidate(args: {
             : resolveNbaNamedBookPosture({ reader: candidate.marketReader, market: "moneyline", pickedSide: mlPick, priceLaw: candidate.priceLaw }),
           spread: candidate.marketConsequence ? resolveNbaConsequencePosture({ consequence: candidate.marketConsequence, market: "spread", pickedSide: spreadPick })
             : resolveNbaNamedBookPosture({ reader: candidate.marketReader, market: "spread", pickedSide: spreadPick, priceLaw: candidate.priceLaw }),
-          total: candidate.marketConsequence ? resolveNbaConsequencePosture({ consequence: candidate.marketConsequence, market: "total", pickedSide: totalPick })
+          total: candidate.conditionalTotal?.status === "shadow_applied"
+            ? { ...resolveNbaNamedBookPosture({ reader: candidate.marketReader, market: "total", pickedSide: totalPick, priceLaw: candidate.priceLaw }), scoreEffectApplied: false }
+            : candidate.marketConsequence ? resolveNbaConsequencePosture({ consequence: candidate.marketConsequence, market: "total", pickedSide: totalPick })
             : resolveNbaNamedBookPosture({ reader: candidate.marketReader, market: "total", pickedSide: totalPick, priceLaw: candidate.priceLaw }),
         },
         moneyline: {
@@ -398,13 +419,15 @@ export function applyNbaProfessionalCandidate(args: {
         `Professional independent release: ${candidate.modelRelease}.`,
         `Unified projection release: ${candidate.final.release}.`,
         ...(candidate.marketConsequence ? [
-          `Continuous margin decision: ${candidate.marketConsequence.actions.margin}; Total: ${candidate.marketConsequence.actions.total}.`,
+          `Continuous margin decision: ${candidate.marketConsequence.actions.margin}; Total: ${candidate.conditionalTotal?.status === "shadow_applied" ? "offline conditional shadow; incumbent consequence is diagnostic only" : candidate.marketConsequence.actions.total}.`,
           `Market evidence epoch: ${candidate.marketConsequence.state.knowledgeAt}; numerical independent revisions preserve source knowledge; only attested coordinate-specific consumed information retires overlap.`,
           ...candidate.marketConsequence.reasons,
         ] : [candidate.final.movementApplied
           ? "Qualified target-excluded categorical Spread reader changed the final margin; no consensus weight was applied."
           : "Independent score remained authoritative; no categorical Spread correction was applied.",
-        candidate.final.totalMovementApplied
+        candidate.conditionalTotal?.status === "shadow_applied"
+          ? "Offline conditional Total shadow supplies the representative median and empirical residual law; incumbent Total movement is diagnostic only."
+          : candidate.final.totalMovementApplied
           ? "Qualified target-excluded categorical Total disagreement changed the final total; no consensus weight was applied."
           : "Independent total remained authoritative; no categorical Total correction was applied."]),
       ],

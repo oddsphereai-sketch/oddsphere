@@ -70,6 +70,8 @@ export type NbaMarketProbabilities = {
   /** Effective standard deviations used (audit). */
   margin_sd_used: number;
   total_sd_used: number;
+  /** Present only for an explicitly enabled, serialized shadow residual law. */
+  total_residual_empirical_used?: NbaEmpiricalResidualLaw;
   /** Full margin-distribution state required for exact-line recomputation. */
   margin_distribution_used: {
     family: "normal_residual" | "two_component_normal_mixture";
@@ -78,6 +80,27 @@ export type NbaMarketProbabilities = {
     tail_sigma_multiplier: number;
   };
 };
+
+export type NbaEmpiricalResidualLaw = { release: string; residuals: readonly number[] };
+
+export function nbaEmpiricalTotalOverProbability(args: {
+  law: NbaEmpiricalResidualLaw; thresholdResidual: number; scale?: number;
+}): number {
+  const { residuals, release } = args.law, scale = args.scale ?? 1;
+  if (!release || residuals.length < 100 || residuals.length > 5000 || !Number.isFinite(args.thresholdResidual) ||
+      !Number.isFinite(scale) || scale <= 0 || residuals.some((v, i) => !Number.isFinite(v) || i > 0 && v < residuals[i - 1]!)) {
+    throw new Error("Invalid NBA empirical Total residual law");
+  }
+  const threshold = args.thresholdResidual / scale;
+  // Mid-rank distribution with one observation of prior mass at either tail.
+  // The complete calibration residuals own every exact-line recomputation.
+  let greater = 0, equal = 0;
+  for (const residual of residuals) {
+    if (residual > threshold) greater++;
+    else if (residual === threshold) equal++;
+  }
+  return (1 + greater + .5 * equal) / (residuals.length + 2);
+}
 
 export type NbaDistributionInput = {
   /** Projected home_score - away_score from the model. */
@@ -92,6 +115,8 @@ export type NbaDistributionInput = {
   margin_sd_base: number;
   /** Base total SD prior. */
   total_sd_base: number;
+  /** Offline Total candidate only; absent for every existing production call. */
+  total_residual_empirical?: NbaEmpiricalResidualLaw;
   /** Optional calibrated heavy-tail margin residual distribution. */
   margin_residual_mixture?: {
     core_sigma_multiplier: number;
@@ -181,7 +206,10 @@ export function computeNbaMarketProbabilities(
   let totalUnder: number | null = null;
   if (input.market_total !== null) {
     totalOver = clamp01(
-      1 - normalCdf((input.market_total - input.projected_total) / totalSd),
+      input.total_residual_empirical
+        ? nbaEmpiricalTotalOverProbability({ law: input.total_residual_empirical,
+            thresholdResidual: input.market_total - input.projected_total, scale: totalSd / input.total_sd_base })
+        : 1 - normalCdf((input.market_total - input.projected_total) / totalSd),
     );
     totalUnder = clamp01(1 - totalOver);
   }
@@ -195,6 +223,7 @@ export function computeNbaMarketProbabilities(
     total_under_prob: totalUnder,
     margin_sd_used: marginSd,
     total_sd_used: totalSd,
+    ...(input.total_residual_empirical ? { total_residual_empirical_used: input.total_residual_empirical } : {}),
     margin_distribution_used: input.margin_residual_mixture === undefined
       ? {
           family: "normal_residual",
