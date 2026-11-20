@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchNbaBdlHistoricalRows } from "./balldontlieNbaHistorical";
+import { retainNbaPlayerStatEvidence, type NbaPlayerStatEvidenceReceipt } from "./nbaPlayerStatEvidence";
 import {
   decodeNbaPlayerPropsPrivatePayload,
   encodeNbaPlayerPropsPrivatePayload,
@@ -58,7 +59,10 @@ export async function readNbaPlayerPropsCurrentState(args: {
 export async function writeNbaPlayerPropsCurrentState(args: {
   client: SupabaseClient;
   state: NbaPlayerPropsCurrentState;
-}): Promise<{ jsonBytes: number; gzipBytes: number }> {
+  writerRunId?: string;
+  collectedGameIds?: readonly number[];
+  statEvidenceDeadlineMs?: number;
+}): Promise<{ jsonBytes: number; gzipBytes: number; statEvidence?: NbaPlayerStatEvidenceReceipt }> {
   validateState(args.state, args.state.season);
   const payload = encodeNbaPlayerPropsPrivatePayload(args.state, "current_state");
   const retention = new Date(Date.parse(args.state.updatedAt) + RETENTION_DAYS * 86_400_000).toISOString();
@@ -76,7 +80,11 @@ export async function writeNbaPlayerPropsCurrentState(args: {
     updated_at: args.state.updatedAt,
   }, { onConflict: "snapshot_key" });
   if (error) throw new Error(`NBA props current-state write failed: ${error.message}`);
-  return { jsonBytes: payload.uncompressedBytes, gzipBytes: payload.compressedBytes };
+  const statEvidence = args.collectedGameIds === undefined ? undefined : await retainNbaPlayerStatEvidence({
+    client: args.client, state: args.state, writerRunId: args.writerRunId, gameIds: args.collectedGameIds, deadlineMs: args.statEvidenceDeadlineMs,
+  });
+  return { jsonBytes: payload.uncompressedBytes, gzipBytes: payload.compressedBytes,
+    ...(statEvidence ? { statEvidence } : {}) };
 }
 
 export function mergeNbaPlayerPropsCurrentState(args: {
@@ -127,6 +135,7 @@ export async function collectNbaPlayerPropsCurrentState(args: {
   maxPages?: number;
 }): Promise<{
   state: NbaPlayerPropsCurrentState;
+  collectedGameIds: readonly number[];
   providerRequests: number;
   gamesAdded: number;
   boxesAdded: number;
@@ -158,7 +167,7 @@ export async function collectNbaPlayerPropsCurrentState(args: {
       capturedAt: new Date().toISOString(),
       games: [], boxes: [], advanced: [],
     });
-    return { state: merged.state, providerRequests: gameRequests, gamesAdded: 0, boxesAdded: 0, advancedAdded: 0, corrected: 0 };
+    return { state: merged.state, collectedGameIds: [], providerRequests: gameRequests, gamesAdded: 0, boxesAdded: 0, advancedAdded: 0, corrected: 0 };
   }
   const gameIds = games.map((row) => row.gameId);
   const playerRows = await fetchPlayerRowsInBatches({
@@ -180,6 +189,7 @@ export async function collectNbaPlayerPropsCurrentState(args: {
   });
   return {
     state: merged.state,
+    collectedGameIds: games.map(game => game.gameId),
     providerRequests: gameRequests + playerRows.requests,
     gamesAdded: merged.gamesAdded,
     boxesAdded: merged.boxesAdded,
