@@ -8,13 +8,15 @@ import type { cbbCurrentSplitEvidence } from "@/lib/cbb/owlsSplitEvidence";
 import { cbbFixtureChronology,adaptCbbProvisionalGame, cbbOfficialGameResult } from "./adaptCbbProvisionalToDailyEdge";
 import { mergeCbbReaderEvidence,cbbQualifiedNamedSplitSection,cbbQualifiedPublicSplitSection,type CbbPreparedNamedSplitSections,type CbbPreparedPublicSplitSections } from "./cbbReaderMarketEvidence";
 import { accumulateCbbPublishedQuotes, BOOK_DISPLAY_HISTORY_RELEASE, type BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
+import { canRebuildCbbUnlockedOrientation, cbbOrientationArchiveIdentity, CBB_UNLOCKED_ORIENTATION_RELEASE, type CbbOrientationRebuildReceipt } from "./cbbUnlockedOrientation";
 
-// Schema r2 remains compatible with in-flight readers; publisher r9 versions
-// the display-evidence publication repair without changing model behavior.
+// Schema R2 stays compatible with in-flight readers. The separate publication
+// release versions the unlocked input repair without reinterpreting old locks.
 export const CBB_MEMBER_GAME_STORE_RELEASE="cbb_member_game_store_2026_11_02_r2_preserved_market_evidence" as const;
+export const CBB_MEMBER_GAME_PUBLICATION_RELEASE="cbb_member_game_publication_2026_11_20_r3_unlocked_orientation" as const;
 export const CBB_COMPATIBLE_MEMBER_STORE_RELEASES=[CBB_MEMBER_GAME_STORE_RELEASE,"cbb_member_game_store_2026_10_29_r1_single_leased_writer"] as const;
 type StoreRelease=typeof CBB_COMPATIBLE_MEMBER_STORE_RELEASES[number];
-export type CbbStoredMemberGame={release:StoreRelease;snapshot:CbbProvisionalSnapshot;memberGame:DailyEdgeGameDto};
+export type CbbStoredMemberGame={release:StoreRelease;snapshot:CbbProvisionalSnapshot;memberGame:DailyEdgeGameDto;fixtureOrientationRebuild?:CbbOrientationRebuildReceipt};
 const key=(id:number)=>`cbb::member-game::${id}`;
 /** A provider can reuse/correct an event ID to a different matchup. An older
  * unlocked forecast is evidence for its original schools, never the new pair. */
@@ -71,13 +73,21 @@ export async function readCbbMemberGames(ids:number[],db?:typeof supabase):Promi
 /** The only CBB prediction writer. Caller must hold prediction_pipeline:cbb.
  * This function never calls a provider or regrades a locked public record. */
 export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisionalBoard|null;
-  homeLogo:string|null;awayLogo:string|null;now:string;splitEvidence?:ReturnType<typeof cbbCurrentSplitEvidence>|null;
+  homeLogo:string|null;awayLogo:string|null;now:string;clock?:()=>string;splitEvidence?:ReturnType<typeof cbbCurrentSplitEvidence>|null;
   marketQuotes?:CbbQuote[];bookHistory?:BookDisplayFeed|null;capturedNamedSections?:CbbPreparedNamedSplitSections;capturedPublicSections?:CbbPreparedPublicSplitSections},db?:typeof supabase):Promise<{record:CbbStoredMemberGame;written:boolean}>{
   const client=db??(await import("@/lib/db/supabase")).supabase;
-  const existing=await readCbbMemberGame(args.game.id,client);
+  const original=await readCbbMemberGame(args.game.id,client);
+  let existing=original;
   if(existing&&existing.snapshot.lockedAt!==null)return {record:existing,written:false};
-  if(existing&&!cbbStoredMemberFixtureMatches(existing,args.game))
-    throw new Error("CBB stored school identity changed; fixture-clock repair is not a matchup migration");
+  const orientationRebuild=existing&&!cbbStoredMemberFixtureMatches(existing,args.game)&&
+    canRebuildCbbUnlockedOrientation(existing,args.game,args.now);
+  if(existing&&!cbbStoredMemberFixtureMatches(existing,args.game)){
+    if(!orientationRebuild||!args.candidate?.gameForecast||args.candidate.gameId!==args.game.id||
+      args.candidate.gameForecast.homeId!==args.game.home_team.id||args.candidate.gameForecast.awayId!==args.game.visitor_team.id||
+      !(Date.parse(args.candidate.asOf)>=Date.parse(existing.snapshot.capturedAt)))
+      throw new Error("CBB stored school identity changed; fixture-clock repair is not a matchup migration");
+    existing=null; // Never carry the old score, selection, flow or evidence into the reversed fixture.
+  }
   if(Date.parse(args.now)>=Date.parse(args.game.date)){
     if(existing&&Date.parse(existing.snapshot.startsAt)!==Date.parse(args.game.date))
       throw new CbbFixtureClockError("CBB corrected fixture already started; preserving prior without a post-start lock");
@@ -93,7 +103,7 @@ export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisi
   const history=freezing?empty:accumulateCbbPublishedQuotes(captured,retained?[retained.memberGame]:[],null,evidenceAt);
   // A future lock freezes the existing published decision and evidence. It
   // must not rebuild the DTO with empty split/quote arguments at the cutoff.
-  const candidate=freezing?structuredClone(existing.memberGame):adaptCbbProvisionalGame({game:args.game,snapshot:next,
+  const candidate=freezing?structuredClone(existing!.memberGame):adaptCbbProvisionalGame({game:args.game,snapshot:next,
     homeLogo:args.homeLogo,awayLogo:args.awayLogo,now:args.now,splitEvidence:args.splitEvidence,marketQuotes:args.marketQuotes});
   const memberGame=freezing?candidate:mergeCbbReaderEvidence({sport:"cbb",games:[candidate]} as Parameters<typeof mergeCbbReaderEvidence>[0],history,[],evidenceAt).games[0];
   if(!freezing){
@@ -118,11 +128,29 @@ export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisi
       market.lockedLineAmerican=market.priceAmerican;market.lockedLineAt=next.lockedAt;
     }
   }
-  const record:CbbStoredMemberGame={release:CBB_MEMBER_GAME_STORE_RELEASE,snapshot:next,memberGame};
+  let rebuildReceipt=original?.fixtureOrientationRebuild;
+  if(orientationRebuild&&original){
+    const latest=await readCbbMemberGame(args.game.id,client);
+    const archive=cbbOrientationArchiveIdentity(original);
+    if(!latest||!canRebuildCbbUnlockedOrientation(latest,args.game,args.clock?.()??args.now)||
+      cbbOrientationArchiveIdentity(latest).sha256!==archive.sha256)throw new Error("CBB orientation original changed before publication");
+    const forecast=original.snapshot.board.gameForecast!;
+    rebuildReceipt={release:CBB_UNLOCKED_ORIENTATION_RELEASE,archivedSnapshotKey:archive.key,originalSha256:archive.sha256,
+      rebuiltAt:args.now,priorHomeId:forecast.homeId,priorAwayId:forecast.awayId,
+      homeId:args.game.home_team.id,awayId:args.game.visitor_team.id};
+    const {error}=await client.from("lab_response_snapshots").upsert({snapshot_key:archive.key,kind:"daily_edge",sport:"cbb",slate_date:null,
+      payload:{release:CBB_UNLOCKED_ORIENTATION_RELEASE,archivedAt:args.now,originalSha256:archive.sha256,original:structuredClone(original)},
+      payload_version:CBB_UNLOCKED_ORIENTATION_RELEASE,source:"cbb_prediction_pipeline",generated_at:args.now,updated_at:args.now,
+      expires_at:"2099-01-01T00:00:00.000Z",stale_until:"2099-01-01T00:00:00.000Z"},{onConflict:"snapshot_key",ignoreDuplicates:true});
+    if(error)throw new Error(`CBB orientation original archive failed: ${error.message}`);
+    if(!canRebuildCbbUnlockedOrientation(original,args.game,args.clock?.()??args.now))throw new Error("CBB orientation rebuild crossed original or new cutoff");
+  }
+  const record:CbbStoredMemberGame={release:CBB_MEMBER_GAME_STORE_RELEASE,snapshot:next,memberGame,
+    ...(rebuildReceipt?{fixtureOrientationRebuild:rebuildReceipt}:{})};
   const now=Date.parse(args.now);
   if(!Number.isFinite(now))throw new Error("CBB writer clock invalid");
   const {error}=await client.from("lab_response_snapshots").upsert({snapshot_key:key(args.game.id),kind:"daily_edge",sport:"cbb",
-    slate_date:null,payload:record,payload_version:CBB_MEMBER_GAME_STORE_RELEASE,source:"cbb_prediction_pipeline",
+    slate_date:null,payload:record,payload_version:CBB_MEMBER_GAME_PUBLICATION_RELEASE,source:"cbb_prediction_pipeline",
     generated_at:args.now,updated_at:args.now,expires_at:new Date(now+366*86_400_000).toISOString(),
     stale_until:new Date(now+366*86_400_000).toISOString()},{onConflict:"snapshot_key"});
   if(error)throw new Error(`CBB member game write failed: ${error.message}`);

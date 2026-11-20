@@ -1090,6 +1090,21 @@ See `model-audits/2026-11-11-player-props-bounded-source-hash.md`.
 
 # Model change safety protocol
 
+## CBB November 20 exact-pair prelock orientation repair R60
+
+The owner's urgent missing UAB–George Washington repair is limited to the input/publication
+behavior documented in `model-audits/2026-11-20-cbb-unlocked-orientation.md`. Model/calibration R8
+and every numerical/grade/stake rule remain unchanged. Pipeline R60, publication R3 and the
+R1 transition receipt identify the new source-handling behavior. Only the same two exact schools,
+unlocked and before both old/new T−60, can receive a fully recomputed forecast after the complete
+original is preserved under an insert-only content-addressed archive. A late or unrelated change
+stays quarantined; a locked payload retains exact writer and reader precedence. Same-orientation
+inputs produce zero promotions/demotions. Restored cards must be evaluated through existing
+rules and counted separately from current-source movement. No historical correction is included.
+Focused/full checks, clean fresh-main integration, protected PR and actual deployed writer,
+coverage, archive and live-card proof are required before declaring this repair live.
+
+
 ## Owner-approved provisional exception: CBB grouped joint outcome R8 — November 18
 
 After reviewing the exact R2 replacement, its already-seen 110-game comparison,

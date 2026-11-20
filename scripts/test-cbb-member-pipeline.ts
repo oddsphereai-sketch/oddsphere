@@ -264,6 +264,25 @@ async function verifiedWestFloridaHandoff(){
   assert(quarantineBoard?.cbbScheduleCoverage?.eligibleGameIds.includes(fixture.id),"The corrected canonical matchup remains visible in the existing schedule");
   assert(!quarantineBoard?.cbbScheduleCoverage?.modelEligibleGameIds.includes(fixture.id));
   assert(quarantined.providerWarnings.some(p=>p.includes("changed matchup")&&p.includes(String(fixture.id))));
+  const originalFixture=structuredClone(stored.get(`cbb::member-game::${fixture.id}`));
+  const reversedFixture={...fixture,home_team:fixture.visitor_team,visitor_team:fixture.home_team};
+  const reversedSchedule={...canonical,games:canonical.games.map(g=>({...g,
+    homeTeam:g.awayTeam,homeTeamDisplayName:g.awayTeamDisplayName,homeTeamLogo:g.awayTeamLogo,
+    awayTeam:g.homeTeam,awayTeamDisplayName:g.homeTeamDisplayName,awayTeamLogo:g.homeTeamLogo}))};
+  const reversedOfficial={...official,competitions:official.competitions.map(c=>({...c,competitors:c.competitors.map(t=>({...t,
+    homeAway:t.homeAway==="home"?"away":"home"}))}))};
+  const rebuilt=await refreshCbbMemberBoard({...args,
+    provider:{calls:0,gamesForDates:async()=>[reversedFixture]} as unknown as CbbBallDontLieClient,
+    loadSchedule:async()=>reversedSchedule,fetcher:(async()=>new Response(JSON.stringify({events:[reversedOfficial]}),{status:200})) as typeof fetch});
+  assert.equal(rebuilt.published,1,"An exact, future unlocked orientation rebuild becomes an analyzed card");
+  assert.deepEqual(rebuilt.orientationRebuildIds,[fixture.id]);
+  assert(!rebuilt.providerWarnings.some(p=>p.includes("changed matchup")));
+  const updated=stored.get(`cbb::member-game::${fixture.id}`) as {snapshot:{board:{gameForecast:{homeId:number;awayId:number}}};memberGame:{homeTeamDisplayName:string}};
+  assert.equal(updated.snapshot.board.gameForecast.homeId,fixture.visitor_team.id);
+  assert.equal(updated.snapshot.board.gameForecast.awayId,fixture.home_team.id);
+  assert.equal(updated.memberGame.homeTeamDisplayName,"West Florida Argonauts");
+  const archived=[...stored].find(([key])=>key.startsWith(`cbb::orientation-original::${fixture.id}::`));
+  assert(archived);assert.deepEqual((archived[1] as {original:unknown}).original,originalFixture);
   console.log("PASS full West Florida pipeline: corrected schedule/raw provider school732, no unnecessary sync, complete publication, wrong-school refusal and no mismatched writes");
   }finally{globalThis.Date=realDate;}
 }
