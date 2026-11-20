@@ -85,7 +85,7 @@ import {
 } from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_11_19_r116_ready_game_admission" as const;
+  "nfl_player_props_writer_2026_11_19_r117_forecast_strength_source_resilience" as const;
 export const NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES = 60 as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
@@ -435,7 +435,20 @@ export async function runNflPlayerPropsProductionWriter(args: {
   const aiLockFrames:NflLockHandoff[]=[];
   const identitySourceFailures=new Map<string,NflIdentityFailureCapture>(),identitySourceFailureAttempts=new Set<string>();let identityCaptureConstructionFailures=0;
   const nativeAiBaseline=nextBoard;
-  let durablePrevious=previous,seasonStateWritten=false;
+  // A cached refresh returns the exact authoritative persisted object. Rewriting
+  // that object cannot add evidence, and a redundant failure must not block the
+  // member snapshot. New/fetched/changed state still uses the original write.
+  let durablePrevious=previous,seasonStateWritten=currentSeason.apiCalls===0&&currentSeason.state===priorCurrentSeasonState;
+  let sourceFailureFlush:Promise<{status:string;reason?:string}[]>|null=null;
+  const flushIdentitySourceFailures=()=>sourceFailureFlush??=(async()=>{
+    if(!args.apply)return[];
+    if(Date.now()-Date.parse(args.now)>=439000)return[...identitySourceFailures.values()].map(()=>({status:"unavailable",reason:"writer_deadline"}));
+    return Promise.all([...identitySourceFailures.values()].map(async capture=>{
+      try{return await appendNflIdentityFailureEvidence(args.client,capture);}
+      catch{return{status:"unavailable",reason:"source_failure_storage_unavailable"};}
+    }));
+  })();
+  try{
   let publicationQueue:Promise<void>=Promise.resolve(),publicationFailure:unknown,publicationFailed=false;
   const publishedSources=new Map<string,{packet:string;review:string|null;lookupAvailable:boolean}>();
   // Review lookup failure is not source/medical withdrawal authority. A new
@@ -617,9 +630,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
   reportNflWriterResourceStage(NFL_PLAYER_PROPS_WRITER_RELEASE, "private_tracking_ready", resourceStartedAt);
   // Essential member publication and tracking precede this bounded private flush.
   // No retry, review claim, provider call or raw source payload enters telemetry.
-  const sourceFailureCaptureResults=Date.now()-Date.parse(args.now)<439000
-    ?await Promise.all([...identitySourceFailures.values()].map(capture=>appendNflIdentityFailureEvidence(args.client,capture)))
-    :[...identitySourceFailures.values()].map(()=>({status:"unavailable",reason:"writer_deadline"}));
+  const sourceFailureCaptureResults=await flushIdentitySourceFailures();
   const aiReviewRuntime=aiReviewOutcome?summarizePropsAiRuntimeHealth({...aiReviewOutcome,findings:[...aiReviewOutcome.findings,...[...reviewAuthorityUnavailable.keys()].map(game=>`lock_prior_authority_unavailable:${game}`)]},new Date().toISOString()):undefined;
   const identityFailureEvidence={captures:identitySourceFailures.size,constructionFailures:identityCaptureConstructionFailures,
     statuses:Object.fromEntries([...new Set(sourceFailureCaptureResults.map(r=>r.status))].map(status=>[status,sourceFailureCaptureResults.filter(r=>r.status===status).length]))};
@@ -703,6 +714,9 @@ export async function runNflPlayerPropsProductionWriter(args: {
       ...(!sourceAwareReferenceOffersAvailable ? ["NFL_PLAYER_PROPS_SOURCE_AWARE_REFERENCE_OFFERS_UNAVAILABLE"] : []),
     ])].sort(),
   };
+  } finally {
+    await flushIdentitySourceFailures();
+  }
 }
 
 function countByNormalizedBook(rows: readonly { sportsbook: string }[]): Record<string, number> {

@@ -1,5 +1,5 @@
 {
-  "decisionRelease": "nfl_player_props_decision_2026_10_28_r39_owls_reference_prices",
+  "decisionRelease": "nfl_player_props_decision_2026_11_19_r40_forecast_strength",
   "modelRelease": "nfl_player_props_distribution_model_2026_10_28_r33_owls_reference_prices",
   "calibrationRelease": "nfl_player_props_distribution_calibration_2026_10_28_r35_owls_reference_prices",
   "touchdownModelRelease": "nfl_player_props_anytime_td_model_2026_08_25_r3_shared_context",
@@ -13,6 +13,7 @@
     "touchdown": "ranked_expected_distinct_scorers_by_team",
     "changesProbabilitiesPricesGradesOrActionability": true
   },
+  "bestAngleForecastStrength": {"minimumUnconditionalWinProbability": 0.62, "minimumAmericanPrice": -200, "weakValueBestBecomesLean": true, "changesNumericalForecast": false},
   "lockLeadMinutes": 60,
   "maximumQuoteAgeHours": 6,
   "maximumRawMarketDivergence": 0.48,

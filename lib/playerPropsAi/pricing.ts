@@ -1,7 +1,8 @@
 import { assessConfidenceLeanPrice } from "../services/dailyEdge/confidenceLeanPrice";
 import type { AcceptedPlayerLaw } from "./law";
 import { lawForecast,lawEventMass } from "./law";
-import { propsAiLawHasPairedConfidence,propsAiLawUsesCanonicalBookPairing,propsAiLawHasExactMass,propsAiLawGradeRelease } from "./releases";
+import { propsAiLawHasPairedConfidence,propsAiLawUsesCanonicalBookPairing,propsAiLawHasExactMass,propsAiLawGradeRelease,propsAiLawUsesForecastStrength } from "./releases";
+import {qualifiesExactPropsBestForecast} from './forecastStrength';
 import {assessExactPropsConfidencePrice} from './exactConfidencePrice';
 import {quoteBook} from "./executionQuotes";
 import { invariant } from "./evidence";
@@ -62,6 +63,11 @@ export function gradeAiEventFromExactPairedMass(args:ExactEventGradeArgs){
   else if(args.confidence>=1&&economics.numerator>BigInt(0)||args.confidence===2&&confidenceLean?.qualified)grade="Lean";
   return{grade,ev:economics.ev,confidenceLean};
 }
+/** R5 law / R7 grade. All older admitted laws keep the functions above. */
+export function gradeAiEventFromForecastMass(args:ExactEventGradeArgs){
+  const priced=gradeAiEventFromExactPairedMass(args);
+  return {...priced,grade:priced.grade==='Best Angle'&&!qualifiesExactPropsBestForecast(args.win,args.total,args.american)?'Lean' as const:priced.grade};
+}
 export function priceAiLaw(args: { law: AcceptedPlayerLaw; market: string; quotes: AiExecutionQuote[]; now: string;
   maxAgeMs: number; confidence: number; exception: string | null; milestone?: boolean }) {
   const exact=propsAiLawHasExactMass(args.law.release),gradeRelease=propsAiLawGradeRelease(args.law.release),canonicalBooks=propsAiLawUsesCanonicalBookPairing(args.law.release);
@@ -84,7 +90,7 @@ export function priceAiLaw(args: { law: AcceptedPlayerLaw; market: string; quote
     const opposing = eligible.find(o => (canonicalBooks?quoteBook(o.book)===quoteBook(q.book):o.book===q.book) && o.provider === q.provider && o.line === q.line && o.side !== q.side && o.side !== "yes" && Math.abs(Date.parse(o.confirmedAt!)-Date.parse(q.confirmedAt!))<=5*60000);
     const mass=exact?lawEventMass(args.law,args.market,q.line,args.milestone||q.side==="yes"):null;
     const exactArgs=mass?{win:side==="under"?mass.under:mass.over,loss:side==="under"?mass.over:mass.under,push:mass.push,total:mass.total,american:q.american,opposingAmerican:opposing?.american??null,confidence:args.confidence,exception:args.exception}:null;
-    const {grade,ev,confidenceLean}=exactArgs?(propsAiLawHasPairedConfidence(args.law.release)?gradeAiEventFromExactPairedMass(exactArgs):gradeAiEventFromMass(exactArgs)):gradeAiEvent({win,loss,american:q.american,opposingAmerican:opposing?.american??null,confidence:args.confidence,exception:args.exception});
+    const {grade,ev,confidenceLean}=exactArgs?(propsAiLawUsesForecastStrength(args.law.release)?gradeAiEventFromForecastMass(exactArgs):propsAiLawHasPairedConfidence(args.law.release)?gradeAiEventFromExactPairedMass(exactArgs):gradeAiEventFromMass(exactArgs)):gradeAiEvent({win,loss,american:q.american,opposingAmerican:opposing?.american??null,confidence:args.confidence,exception:args.exception});
     const fairWin=exactArgs?.win??win,fairLoss=exactArgs?.loss??loss;
     const decision={ gradeRelease, grade, forecast, quote: q, side, probability: win, loss, push: forecast.push,
       expectedValue: ev, fairAmerican: fairWin > 0 && fairLoss > 0 ? fairWin >= fairLoss ? -100 * fairWin / fairLoss : 100 * fairLoss / fairWin : null,
@@ -95,6 +101,10 @@ export function priceAiLaw(args: { law: AcceptedPlayerLaw; market: string; quote
     return [{decision,fraction:exactArgs?exactEventEconomics(exactArgs):null}];
   });
   return candidates.sort((a,b)=>{
+    if(propsAiLawUsesForecastStrength(args.law.release)){
+      const tier=Number(b.decision.grade==='Best Angle')-Number(a.decision.grade==='Best Angle');
+      if(tier)return tier;
+    }
     if(a.fraction&&b.fraction){const difference=b.fraction.numerator*a.fraction.denominator-a.fraction.numerator*b.fraction.denominator;if(difference!==BigInt(0))return difference>BigInt(0)?1:-1;}
     else{const difference=b.decision.expectedValue-a.decision.expectedValue;if(difference)return difference;}
     return a.decision.quote.book.localeCompare(b.decision.quote.book);

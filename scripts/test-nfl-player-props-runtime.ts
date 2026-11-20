@@ -79,11 +79,11 @@ import {
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
 assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_28_r22_owls_reference_prices");
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_28_r40_owls_reference_prices");
-assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_28_r43_owls_reference_prices");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_11_19_r41_forecast_strength");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_11_19_r44_forecast_strength");
 assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_28_r33_owls_reference_prices");
 assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_28_r35_owls_reference_prices");
-assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_28_r39_owls_reference_prices");
+assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_11_19_r40_forecast_strength");
 assert.equal(expectedRoleArtifact.release,
   "nfl_player_props_expected_role_runtime_2026_10_15_r7_independent_rushing_yards");
 assert.equal(expectedRoleArtifact.marketIndependent, true);

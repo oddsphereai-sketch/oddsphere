@@ -12,11 +12,13 @@ import {digest,etDate} from '../lib/playerPropsAi/evidence';
 import {mergeNflHandoffs} from '../lib/playerPropsAi/nflLockAuthority';
 
 globalThis.fetch=async()=>{throw Error('Actual-writer integration proof forbids HTTP');};
-type Mode='identity'|'unrelated'|'construction'|'append_refused'|'deadline'|'no_owner'|'disabled'|'success';
+type Mode='identity'|'unrelated'|'construction'|'append_refused'|'deadline'|'no_owner'|'disabled'|'success'|'state_failure'|'member_failure'|'settlement_failure'|'append_throw'|'unchanged_state'|'changed_state';
 type ReviewArgs=Parameters<typeof reviewPropsForSite>[0];
 async function run(mode:Mode){
  const fixture=syntheticNflIdentityFailureArgs(),fixed=Date.parse(fixture.observedAt),trace:string[]=[],errors:unknown[]=[],purposes:string[]=[];
  let elapsed=0,builds=0,rpcs=0,reviews=0;
+ const cachedState={season:2026,completeThroughWeek:9};
+ const originalWriteError=new Error('synthetic original durable write failure');
  const sourceError=new Error(mode==='unrelated'?'synthetic unrelated statistics failure':'NFL offered-player identity coverage incomplete:3');
  const protectedBefore=digest(fixture);
  class Clock extends Date{constructor(value?:string|number){super(value??fixed+elapsed);}static now(){return fixed+elapsed;}}
@@ -25,7 +27,7 @@ async function run(mode:Mode){
  const emptyCurrentGame={gameId:fixture.game.id,release:'synthetic-explicit-empty-receipt'};
  const previousSnapshot={...snapshot,source:'synthetic-original-previous'};
  const appendClient={rpc:(name:string,body:{p_writer_run:string;p_capture:evidence.NflIdentityFailureRecord})=>{
-  assert.equal(name,'player_props_ai_append_source_failure_v1');assert.equal(body.p_writer_run,fixture.writerRunId);assert.equal(body.p_capture.writerRunId,fixture.writerRunId);rpcs++;trace.push('private_identity_append');
+  assert.equal(name,'player_props_ai_append_source_failure_v1');assert.equal(body.p_writer_run,fixture.writerRunId);assert.equal(body.p_capture.writerRunId,fixture.writerRunId);rpcs++;trace.push('private_identity_append');if(mode==='append_throw')throw Error('synthetic archive failure');
   assert.equal(body.p_capture.observedAtMeaning,'requested_source_cutoff');
   const decoded=evidence.decodeNflIdentityFailureArchive(body.p_capture) as {nativeHeader:{generatedAt:string};observationsHeader:{generatedAt:string}};
   assert.equal(decoded.nativeHeader.generatedAt,snapshot.generatedAt,'Original source availability is never rewritten to the cutoff');assert.equal(decoded.observationsHeader.generatedAt,fixture.observations.generatedAt);
@@ -58,12 +60,12 @@ async function run(mode:Mode){
    NFL_PLAYER_PROPS_BOARD_RELEASE:'synthetic',NFL_PLAYER_PROPS_CALIBRATION_RELEASE:'synthetic',NFL_PLAYER_PROPS_DECISION_RELEASE:'synthetic',NFL_PLAYER_PROPS_MODEL_RELEASE:'synthetic',NFL_PLAYER_PROPS_SOURCE_AWARE_QUALIFIED_MARKETS:[],
    nflPlayerPropsRuntimePolicy:()=>({maximumQuoteAgeHours:1}),verifyNflPlayerPropsRuntimeParity:()=>{}},
   nflPlayerPropsProductionContract:{buildNflPlayerPropsTrackingRows:()=>[],NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE:'synthetic',reconcileNflPlayerPropsProductionSnapshot:()=>structuredClone(snapshot)},
-  nflPlayerPropsSnapshotStore:{readNflPlayerPropsSnapshot:async()=>previousSnapshot,writeNflPlayerPropsSnapshot:async()=>{trace.push('member_snapshot');}},
+  nflPlayerPropsSnapshotStore:{readNflPlayerPropsSnapshot:async()=>previousSnapshot,writeNflPlayerPropsSnapshot:async()=>{trace.push('member_snapshot');if(mode==='member_failure')throw originalWriteError;}},
   nflPlayerPropsTrackingStore:{updateNflPlayerPropsClosingPrices:async()=>0,updateNflPlayerPropsClosingPricesFromObserver:async()=>0,writeLockedNflPlayerPropsTracking:async()=>{trace.push('official_tracking');}},
   nflPlayerPropsCurrentSeasonState:{NFL_PLAYER_PROPS_CURRENT_SEASON_GAMES_PAGE_MAXIMUM:1,NFL_PLAYER_PROPS_CURRENT_SEASON_STATS_PAGE_MAXIMUM:1,NFL_PLAYER_PROPS_CURRENT_SEASON_TEAM_STATS_PAGE_MAXIMUM:1,
-   readNflPlayerPropsCurrentSeasonState:async()=>null,refreshNflPlayerPropsCurrentSeasonState:async()=>({state:{},apiCalls:0,gamesAdded:0,teamStatsAdded:0,statsAdded:0}),writeNflPlayerPropsCurrentSeasonState:async()=>{trace.push('current_season');}},
+   readNflPlayerPropsCurrentSeasonState:async()=>cachedState,refreshNflPlayerPropsCurrentSeasonState:async()=>({state:mode==='unchanged_state'?cachedState:{...cachedState},apiCalls:0,gamesAdded:0,teamStatsAdded:0,statsAdded:0}),writeNflPlayerPropsCurrentSeasonState:async()=>{trace.push('current_season');if(mode==='state_failure')throw originalWriteError;}},
   nflPlayerPropsSettlement:{NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE:1,NFL_PLAYER_PROPS_SETTLEMENT_MAX_SNAP_PAGES:1,NFL_PLAYER_PROPS_SETTLEMENT_MAX_DESIGNATION_PAGES:1,NFL_PLAYER_PROPS_SETTLEMENT_RELEASE:'synthetic',
-   settleNflPlayerPropsRecords:async()=>{trace.push('settlement');return{pending:0,eligible:0,eligibleGames:0,processedGames:0,deferredGames:0,recordReadLimitReached:false,settled:0,apiCalls:0};},countNflPlayerPropsUnresolvedSettlementIdentities:async()=>0},
+   settleNflPlayerPropsRecords:async()=>{trace.push('settlement');if(mode==='settlement_failure')throw originalWriteError;return{pending:0,eligible:0,eligibleGames:0,processedGames:0,deferredGames:0,recordReadLimitReached:false,settled:0,apiCalls:0};},countNflPlayerPropsUnresolvedSettlementIdentities:async()=>0},
   nflPlayerPropsPrediction:{nflPlayerPropsOverUnderMarketKey:()=>'',nflPlayerPropsTouchdownPlayerKey:()=>'',selectNflPlayerPropsOverForecasts:()=>new Set(),selectNflPlayerPropsTouchdownScorers:()=>new Set()},
   nflPlayerPropsMarketObserverStore:{captureNflPlayerPropsMarketObserver:async()=>{trace.push('market_observer');return{};},captureNflPlayerPropsMarketObserverSafely:async(run:()=>Promise<unknown>)=>run(),readNflPlayerPropsMarketObserverHistory:async()=>({rows:[]})},
   nflPlayerPropsPrivateTrackingStore:{captureNflPlayerPropsPrivateTracking:async()=>{trace.push('private_tracking');if(mode==='deadline')elapsed=440000;return{};},captureNflPlayerPropsPrivateTrackingSafely:async(run:()=>Promise<unknown>)=>run()},
@@ -74,7 +76,13 @@ async function run(mode:Mode){
  const requireMock=(request:string)=>{const name=request.split('/').at(-1)!;assert(Object.hasOwn(modules,name),`Unmocked writer dependency ${request}`);return new Proxy(modules[name],{get:(target,key)=>{if(key==='__esModule')return false;assert(Object.hasOwn(target,key),`Unmocked writer dependency member ${name}.${String(key)}`);return target[key as string];}});};
  vm.runInNewContext(javascript,{module:moduleFixture,exports:moduleFixture.exports,require:requireMock,Date:Clock,console,fetch:globalThis.fetch},{filename:'actual-nfl-production-writer-under-offline-test.cjs'});
  const writer=(moduleFixture.exports as {runNflPlayerPropsProductionWriter:typeof runNflPlayerPropsProductionWriter}).runNflPlayerPropsProductionWriter;
- const result=await writer({client:appendClient as unknown as Parameters<typeof writer>[0]['client'],writerRunId:mode==='no_owner'?undefined:fixture.writerRunId,season:2026,week:10,now:fixture.observedAt,apply:mode!=='disabled',ballDontLieApiKey:'synthetic-never-real',fetchImpl:globalThis.fetch});
+ const invoke=()=>writer({client:appendClient as unknown as Parameters<typeof writer>[0]['client'],writerRunId:mode==='no_owner'?undefined:fixture.writerRunId,season:2026,week:10,now:fixture.observedAt,apply:mode!=='disabled',ballDontLieApiKey:'synthetic-never-real',fetchImpl:globalThis.fetch});
+ if(['state_failure','member_failure','settlement_failure'].includes(mode)){
+  await assert.rejects(invoke,error=>error===originalWriteError);assert.equal(rpcs,1,'A fallible primary operation must not discard captured source evidence');assert.equal(builds,1);assert.equal(digest(fixture),protectedBefore);return{mode,builds,rpcs};
+ }
+ const result=await invoke();
+ if(mode==='unchanged_state')assert(!trace.includes('current_season'),'Exact cached state must not be redundantly rewritten');
+ if(mode==='changed_state')assert.equal(trace.filter(x=>x==='current_season').length,1,'Equal content in a different state object still requires the original write');
  assert.equal(digest(fixture),protectedBefore,'Actual writer never mutates captured source fixtures');
  if(mode==='disabled'){assert.equal(reviews,0);assert.equal(builds,0);assert.equal(rpcs,0);assert.equal(result.published,false);}
  else{
@@ -84,7 +92,7 @@ async function run(mode:Mode){
    else if(mode==='construction'){assert.equal(builds,1,'Even diagnostic construction failure may only be attempted once per due job');assert.equal(rpcs,0);assert.equal(result.identityFailureEvidence?.constructionFailures,1);}
    else{assert.equal(builds,1,'Only actual scheduled source failure is captured; repeated same-job load is deduplicated');assert.equal(result.identityFailureEvidence?.captures,1);
     if(mode==='deadline'){assert.equal(rpcs,0);assert.deepEqual(JSON.parse(JSON.stringify(result.identityFailureEvidence?.statuses)),{unavailable:1});}
-    else{assert.equal(rpcs,1);assert.deepEqual(JSON.parse(JSON.stringify(result.identityFailureEvidence?.statuses)),{[mode==='append_refused'?'unavailable':'stored']:1});
+    else{assert.equal(rpcs,1);assert.deepEqual(JSON.parse(JSON.stringify(result.identityFailureEvidence?.statuses)),{[mode==='append_refused'||mode==='append_throw'?'unavailable':'stored']:1});
      for(const essential of ['member_snapshot','official_tracking','market_observer','settlement','private_tracking'])assert(trace.indexOf(essential)<trace.indexOf('private_identity_append'),`Actual writer flush must follow ${essential}`);
     }
    }
@@ -92,5 +100,5 @@ async function run(mode:Mode){
  }
  return{mode,builds,rpcs};
 }
-async function main(){const results=[];for(const mode of ['identity','unrelated','construction','append_refused','deadline','no_owner','disabled','success'] as const)results.push(await run(mode));console.log('Actual NFL writer source-failure integration passed: real wrapper/purpose gating, original error identity, once-only construction, post-publication bounded flush, owner binding, unavailable/deadline isolation and healthy/no-owner/no-apply controls. All dependencies mocked; no HTTP, production DB or paid calls.',JSON.stringify(results));}
+async function main(){const results=[];for(const mode of ['identity','unrelated','construction','append_refused','deadline','no_owner','disabled','success','state_failure','member_failure','settlement_failure','append_throw','unchanged_state','changed_state'] as const)results.push(await run(mode));console.log('Actual NFL writer source-failure integration passed: real wrapper/purpose gating, original error identity, once-only construction, post-publication bounded flush, owner binding, unavailable/deadline isolation and healthy/no-owner/no-apply controls. All dependencies mocked; no HTTP, production DB or paid calls.',JSON.stringify(results));}
 main().catch(error=>{console.error(error);process.exitCode=1;});

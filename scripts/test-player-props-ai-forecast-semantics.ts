@@ -32,7 +32,7 @@ const goodCenter=validateLaw("nba",center.players[0],{weights:vector(1),outcomes
 assert.doesNotThrow(()=>validateSourceForecast(center,center.players[0],goodCenter,[null,null]));
 assert.equal(JSON.stringify(center),before);assert.equal(JSON.stringify(acceptedBad),badBefore);
 const quotes=["over","under"].map(side=>({id:side,book:"synthetic",provider:"synthetic",line:11.5,side:side as "over"|"under",american:side==="over"?150:-170,availableAt:at,confirmedAt:at,current:true,actionRule:"qualifying_participation" as const}));
-assert.equal(priceAiLaw({law:goodCenter,market:"rebounds",quotes,now:at,maxAgeMs:1000,confidence:2,exception:null})?.grade,"Best Angle"); // Corrected supported forecast remains promotable, no side quota.
+assert.equal(priceAiLaw({law:goodCenter,market:"rebounds",quotes,now:at,maxAgeMs:1000,confidence:2,exception:null})?.grade,"Lean"); // Corrected supported forecast remains promotable, no side quota.
 assert.equal(priceAiLaw({law:acceptedBad,market:"rebounds",quotes,now:at,maxAgeMs:1000,confidence:2,exception:"Contradicts source."})?.grade,"No Play");
 const supportedUnder=validateLaw("nba",center.players[0],{weights:[3,1,...Array(14).fill(0)],outcomes:{points:vector(12),rebounds:[8,13,...Array(14).fill(8)],assists:vector(2),threes:vector(0)}});
 assert.doesNotThrow(()=>validateSourceForecast(center,center.players[0],supportedUnder,[null,null]));assert.equal(priceAiLaw({law:supportedUnder,market:"rebounds",quotes,now:at,maxAgeMs:1000,confidence:2,exception:null})?.grade,"Best Angle");

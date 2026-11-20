@@ -43,7 +43,7 @@ function issued(market: 'rushing_yards' | 'passing_tds' | 'anytime_td', line: nu
   const seed = applyNflSiteAi({ decisions: [], counts: {} } as never, packet, choices, at);
   const baseline = { ...seed, decisions: seed.decisions.map(r => ({ ...r, modelRelease: 'synthetic-native-source', aiReview: undefined, market: 'receptions', line: 4.5, side: 'over' })) };
   const published = applyNflSiteAi(baseline as never, packet, choices, at).decisions.find(r => r.market === market && r.side === choices[0].side)!;
-  assert.equal(published.grade, 'Best Angle'); assert.equal(published.aiReview!.release, release);
+  assert.equal(published.grade, milestone ? 'Best Angle' : 'Lean'); assert.equal(published.aiReview!.release, release);
   return { ...published, state: 'locked' };
 }
 type Stored = Record<string, unknown> & { id: number; result: string; snapshot_json: { lockedEvent?: unknown; decision: Decision; trackingRelease: string } };

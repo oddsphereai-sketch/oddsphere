@@ -11,7 +11,7 @@ import {isNbaPlayerPropsContextMetric} from '../services/nba/nbaPlayerPropsReade
 export const PROPS_AI_NBA_BENCHMARK_FRESHNESS_RELEASE='player_props_ai_nba_benchmark_freshness_2026_11_18_r1_exact_metric_sets' as const;
 const SOURCE='nba_player_props_model_tournament_2026_10_28_r16_owls_sharp_market_reader';
 const MARKETS=new Set<string>([...CATALOG.nba.required,...CATALOG.nba.expansion]);
-const RELEASES=new Set(['player_props_ai_2026_11_19_r55_ready_game_admission','player_props_ai_2026_11_17_r51_event_tail_navigation','player_props_ai_2026_11_18_r52_joint_dependence_navigation','player_props_ai_2026_11_18_r53_exact_benchmark_context','player_props_ai_2026_11_18_r54_exact_counts_complete_numeric_retry']);
+const RELEASES=new Set(['player_props_ai_2026_11_19_r56_forecast_strength','player_props_ai_2026_11_19_r55_ready_game_admission','player_props_ai_2026_11_17_r51_event_tail_navigation','player_props_ai_2026_11_18_r52_joint_dependence_navigation','player_props_ai_2026_11_18_r53_exact_benchmark_context','player_props_ai_2026_11_18_r54_exact_counts_complete_numeric_retry']);
 const object=(v:unknown):Record<string,Json>|null=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,Json>:null;
 
 /** Complete exact facts, independent of which offered market repeats them.

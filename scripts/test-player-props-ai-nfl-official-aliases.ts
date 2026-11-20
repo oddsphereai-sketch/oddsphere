@@ -7,7 +7,7 @@ import {PROPS_AI_RELEASE,propsReviewHasMemberExecutionContracts} from '../lib/pl
 globalThis.fetch=async()=>{throw Error('Official alias proof denies real network');};
 type Args=Parameters<typeof resolveNflPropSourcePlayer>[0];
 const at='2030-11-17T15:00:00Z',start='2030-11-17T21:00:00Z',lock='2030-11-17T20:00:00Z';
-const cases=[{id:'33934589',canonical:'Matt Hibner',alias:'Matthew Hibner',team:'BAL',position:'TE',market:'receiving_yards'}, {id:'13873931',canonical:'Cam Ward',alias:'Cameron Ward',team:'TEN',position:'QB',market:'passing_yards'}, {id:'697',canonical:'Bam Knight',alias:'Zonovan Knight',team:'ARI',position:'RB',market:'rushing_yards'}] as const;
+const cases=[{id:'1048',canonical:'Drew Ogletree',alias:'Andrew Ogletree',team:'IND',position:'TE',market:'receiving_yards'},{id:'33934589',canonical:'Matt Hibner',alias:'Matthew Hibner',team:'BAL',position:'TE',market:'receiving_yards'}, {id:'13873931',canonical:'Cam Ward',alias:'Cameron Ward',team:'TEN',position:'QB',market:'passing_yards'}, {id:'697',canonical:'Bam Knight',alias:'Zonovan Knight',team:'ARI',position:'RB',market:'rushing_yards'}] as const;
 let controls=0;
 for(const c of cases){
  const game={id:`synthetic-${c.team}`,home:c.team,away:'CHI',start};
@@ -31,6 +31,6 @@ for(const c of cases){
 }
 assert(!sameNflPropActorName('Matt Other','Matthew Other','33934589'));assert(!sameNflPropActorName('Matt Hibner','Matthew Hibner','33934590'));controls+=2;
 assert(!sameNflPropActorName('Benjamin Synthetic','Ben Synthetic','synthetic-unverified'),'Unproved name equivalence remains held');assert(!sameNflPropActorName('Cameron Other','Cam Ward','13873931'));assert(!sameNflPropActorName('Zonovan Other','Bam Knight','697'));controls+=3;
-assert.equal(PROPS_AI_NFL_ALIAS_RELEASE,'player_props_ai_nfl_alias_catalog_2026_11_16_r2_hibner_official_names');assert(propsReviewHasMemberExecutionContracts('player_props_ai_2026_11_16_r43_numeric_source_continuation'));controls+=2;
-assert.equal(PROPS_AI_RELEASE,'player_props_ai_2026_11_19_r55_ready_game_admission');assert(propsReviewHasMemberExecutionContracts('player_props_ai_2026_11_15_r40_complete_correction_feedback'));controls+=2;
-console.log(JSON.stringify({officialAliases:true,controls,threeProspectiveExactIdBoundPairs:true,unknownAliasRemainsHeld:true,currentSourcePacketVersioned:true,originalSourceAndGuardsUnchanged:true,noNetworkOrPaidCalls:true}));
+assert.equal(PROPS_AI_NFL_ALIAS_RELEASE,'player_props_ai_nfl_alias_catalog_2026_11_19_r3_ogletree_official_names');assert(propsReviewHasMemberExecutionContracts('player_props_ai_2026_11_16_r43_numeric_source_continuation'));controls+=2;
+assert.equal(PROPS_AI_RELEASE,'player_props_ai_2026_11_19_r56_forecast_strength');assert(propsReviewHasMemberExecutionContracts('player_props_ai_2026_11_15_r40_complete_correction_feedback'));controls+=2;
+console.log(JSON.stringify({officialAliases:true,controls,fourProspectiveExactIdBoundPairs:true,unknownAliasRemainsHeld:true,currentSourcePacketVersioned:true,originalSourceAndGuardsUnchanged:true,noNetworkOrPaidCalls:true}));

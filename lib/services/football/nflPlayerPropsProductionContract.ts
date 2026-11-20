@@ -3,9 +3,11 @@ import {prepareNflLockHandoff,type NflLockHandoff} from "../../playerPropsAi/nfl
 import {PROPS_AI_SOURCE_EVENT_RELEASE} from "../../playerPropsAi/sourceEvents";
 import {PROPS_AI_NFL_EXACT_RECEIPT_RELEASES} from "../../playerPropsAi/releases";
 import {propsTeam} from "../../playerPropsAi/teamIdentity";
+import {qualifyPropsForecastGrade} from "../../playerPropsAi/forecastStrength";
 import {
   NFL_PLAYER_PROPS_DECISION_RELEASE,
   nflPlayerPropsRuntimePolicy,
+  nflPlayerPropsCurrentNumericalReleases,
   type NflPlayerPropsRuntimeBoard,
   type NflPlayerPropsRuntimeDecision,
 } from "./nflPlayerPropsRuntime";
@@ -20,11 +22,13 @@ import { selectNflPlayerPropsCanonicalLines } from "./nflPlayerPropsCanonicalLin
 import { withoutUnresolvedNflPlayerAliasDuplicates } from "./nflPlayerPropsMemberAliasIdentity";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_11_15_r61_canonical_lock_precedence" as const;
+  "nfl_player_props_member_2026_11_19_r62_forecast_strength_continuity" as const;
 export const NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE =
-  "nfl_player_props_member_lifecycle_2026_11_15_r43_canonical_lock_precedence" as const;
-const NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE =
+  "nfl_player_props_member_lifecycle_2026_11_19_r44_forecast_strength_continuity" as const;
+const NFL_PLAYER_PROPS_OLD_TOUCHDOWN_DECISION_RELEASE =
   "nfl_player_props_decision_2026_10_27_r38_passing_yards_direction" as const;
+const NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE =
+  "nfl_player_props_decision_2026_10_28_r39_owls_reference_prices" as const;
 export const NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET = 2 as const;
 export const NFL_PLAYER_PROPS_WRITER_LEASE_GROUP = "prediction_pipeline:nfl" as const;
 
@@ -226,14 +230,18 @@ function releaseCoherentRetainedUnlockedDecision(
   prior: NflPlayerPropsRuntimeDecision,
 ): NflPlayerPropsRuntimeDecision | null {
   if (prior.decisionRelease === NFL_PLAYER_PROPS_DECISION_RELEASE) return prior;
-  if (prior.decisionRelease !== NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE) return null;
-  // The Owls source release advances the ordinary forecast family.
-  // Only the behavior-identical Anytime TD market may bridge one
-  // still-fresh partial provider cycle. Ordinary rows must be freshly
-  // recomputed rather than relabeled under a release that did not score them.
-  if (prior.market !== "anytime_td") return null;
+  // Only unchanged numerical families may cross this grade-only boundary.
+  // AI laws own their original grade policy and never enter a native migration.
+  if (prior.aiReview) return null;
+  const preceding=prior.decisionRelease===NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE;
+  const oldTouchdown=prior.decisionRelease===NFL_PLAYER_PROPS_OLD_TOUCHDOWN_DECISION_RELEASE&&prior.market==='anytime_td';
+  if(!preceding&&!oldTouchdown)return null;
+  const releases=nflPlayerPropsCurrentNumericalReleases(),touchdown=prior.market==='anytime_td';
+  if(prior.modelRelease!==(touchdown?releases.touchdownModel:releases.model)
+    ||prior.calibrationRelease!==(touchdown?releases.touchdownCalibration:releases.calibration))return null;
   return {
     ...prior,
+    grade:qualifyPropsForecastGrade(prior.grade,prior.finalProbability,prior.americanPrice),
     decisionRelease: NFL_PLAYER_PROPS_DECISION_RELEASE,
   };
 }

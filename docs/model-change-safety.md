@@ -1,3 +1,30 @@
+## November19 prospective props forecast strength and NFL identity R56
+
+The new predeclaration is
+`docs/model-audits/2026-11-19-props-forecast-strength-source-resilience-predeclaration.md`.
+Best Angle adds the explicit owner-branded 62% unconditional win and -200 price
+boundaries to all existing source/confidence/positive-value requirements. A
+price-led weak-conviction Best becomes Lean, with no actionable contraction.
+Genuine stronger/price recovery and both Over/Under promotions are tested; exact
+within-tier value ordering and all original numerical laws remain. New law5 /
+grade7 /selection10 dispatch preserves original law4/grade6/selection9 forever.
+R56/NBAwriter39/NFLwriter117/nativeNFLdecision40/alias3 version the affected
+paths; native models/calibrations and all old locked payloads remain exact.
+
+Actual later ordinary NFL input archives establish a single Andrew/Drew Ogletree
+alias mismatch across four offers, not a provider credit/output/rate failure.
+Official identity evidence and current ID1048 permit only that exact alias pair.
+No player/market omission or broad nickname heuristic. The separate fallible
+season-state write could bypass diagnostic archival; bounded idempotent finally
+storage preserves original errors and skips only exact unchanged cached state.
+No new API/model/paid test/SQL/operator replay, schedule/slot/lease/budget change.
+Native member R62/lifecycle R44 applies the new policy to retained same-numerical
+R39 and olderR38 TD rows before current stamping; no AI/different-model retag,
+original locks exact. Round132 on d1e23 was NOT CLEAR and earns no clean credit.
+Same-source impact, source/fault/restart/locks, full model/focused/types/lint/build,
+hosted actualPG with all AI mocked and TWO new consecutive fresh triple whole-
+product CLEAR rounds are mandatory before a protected actual production release.
+
 ## November19 ready whole-game admission R55
 
 Prospective shared generation is `player_props_ai_2026_11_19_r55_ready_game_admission`;

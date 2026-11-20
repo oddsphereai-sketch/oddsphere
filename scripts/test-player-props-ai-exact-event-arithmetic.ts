@@ -17,7 +17,7 @@ let assertions=0;
 for(let shift=0;shift<16;shift++)for(const scale of [1,2,10]){
  const indices=Array.from({length:16},(_,i)=>(i+shift)%16);if(shift%2)indices.reverse();
  const input={weights:indices.map(i=>raw.weights[i]*scale),outcomes:{receptions:indices.map(i=>raw.outcomes.receptions[i])}},law=validateLaw('nfl',{markets:['receptions']},input),f=lawForecast(law,'receptions',.5),p=price(law);
- assert.deepEqual(f,{mean:.5,over:.5,under:.5,push:0,preferredSide:'over'});assert.equal(p.side,'over');assert.equal(p.expectedValue,.25);assert.equal(p.grade,'Best Angle');assert.equal(p.gradeRelease,PROPS_AI_GRADE_RELEASE);assert.equal(p.recommendationBasis,'estimated_value');assert.deepEqual(law.integerWeights,input.weights);assertions+=7;
+ assert.deepEqual(f,{mean:.5,over:.5,under:.5,push:0,preferredSide:'over'});assert.equal(p.side,'over');assert.equal(p.expectedValue,.25);assert.equal(p.grade,'Lean');assert.equal(p.gradeRelease,PROPS_AI_GRADE_RELEASE);assert.equal(p.recommendationBasis,'estimated_value');assert.deepEqual(law.integerWeights,input.weights);assertions+=7;
 }
 const exactZero=validateLaw('nfl',{markets:['receptions']},{weights:[5,2,...zero().slice(2)],outcomes:{receptions:[1,0,...zero().slice(2)]}}),breakEven=price(exactZero,-250,200);
 assert.equal(breakEven.expectedValue,0);assert.notEqual(breakEven.grade,'Best Angle');assert.notEqual(breakEven.recommendationBasis,'estimated_value');
@@ -26,9 +26,9 @@ const zeroLegacy=legacy({weights:[5,2,...zero().slice(2)],outcomes:{receptions:[
 const noPairOld=priceAiLaw({...noPairArgs,law:zeroLegacy})!,noPairNew=priceAiLaw({...noPairArgs,law:exactZero})!;
 assert.equal(noPairOld.grade,'Best Angle');assert.equal(noPairNew.grade,'Watchlist');assert.equal(noPairNew.expectedValue,0);
 const boardImpact={syntheticEvents:2,beforeActionable:1,afterActionable:1,promotions:1,demotions:1,meaning:'Exact-tie genuine positive Over recovery pairs with removal of a false positive-EV unpaired Best; no board quota.'};
-assert.equal(price(exactZero,-249,200).grade,'Best Angle');assert(price(exactZero,-251,200).expectedValue<0);
+assert.equal(price(exactZero,-249,200).grade,'Lean');assert(price(exactZero,-251,200).expectedValue<0);
 assert.equal(gradeAiEventFromMass({win:5,loss:2,push:0,total:7,american:-250,opposingAmerican:200,confidence:2,exception:null}).grade,'Lean','A genuine paired-confidence zero-EV Lean remains allowed');
-const favorUnder=validateLaw('nfl',{markets:['receptions']},{weights:[6,4,...zero().slice(2)],outcomes:{receptions:[0,1,...zero().slice(2)]}});assert.equal(price(favorUnder,-170,150).side,'under');assert.equal(price(favorUnder,-170,150).grade,'Best Angle');
+const favorUnder=validateLaw('nfl',{markets:['receptions']},{weights:[6,4,...zero().slice(2)],outcomes:{receptions:[0,1,...zero().slice(2)]}});assert.equal(price(favorUnder,-170,150).side,'under');assert.equal(price(favorUnder,-170,150).grade,'Lean');
 const minimum=validateLaw('nfl',{markets:['receptions']},{weights:[10000,9999,...Array(14).fill(10000)],outcomes:{receptions:[...Array(8).fill(0),...Array(8).fill(1)]}});assert.equal(lawForecast(minimum,'receptions',.5).preferredSide,'over');
 const eventCases:[import('../lib/playerPropsAi/evidenceContract').Sport,string,Record<string,number[]>,number,boolean][]=[
  ['nba','points_rebounds',{points:[0,2,...zero().slice(2)],rebounds:[1,3,...zero().slice(2)],assists:zero(),threes:zero()},3,false],
