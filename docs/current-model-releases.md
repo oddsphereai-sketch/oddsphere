@@ -9,6 +9,23 @@ Do not activate it or revive the older unqualified linear R38 candidate from an
 old audit. Exact original locks always precede any reconstructed shadow.
 See [the frozen result and limitations](model-audits/2026-11-20-nba-directional-accuracy-shadow-result.md).
 
+## November 20 CBB unlocked exact-pair orientation repair R60
+
+Input/pipeline publication is `cbb_member_pipeline_2026_11_20_r60_unlocked_orientation`;
+member writer publication is `cbb_member_game_publication_2026_11_20_r3_unlocked_orientation`.
+The stored schema remains R2; source transition receipt is
+`cbb_unlocked_orientation_2026_11_20_r1_exact_pair_rebuild`.
+The active grouped numerical model/calibration R8 and grade rules below remain authoritative.
+Only an exact two-school reversal, still unlocked and before both old/new T−60,
+can rebuild from complete current inputs. The sole writer preserves the full original
+under a content-addressed insert-only archive, binds its receipt in the new record,
+and rechecks the actual cutoff after archival. Wrong schools, locked records and
+late reversals cannot migrate. No old score, price, grade or flow is relabeled.
+Normal same-orientation behavior has zero promotions/demotions; the four previously
+omitted fixtures are newly evaluated through existing rules. No new writer, timer,
+provider budget, stake, copy, layout or historical correction. Evidence:
+`model-audits/2026-11-20-cbb-unlocked-orientation.md`.
+
 ## NBA event-scoped complete evidence R37 — November20
 
 Model/record is `nba_professional_unified_2026_11_20_r37_event_scoped_evidence`,

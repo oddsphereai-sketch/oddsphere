@@ -42,8 +42,9 @@ import {cbbCrossDivisionContext} from "@/lib/cbb/crossDivisionIdentity";
 import {forecastCbbFullDivisionOneBatch} from "@/lib/cbb/fullDivisionOneForecast";
 import {buildCbbGameForecastBoard} from "@/lib/cbb/gameForecastBoard";
 import type {CbbProvisionalBoard} from "@/lib/cbb/provisionalLifecycle";
+import {canRebuildCbbUnlockedOrientation} from "./cbbUnlockedOrientation";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_18_r59_grouped_native_outcome" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_20_r60_unlocked_orientation" as const;
 /** Book/contract choice only. No prior projection, probability or grade runs. */
 export function selectCbbContextualPipelineTargets(quotes:CbbQuote[]):CbbQuote[]{
   const boardBook=chooseCbbSupportedTargetBook(quotes);
@@ -122,6 +123,12 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   });
   trace("fixture_sync_complete");
   const prior=await readCbbMemberGames(candidateGames.map(game=>game.id),db);
+  const orientationRebuildIds=candidateGames.filter(game=>{
+    const stored=prior.get(game.id);return stored&&!cbbStoredMemberFixtureMatches(stored,game)&&canRebuildCbbUnlockedOrientation(stored,game,asOf);
+  }).map(game=>game.id);
+  // The store independently rereads, archives and guards the original. The
+  // numerical pipeline must rebuild these exact schools as a new prelock input.
+  for(const id of orientationRebuildIds)prior.delete(id);
   const changedMatchupIds=candidateGames.filter(game=>{
     const stored=prior.get(game.id);
     return stored&&!stored.snapshot.lockedAt&&!cbbStoredMemberFixtureMatches(stored,game);
@@ -394,7 +401,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     }
     let result;
     try{result=await writeCbbMemberGame({game,candidate,homeLogo:identity.homeTeamLogo,
-      awayLogo:identity.awayTeamLogo,now:writeNow,splitEvidence,marketQuotes:namedById.get(game.id)?.quotes??[],bookHistory,
+      awayLogo:identity.awayTeamLogo,now:writeNow,clock:nowClock,splitEvidence,marketQuotes:namedById.get(game.id)?.quotes??[],bookHistory,
       capturedNamedSections:preparedSections.get(game.id),capturedPublicSections:preparedPublic.get(game.id)},db);
     }catch(error){
       if(!(error instanceof CbbFixtureClockError)||!previous)throw error;
@@ -421,7 +428,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     payloadVersion:CBB_MEMBER_PIPELINE_RELEASE,ttlMs:15*60_000,staleMs:24*60*60_000});
   if(!saved.ok)throw new Error(`CBB member snapshot publication failed: ${saved.error}`);
   trace("snapshot_published");
-  return {release:CBB_MEMBER_PIPELINE_RELEASE,unsupportedCrossGameIds,currentSourceCoverage:sourceCoverage,requestedDates:dates,sourceGames:sourceGames.length,published:memberGames.length,
+  return {release:CBB_MEMBER_PIPELINE_RELEASE,orientationRebuildIds,unsupportedCrossGameIds,currentSourceCoverage:sourceCoverage,requestedDates:dates,sourceGames:sourceGames.length,published:memberGames.length,
     scheduleOnly:candidateGames.length-memberGames.length,missingIdentity,missingLogosOnSchedule,
     written,locked,held,missingLogos,trackingInserted,problems,unpublishedIncomplete,ownerApprovedExclusions,providerWarnings,
     canonicalHistory:{release:canonicalHistory.release,complete:canonicalHistory.complete,price:canonicalHistory.price,split:canonicalHistory.split,elapsedMs:canonicalHistory.elapsedMs},
