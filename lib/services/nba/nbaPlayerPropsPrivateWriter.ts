@@ -49,10 +49,11 @@ import { buildNbaPlayerPropsReaderEvidence } from "./nbaPlayerPropsReaderContrac
 import { captureNbaPlayerPropsPrivateTracking } from "./nbaPlayerPropsPrivateTrackingStore";
 import { settleNbaPlayerPropsTrackedSlates,hasNbaPropsUnsettledTrackedSlates } from "./nbaPlayerPropsSettlementStore";
 import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
+import type { NbaPlayerStatEvidenceReceipt } from "./nbaPlayerStatEvidence";
 import { buildNbaPlayerPropsMemberPrices } from "./nbaPlayerPropsMemberPrices";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_11_19_r39_forecast_strength" as const;
+  "nba_player_props_private_writer_2026_11_20_r40_player_stat_evidence" as const;
 
 export function nbaPlayerPropsForecastIsPublishable(
   row: Pick<NbaPlayerPropsForwardDecision, "independentProjection" | "finalProjection">,
@@ -76,6 +77,7 @@ export type NbaPlayerPropsPrivateWriterResult = Readonly<{
   decisions: number;
   locked: number;
   findings: readonly string[];
+  playerStatEvidence?: NbaPlayerStatEvidenceReceipt;
   aiReviewRuntime?: NbaPlayerPropsMemberSnapshot['diagnostics']['aiReviewRuntime'];
   settlement?:Awaited<ReturnType<typeof settleNbaPlayerPropsTrackedSlates>>|null;
 }>;
@@ -130,6 +132,8 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   let currentState = previousState;
   let stateRequests = 0;
   let stateCorrections = 0;
+  const stateEvidenceFindings: string[] = [];
+  let playerStatEvidence: NbaPlayerStatEvidenceReceipt | undefined;
   if (args.fullRefresh) {
     const collected = await collectNbaPlayerPropsCurrentState({
       previous: previousState,
@@ -142,7 +146,12 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     currentState = collected.state;
     stateRequests = collected.providerRequests;
     stateCorrections = collected.corrected;
-    await writeNbaPlayerPropsCurrentState({ client: args.client, state: collected.state });
+    const savedState = await writeNbaPlayerPropsCurrentState({ client: args.client, state: collected.state,
+      writerRunId: args.writerRunId, collectedGameIds: collected.collectedGameIds, statEvidenceDeadlineMs: sourceDeadline ?? undefined });
+    playerStatEvidence = savedState.statEvidence;
+    if (savedState.statEvidence?.status === "unavailable") {
+      stateEvidenceFindings.push(`player_stat_evidence_unavailable:${savedState.statEvidence.reason}`);
+    }
   }
 
   // A rest day cannot strand yesterday's locks. Reuse the same bounded stats
@@ -151,7 +160,8 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   if(slateSchedule.length===0){
     const settlement=currentState?await settleNbaPlayerPropsTrackedSlates({client:args.client,season:args.season,
       slateDates:recentDates(now,7),state:currentState,observedAt:now}):null;
-    return{...result("no_games"),providerRequests:stateRequests,settlement};
+    return{...result("no_games"),providerRequests:stateRequests,settlement,findings:stateEvidenceFindings,
+      ...(playerStatEvidence ? { playerStatEvidence } : {})};
   }
   if(!priorState)throw new Error("NBA props prior state missing after readiness check");
 
@@ -190,12 +200,13 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   if (missingScheduledGames.length > 0) {
     return {
       ...result("last_known_good_preserved"),
+      ...(playerStatEvidence ? { playerStatEvidence } : {}),
       providerRequests: stateRequests + live.providerRequests.balldontlie + live.providerRequests.theOddsApi + live.providerRequests.owls,
       theOddsApiCreditsUsed: live.theOddsApiCreditsUsed,
       observationsAdded: mergedMarket.added,
       observationsRefreshed: mergedMarket.refreshed,
       observationConflictsPreserved: mergedMarket.conflicts,
-      findings: [...live.findings, ...missingScheduledGames.map((game) => `scheduled_game_missing_from_prop_provider:${game.id}`)],
+      findings: [...stateEvidenceFindings, ...live.findings, ...missingScheduledGames.map((game) => `scheduled_game_missing_from_prop_provider:${game.id}`)],
     };
   }
 
@@ -277,6 +288,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   if ((!withdrawalOnly&&eligibleFeatures.length < minimumCoverage) || (publishableForward.length === 0 && !noNativeForwardRequired)) {
     return {
       ...result("last_known_good_preserved"),
+      ...(playerStatEvidence ? { playerStatEvidence } : {}),
       providerRequests: stateRequests + live.providerRequests.balldontlie + live.providerRequests.theOddsApi + live.providerRequests.owls,
       theOddsApiCreditsUsed: live.theOddsApiCreditsUsed,
       observationsAdded: mergedMarket.added,
@@ -284,6 +296,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       observationConflictsPreserved: mergedMarket.conflicts,
       featureRows: eligibleFeatures.length,
       findings: [
+        ...stateEvidenceFindings,
         ...live.findings,
         ...(eligibleFeatures.length < minimumCoverage
           ? [`feature_coverage_below_80_percent:${eligibleFeatures.length}/${availableCandidates.length}`]
@@ -596,8 +609,10 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     decisions: lifecycle.snapshot.decisions.length,
     locked: lifecycle.snapshot.decisions.filter((row) => row.lockedAt !== null).length,
     settlement,
+    ...(playerStatEvidence ? { playerStatEvidence } : {}),
     ...(aiReviewOutcome?{aiReviewRuntime:runtimeTelemetry()}:{}),
     findings: [
+      ...stateEvidenceFindings,
       ...live.findings,
       ...(invalidForecasts.length > 0 ? [`invalid_nonpositive_forecasts_excluded:${invalidForecasts.length}`] : []),
       ...(trackingConflicts > 0 ? [`locked_tracking_conflicts_preserved:${trackingConflicts}`] : []),

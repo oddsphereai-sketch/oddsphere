@@ -1,3 +1,30 @@
+## November 20 NBA player-stat observation foundation
+
+R40 private writer retains already-collected normalized per-game player stats
+using source observation R1. This is an append-only data foundation, not an
+independent scoring or grading input. R2 canonical numerical state, Daily Edge
+R37/R39/R3/R31 and props AI generation/law/selection remain exact. There are zero
+forecast/grade/stake promotions or demotions for identical inputs. No additional
+provider/AI call, review, phase, timer, writer, schema or budget is introduced.
+
+Only the existing full-refresh source collection supplies exact collected IDs.
+After its original state write succeeds, bounded compressed observations preserve
+all numerical fields; later corrections cannot replace the original. Small
+immutable per-collection references preserve correction/reversion chronology
+without duplicating the body; retries preserve original receipt clocks. Source-state and first-retained clocks stay
+distinct, and normalized data is never called raw HTTP. First retention does not
+backdate knowledge. Actual shared NBA lease ownership, bounded reads/insert/
+reconciliation, ten-year explicit retention and source-window headroom protect
+publication. Archive failure is explicit and cannot hold an otherwise valid
+forecast. Existing locked writer/reader precedence remains exact.
+
+The source ledger still lacks qualified historical availability/transaction/
+identity evidence; its predeclared fitting gates cannot be waived by this
+observation release. No new numerical model is approved. Require source/codec/
+lease/time/fault/size/default-state/request-parity and lock tests, full model
+verification, latest-main integration, protected PR and actual ordinary-source
+archive plus member/cron/lease proof. This is not an accuracy-success claim.
+
 ## NBA complete event-scoped evidence correctness — November20
 
 R37 event-scoped evidence / R39 marriage / reader R3 replaces a confirmed failing
