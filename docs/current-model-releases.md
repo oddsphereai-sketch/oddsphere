@@ -1,3 +1,23 @@
+## November 20 NBA normalized player-stat observations R1
+
+The existing NBA private writer is
+`nba_player_props_private_writer_2026_11_20_r40_player_stat_evidence`. Only full
+refreshes retain the already-collected normalized per-game stats under
+`nba_player_stat_evidence_2026_11_20_r1_normalized_observations`. Current-state
+R2 and every numerical model, AI generation/law, grade, selection, market reader,
+price, source request count, schedule and sport lease remain unchanged. No fit,
+new review or numerical promotion is authorized. Daily Edge R37 / marriage R39 /
+reader R3 / grade R31 remain active; the separate Total shadow stays inactive.
+
+Exact repeats preserve original bytes/first-retained clocks; source corrections
+append new hashes. Small immutable per-collection references preserve A/B/A
+reversions and reuse old bodies; retries preserve the same collection receipt. Newly retained cache observations never claim old historical
+knowledge or raw HTTP provenance. Storage, codec, run-size, source-window and
+actual leased-run guards are mandatory. Archive trouble is a private finding;
+the valid canonical state and forecasts continue. No member/locked payload is
+migrated or regraded. See
+`model-audits/2026-11-20-nba-player-stat-evidence-predeclaration.md`.
+
 ## November 20 CBB unlocked exact-pair orientation repair R60
 
 Input/pipeline publication is `cbb_member_pipeline_2026_11_20_r60_unlocked_orientation`;

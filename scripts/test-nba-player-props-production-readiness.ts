@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import "./test-nba-player-stat-evidence";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
@@ -57,7 +58,7 @@ assert.equal(
 );
 assert.equal(
   NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE,
-  "nba_player_props_private_writer_2026_11_19_r39_forecast_strength",
+  "nba_player_props_private_writer_2026_11_20_r40_player_stat_evidence",
 );
 assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: 18.2, finalProjection: 18.8 }), true);
 assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: 0, finalProjection: 18.8 }), false);
