@@ -1,14 +1,3 @@
-## NBA conditional Total R2 — offline candidate, not a release
-
-`nba_total_conditional_2026_11_20_r2_shadow_trees` is an explicit **offline-only**
-comparison. No member, cron, tracking or prediction writer enables it. Active
-NBA R37 / marriage R39 / reader R3 / grade R31 remain unchanged. The Spread
-experiment failed confirmation; Total does not meet the release gates and
-would reduce the checked current Total board from two actionables to zero.
-Do not activate it or revive the older unqualified linear R38 candidate from an
-old audit. Exact original locks always precede any reconstructed shadow.
-See [the frozen result and limitations](model-audits/2026-11-20-nba-directional-accuracy-shadow-result.md).
-
 ## November 20 CBB unlocked exact-pair orientation repair R60
 
 Input/pipeline publication is `cbb_member_pipeline_2026_11_20_r60_unlocked_orientation`;
