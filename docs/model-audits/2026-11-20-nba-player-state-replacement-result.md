@@ -88,3 +88,10 @@ saving the draft. No production deployment or accuracy improvement is claimed.
 Full model-change, fresh-main integration, protected PR and live checks remain
 mandatory before any later activation. Source data and private forecast bundles
 stay outside Git under ignored ops-local/learning-lab.
+
+November21 settlement follow-up: the unchanged early nine-game Total freeze
+finished4–5 in both arms. Actual later locks finished2–7; a separate exact
+lock-specific held-candidate replay finished4–5 and demoted all four Leans with
+zero promotions. These are different decision-time contracts. The candidate
+remains held. See `2026-11-21-nba-total-direction-and-primary-player-inputs.md`
+for source progress, complete cohort distinctions and remaining fitting gates.
