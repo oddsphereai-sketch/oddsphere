@@ -193,13 +193,16 @@ import { fetchCfbOwlsProvider } from "./cfbOwlsProvider";
 import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_11_16_r156_current_fixture_recovery" as const;
+  "cfb_forward_evidence_writer_2026_11_22_r157_full_season_result_capacity" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_CURRENT_ODDS_GAMES_PER_RUN = CFB_ESPN_CURRENT_ODDS_MAX_GAMES_PER_RUN;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
-export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
+// The board includes FBS and FCS. A complete season exceeds 1,200 games before
+// Thanksgiving; the old cap prevented every subsequent refresh. Keep a
+// finite full-season ceiling without changing the 100-ID/three-date read units.
+export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 2400 as const;
 type CfbForwardCollectionNeed = ReturnType<typeof determineCfbForwardCollectionNeed>;
 
 export function resolveCfbForwardCollectionNeed(args: {

@@ -706,7 +706,19 @@ current offers under the established book priority. Valid original contracts
 remain exact before the unchanged same-contract better-payout policy. No grade,
 risk, resistance or price-cap threshold changes and no new provider calls.
 
-CFB writer is `cfb_forward_evidence_writer_2026_11_16_r156_current_fixture_recovery`.
+CFB writer is `cfb_forward_evidence_writer_2026_11_22_r157_full_season_result_capacity`.
+R157 repairs the November 22 publication failure after season identities exceeded
+the former 1,200-game ceiling. The prior-result planner permits at most 2,400
+exact game IDs, retaining the existing 100-ID / three-UTC-date batches and
+four-page provider read budget. Latest captured schedule-date precedence,
+target/future exclusion and all numerical, market, grade, reader and lock
+semantics remain unchanged. The existing sole writer and shared CFB pipeline
+lease remain authoritative. The 1,282-game production-metadata replay loses no
+identity and exactly preserves the predecessor plan within its supported range;
+the old planner fails the full cohort. No historical correction is included.
+See `docs/model-audits/2026-11-22-cfb-full-season-result-capacity.md`.
+
+Its R156 predecessor fixed the following accuracy-only fixture recovery:
 Accuracy-only recovery requires the latest known unambiguous fixture time and
 teams; an expired opening placeholder cannot freeze a game before its corrected
 kickoff and block the genuine priced T-60 records. Existing official/public
