@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import "./test-cfb-full-season-result-capacity";
 import { readFileSync } from "node:fs";
 import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
