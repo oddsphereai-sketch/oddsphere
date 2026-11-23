@@ -58,7 +58,7 @@ assert.equal(
 );
 assert.equal(
   NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE,
-  "nba_player_props_private_writer_2026_11_20_r40_player_stat_evidence",
+  "nba_player_props_private_writer_2026_11_23_r41_explicit_law_disposition",
 );
 assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: 18.2, finalProjection: 18.8 }), true);
 assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: 0, finalProjection: 18.8 }), false);

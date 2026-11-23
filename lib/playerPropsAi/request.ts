@@ -2,6 +2,7 @@ import {compileReaderClaims,compileReaderClaimRequest,readerClaimModelInput} fro
 import {readerClaimResponseSchema,renderReaderOnlyClaimSelections,PROPS_AI_READER_CLAIMS_RELEASE} from './readerClaimAdmission';
 import {numericSourceNavigation} from './numericSourceNavigation';
 import {reviewSupportNavigation} from './reviewSupportNavigation';
+import {reviewDispositionSchema} from './reviewDispositionSchema';
 import {sourceConstraintCards} from "./sourceConstraintCards";
 import {nbaMarketNavigation,NBA_MARKET_NAVIGATION_MEANING} from "./marketNavigation";
 import {inspectGenerativeDraft} from "./generativeAdmission";
@@ -39,16 +40,21 @@ function jointReviewSchemaFromCatalogs(packet: GamePacket,catalogs:ReturnType<ty
   const aliases = new Map([...evidenceAliases(packet)].map(([alias, id]) => [id, alias]));
   const vector = (items: object, length: number) => ({ type: "array", items, minItems: length, maxItems: length });
   const object = (properties: Record<string, unknown>) => ({ type: "object", additionalProperties: false, required: Object.keys(properties), properties });
-  return object({ wireRelease:{type:"string",enum:[PROPS_AI_WIRE_RELEASE]}, players: object(Object.fromEntries(packet.players.map(p => [p.id, object({
+  const definitions:Record<string,unknown>={};
+  const schema=object({ wireRelease:{type:"string",enum:[PROPS_AI_WIRE_RELEASE]}, players: object(Object.fromEntries(packet.players.map((p,index) => [p.id, reviewDispositionSchema({
+    key:`p${index}`,definitions,qualified:qualifiedForecastMarkets(p).length>0&&primitives(packet.sport,p).length>0,marketCount:p.markets.length,
+    reasons:claimSchemas[p.id].gaps.items,
+    unsupportedException:qualifiedForecastMarkets(p).length?undefined:{type:'string',enum:['source_event_unresolved']},
+    law:object({weights:vector({type:"integer",minimum:0,maximum:10000},PROPS_AI_SCENARIOS),outcomes:object(Object.fromEntries(generativeStatistics(packet.sport,p).map(k=>[k,vector({type:"integer",minimum:signedGenerativeStatistic(k)?-10000:0,maximum:10000},PROPS_AI_SCENARIOS)])))}),
+    shared:{
     assessment: claimSchemas[p.id].assessment,
     priorRead:object(Object.fromEntries(independentPriorEvents(p).map(e=>[aliases.get(e.sourceId)!,{type:"string",enum:[e.preferredOutcome]}]))),
     coverage: claimSchemas[p.id].coverage,
     evidenceIds: { type: "array", items: { type: "string", enum: p.evidence.map(e => aliases.get(e.id)!) }, minItems: 1, maxItems: 6 },
-    gaps: {...claimSchemas[p.id].gaps,...(qualifiedForecastMarkets(p).length?{}:{minItems:1})},
-    law: {...(primitives(packet.sport,p).length?{anyOf:[object({weights:vector({type:"integer",minimum:0,maximum:10000},PROPS_AI_SCENARIOS),outcomes:object(Object.fromEntries(generativeStatistics(packet.sport,p).map(k=>[k,vector({type:"integer",minimum:signedGenerativeStatistic(k)?-10000:0,maximum:10000},PROPS_AI_SCENARIOS)])))}),{type:"null"}]}:{type:"null"})},
     confidence: vector({ type: "integer", enum: qualifiedForecastMarkets(p).length?[0,1,2]:[0] }, p.markets.length),
-    exceptions: qualifiedForecastMarkets(p).length?claimSchemas[p.id].exceptions:vector({type:"string",enum:["source_event_unresolved"]},p.markets.length),
+    },
   })]))) });
+  return{...schema,$defs:definitions};
 }
 export function jointReviewSchema(packet:GamePacket){return jointReviewSchemaFromCatalogs(packet,compileReaderClaims(packet));}
 

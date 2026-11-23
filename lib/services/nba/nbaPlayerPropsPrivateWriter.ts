@@ -53,7 +53,7 @@ import type { NbaPlayerStatEvidenceReceipt } from "./nbaPlayerStatEvidence";
 import { buildNbaPlayerPropsMemberPrices } from "./nbaPlayerPropsMemberPrices";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_11_20_r40_player_stat_evidence" as const;
+  "nba_player_props_private_writer_2026_11_23_r41_explicit_law_disposition" as const;
 
 export function nbaPlayerPropsForecastIsPublishable(
   row: Pick<NbaPlayerPropsForwardDecision, "independentProjection" | "finalProjection">,
