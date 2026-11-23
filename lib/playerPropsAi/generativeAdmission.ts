@@ -18,6 +18,9 @@ export function inspectGenerativeDraft(packet:GamePacket,draft:unknown){
   let law:PlayerReview["law"]=null,rendered:Record<string,unknown>|null=null;
   try{rendered=renderReaderClaimSelections(packet,id,row,catalogs[id]);}catch(error){coordinates.push({playerId:id,playerIndex:packet.players.indexOf(player),code:'source_claims',detail:(error as Error).message});}
   try{law=row.law===null?null:decodeGenerativeScenarioLaw(packet.sport,player,row.law);}catch(error){const detail=(error as Error).message,code=detail.includes("integer units:")?`units:${detail.split("units:")[1].trim()}`:detail.includes("stat units:")?`bound:${detail.split("units:")[1].trim()}`:detail.includes("weights")?"weights":detail.includes("coordinates")?"named_keys":"fields_or_identity";coordinates.push({playerId:id,playerIndex:packet.players.indexOf(player),code:code.slice(0,32),detail});}
+  if(row.law===null&&(!Array.isArray(row.gaps)||row.gaps.length===0||!Array.isArray(row.exceptions)||row.exceptions.length!==player.markets.length||row.exceptions.some(value=>typeof value!=='string'||!value.trim()))){
+   coordinates.push({playerId:id,playerIndex:packet.players.indexOf(player),code:'unsupported_disposition',detail:'law=null requires a source-bound gap and explicit aligned exceptions for EVERY market; supported scopes need a valid law'});
+  }
   players[id]={...(rendered??row),law} as PlayerReview;
   if(law){const accepted=validateLaw(packet.sport,player,law),issues=sourceForecastIssues(packet,player,accepted),exceptions=Array.isArray(row.exceptions)?row.exceptions:[];source.push({playerId:id,playerIndex:packet.players.indexOf(player),issues,unhandled:issues.filter(issue=>issue.markets.some(m=>typeof exceptions[player.markets.indexOf(m)]!=="string"||!(exceptions[player.markets.indexOf(m)] as string).trim()))});}
  }
@@ -29,6 +32,6 @@ export function inspectGenerativeDraft(packet:GamePacket,draft:unknown){
  });
  let summary=affected.length?`P=player;T=claim rendering(A/R indices);C=coordinates/claim selections;S=source(mean/support/yards/dep/pt/qt);M=market indices/ranges. ${affected.join("; ")}`:null;
  if(summary)for(const row of source){const example=row.unhandled.find(f=>f.example)?.example;if(example){const addition=`; P${row.playerIndex} ${example}`;if(summary.length+addition.length<=1024)summary+=addition;}}
- if(summary)for(const row of coordinates.filter(c=>c.code==='source_claims')){const detail=`; P${row.playerIndex} ${row.detail}`;if(summary.length+detail.length<=1024)summary+=detail;}
+ if(summary)for(const row of coordinates.filter(c=>c.code==='source_claims'||c.code==='unsupported_disposition')){const detail=`; P${row.playerIndex} ${row.detail}`;if(summary.length+detail.length<=1024)summary+=detail;}
  return {canonical:{players},coordinates,source,format,summary:summary?.slice(0,1024)??null};
 }

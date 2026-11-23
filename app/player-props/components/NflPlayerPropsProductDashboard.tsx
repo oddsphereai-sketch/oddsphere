@@ -12,6 +12,7 @@ import { nflPlayerPropsCanonicalMarketScopeKey } from "@/lib/services/football/n
 import { PlayerPropReaderDialog } from "./PlayerPropReaderDialog";
 import {
   nflPlayerPropsAvailabilityAgeLabel,
+  latestNflPlayerPropsQuoteTime,
   nflPlayerPropsTouchdownPlayerKey,
   resolveNflPlayerPropsActionableForecast,
   resolveNflPlayerPropsPrediction,
@@ -135,12 +136,13 @@ export function NflPlayerPropsProductDashboard({ snapshot, reviewMode = false, i
 }
 
 function NflSlateHeader({ snapshot, games, actionables, selectedGame, onSelectGame, reviewMode }: { snapshot: NflPlayerPropsMemberSnapshot; games: GameSummary[]; actionables: RadarItem[]; selectedGame: string; onSelectGame: (value: string) => void; reviewMode: boolean }) {
+  const quoteAt=latestNflPlayerPropsQuoteTime(snapshot.memberDecisions,snapshot.generatedAt);
   return <header data-product-zone="slate-intelligence" className="border-b border-gray-800 pb-6"><PlayerPropsSlateHero
     badge={reviewMode ? <span className="mb-2 inline-flex rounded border border-amber-400/30 px-2 py-1 text-[10px] font-black uppercase text-amber-200">Review only</span> : null}
     eyebrow={<>NFL · Week {snapshot.week}</>}
     title="Player Props"
     description="Start with today’s strongest model reads, compare the best available price, then open the full OddSphere research before making a decision."
-    status={<>Prices updated {localTime(snapshot.board.evaluatedAt)}</>}
+    status={quoteAt?<>Latest quote {localTime(quoteAt)}</>:<>Quote time unavailable</>}
     statusDetail={<>Exact offered prices across {unique(snapshot.memberDecisions.map((row) => row.sportsbook)).length} books · freezes at T-60</>}
     metrics={[
       { label: "Best angles", value: String(actionables.filter((item) => item.row.grade === "Best Angle").length), tone: "best" },

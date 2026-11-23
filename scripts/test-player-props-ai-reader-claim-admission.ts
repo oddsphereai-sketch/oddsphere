@@ -2,6 +2,7 @@
 /** Prospective R5 factual admission. Saved R29 failures are negative strings,
  * never corrections/reinterpretations of an accepted historical response. */
 import assert from 'node:assert/strict';
+import {reviewActorSchema} from './lib/player-props-ai-schema-fixture';
 import {PRODUCT_RELEASE,type GamePacket,type Evidence} from '../lib/playerPropsAi/evidenceContract';
 import {compileMarketReport} from '../lib/playerPropsAi/marketReport';
 import {digest} from '../lib/playerPropsAi/evidence';
@@ -42,7 +43,7 @@ const compactProof=row.sourceReadProofs as {catalogHash:string;claims:{id:string
 assert.equal(compactProof.catalogHash,digest(catalog));assert.equal(compactProof.claims.length,catalog.claims.length);
 for(const proof of compactProof.claims){const full=catalog.claims.find(c=>c.id===proof.id)!;assert.equal(proof.claimHash,digest(full),'Private proof must bind every byte of the FULL original claim, including relationship details');assert.deepEqual(proof.factIds,full.factIds);assert.deepEqual(proof.factHashes,full.factHashes);assert.deepEqual(proof.sourceIds,full.sourceIds);assert.equal(proof.availableAt,full.availableAt);assert(!Object.hasOwn(proof,'details'));assert(!Object.hasOwn(proof,'text'));assert(!Object.hasOwn(proof,'shortText'));}
 assert(Object.values(compactProof.areas).every(area=>!Object.hasOwn(area as object,'claims')),'Area selections must not duplicate full claims');assert(Buffer.byteLength(JSON.stringify(compactProof))<Buffer.byteLength(JSON.stringify(catalog)),'Exact hash bindings must reduce private proof storage without deleting original input evidence');
-const schema=jointReviewSchema(packet) as any,areas=schema.properties.players.properties[id].properties.coverage.properties;
+const schema=jointReviewSchema(packet) as any,areas=reviewActorSchema(schema,id).properties.coverage.properties;
 assert.deepEqual(areas.availability.properties.effect.enum,['neutral','uncertain','unavailable']);assert.deepEqual(areas.availability.properties.judgment.enum,['neutral','uncertain'],'Unknown own availability schema must match the runtime factual-influence guard');
 assert.deepEqual(areas.head_to_head.properties.effect.enum,['uncertain','unavailable']);assert.deepEqual(areas.head_to_head.properties.judgment.enum,['neutral','uncertain'],'Missing source schemas preserve the existing effect restriction');
 for(const [field,value] of [['effect','upward'],['judgment','supports']] as const){const invalid:any=structuredClone(raw);invalid.players[id].coverage.availability[field]=value;assert.throws(()=>parseJointReview(packet,invalid),/source_claims/);}

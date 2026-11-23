@@ -10,7 +10,7 @@ import {jointReviewSchema,parseJointPlayerReview,parseJointReview} from "./reque
 import {PROPS_AI_WIRE_RELEASE} from "./scenarioCoordinates";
 import {PROPS_AI_PRIMARY_MODEL,type PropsAiModel} from "./releases";
 
-export const ACTOR_ADMISSION_RELEASE="player_props_ai_actor_admission_2026_11_10_r2_verified_reader_claims" as const;
+export const ACTOR_ADMISSION_RELEASE="player_props_ai_actor_admission_2026_11_23_r3_explicit_law_disposition" as const;
 type RawObject=Record<string,unknown>;
 type AdmittedPlayer=ReturnType<typeof parseJointPlayerReview>;
 export type ActorAdmissionLineage={part:number;phase:1|2;model:PropsAiModel;requestedTier:string;actualTier:string;responseId:string;requestHash:string};
@@ -43,19 +43,26 @@ function freeze<T>(value:T):T{
  * The whole response must have the original structured-output shape even when
  * previously admitted actors' resampled numerical/prose interpretations are ignored.
  */
-function schemaValid(value:unknown,unknownSchema:unknown):boolean{
+function schemaValid(value:unknown,unknownSchema:unknown,root:unknown=unknownSchema,depth=0):boolean{
+  if(depth>64)return false;
   const schema=object(unknownSchema);if(!schema)return false;
-  const supported=new Set(["type","enum","anyOf","properties","additionalProperties","required","items","minItems","maxItems","minLength","maxLength","pattern","minimum","maximum","description"]);
+  const supported=new Set(["type","enum","anyOf","properties","additionalProperties","required","items","minItems","maxItems","minLength","maxLength","pattern","minimum","maximum","description","$defs","$ref"]);
   if(Object.keys(schema).some(key=>!supported.has(key)))return false;
-  if(Array.isArray(schema.anyOf))return schema.anyOf.some(option=>schemaValid(value,option));
+  if(Object.hasOwn(schema,'$defs')&&schema!==root)return false;
+  if(Object.hasOwn(schema,'$ref')){
+    if(Object.keys(schema).length!==1||typeof schema.$ref!=='string'||!/^#\/\$defs\/[a-zA-Z0-9_]+$/.test(schema.$ref))return false;
+    const definitions=object(object(root)?.$defs),key=schema.$ref.slice('#/$defs/'.length);
+    return Boolean(definitions&&Object.hasOwn(definitions,key)&&schemaValid(value,definitions[key],root,depth+1));
+  }
+  if(Array.isArray(schema.anyOf))return Object.keys(schema).length===1&&schema.anyOf.some(option=>schemaValid(value,option,root,depth+1));
   if(Array.isArray(schema.enum)&&!schema.enum.some(option=>digest(option)===digest(value)))return false;
   if(schema.type==="null")return value===null;
   if(schema.type==="object"){
     const row=object(value),properties=object(schema.properties);
     if(!row||!properties||schema.additionalProperties!==false||!Array.isArray(schema.required)||!schema.required.every(key=>typeof key==="string"&&Object.hasOwn(row,key)))return false;
-    return Object.keys(row).every(key=>Object.hasOwn(properties,key)&&schemaValid(row[key],properties[key]));
+    return Object.keys(row).every(key=>Object.hasOwn(properties,key)&&schemaValid(row[key],properties[key],root,depth+1));
   }
-  if(schema.type==="array")return Array.isArray(value)&&value.length>=(typeof schema.minItems==="number"?schema.minItems:0)&&value.length<=(typeof schema.maxItems==="number"?schema.maxItems:Infinity)&&value.every(item=>schemaValid(item,schema.items));
+  if(schema.type==="array")return Array.isArray(value)&&value.length>=(typeof schema.minItems==="number"?schema.minItems:0)&&value.length<=(typeof schema.maxItems==="number"?schema.maxItems:Infinity)&&value.every(item=>schemaValid(item,schema.items,root,depth+1));
   if(schema.type==="string")return typeof value==="string"&&Array.from(value).length>=(typeof schema.minLength==="number"?schema.minLength:0)&&Array.from(value).length<=(typeof schema.maxLength==="number"?schema.maxLength:Infinity)&&(typeof schema.pattern!=="string"||new RegExp(schema.pattern).test(value));
   if(schema.type==="integer")return typeof value==="number"&&Number.isSafeInteger(value)&&value>=(typeof schema.minimum==="number"?schema.minimum:-Infinity)&&value<=(typeof schema.maximum==="number"?schema.maximum:Infinity);
   return false;
