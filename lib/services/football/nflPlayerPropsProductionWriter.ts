@@ -85,7 +85,7 @@ import {
 } from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_11_23_r118_explicit_law_disposition" as const;
+  "nfl_player_props_writer_2026_11_23_r119_weighted_joint_examples" as const;
 export const NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES = 60 as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (

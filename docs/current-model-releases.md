@@ -1,3 +1,35 @@
+## November23 weighted joint-scenario construction guidance R58
+
+Prospective generation is `player_props_ai_2026_11_23_r58_weighted_joint_examples`;
+sole NBA writer is `nba_player_props_private_writer_2026_11_23_r42_weighted_joint_examples`,
+sole NFL writer is `nfl_player_props_writer_2026_11_23_r119_weighted_joint_examples`.
+Guidance R1 clarifies the existing sixteen-row weighted distribution: small positive
+relative weights can represent a source-supported rare event, zero-weight rows
+cannot witness a tail, and independently sorted marginal columns do not preserve
+required joint variation. Synthetic arithmetic examples are explicitly not player
+facts, probability targets/floors, model votes or permission to invent support.
+Missing support still requires an explicit source-bound exception or decline.
+
+This changes future request instructions only. Source input bytes, exact factual
+catalogs, schema, numerical/source/physical admission, actor R3, law5/grade7/select10,
+native MLB44, models, source requests, slots/phases, output caps, partition/count
+limits, deadlines, concurrency16, shared sport lease and spending limits remain.
+R57 and every older original request, law, membership and locked payload remain
+authoritative; explicit R57 membership and R58 benchmark freshness are preserved.
+For the same admitted law/source, decision and grade behavior is unchanged; no
+new demotion or hidden board contraction is introduced. Future generated answers
+can differ and require their own release-specific evaluation.
+
+The examples pass actual source-bound law and full reader admission for synthetic
+NBA/NFL/MLB cases; all-zero rare tails, zero-weight witnesses and erased source
+dependence remain rejected. This is not proof that a future model answer will
+comply, that a past failed/expired slot was repaired, or that accuracy improves.
+No extra paid test, third review, automatic law repair/decline, schema migration
+or historical rewrite. Require TWO new consecutive fresh triple whole-product
+CLEAR rounds and all local/hosted mocked-realPG/fresh-main/protected/actualReady
+gates, then ordinary scheduled review/publication/refresh/lock proof. See
+`model-audits/2026-11-23-props-weighted-joint-guidance-predeclaration.md`.
+
 ## November23 explicit unsupported review disposition R57
 
 Prospective shared generation is `player_props_ai_2026_11_23_r57_explicit_law_disposition`;
