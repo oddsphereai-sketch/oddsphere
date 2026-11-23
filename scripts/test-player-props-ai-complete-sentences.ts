@@ -1,5 +1,6 @@
 /** Synthetic admission checks only; no model/provider/network access. */
 import assert from "node:assert/strict";
+import {reviewActorSchema} from "./lib/player-props-ai-schema-fixture";
 import {draftAdmissionSummary,draftFormattingFindings} from "../lib/playerPropsAi/draftDiagnostics";
 import {physicalLawFindings} from "../lib/playerPropsAi/physicalDiagnostics";
 import {jointReviewSchema,correctionFeedback} from "../lib/playerPropsAi/request";
@@ -20,5 +21,5 @@ assert.equal(draftAdmissionSummary(packet,draft),null);
 // production schema has no free factual prose field to repair or bypass.
 type SchemaNode={type?:string;additionalProperties?:boolean;properties:Record<string,SchemaNode>};
 const schema=jointReviewSchema(packet) as unknown as SchemaNode;
-for(const p of packet.players){const s=schema.properties.players.properties[p.id].properties;assert.equal(s.assessment.type,'object');assert.equal(s.assessment.additionalProperties,false);assert.deepEqual(Object.keys(s.assessment.properties).sort(),['claimIds','judgment']);for(const area of READER_AREAS){const selection=s.coverage.properties[area];assert.equal(selection.additionalProperties,false);assert.deepEqual(Object.keys(selection.properties).sort(),['claimIds','effect','judgment']);assert(!Object.hasOwn(selection.properties,'observation'));}}
+for(const p of packet.players){const s=reviewActorSchema(schema,p.id).properties;assert.equal(s.assessment.type,'object');assert.equal(s.assessment.additionalProperties,false);assert.deepEqual(Object.keys(s.assessment.properties).sort(),['claimIds','judgment']);for(const area of READER_AREAS){const selection=s.coverage.properties[area];assert.equal(selection.additionalProperties,false);assert.deepEqual(Object.keys(selection.properties).sort(),['claimIds','effect','judgment']);assert(!Object.hasOwn(selection.properties,'observation'));}}
 console.log("Complete-sentence admission passed: all actors/areas and physical failures reported together within unchanged feedback, schema matches existing checks, no text/number mutation or paid calls.");

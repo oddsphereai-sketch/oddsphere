@@ -4,7 +4,16 @@ type NflPlayerPropsAvailabilityTimestamps = {
 };
 
 export const NFL_PLAYER_PROPS_PRESENTATION_RELEASE =
-  "nfl_player_props_presentation_2026_10_28_r2_reference_book_movement_continuity" as const;
+  "nfl_player_props_presentation_2026_11_23_r3_exact_quote_clock" as const;
+
+/** Display the latest real offered-quote clock, never a model evaluation or
+ * snapshot-write clock. This neither confirms a price nor changes any row. */
+export function latestNflPlayerPropsQuoteTime(rows:readonly {observedAt:string}[],snapshotAt:string):string|null{
+  const cutoff=Date.parse(snapshotAt);if(!Number.isFinite(cutoff))return null;
+  let latest:number|null=null,value:string|null=null;
+  for(const row of rows){const at=Date.parse(row.observedAt);if(Number.isFinite(at)&&at<=cutoff&&(latest===null||at>latest)){latest=at;value=row.observedAt;}}
+  return value;
+}
 
 export type NflPlayerPropsMovementBookEvidence = {
   sportsbook: string;

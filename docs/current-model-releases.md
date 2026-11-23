@@ -1,3 +1,38 @@
+## November23 explicit unsupported review disposition R57
+
+Prospective shared generation is `player_props_ai_2026_11_23_r57_explicit_law_disposition`;
+sole NBA writer is `nba_player_props_private_writer_2026_11_23_r41_explicit_law_disposition`,
+sole NFL writer is `nfl_player_props_writer_2026_11_23_r118_explicit_law_disposition`.
+The strict output schema now expresses the EXISTING backend invariant: a valid
+law or a null law with a nonempty source-bound gap and explicit exception for
+EVERY market. Actor-local source catalogs remain single-copy via local schema
+definitions. Complete diagnostics name every invalid unsupported disposition;
+no law, confidence, exception or fact is generated or repaired by this code.
+Actor-admission R3 validates bounded local schema references; old R2 archives
+remain bound to their original parser. Existing NBA benchmark-context membership
+is extended explicitly to R57, preserving every older generation.
+
+R56 and every older review retain permanent original release membership. Law5,
+grade7, selection10, native MLB44, numerical/factual/physical/source validation,
+all original source bytes, slots/phases, models, output caps, partition/count
+limits, deadlines, shared sport lease and spending limits stay unchanged. No
+schema migration, historical rewrite, extra paid test or forced review. NFL
+presentation `nfl_player_props_presentation_2026_11_23_r3_exact_quote_clock` shows
+the latest valid stored offered-row clock as Latest quote, not the older native
+board evaluation. Missing/invalid/future clocks stay unavailable; no price
+confirmation or new evaluation is inferred and no stored row is changed. NBA R40
+stat retention and NFL R117 source resilience are preserved in the sole writers.
+
+Two exact saved NFL corrections passed their submitted old schema while failing
+the existing null-law backend contract. Offline replay proves prospective schema
+rejection and complete diagnostics; it does not prove that the model will choose
+a supported forecast, correct other numerical tails/dependencies, complete future
+slots or improve accuracy. Unknown transport holds and historical failed/expired
+slots remain exact. Require TWO new consecutive fresh triple whole-product CLEAR
+rounds, all mandatory local/hosted mocked-realPG/protected gates and actual
+production/member behavior before calling this live. See
+`model-audits/2026-11-23-props-review-disposition-predeclaration.md`.
+
 ## November 20 NBA event-scoped split evidence R38
 
 Model/record `nba_professional_unified_2026_11_20_r38_event_scoped_split_evidence`,
@@ -706,7 +741,19 @@ current offers under the established book priority. Valid original contracts
 remain exact before the unchanged same-contract better-payout policy. No grade,
 risk, resistance or price-cap threshold changes and no new provider calls.
 
-CFB writer is `cfb_forward_evidence_writer_2026_11_16_r156_current_fixture_recovery`.
+CFB writer is `cfb_forward_evidence_writer_2026_11_22_r157_full_season_result_capacity`.
+R157 repairs the November 22 publication failure after season identities exceeded
+the former 1,200-game ceiling. The prior-result planner permits at most 2,400
+exact game IDs, retaining the existing 100-ID / three-UTC-date batches and
+four-page provider read budget. Latest captured schedule-date precedence,
+target/future exclusion and all numerical, market, grade, reader and lock
+semantics remain unchanged. The existing sole writer and shared CFB pipeline
+lease remain authoritative. The 1,282-game production-metadata replay loses no
+identity and exactly preserves the predecessor plan within its supported range;
+the old planner fails the full cohort. No historical correction is included.
+See `docs/model-audits/2026-11-22-cfb-full-season-result-capacity.md`.
+
+Its R156 predecessor fixed the following accuracy-only fixture recovery:
 Accuracy-only recovery requires the latest known unambiguous fixture time and
 teams; an expired opening placeholder cannot freeze a game before its corrected
 kickoff and block the genuine priced T-60 records. Existing official/public

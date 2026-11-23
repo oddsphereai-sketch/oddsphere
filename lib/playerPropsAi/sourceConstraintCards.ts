@@ -123,7 +123,7 @@ function issueCategory(issue:ForecastSanityIssue,means:Partial<Record<Statistic,
   return null;
 }
 function coordinateCategory(code:string):string|null{
-  const known:Readonly<Record<string,string>>={source_claims:'verified source reading selections',weights:'relative weights',named_keys:'named statistic keys',fields_or_identity:'coordinate shape/identity',
+  const known:Readonly<Record<string,string>>={source_claims:'verified source reading selections',unsupported_disposition:'law=null requires a source-bound gap AND explicit exceptions for EVERY market; retain a valid law for supported scopes',weights:'relative weights',named_keys:'named statistic keys',fields_or_identity:'coordinate shape/identity',
     'units:points_excluding_made_threes':'non-three points integer units','units:rebounds':'rebounds integer units','units:assists':'assists integer units','units:threes':'threes integer units',
     'bound:points':'total points bounds','bound:rebounds':'rebounds bounds','bound:assists':'assists bounds','bound:threes':'threes bounds'};
   // Existing generative diagnostics bound code strings to 32 characters.

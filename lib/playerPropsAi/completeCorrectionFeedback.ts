@@ -45,6 +45,7 @@ function buildCompleteDiagnosticCorrection(packet:GamePacket,draft:unknown,enric
   }
   for(const finding of coordinates){
    if(finding.code==='source_claims')entries.push('verified source reading selections: reselect required actor-local claim IDs');
+   else if(finding.code==='unsupported_disposition')entries.push('law=null requires a source-bound gap AND explicit exceptions for EVERY market; retain a valid law for supported scopes');
    else if(['weights','named_keys','fields_or_identity'].includes(finding.code))entries.push(`coordinates ${finding.code}`);
    else{const coordinate=completeCorrectionCoordinate(finding.code,generativeStatistics(packet.sport,player));if(!coordinate)return unavailable('diagnostic_unavailable',packet.players.map(p=>p.id));entries.push(`coordinates ${coordinate}`);}
   }
