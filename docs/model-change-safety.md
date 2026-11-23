@@ -1,3 +1,42 @@
+## November23 native NBA Best Angle exact-value coherence
+
+Prospective published native calibration is
+`nba_player_props_exact_price_grade_2026_11_23_r17_best_value`, forward policy
+`nba_player_props_forward_decision_2026_11_23_r16_best_value`, sole NBA writer
+`nba_player_props_private_writer_2026_11_23_r44_native_best_value`.
+`nbaPlayerPropsNativeGrade.ts` is the one published qualification/version path;
+the existing production entry applies it after original frozen native ranking.
+Only a fresh native Best with zero/negative own offered-price value becomes Lean.
+Existing Lean grades and forecast numbers, including confidence-led negative-value
+Leans, are unchanged; only fresh policy/version metadata is stamped.
+No native62%/-200 cutoff is introduced. The original eligible Best can recover
+at a genuinely improved positive-value price; both sides and all possible unit
+return classes are tested without creating/removing an actionable forecast.
+
+The fixed868-card board moves6 Best/78 Lean/65 Watch/719 NoPlay to4/80/65/719:
+all84 actionables and868 forecasts retained,2 within-actionable tier demotions,
+0 current promotions. No projection, probability, selected side, price, source,
+exposure or fitted parameter changes. The broader unpublished fe67 proposal was
+NOT CLEAR and is not this policy. Existing grade-intent permits negative-value
+confidence Leans; no new numerical native authorization or empirical accuracy
+claim is inferred. Any remaining required policy exception must be explicit.
+
+Fitted artifact13/model16/calibration15/raw audit forward14 remain exact in the
+old audit entry. The production lineage gate rejects unknown fitted sources.
+Only fresh native scoring gets the new published stamp; old locks, member
+readers, pending/LKG fallbacks and their clocks retain original payloads and
+releases. Shared AI58/law5/grade7/select10, NFL119/MLB44, source/call cadence,
+slots/phases/caps/deadlines/shared leases/schema/budget are unchanged. No paid
+proof, manual refresh, failed replay or historical correction.
+
+Full numerical/source parity, fixed-input impact/recovery, writer/reader locks,
+focused/model/type/lint/build, TWO new consecutive fresh triple whole-product
+CLEAR rounds, hosted mocked realPG, fresh-main/no-overlap/exactremoteTREE/strict
+up-to-date/no-bypass protected merge and actual Ready/normal publication/refresh/
+lock/internal tracking remain mandatory. See
+`model-audits/2026-11-23-native-nba-best-value-predeclaration.md` and the existing
+`daily-edge-grade-intent.md`; do not describe an unverified candidate as live.
+
 ## November23 weighted joint-scenario construction guidance R58
 
 Prospective generation is `player_props_ai_2026_11_23_r58_weighted_joint_examples`;
