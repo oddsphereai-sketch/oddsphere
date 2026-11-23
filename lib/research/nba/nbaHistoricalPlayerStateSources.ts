@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 export const NBA_HISTORICAL_PLAYER_STATE_SOURCE_RELEASE = "nba_historical_player_state_sources_2026_11_20_r1_primary_archives" as const;
 export type PdfCell = { text: string; x: number; y: number; width?: number };
+export const NBA_HISTORICAL_INJURY_GEOMETRY_RELEASE = "nba_historical_injury_geometry_2026_11_23_r3_canonical_viewport" as const;
+export function nbaHistoricalViewportCell(cell: PdfCell, transform: readonly number[]): PdfCell {
+  if (transform.length !== 6 || !transform.every(Number.isFinite) || !Number.isFinite(cell.x) || !Number.isFinite(cell.y)) throw Error("invalid_injury_viewport");
+  return { ...cell, x: transform[0]! * cell.x + transform[2]! * cell.y + transform[4]!, y: transform[1]! * cell.x + transform[3]! * cell.y + transform[5]! };
+}
 const hash = (v: Uint8Array) => createHash("sha256").update(v).digest("hex");
 const exactName = (v: string) => v.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 const biographyName = (v: string) => exactName(v.replace(/\b(jr|sr)\b\.?/gi, ""));
@@ -83,8 +88,15 @@ export type NbaHistoricalPdfClock = { release: typeof NBA_HISTORICAL_PLAYER_STAT
 /** Own receipt time is NEVER backdated. This is primary archived-document
  * availability evidence, not proof that our collector ran before the game. */
 export function verifyNbaHistoricalReportClock(args: { bytes: Uint8Array; url: string; text: string; creationDate: string; lastModified: string; fetchedAt: string }): NbaHistoricalPdfClock {
+  return { release: NBA_HISTORICAL_PLAYER_STATE_SOURCE_RELEASE, ...verifyHistoricalReportClockCore(args, ["ak-static.cms.nba.com"]) };
+}
+export const NBA_HISTORICAL_PDF_CLOCK_R2 = "nba_historical_pdf_clock_2026_11_23_r2_official_archive_hosts" as const;
+export function verifyNbaHistoricalReportClockV2(args: Parameters<typeof verifyNbaHistoricalReportClock>[0]) {
+  return { release: NBA_HISTORICAL_PDF_CLOCK_R2, ...verifyHistoricalReportClockCore(args, ["ak-static.cms.nba.com", "official.nba.com"]) };
+}
+function verifyHistoricalReportClockCore(args: Parameters<typeof verifyNbaHistoricalReportClock>[0], hosts: readonly string[]) {
   const url = new URL(args.url), path = /^\/referee\/injury\/Injury-Report_(\d{4})-(\d{2})-(\d{2})_[^/]+\.pdf$/.exec(url.pathname);
-  if (url.protocol !== "https:" || url.hostname !== "ak-static.cms.nba.com" || !path || url.search || url.hash || Buffer.from(args.bytes).subarray(0, 5).toString() !== "%PDF-") throw Error("untrusted_historical_report");
+  if (url.protocol !== "https:" || !hosts.includes(url.hostname) || !path || url.search || url.hash || Buffer.from(args.bytes).subarray(0, 5).toString() !== "%PDF-") throw Error("untrusted_historical_report");
   const headers = [...args.text.matchAll(/Injury\s+Report:\s*(\d{2})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})\s*(AM|PM)/g)];
   if (!headers.length || new Set(headers.map(m => m[0])).size !== 1) throw Error("missing_or_conflicting_printed_report_clock");
   const m = headers[0]!; if (+path[1]! !== 2000 + +m[3]! || +path[2]! !== +m[1]! || +path[3]! !== +m[2]!) throw Error("report_url_and_printed_date_disagree");
@@ -92,11 +104,11 @@ export function verifyNbaHistoricalReportClock(args: { bytes: Uint8Array; url: s
   const printed = etInstant(2000 + +m[3]!, +m[1]!, +m[2]!, +m[4]! % 12 + (m[6] === "PM" ? 12 : 0), +m[5]!);
   const created = parseNbaPdfCreationClock(args.creationDate), modified = Date.parse(args.lastModified), fetched = Date.parse(args.fetchedAt);
   if (![modified, fetched].every(Number.isFinite) || created < printed || modified < created || fetched < modified) throw Error("invalid_historical_publication_chronology");
-  return { release: NBA_HISTORICAL_PLAYER_STATE_SOURCE_RELEASE, kind: "verified_historical_primary_pdf", url: args.url,
+  return { kind: "verified_historical_primary_pdf" as const, url: args.url,
     rawSha256: hash(args.bytes), fetchedAt: args.fetchedAt, printedPublishedAt: new Date(printed).toISOString(), pdfCreatedAt: new Date(created).toISOString(),
     httpModifiedAt: new Date(modified).toISOString(), sourceAvailableAt: new Date(Math.max(printed, created, modified)).toISOString() };
 }
-export function nbaHistoricalReportAdmittedAt(clock: NbaHistoricalPdfClock, cutoff: string) {
+export function nbaHistoricalReportAdmittedAt(clock: Pick<NbaHistoricalPdfClock, "sourceAvailableAt">, cutoff: string) {
   const at = Date.parse(cutoff); return Number.isFinite(at) && Date.parse(clock.sourceAvailableAt) <= at;
 }
 export type PlayerIdentityFacts = { playerId: number; firstName: string; lastName: string; college: string | null; country: string | null;
@@ -124,7 +136,25 @@ export type NbaHistoricalInjurySection = { gameDate: string; matchup: string; te
  * create a new row. Page continuations retain their actual preceding section.
  * An omitted healthy player is deliberately NOT synthesized as Available. */
 export function parseNbaHistoricalInjuryPages(pages: readonly (readonly PdfCell[])[]): NbaHistoricalInjurySection[] {
-  const sections: NbaHistoricalInjurySection[] = []; let gameDate = "", matchup = "", current: NbaHistoricalInjurySection | undefined;
+  return parseInjuryPages(pages, false);
+}
+export const NBA_HISTORICAL_INJURY_TIME_RELEASE = "nba_historical_injury_time_2026_11_21_r2_printed_tip_binding" as const;
+export function parseNbaHistoricalInjuryPagesWithTimes(pages: readonly (readonly PdfCell[])[]) {
+  return parseInjuryPages(pages, true).map(s => { if (!s.gameTime) throw Error("missing_printed_injury_game_time"); return { ...s, gameTime: s.gameTime }; });
+}
+/** Binds a postgame native schedule value to a separately published pregame
+ * printed schedule. An omitted AM/PM is checked modulo twelve, not invented. */
+export function nbaHistoricalPrintedTipMatches(section: { gameDate: string; gameTime: string }, startAt: string) {
+  const clock = /^(\d{1,2}):(\d{2})(AM|PM)?(?:\(ET\))?$/.exec(section.gameTime);
+  if (!clock || +clock[1]! < 1 || +clock[1]! > 12 || +clock[2]! > 59 || !Number.isFinite(Date.parse(startAt))) return false;
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(startAt));
+  const p = Object.fromEntries(parts.map(p => [p.type, p.value]));
+  return section.gameDate === `${p.month}/${p.day}/${p.year}` && +clock[2]! === +p.minute! &&
+    (clock[3] ? +p.hour! === +clock[1]! % 12 + (clock[3] === "PM" ? 12 : 0) : +p.hour! % 12 === +clock[1]! % 12);
+}
+function parseInjuryPages(pages: readonly (readonly PdfCell[])[], includeTimes: boolean) {
+  type Section = NbaHistoricalInjurySection & { gameTime?: string };
+  const sections: Section[] = []; let gameDate = "", gameTime = "", matchup = "", current: Section | undefined;
   let bounds: { date: number; time: number; matchup: number; team: number; player: number; status: number; reason: number } | undefined;
   let previous: NbaHistoricalInjurySection["players"][number] | undefined;
   for (const [page, cells] of pages.entries()) {
@@ -146,10 +176,11 @@ export function parseNbaHistoricalInjuryPages(pages: readonly (readonly PdfCell[
       const b = bounds, field = (lo: number, hi = Infinity) => row.filter(c => c.x >= lo - 2 && c.x < hi - 2).map(c => c.text.trim()).join(" ").trim();
       const date = field(b.date, b.time), match = field(b.matchup, b.team), team = field(b.team, b.player), player = field(b.player, b.status), status = field(b.status, b.reason), reason = field(b.reason);
       if (date) { if (!/^\d{2}\/\d{2}\/\d{4}$/.test(date)) throw Error("invalid_injury_game_date"); gameDate = date; }
+      if (includeTimes) { const printedTime = field(b.time, b.matchup).replace(/\s/g, ""); if (printedTime) { if (!/^\d{1,2}:\d{2}(?:AM|PM)?(?:\(ET\))?$/.test(printedTime)) throw Error("invalid_printed_injury_game_time"); gameTime = printedTime; } }
       if (match) { if (!/^[A-Z]{2,3}@[A-Z]{2,3}$/.test(match)) throw Error("invalid_injury_matchup"); matchup = match; current = undefined; previous = undefined; }
       if (team) {
         if (!gameDate || !matchup) throw Error("orphan_injury_team");
-        current = { gameDate, matchup, teamName: team, submitted: !/NOT YET SUBMITTED/i.test(player + " " + status + " " + reason), players: [] };
+        current = { gameDate, matchup, teamName: team, submitted: !/NOT YET SUBMITTED/i.test(player + " " + status + " " + reason), players: [], ...(includeTimes ? { gameTime } : {}) };
         if (sections.some(s => s.gameDate === gameDate && s.matchup === matchup && s.teamName === team)) throw Error("duplicate_injury_team_section");
         sections.push(current); previous = undefined;
       }

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as newer from "../lib/research/nba/nbaHistoricalPlayerStateSources";
 import { bridgeNbaHistoricalPlayerIds, nbaHistoricalReportAdmittedAt, parseNbaHistoricalInjuryPages,
   parseNbaPdfCreationClock, splitNbaRosterColumns, verifyNbaHistoricalReportClock,
   type PdfCell, type PlayerIdentityFacts } from "../lib/research/nba/nbaHistoricalPlayerStateSources";
@@ -50,3 +51,18 @@ assert.throws(() => parseNbaHistoricalInjuryPages([first, [cell("Los Angeles Lak
 assert.throws(() => parseNbaHistoricalInjuryPages([[...header, cell("Out", 586, 450)]]), /malformed/);
 assert.throws(() => parseNbaHistoricalInjuryPages([[...header, cell("Unowned reason", 667, 450)]]), /orphan/);
 console.log("Historical NBA primary clocks, real fetch-time preservation, cutoff/DST refusal, biographical identity/generations, merged roster columns, wrapped/page-continuation injuries and unknown-team refusal passed; no model fit or production access.");
+
+// Explicit R2/R3 paths do not widen the original R1 host/parser contract.
+const official = { ...original, url: original.url.replace("ak-static.cms.nba.com", "official.nba.com") };
+assert.throws(() => verifyNbaHistoricalReportClock(official), /untrusted/);
+assert.equal(newer.verifyNbaHistoricalReportClockV2(official).sourceAvailableAt, clock.sourceAvailableAt);
+assert.throws(() => newer.verifyNbaHistoricalReportClockV2({ ...official, url: official.url.replace("official.nba.com", "official.nba.com.example.org") }), /untrusted/);
+const timed = [...first, cell("07:30 (ET)", 120, 450)];
+const withTimes = newer.parseNbaHistoricalInjuryPagesWithTimes([timed]);
+assert.equal(withTimes[0]!.gameTime, "07:30(ET)");
+assert(newer.nbaHistoricalPrintedTipMatches(withTimes[0]!, "2023-10-24T23:30:00Z"));
+assert(!newer.nbaHistoricalPrintedTipMatches(withTimes[0]!, "2023-10-24T23:00:00Z"));
+assert(!newer.nbaHistoricalPrintedTipMatches(withTimes[0]!, "2023-10-25T23:30:00Z"));
+const rotated = timed.map(c => ({ ...c, x: c.y, y: c.x }));
+assert.deepEqual(newer.parseNbaHistoricalInjuryPagesWithTimes([rotated.map(c => newer.nbaHistoricalViewportCell(c, [0, 1, 1, 0, 0, 0]))]), withTimes);
+assert.deepEqual(parseNbaHistoricalInjuryPages([first, second]), report, "legacy parser remains exact");
