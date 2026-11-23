@@ -37,6 +37,25 @@ lock/internal tracking remain mandatory. See
 `model-audits/2026-11-23-native-nba-best-value-predeclaration.md` and the existing
 `daily-edge-grade-intent.md`; do not describe an unverified candidate as live.
 
+
+### Explicit owner-approved correctness exception, November23
+
+On November23,2026 the owner answered **“Approve this narrow correctness
+exception”** to the following exact proposed exception:
+
+> May I treat the narrow native NBA Best Angle correction as an exception to the repository’s held-out-evidence requirement? It changes only nonpositive-value Best Angle labels to Lean, preserves every forecast, price, existing Lean and all 84 actionables, and still requires two fresh independent review rounds, CI, protected merge and live verification. No extra paid tests.
+
+This authorizes only the prospective native R17/forward R16/writer R44 label
+coherence correction described here. It is an explicit exception to section4’s
+held-out-evidence prerequisite for this correction, not empirical proof of
+accuracy, ROI or improved calibration. It does not authorize the rejected
+fe67 policy, a Lean value floor, new numerical thresholds, changed forecasts,
+source/evidence relaxation, extra paid calls, historical relabeling, altered
+stakes or any other policy waiver. All84 actionables on the fixed input remain
+actionable. Every other local/hosted, two-fresh-triple-round, shared-lease,
+locked-record and protected-production/live-verification gate still applies.
+Round140’s original NOT CLEAR reports remain unchanged and earn no clean credit.
+
 ## November23 weighted joint-scenario construction guidance R58
 
 Prospective generation is `player_props_ai_2026_11_23_r58_weighted_joint_examples`;
