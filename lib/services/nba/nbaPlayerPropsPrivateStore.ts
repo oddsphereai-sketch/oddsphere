@@ -2,6 +2,7 @@ import {assertNbaWithdrawalAuthority,type NbaWithdrawalAuthority} from "../../pl
 import {assertNbaStoredLocksUnambiguous,assertNbaLockedPayloadsPreserved} from './nbaPlayerPropsLockIntegrity';
 import {digest} from "../../playerPropsAi/evidence";
 import { stringifyPropsAiCoverage, parsePropsAiCoverage } from "../../playerPropsAi/coverageCodec";
+import {NBA_PROPS_MARKET_ROW_TABLE,planNbaPropsMarketRowTable,stringifyNbaPropsMarketRowTable,parseNbaPropsMarketRowTable} from "./nbaPlayerPropsMarketRowTable";
 import { createHash } from "node:crypto";
 import { isUtf8 } from "node:buffer";
 import { gunzipSync, gzipSync, createGzip } from "node:zlib";
@@ -13,8 +14,9 @@ import type { NbaPlayerPropPriceObservation } from "./nbaPlayerPropsContract";
 import type { NbaPlayerPropsMemberSnapshot } from "./nbaPlayerPropsProductContract";
 
 export const NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE =
-  "nba_player_props_private_store_2026_11_08_r8_interned_ai_coverage" as const;
+  "nba_player_props_private_store_2026_11_23_r9_lossless_market_rows" as const;
 const NBA_PLAYER_PROPS_PRIVATE_STORE_LEGACY_RELEASES = new Set([
+  "nba_player_props_private_store_2026_11_08_r8_interned_ai_coverage",
   "nba_player_props_private_store_2026_11_07_r7_native_reconfirmation",
   "nba_player_props_private_store_2026_10_28_r6_expanded_bounded_market_history_capacity",
   "nba_player_props_private_store_2026_10_23_r5_bounded_market_history_capacity",
@@ -43,6 +45,7 @@ type Envelope = Readonly<{
   uncompressedBytes: number;
   compressedBytes: number;
   payload: string;
+  payloadSchema?: typeof NBA_PROPS_MARKET_ROW_TABLE;
 }>;
 
 export type NbaPlayerPropsMarketHistory = Readonly<{
@@ -143,8 +146,39 @@ export async function readNbaPlayerPropsMarketHistory(args: {
   client: SupabaseClient;
   slateDate: string;
 }): Promise<NbaPlayerPropsMarketHistory | null> {
-  const payload = await readPayload(args.client, nbaPlayerPropsMarketHistoryKey(args.slateDate));
-  return payload === null ? null : decode<NbaPlayerPropsMarketHistory>(payload, "market_history");
+  const {data,error} = await args.client.from("lab_response_snapshots")
+    .select("payload").eq("snapshot_key", nbaPlayerPropsMarketHistoryKey(args.slateDate)).maybeSingle();
+  if (error) throw new Error(`NBA props private payload read failed: ${error.message}`);
+  if (data === null) return null;
+  const history = decode<NbaPlayerPropsMarketHistory>(data?.payload, "market_history");
+  if (!validMarketHistory(history, args.slateDate)) throw new Error("NBA props retained market history is invalid; replacement refused.");
+  return history;
+}
+
+function validMarketHistory(value: unknown, slateDate: string): value is NbaPlayerPropsMarketHistory {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const history = value as Record<string, unknown>;
+  if ((history.release !== NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE
+      && !NBA_PLAYER_PROPS_PRIVATE_STORE_LEGACY_RELEASES.has(String(history.release)))
+    || history.publicEnabled !== false || history.slateDate !== slateDate
+    || typeof history.createdAt !== "string" || !Number.isFinite(Date.parse(history.createdAt))
+    || typeof history.updatedAt !== "string" || !Number.isFinite(Date.parse(history.updatedAt))
+    || !Array.isArray(history.observations)
+    || history.observations.length > NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_OBSERVATIONS) return false;
+  const strings = ["release", "provider", "providerObservationId", "providerEventId", "sportsbook", "market", "providerMarket", "offerType", "side", "observedAt", "fetchedAt"];
+  const nullable = ["canonicalGameId", "canonicalPlayerId", "providerPlayerId", "playerName", "playerTeam", "homeTeam", "awayTeam", "scheduledStart"];
+  return history.observations.every(value => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const row = value as Record<string, unknown>;
+    return strings.every(key => typeof row[key] === "string")
+      && nullable.every(key => row[key] === undefined || row[key] === null || typeof row[key] === "string")
+      && typeof row.line === "number" && Number.isFinite(row.line)
+      && typeof row.americanPrice === "number" && Number.isFinite(row.americanPrice)
+      && typeof row.isOpening === "boolean" && typeof row.isLive === "boolean"
+      && ["receivedAt", "playerIdentityAvailableAt"].every(key => row[key] === undefined || row[key] === null || typeof row[key] === "string")
+      && (row.playerIdentityEvidence === undefined || row.playerIdentityEvidence === null
+        || typeof row.playerIdentityEvidence === "object" && !Array.isArray(row.playerIdentityEvidence));
+  });
 }
 
 export function mergeNbaPlayerPropsMarketHistory(args: {
@@ -254,10 +288,15 @@ export async function writeNbaPlayerPropsMarketHistory(args: {
  * alongside the already decoded quote objects. Compression is backpressured;
  * the only retained output is the existing <=8 MB compressed envelope. */
 export async function encodeNbaPlayerPropsMarketHistoryPayload(history: NbaPlayerPropsMarketHistory): Promise<Envelope> {
+  if (history.observations.length > NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_OBSERVATIONS) {
+    throw new Error("NBA props market history row limit exceeded.");
+  }
   const limits = payloadLimits("market_history");
+  const table = planNbaPropsMarketRowTable(history, NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_OBSERVATIONS);
   const checksum = createHash("sha256");
   let uncompressedBytes = 0;
   function* parts(): Generator<string> {
+    if (table) { yield* stringifyNbaPropsMarketRowTable(history, table); return; }
     yield "{";
     let first = true;
     for (const [key, value] of Object.entries(history)) {
@@ -309,7 +348,8 @@ export async function encodeNbaPlayerPropsMarketHistoryPayload(history: NbaPlaye
   );
   return { kind: "nba_player_props_private_envelope_v1", release: NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE,
     encoding: "gzip-base64", payloadKind: "market_history", checksum: checksum.digest("hex"),
-    uncompressedBytes, compressedBytes, payload: Buffer.concat(output, compressedBytes).toString("base64") };
+    uncompressedBytes, compressedBytes, payload: Buffer.concat(output, compressedBytes).toString("base64"),
+    ...(table ? {payloadSchema: NBA_PROPS_MARKET_ROW_TABLE} : {}) };
 }
 
 export function encodeNbaPlayerPropsPrivatePayload(
@@ -356,6 +396,11 @@ function encode(payload: unknown, payloadKind: Envelope["payloadKind"]): Envelop
 function decode<T>(value: unknown, payloadKind: Envelope["payloadKind"]): T | null {
   if (!isEnvelope(value) || value.payloadKind !== payloadKind) return null;
   try {
+    const current = value.release === NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE;
+    const table = current && value.payloadSchema === NBA_PROPS_MARKET_ROW_TABLE;
+    if (value.payloadSchema === NBA_PROPS_MARKET_ROW_TABLE && (!current || payloadKind !== "market_history")) return null;
+    if (current && value.payloadSchema !== undefined && (!table || payloadKind !== "market_history")) return null;
+    if (table && value.compressedBytes > payloadLimits(payloadKind).gzip) return null;
     const limit = payloadLimits(payloadKind).json;
     if (value.uncompressedBytes < 0 || value.uncompressedBytes > limit) return null;
     const compressed = Buffer.from(value.payload, "base64");
@@ -376,7 +421,9 @@ function decode<T>(value: unknown, payloadKind: Envelope["payloadKind"]): T | nu
     // Preserve legacy replacement-character semantics for malformed UTF-8.
     const hashInput = isUtf8(decoded) ? decoded : decoded.toString("utf8");
     if (createHash("sha256").update(hashInput).digest("hex") !== value.checksum) return null;
-    return (payloadKind === "candidate_snapshot" ? parsePropsAiCoverage(decoded.toString("utf8")) : JSON.parse(decoded.toString("utf8"))) as T;
+    const parsed = payloadKind === "candidate_snapshot" ? parsePropsAiCoverage(decoded.toString("utf8")) : JSON.parse(decoded.toString("utf8"));
+    if (current && !table && parsed?.format === NBA_PROPS_MARKET_ROW_TABLE) return null;
+    return (table ? parseNbaPropsMarketRowTable(parsed, NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_OBSERVATIONS) : parsed) as T;
   } catch {
     return null;
   }

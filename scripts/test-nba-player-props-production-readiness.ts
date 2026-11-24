@@ -64,7 +64,7 @@ assert.equal(
 );
 assert.equal(
   NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE,
-  "nba_player_props_private_writer_2026_11_23_r45_count_stage_headroom",
+  "nba_player_props_private_writer_2026_11_23_r47_lossless_market_rows",
 );
 assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: 18.2, finalProjection: 18.8 }), true);
 assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: 0, finalProjection: 18.8 }), false);
@@ -600,7 +600,7 @@ assert.equal(NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_JSON_BYTES, 192_000_000);
 assert.equal(NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_OBSERVATIONS, 250_000);
 assert.equal(
   NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE,
-  "nba_player_props_private_store_2026_11_08_r8_interned_ai_coverage",
+  "nba_player_props_private_store_2026_11_23_r9_lossless_market_rows",
 );
 assert.deepEqual(decodeNbaPlayerPropsPrivatePayload({
   ...envelope,

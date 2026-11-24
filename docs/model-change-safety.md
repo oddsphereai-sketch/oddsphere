@@ -1,3 +1,80 @@
+## November23 lossless large NBA quote-history storage R61
+
+Prospective shared generation `player_props_ai_2026_11_23_r61_lossless_market_rows`,
+NBA writer `nba_player_props_private_writer_2026_11_23_r47_lossless_market_rows`,
+NFL writer `nfl_player_props_writer_2026_11_23_r122_lossless_market_rows` and private
+NBA store `nba_player_props_private_store_2026_11_23_r9_lossless_market_rows`.
+Native17/forward16, law5/grade7/selection10/nativeMLB44 remain unchanged.
+
+Ordinary03:42 NBA publication failed at the streaming market-history JSON limit.
+The last retained actual history is208,979 rows/191,584,903 JSON bytes, leaving
+415,097 bytes under the unchanged192MB limit; repeated property names alone
+occupy75,169,063 bytes. The failed later merged body itself was not retained;
+its precise row count and bytes remain unavailable. This is a storage capacity
+failure, not a failed AI review or demonstrated vendor/rate/credit/output issue.
+The original975 locked cards and old coherent snapshot remain authoritative.
+
+For large eligible histories, intern ordered property-name layouts and stream
+row value tuples. Restore every original JSON field/value, row order and duplicate
+multiplicity on read; no quote, clock, identity receipt or history state is dropped.
+The existing192MB wire/8MB gzip/250,000-row limits remain. Layouts/columns/key bytes
+are separately bounded64/64/128. Unsupported shapes retain the original bounded
+JSON path. New format tags/checksums and strict table validation reject corruption;
+old store envelopes retain their original decoding and locked reader precedence.
+No provider request, model request/count, review phase/slot, cadence, numerical
+rule, source gate, input/output cap, budget, schema or sport lease is changed.
+Fixed same-input published decisions/grades/actionable counts must remain exact:
+zero promotions/demotions and zero hidden board contraction. There is no new
+held-out calibration or predictive-accuracy claim. OriginalR60 request/law/source
+semantics and accepted versions remain explicit; R60 guidance is unchanged.
+
+
+A present but undecodable market envelope throws before merge or any history/candidate write. Only an absent stored payload is a missing-history sentinel; malformed tags/checksums/layouts never authorize replacement. Round148 found this inherited caller conflation; its original NOT CLEAR evidence is preserved and earns no clean credit.
+
+Require actual retained-source roundtrip and resource benchmarks, malformed and
+bounded failure controls, complete source/law/price/lock parity, mandatory focused/
+model/type/lint/webpack and hosted realPG with ALL AI HTTP mocked. Require TWO NEW
+consecutive fresh triple whole-product CLEAR rounds, fresh-main/no-overlap/exact
+remote tree/strict-up-to-date/no-bypass expected-head protected merge, actualReady
+and only normal scheduled writer/public/lock proof. No paid test, closed replay,
+third review, manual refresh, provider/model/count request or historical rewrite.
+
+## November23 correction event-support witnesses R60
+
+Prospective generation `player_props_ai_2026_11_23_r60_correction_event_witnesses`,
+NBA writer `nba_player_props_private_writer_2026_11_23_r46_correction_event_witnesses`,
+NFL writer `nfl_player_props_writer_2026_11_23_r121_correction_event_witnesses`.
+Native qualification17/forward16, law5/grade7/selection10/nativeMLB44 remain.
+
+The ordinary SAS final failed after four primary and three correction responses
+completed. In the same original part/actor, primary source errors concerned a
+PRA24.5 tail; correction fixed that but erased previously valid threes2.5 support.
+The full old numerical draft and complete1313-byte feedback were actually sent.
+No timing, rate, billing or output cause is established. This failure stays closed.
+
+Append bounded original positive-weight event/complement/push witness indices to
+that same correction, explicitly labeled an UNACCEPTED draft reference, never
+source evidence or approved values. Recheck all unchanged source requirements
+when editing joint coordinates/weights; do not erase a formerly supported tail
+while fixing another scope. Existing strict validators still reject both saved
+bad drafts. No law, weight, outcome, exception or decline is automatically changed.
+Only the existing feedback allowance1984bytes is used; original diagnostics,
+previously fitting numerical references and valid declines remain an exact prefix.
+If the complete extra table cannot fit (including JSON escaping), omit it whole.
+No input/output cap, model, phase/slot, provider, cadence, lease, budget or grade
+rule changes. Fixed stored/accepted/locked board impact is zero; future inference
+results and correction success need ordinary receipts, not a purchased proof.
+
+All original releases/pins/wires/requests/laws and stored locks stay authoritative;
+R59 explicitly remains accepted and benchmark-fresh. No schema/DB migration or
+paid switch. Require focused/model/type/lint/webpack and exact hosted realPG with
+ALL AI HTTP mocked, TWO NEW consecutive fresh triple whole-product CLEAR rounds,
+fresh-main/no-overlap/exact remote tree/strict-up-to-date/no-bypass expected-head
+protected merge, actual Ready/www/source and ordinary publication/lock proof.
+No extra paid tests, replay of closed jobs, third review, operator refresh or
+provider/model/token-count request. This is prospective guidance, no guarantee
+of future comprehension, numerical acceptance, collector coverage or accuracy.
+
 ## November23 NBA exact saved-card lock handoff R11
 
 Prospective member-lock publication is

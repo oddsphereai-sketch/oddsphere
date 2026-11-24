@@ -89,3 +89,13 @@ There are no remaining NBA lock entries tonight after the ten-game slate.
 Keep the prospective future-lock qualification explicit; a green synthetic or
 preview test is not an actual future lock. Original R39/R5 successful live
 publication and the thirty original locks remain separately documented.
+
+## November24 fresh production integration
+
+Integrated production `29d6bbf1ea3736f366e4bf9a2f7cdd1591877b60`, including
+R60 correction witnesses and R61 lossless market-history storage. Both full
+released registry/safety sections are retained byte-for-byte. No R60/R61
+runtime hunk conflicts with the exact-card publication change. Prior f27 checks
+are not credited as current-base verification; rerun focused, model, type,
+lint, build and committed integration checks before updating the draft. The
+future ordinary-lock qualification remains pending.
