@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { __NBA_ROSTER_REGIME_TEST__, applyNbaRosterRegime, fetchNbaLiveRosterSnapshot } from "../lib/automodel/nba/nbaRosterRegime";
 import { NBA_PROFESSIONAL_MODEL_ARTIFACT } from "../lib/automodel/nba/nbaProfessionalRuntimeArtifacts";
 import { buildNbaProfessionalCandidate } from "../lib/services/nba/nbaProfessionalCandidate";
@@ -9,7 +10,7 @@ import { markNbaReaderBuildFailure } from "../lib/services/nba/nbaReaderBuildPha
 import { nbaReaderUnavailableResponse } from "../lib/services/nba/nbaReaderPublication";
 import { refreshDailyEdgeResponseSnapshot } from "../lib/services/labResponseSnapshotWriter";
 
-async function main() {
+export async function testNbaRequestRoster() {
   const previousFetch = globalThis.fetch;
   let network = 0;
   globalThis.fetch = async () => { network++; throw Error("unexpected real IO"); };
@@ -133,4 +134,6 @@ async function main() {
       realNetworkRequests: network, projectionChangesOnSameInput: 0, promotions: 0, demotions: 0 }));
   } finally { globalThis.fetch = previousFetch; }
 }
-main().catch(error => { console.error(error); process.exitCode = 1; });
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  testNbaRequestRoster().catch(error => { console.error(error); process.exitCode = 1; });
+}

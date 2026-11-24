@@ -90,6 +90,21 @@ cron literal and a removed conditional heading. The tests now check the current
 helper pagination/count proof, actual R26 cron and current NBA heading; runtime
 source/cron/UI behavior is not restored to an older release.
 
+## Verified local checks on the integrated production base
+
+On integrated main `44a5457101128688f4cd454af4fb0007c62c0a89`, all sixteen
+focused NBA suites, full repository TypeScript (`--incremental false`), affected
+ESLint and `npm run verify:model-change` pass. The optional local Market Brain
+PostgreSQL proof is explicitly skipped because its URL is unset. The new roster
+regressions run serially from the existing required reader-publication suite;
+`package.json` is unchanged, preserving another task's independent test wiring.
+The initial test-entry attempt lacked the mock DB environment and failed before
+any I/O; the serial entry uses the existing fixture environment correctly.
+
+The default local Turbopack build rejects this isolated worktree's external
+`node_modules` symlink. The webpack production build is checked separately;
+this is a worktree tooling constraint, not evidence of a live application error.
+
 ## Release gates and rollback
 
 Before publication: focused suites, `npm run verify:model-change`, semantic

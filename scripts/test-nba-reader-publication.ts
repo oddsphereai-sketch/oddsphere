@@ -1,3 +1,4 @@
+import {testNbaRequestRoster} from "./test-nba-request-roster";
 import {NBA_READER_BUILD_PHASES,markNbaReaderBuildFailure} from "../lib/services/nba/nbaReaderBuildPhase";
 import "./test-nba-split-evidence-read";
 import "./test-nba-price-evidence-read";
@@ -8,6 +9,7 @@ import {reconcileNbaMarketConsequence} from "../lib/services/nba/nbaMarketConseq
 import {gradeNbaR30MarketForAudit} from "../lib/services/nba/nbaMarketReview";
 
 async function main(){
+ await testNbaRequestRoster();
  const previousFetch=globalThis.fetch;let network=0;globalThis.fetch=async()=>{network++;throw Error("unexpected real IO");};
  try{
   assert.doesNotThrow(()=>assertNbaReaderEvidenceComplete([]),"successful empty observations are not an opposition/confirmation gate");
