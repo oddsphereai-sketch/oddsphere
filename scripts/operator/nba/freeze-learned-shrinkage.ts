@@ -1,0 +1,12 @@
+import fs from "node:fs";
+import {gunzipSync} from "node:zlib";
+import {createHash} from "node:crypto";
+import {nbaPlayerStateHash} from "../../../lib/research/nba/nbaPlayerStateLedger";
+import {NBA_LEARNED_SHRINKAGE_RELEASE,type NbaLearnedShrinkageHead} from "../../../lib/research/nba/nbaLearnedShrinkage";
+const [input,rawPath,output]=process.argv.slice(2);
+if(!input||!rawPath||!output||fs.existsSync(output))throw Error("usage: freeze-learned-shrinkage INPUT RAW_FIT NEW_HEAD");
+const bytes=fs.readFileSync(input),source=JSON.parse(gunzipSync(bytes).toString()),raw=fs.readFileSync(rawPath),fit=JSON.parse(raw.toString());
+if(fit.inputSha256!==createHash("sha256").update(bytes).digest("hex")||fit.release!==NBA_LEARNED_SHRINKAGE_RELEASE||fit.trainingHash!==source.trainingHash||fit.trainingEnd!==source.baseline.trainingEnd||fit.baselineHash!==source.baseline.hash||nbaPlayerStateHash(fit.design)!==nbaPlayerStateHash(source.baseline.artifact.design)||!fit.fit.margin.success||!fit.fit.total.success)throw Error("learned_fit_source_mismatch");
+const core:Omit<NbaLearnedShrinkageHead,"hash">={release:fit.release,sourceRecipe:fit.sourceRecipe,trainingHash:fit.trainingHash,baselineHash:fit.baselineHash,rawFitSha256:createHash("sha256").update(raw).digest("hex"),trainingEnd:fit.trainingEnd,trainingRows:fit.trainingRows,design:fit.design,margin:fit.margin,total:fit.total};
+const result={frozenAt:new Date().toISOString(),inputSha256:fit.inputSha256,head:{...core,hash:nbaPlayerStateHash(core)},fittingPerformed:false,developmentRead:false};
+fs.writeFileSync(output,JSON.stringify(result,null,2),{flag:"wx",mode:0o600});console.log(JSON.stringify({frozenAt:result.frozenAt,headHash:result.head.hash,inputSha256:result.inputSha256,marginAlpha:fit.margin.alpha,totalAlpha:fit.total.alpha}));
