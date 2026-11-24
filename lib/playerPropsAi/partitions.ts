@@ -67,10 +67,19 @@ export async function prepareReviewParts(packet: GamePacket, args: { key: string
         args.onCountStage?.(packets.length);
         const tokens=await Promise.all(packets.map(p=>count(p,model)));
         if(tokens.every(n=>n<=PROPS_AI_MAX_INPUT_PER_REQUEST)){parts=packets.map((p,i)=>({packet:p,inputTokens:tokens[i]}));break;}
-        const from=tokens.indexOf(Math.max(...tokens)),available=tokens.map((load,i)=>({load,i})).filter(({i})=>i!==from&&bins[i].length<actorLimit).sort((a,b)=>a.load-b.load);
+        // Rebalancing needs a recipient with measured input headroom. Moving
+        // a whole player between already-full bins spends another remote count
+        // round without a usable destination; advance to more whole-player bins.
+        // Estimates still choose bins, and every accepted wire is counted exactly.
+        const from=tokens.indexOf(Math.max(...tokens)),available=tokens.map((load,i)=>({load,i})).filter(({load,i})=>i!==from&&bins[i].length<actorLimit&&load<PROPS_AI_MAX_INPUT_PER_REQUEST).sort((a,b)=>a.load-b.load);
         if(!available.length)break;const to=available[0].i;
         const moved=weighted.filter(p=>bins[from].includes(p.id)).sort((a,b)=>Math.abs((loads[from]-a.weight)-(loads[to]+a.weight))-Math.abs((loads[from]-b.weight)-(loads[to]+b.weight)))[0];
         if(!moved||bins[from].length<=1)break;
+        const beforeImbalance=Math.abs(loads[from]-loads[to]);
+        const afterImbalance=Math.abs((loads[from]-moved.weight)-(loads[to]+moved.weight));
+        // A swap/plateau under this same sizing heuristic is not progress.
+        // Do not issue another exact count merely to oscillate whole players.
+        if(afterImbalance>=beforeImbalance)break;
         bins[from]=bins[from].filter(id=>id!==moved.id);bins[to].push(moved.id);loads[from]-=moved.weight;loads[to]+=moved.weight;
       }
       if(parts.length)break;
