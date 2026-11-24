@@ -28,6 +28,9 @@ zero promotions/demotions and zero hidden board contraction. There is no new
 held-out calibration or predictive-accuracy claim. OriginalR60 request/law/source
 semantics and accepted versions remain explicit; R60 guidance is unchanged.
 
+
+A present but undecodable market envelope throws before merge or any history/candidate write. Only an absent stored payload is a missing-history sentinel; malformed tags/checksums/layouts never authorize replacement. Round148 found this inherited caller conflation; its original NOT CLEAR evidence is preserved and earns no clean credit.
+
 Require actual retained-source roundtrip and resource benchmarks, malformed and
 bounded failure controls, complete source/law/price/lock parity, mandatory focused/
 model/type/lint/webpack and hosted realPG with ALL AI HTTP mocked. Require TWO NEW

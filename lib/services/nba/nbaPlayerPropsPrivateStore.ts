@@ -146,8 +146,39 @@ export async function readNbaPlayerPropsMarketHistory(args: {
   client: SupabaseClient;
   slateDate: string;
 }): Promise<NbaPlayerPropsMarketHistory | null> {
-  const payload = await readPayload(args.client, nbaPlayerPropsMarketHistoryKey(args.slateDate));
-  return payload === null ? null : decode<NbaPlayerPropsMarketHistory>(payload, "market_history");
+  const {data,error} = await args.client.from("lab_response_snapshots")
+    .select("payload").eq("snapshot_key", nbaPlayerPropsMarketHistoryKey(args.slateDate)).maybeSingle();
+  if (error) throw new Error(`NBA props private payload read failed: ${error.message}`);
+  if (data === null) return null;
+  const history = decode<NbaPlayerPropsMarketHistory>(data?.payload, "market_history");
+  if (!validMarketHistory(history, args.slateDate)) throw new Error("NBA props retained market history is invalid; replacement refused.");
+  return history;
+}
+
+function validMarketHistory(value: unknown, slateDate: string): value is NbaPlayerPropsMarketHistory {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const history = value as Record<string, unknown>;
+  if ((history.release !== NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE
+      && !NBA_PLAYER_PROPS_PRIVATE_STORE_LEGACY_RELEASES.has(String(history.release)))
+    || history.publicEnabled !== false || history.slateDate !== slateDate
+    || typeof history.createdAt !== "string" || !Number.isFinite(Date.parse(history.createdAt))
+    || typeof history.updatedAt !== "string" || !Number.isFinite(Date.parse(history.updatedAt))
+    || !Array.isArray(history.observations)
+    || history.observations.length > NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_OBSERVATIONS) return false;
+  const strings = ["release", "provider", "providerObservationId", "providerEventId", "sportsbook", "market", "providerMarket", "offerType", "side", "observedAt", "fetchedAt"];
+  const nullable = ["canonicalGameId", "canonicalPlayerId", "providerPlayerId", "playerName", "playerTeam", "homeTeam", "awayTeam", "scheduledStart"];
+  return history.observations.every(value => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const row = value as Record<string, unknown>;
+    return strings.every(key => typeof row[key] === "string")
+      && nullable.every(key => row[key] === undefined || row[key] === null || typeof row[key] === "string")
+      && typeof row.line === "number" && Number.isFinite(row.line)
+      && typeof row.americanPrice === "number" && Number.isFinite(row.americanPrice)
+      && typeof row.isOpening === "boolean" && typeof row.isLive === "boolean"
+      && ["receivedAt", "playerIdentityAvailableAt"].every(key => row[key] === undefined || row[key] === null || typeof row[key] === "string")
+      && (row.playerIdentityEvidence === undefined || row.playerIdentityEvidence === null
+        || typeof row.playerIdentityEvidence === "object" && !Array.isArray(row.playerIdentityEvidence));
+  });
 }
 
 export function mergeNbaPlayerPropsMarketHistory(args: {
