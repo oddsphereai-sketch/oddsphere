@@ -2,6 +2,9 @@
 
 Status: prospective, not deployed. Starting production base:
 `a622cad6ec678b4da0194ea6aa404d521454b6a1`.
+Fresh production integration base: `44a5457101128688f4cd454af4fb0007c62c0a89`
+(PR1143). Both additive registry/safety sections are retained verbatim; R59
+partition headroom and its source/writer release changes remain intact.
 
 ## Observed incident and scope
 
