@@ -62,8 +62,14 @@ assert.doesNotMatch(
   /\.from\("line_history"\)/,
   "NBA opening evidence must not use a silently truncated direct line_history read",
 );
-assert.match(pipeline, /splitHighWaterRead[\s\S]*\.gt\("id", lastSplitId\)[\s\S]*\.lte\("id", splitHighWaterId\)/);
-assert.match(pipeline, /priceHighWaterRead[\s\S]*\.gt\("id", lastPriceId\)[\s\S]*\.lte\("id", priceHighWaterId\)/);
+for (const [family, highWater] of [["Split", "splitHighWaterId"], ["Price", "priceHighWaterId"]] as const) {
+  assert.ok(pipeline.includes(`readNba${family}Evidence({ client: supabase`));
+  assert.ok(pipeline.includes(`highWater: ${highWater}`));
+  const source = readFileSync(new URL(`../lib/services/nba/nba${family}EvidenceRead.ts`, import.meta.url), "utf8");
+  assert.match(source, /\.eq\("canonical_event_id", event\)\.gt\("id", cursor\)\.lte\("id", args.highWater\)/);
+  assert.match(source, /count: "exact", head: true/);
+  assert.match(source, /advanceNbaEvidencePage/);
+}
 assert.match(pipeline, /loadNbaConsumerMemberLineHistory/);
 assert.match(
   pipeline,

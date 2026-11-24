@@ -1,3 +1,233 @@
+## November23 lossless large NBA quote-history storage R61
+
+Prospective shared generation `player_props_ai_2026_11_23_r61_lossless_market_rows`,
+NBA writer `nba_player_props_private_writer_2026_11_23_r47_lossless_market_rows`,
+NFL writer `nfl_player_props_writer_2026_11_23_r122_lossless_market_rows` and private
+NBA store `nba_player_props_private_store_2026_11_23_r9_lossless_market_rows`.
+Native17/forward16, law5/grade7/selection10/nativeMLB44 remain unchanged.
+
+Ordinary03:42 NBA publication failed at the streaming market-history JSON limit.
+The last retained actual history is208,979 rows/191,584,903 JSON bytes, leaving
+415,097 bytes under the unchanged192MB limit; repeated property names alone
+occupy75,169,063 bytes. The failed later merged body itself was not retained;
+its precise row count and bytes remain unavailable. This is a storage capacity
+failure, not a failed AI review or demonstrated vendor/rate/credit/output issue.
+The original975 locked cards and old coherent snapshot remain authoritative.
+
+For large eligible histories, intern ordered property-name layouts and stream
+row value tuples. Restore every original JSON field/value, row order and duplicate
+multiplicity on read; no quote, clock, identity receipt or history state is dropped.
+The existing192MB wire/8MB gzip/250,000-row limits remain. Layouts/columns/key bytes
+are separately bounded64/64/128. Unsupported shapes retain the original bounded
+JSON path. New format tags/checksums and strict table validation reject corruption;
+old store envelopes retain their original decoding and locked reader precedence.
+No provider request, model request/count, review phase/slot, cadence, numerical
+rule, source gate, input/output cap, budget, schema or sport lease is changed.
+Fixed same-input published decisions/grades/actionable counts must remain exact:
+zero promotions/demotions and zero hidden board contraction. There is no new
+held-out calibration or predictive-accuracy claim. OriginalR60 request/law/source
+semantics and accepted versions remain explicit; R60 guidance is unchanged.
+
+
+A present but undecodable market envelope throws before merge or any history/candidate write. Only an absent stored payload is a missing-history sentinel; malformed tags/checksums/layouts never authorize replacement. Round148 found this inherited caller conflation; its original NOT CLEAR evidence is preserved and earns no clean credit.
+
+Require actual retained-source roundtrip and resource benchmarks, malformed and
+bounded failure controls, complete source/law/price/lock parity, mandatory focused/
+model/type/lint/webpack and hosted realPG with ALL AI HTTP mocked. Require TWO NEW
+consecutive fresh triple whole-product CLEAR rounds, fresh-main/no-overlap/exact
+remote tree/strict-up-to-date/no-bypass expected-head protected merge, actualReady
+and only normal scheduled writer/public/lock proof. No paid test, closed replay,
+third review, manual refresh, provider/model/count request or historical rewrite.
+
+## November23 correction event-support witnesses R60
+
+Prospective generation `player_props_ai_2026_11_23_r60_correction_event_witnesses`,
+NBA writer `nba_player_props_private_writer_2026_11_23_r46_correction_event_witnesses`,
+NFL writer `nfl_player_props_writer_2026_11_23_r121_correction_event_witnesses`.
+Native qualification17/forward16, law5/grade7/selection10/nativeMLB44 remain.
+
+The ordinary SAS final failed after four primary and three correction responses
+completed. In the same original part/actor, primary source errors concerned a
+PRA24.5 tail; correction fixed that but erased previously valid threes2.5 support.
+The full old numerical draft and complete1313-byte feedback were actually sent.
+No timing, rate, billing or output cause is established. This failure stays closed.
+
+Append bounded original positive-weight event/complement/push witness indices to
+that same correction, explicitly labeled an UNACCEPTED draft reference, never
+source evidence or approved values. Recheck all unchanged source requirements
+when editing joint coordinates/weights; do not erase a formerly supported tail
+while fixing another scope. Existing strict validators still reject both saved
+bad drafts. No law, weight, outcome, exception or decline is automatically changed.
+Only the existing feedback allowance1984bytes is used; original diagnostics,
+previously fitting numerical references and valid declines remain an exact prefix.
+If the complete extra table cannot fit (including JSON escaping), omit it whole.
+No input/output cap, model, phase/slot, provider, cadence, lease, budget or grade
+rule changes. Fixed stored/accepted/locked board impact is zero; future inference
+results and correction success need ordinary receipts, not a purchased proof.
+
+All original releases/pins/wires/requests/laws and stored locks stay authoritative;
+R59 explicitly remains accepted and benchmark-fresh. No schema/DB migration or
+paid switch. Require focused/model/type/lint/webpack and exact hosted realPG with
+ALL AI HTTP mocked, TWO NEW consecutive fresh triple whole-product CLEAR rounds,
+fresh-main/no-overlap/exact remote tree/strict-up-to-date/no-bypass expected-head
+protected merge, actual Ready/www/source and ordinary publication/lock proof.
+No extra paid tests, replay of closed jobs, third review, operator refresh or
+provider/model/token-count request. This is prospective guidance, no guarantee
+of future comprehension, numerical acceptance, collector coverage or accuracy.
+
+## November 23 NBA request-scoped roster publication R39
+
+Prospective model/record is `nba_professional_unified_2026_11_23_r39_request_scoped_roster`,
+marriage `nba_market_marriage_2026_11_23_r41_request_scoped_roster`, reader
+`nba_reader_publication_2026_11_23_r5_request_scoped_roster` and diagnostic receipt
+`nba_reader_failure_log_2026_11_23_r2_source_phase`. The existing seven-date
+reader shares one lazy request-local active-roster pagination set instead of
+collecting up to seven sets. No process cache, extra source, retry, writer,
+timer, schema, source relaxation or numerical/grade/stake change is introduced.
+Body failures keep their original rejection semantics and preserve the prior
+complete reader and original clocks. Safe error-only stage codes use the
+existing receipt/cron log; no source or credential text enters those receipts.
+
+R38/R37/R36/R35/R34 knowledge remains explicitly compatible; current state and
+all original locked payloads retain precedence. Grade R31, roster residual R2,
+score artifacts, price/split evidence gates, lease and T-60 lifecycle stay exact.
+Thirty same-input synthetic pairs/90 markets (20 roster corrections) preserve
+every forecast/probability/selection/grade: zero promotions, zero demotions and
+zero net actionable change. Three concurrent body-failure controls preserve
+all old fields and issue zero writes; there is no empirical accuracy claim.
+The observed November23 timeout dependency remains unproved from old logs.
+Require full/focused/type/lint, latest-main/no-overlap/protected/exact-tree and
+actual production/ordinary publication/coverage/lease/lock proof before calling
+this live. Evidence: `model-audits/2026-11-23-nba-request-roster-publication.md`.
+
+## November23 bounded partition-count stage headroom R59
+
+Prospective shared generation is `player_props_ai_2026_11_23_r59_count_stage_headroom`;
+sole NBA writer `nba_player_props_private_writer_2026_11_23_r45_count_stage_headroom`,
+sole NFL writer `nfl_player_props_writer_2026_11_23_r120_count_stage_headroom`.
+Native qualification R17/forward R16 and law5/grade7/selection10/nativeMLB44 remain.
+
+Partition preparation stops trying whole-player transfers into bins whose actual
+measured count is already at/above the input cap. Useful transfers into bins with measured headroom remain permitted even when
+byte estimates predict no balance improvement; byte weights do not replace exact
+token measurements. The rejected first candidate incorrectly pruned those moves. Every accepted
+model-specific wire still needs its exact count. All players, markets, original
+source facts and complete two-phase admission remain required; no truncated input,
+estimated accepted token count, output/law repair, auto decline or dropped scope.
+This heuristic does not claim a globally minimum partition count. Fixed control
+preserves the exact four accepted packets while reducing13 remote counts to11 and
+five count waves tofour; virtual delays fit a225second preparation window that
+its exact frozen R58 control misses. This is not a measured vendor-latency claim.
+
+Original Portland final expired without a paid claim; its saved scheduled rescue
+telemetry says input_count_deadline_exhausted. The main request separately timed
+out at540seconds. Later three-game telemetry distinguishes transport failure,
+input-count deadline and source/preparation timeout. Original remote count-stage
+traces/latencies are unavailable; this change removes independently reproduced
+avoidable work, not a proved sole cause or guarantee of future coverage/accuracy.
+
+Original R58 and all older readers, accepted law versions and locked values keep
+their original authority. R58 is explicitly retained in release membership and
+native-benchmark freshness. Source inputs/schema/claims/numerical validation,
+models, exactly two logical slots/phases, caps145000/7000/16, concurrency16,
+ordinary cadence, shared sport leases, prices/grades/stakes and budget50/60 remain.
+Two skewed additive-token counterexamples preserve the exact original two fitting
+parts; this repair must not turn those cases into three paid review parts.
+No manual cron, provider/model/count request, paid test, closed replay or DB change.
+Require TWO NEW consecutive fresh triple whole-product CLEAR rounds and all
+focused/model/type/lint/build/hosted realPG(allAI mocked)/fresh-main/no-overlap/
+strict protected expected-head merge/actual Ready and ordinary live evidence.
+
+## November23 native NBA Best Angle exact-value coherence
+
+Prospective published native calibration is
+`nba_player_props_exact_price_grade_2026_11_23_r17_best_value`, forward policy
+`nba_player_props_forward_decision_2026_11_23_r16_best_value`, sole NBA writer
+`nba_player_props_private_writer_2026_11_23_r44_native_best_value`.
+`nbaPlayerPropsNativeGrade.ts` is the one published qualification/version path;
+the existing production entry applies it after original frozen native ranking.
+Only a fresh native Best with zero/negative own offered-price value becomes Lean.
+Existing Lean grades and forecast numbers, including confidence-led negative-value
+Leans, are unchanged; only fresh policy/version metadata is stamped.
+No native62%/-200 cutoff is introduced. The original eligible Best can recover
+at a genuinely improved positive-value price; both sides and all possible unit
+return classes are tested without creating/removing an actionable forecast.
+
+The fixed868-card board moves6 Best/78 Lean/65 Watch/719 NoPlay to4/80/65/719:
+all84 actionables and868 forecasts retained,2 within-actionable tier demotions,
+0 current promotions. No projection, probability, selected side, price, source,
+exposure or fitted parameter changes. The broader unpublished fe67 proposal was
+NOT CLEAR and is not this policy. Existing grade-intent permits negative-value
+confidence Leans; no new numerical native authorization or empirical accuracy
+claim is inferred. Any remaining required policy exception must be explicit.
+
+Fitted artifact13/model16/calibration15/raw audit forward14 remain exact in the
+old audit entry. The production lineage gate rejects unknown fitted sources.
+Only fresh native scoring gets the new published stamp; old locks, member
+readers, pending/LKG fallbacks and their clocks retain original payloads and
+releases. Shared AI58/law5/grade7/select10, NFL119/MLB44, source/call cadence,
+slots/phases/caps/deadlines/shared leases/schema/budget are unchanged. No paid
+proof, manual refresh, failed replay or historical correction.
+
+Full numerical/source parity, fixed-input impact/recovery, writer/reader locks,
+focused/model/type/lint/build, TWO new consecutive fresh triple whole-product
+CLEAR rounds, hosted mocked realPG, fresh-main/no-overlap/exactremoteTREE/strict
+up-to-date/no-bypass protected merge and actual Ready/normal publication/refresh/
+lock/internal tracking remain mandatory. See
+`model-audits/2026-11-23-native-nba-best-value-predeclaration.md` and the existing
+`daily-edge-grade-intent.md`; do not describe an unverified candidate as live.
+
+
+### Explicit owner-approved correctness exception, November23
+
+On November23,2026 the owner answered **“Approve this narrow correctness
+exception”** to the following exact proposed exception:
+
+> May I treat the narrow native NBA Best Angle correction as an exception to the repository’s held-out-evidence requirement? It changes only nonpositive-value Best Angle labels to Lean, preserves every forecast, price, existing Lean and all 84 actionables, and still requires two fresh independent review rounds, CI, protected merge and live verification. No extra paid tests.
+
+This authorizes only the prospective native R17/forward R16/writer R44 label
+coherence correction described here. It is an explicit exception to section4’s
+held-out-evidence prerequisite for this correction, not empirical proof of
+accuracy, ROI or improved calibration. It does not authorize the rejected
+fe67 policy, a Lean value floor, new numerical thresholds, changed forecasts,
+source/evidence relaxation, extra paid calls, historical relabeling, altered
+stakes or any other policy waiver. All84 actionables on the fixed input remain
+actionable. Every other local/hosted, two-fresh-triple-round, shared-lease,
+locked-record and protected-production/live-verification gate still applies.
+Round140’s original NOT CLEAR reports remain unchanged and earn no clean credit.
+
+## November23 weighted joint-scenario construction guidance R58
+
+Prospective generation is `player_props_ai_2026_11_23_r58_weighted_joint_examples`;
+sole NBA writer is `nba_player_props_private_writer_2026_11_23_r42_weighted_joint_examples`,
+sole NFL writer is `nfl_player_props_writer_2026_11_23_r119_weighted_joint_examples`.
+Guidance R1 clarifies the existing sixteen-row weighted distribution: small positive
+relative weights can represent a source-supported rare event, zero-weight rows
+cannot witness a tail, and independently sorted marginal columns do not preserve
+required joint variation. Synthetic arithmetic examples are explicitly not player
+facts, probability targets/floors, model votes or permission to invent support.
+Missing support still requires an explicit source-bound exception or decline.
+
+This changes future request instructions only. Source input bytes, exact factual
+catalogs, schema, numerical/source/physical admission, actor R3, law5/grade7/select10,
+native MLB44, models, source requests, slots/phases, output caps, partition/count
+limits, deadlines, concurrency16, shared sport lease and spending limits remain.
+R57 and every older original request, law, membership and locked payload remain
+authoritative; explicit R57 membership and R58 benchmark freshness are preserved.
+For the same admitted law/source, decision and grade behavior is unchanged; no
+new demotion or hidden board contraction is introduced. Future generated answers
+can differ and require their own release-specific evaluation.
+
+The examples pass actual source-bound law and full reader admission for synthetic
+NBA/NFL/MLB cases; all-zero rare tails, zero-weight witnesses and erased source
+dependence remain rejected. This is not proof that a future model answer will
+comply, that a past failed/expired slot was repaired, or that accuracy improves.
+No extra paid test, third review, automatic law repair/decline, schema migration
+or historical rewrite. Require TWO new consecutive fresh triple whole-product
+CLEAR rounds and all local/hosted mocked-realPG/fresh-main/protected/actualReady
+gates, then ordinary scheduled review/publication/refresh/lock proof. See
+`model-audits/2026-11-23-props-weighted-joint-guidance-predeclaration.md`.
+
 ## November23 explicit unsupported review disposition R57
 
 Prospective shared generation is `player_props_ai_2026_11_23_r57_explicit_law_disposition`;

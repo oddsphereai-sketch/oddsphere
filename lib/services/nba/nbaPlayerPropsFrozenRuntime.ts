@@ -18,9 +18,16 @@ import {
 } from "./nbaPlayerPropsMarketEvidence";
 import type { NbaPlayerPropFeatureRow } from "./nbaPlayerPropsPointInTimeFeatures";
 import type { NbaPlayerPropsMemberGrade } from "./nbaPlayerPropsProductContract";
+import {
+  nativeNbaBestPriceGrade,
+  assertNativeNbaGradePolicyLineage,
+  NBA_PLAYER_PROPS_NATIVE_GRADE_CALIBRATION_RELEASE,
+  NBA_PLAYER_PROPS_NATIVE_GRADE_DECISION_RELEASE,
+} from "./nbaPlayerPropsNativeGrade";
 
 export const NBA_PLAYER_PROPS_FROZEN_RUNTIME_RELEASE =
   "nba_player_props_frozen_runtime_artifact_2026_10_28_r13_owls_sharp_market_reader" as const;
+/** Original fitted-artifact replay stamp; production applies the published native policy below. */
 export const NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE =
   "nba_player_props_forward_decision_2026_10_28_r14_owls_sharp_market_reader" as const;
 
@@ -120,10 +127,10 @@ export type NbaPlayerPropsFrozenArtifact = Readonly<{
 }>;
 
 export type NbaPlayerPropsForwardDecision = Readonly<{
-  release: typeof NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE;
+  release: typeof NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE | typeof NBA_PLAYER_PROPS_NATIVE_GRADE_DECISION_RELEASE;
   modelRelease: string;
   calibrationRelease: string;
-  decisionRelease: typeof NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE;
+  decisionRelease: typeof NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE | typeof NBA_PLAYER_PROPS_NATIVE_GRADE_DECISION_RELEASE;
   publicEnabled: false;
   scopeKey: string;
   gameId: number;
@@ -227,10 +234,21 @@ export function buildNbaPlayerPropsForwardDecisions(args: {
   currentObservations?: readonly NbaPlayerPropPriceObservation[];
   evaluatedAt?: string;
 }): NbaPlayerPropsForwardDecision[] {
+  const artifact = nbaPlayerPropsFrozenRuntimeArtifact();
+  assertNativeNbaGradePolicyLineage({
+    modelRelease: artifact.sourceTournamentRelease,
+    calibrationRelease: artifact.sourceGradeRelease,
+  });
   return buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit({
     ...args,
-    artifact: nbaPlayerPropsFrozenRuntimeArtifact(),
-  });
+    artifact,
+  }).map((row) => ({
+    ...row,
+    release: NBA_PLAYER_PROPS_NATIVE_GRADE_DECISION_RELEASE,
+    calibrationRelease: NBA_PLAYER_PROPS_NATIVE_GRADE_CALIBRATION_RELEASE,
+    decisionRelease: NBA_PLAYER_PROPS_NATIVE_GRADE_DECISION_RELEASE,
+    grade: nativeNbaBestPriceGrade(row.grade, row.probability, row.americanPrice, row.expectedValue),
+  }));
 }
 
 /** Read-only release-comparison seam; production callers use the checked-in artifact above. */

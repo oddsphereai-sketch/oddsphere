@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
 import "./test-nba-player-stat-evidence";
+import "./test-nba-player-props-native-grade-coherence";
+import {
+  nativeNbaBestPriceGrade,
+  NBA_PLAYER_PROPS_NATIVE_GRADE_CALIBRATION_RELEASE,
+  NBA_PLAYER_PROPS_NATIVE_GRADE_DECISION_RELEASE,
+} from "../lib/services/nba/nbaPlayerPropsNativeGrade";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
@@ -58,7 +64,7 @@ assert.equal(
 );
 assert.equal(
   NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE,
-  "nba_player_props_private_writer_2026_11_23_r41_explicit_law_disposition",
+  "nba_player_props_private_writer_2026_11_23_r47_lossless_market_rows",
 );
 assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: 18.2, finalProjection: 18.8 }), true);
 assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: 0, finalProjection: 18.8 }), false);
@@ -258,6 +264,20 @@ assert(recoveredCurrentCycle.every((row) => !row.isOpening && !row.isLive));
 const first = buildNbaPlayerPropsForwardDecisions({ features, observations });
 const second = buildNbaPlayerPropsForwardDecisions({ features, observations });
 assert.deepEqual(first, second, "frozen runtime scoring must be deterministic");
+const originalArtifactRows = buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit({ artifact, features, observations });
+assert.equal(first.length, originalArtifactRows.length, "grade coherence cannot remove a forecast or scope");
+for (let index = 0; index < first.length; index++) {
+  const original = originalArtifactRows[index]!;
+  assert.equal(original.release, NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE, "original artifact replay retains R14");
+  assert.equal(original.calibrationRelease, artifact.sourceGradeRelease, "original fitted R15 stays exact");
+  assert.deepEqual(first[index], {
+    ...original,
+    release: NBA_PLAYER_PROPS_NATIVE_GRADE_DECISION_RELEASE,
+    calibrationRelease: NBA_PLAYER_PROPS_NATIVE_GRADE_CALIBRATION_RELEASE,
+    decisionRelease: NBA_PLAYER_PROPS_NATIVE_GRADE_DECISION_RELEASE,
+    grade: nativeNbaBestPriceGrade(original.grade, original.probability, original.americanPrice, original.expectedValue),
+  }, "every numeric/source/selection/price field must remain identical to the frozen artifact");
+}
 assert.equal(first.length, NBA_PLAYER_PROPS_FOUNDATION_MARKETS.length);
 for (const decision of first) {
   assert.equal(decision.publicEnabled, false);
@@ -292,7 +312,7 @@ assert.equal(rerankedFixture.find((row) => row.scopeKey === "points-a")?.grade, 
 assert(rerankedFixture.filter((row) => row.scopeKey === "points-c" || row.scopeKey === "points-d")
   .every((row) => row.gradePolicySource === "accuracy_side_rerank"));
 const calibratedRebound = first.find((decision) => decision.market === "rebounds");
-assert.equal(calibratedRebound?.calibrationRelease, artifact.sourceGradeRelease);
+assert.equal(calibratedRebound?.calibrationRelease, NBA_PLAYER_PROPS_NATIVE_GRADE_CALIBRATION_RELEASE);
 assert.equal(
   calibratedRebound?.grade,
   "Lean",
@@ -580,7 +600,7 @@ assert.equal(NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_JSON_BYTES, 192_000_000);
 assert.equal(NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_OBSERVATIONS, 250_000);
 assert.equal(
   NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE,
-  "nba_player_props_private_store_2026_11_08_r8_interned_ai_coverage",
+  "nba_player_props_private_store_2026_11_23_r9_lossless_market_rows",
 );
 assert.deepEqual(decodeNbaPlayerPropsPrivatePayload({
   ...envelope,

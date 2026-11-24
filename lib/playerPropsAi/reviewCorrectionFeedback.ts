@@ -4,6 +4,7 @@ import {namedSourceCorrection} from './sourceConstraintCards';
 import {sourceAwareDiagnosticCorrection} from './sourceAwareCorrectionFeedback';
 import {withOriginalDraftCorrectionContext} from './originalDraftCorrectionContext';
 import {withAllActorNumericCorrection} from './allActorNumericCorrection';
+import {withPreviousEventWitnesses} from './previousEventWitnesses';
 
 function originalCompleteCorrectionFeedback(packet:GamePacket,draft:unknown){
  const feedback=packet.sport==='nba'?namedSourceCorrection(packet,draft):sourceAwareDiagnosticCorrection(packet,draft);
@@ -24,5 +25,5 @@ function originalCompleteCorrectionFeedback(packet:GamePacket,draft:unknown){
 }
 
 export function reviewCorrectionFeedback(packet:GamePacket,draft:unknown){
- return withAllActorNumericCorrection(packet,draft,originalCompleteCorrectionFeedback(packet,draft));
+ return withPreviousEventWitnesses(packet,draft,withAllActorNumericCorrection(packet,draft,originalCompleteCorrectionFeedback(packet,draft)));
 }
