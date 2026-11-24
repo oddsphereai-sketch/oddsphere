@@ -1,3 +1,4 @@
+import {NBA_READER_BUILD_PHASES,markNbaReaderBuildFailure} from "../lib/services/nba/nbaReaderBuildPhase";
 import "./test-nba-split-evidence-read";
 import "./test-nba-price-evidence-read";
 import assert from "node:assert/strict";
@@ -41,6 +42,14 @@ async function main(){
    assert.equal(JSON.stringify(stored),bytes,"source failure preserves every old payload/locked field and its original as-of");
    assert.equal(writes,0);assert.equal(expirations,0,"a failed rebuild cannot extend freshness or invalidate the good cache");
   }
+  for(const phase of NBA_READER_BUILD_PHASES){
+   const error=Object.freeze(new DOMException("private SQL / source credential","TimeoutError"));
+   markNbaReaderBuildFailure(error,phase);markNbaReaderBuildFailure(error,"adapter");
+   const result=await refreshDailyEdgeResponseSnapshot({sport:"nba",date:"2026-11-06"},{buildResponse:async()=>nbaReaderUnavailableResponse({date:"2026-11-06",now:"2026-11-06T19:46:00Z",error}),saveSnapshot,expireMemberCache:async()=>{expirations++;}});
+   assert.equal(result.ok,false);assert(result.error?.includes(`nba_build_phase_${phase}`));assert(!result.error?.includes("private SQL"));
+   assert.equal(JSON.stringify(stored),bytes);assert.equal(writes,0);assert.equal(expirations,0);
+  }
+  assert.equal(nbaReaderFailureReceipt(new Response(null,{headers:{"X-Oddsphere-Nba-Reader-Failure":"nba_build_phase_arbitrary_secret"}})),undefined);
   const redacted=nbaReaderUnavailableResponse({date:"2026-11-06",now:"2026-11-06T19:46:00Z",error:new Error("private SQL / API token")});
   assert(!(await redacted.text()).includes("private SQL"));
   assert.equal(nbaReaderFailureReceipt(new Response(null,{headers:{"X-Oddsphere-Nba-Reader-Failure":"private SQL / token"}})),undefined);

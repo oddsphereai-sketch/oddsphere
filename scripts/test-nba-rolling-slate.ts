@@ -71,7 +71,7 @@ const cronSource = readFileSync(
   "utf8",
 );
 assert.match(cronSource, /nbaScheduleSeedDates\(etDateDashed, intraday\)/);
-assert.match(cronSource, /nba_daily_refresh_schedule_2026_11_03_r22_consumer_gap_continuity/);
+assert.match(cronSource, /nba_daily_refresh_schedule_2026_11_11_r26_two_phase_priority/);
 assert.match(cronSource, /lineTotals\.linesRemoved/);
 assert.match(cronSource, /NBA line refresh partial/);
 assert.match(cronSource, /loadNbaRollingSchedule\(etDateDashed\)/);
@@ -108,7 +108,7 @@ const candidateReaderSource = readFileSync(
   "utf8",
 );
 assert.match(candidateReaderSource, /displaySnapshot\.nbaRollingSchedule/);
-assert.match(candidateReaderSource, /sport === "cbb" \? "College Basketball" : "NBA"\} · Next 7 Days/);
+assert.match(candidateReaderSource, /NBA · Next 7 Days/);
 assert.doesNotMatch(candidateReaderSource, /Analysis opens game day/);
 
 const candidatePageSource = readFileSync(

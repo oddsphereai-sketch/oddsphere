@@ -1,3 +1,5 @@
+import {createNbaRequestRosterLoader} from "./nbaRequestRoster";
+import {markNbaReaderBuildFailure, type NbaReaderBuildPhase} from "./nbaReaderBuildPhase";
 import {readNbaSplitEvidence} from "./nbaSplitEvidenceRead";
 import {readNbaSplitHighWater} from "./nbaSplitHighWater";
 import {assertNbaReaderEvidenceComplete,nbaEvidenceHighWaterError,NBA_READER_PUBLICATION_RELEASE} from "./nbaReaderPublication";
@@ -191,6 +193,8 @@ export async function buildNbaDailyEdgePipeline(
     includeR21GradePolicyAudit?: boolean;
     /** Deterministic audit/test hook. Production resolves the active provider roster once per build. */
     rosterRegimeRosterOverride?: NbaLiveRosterSnapshot;
+    /** Same request-local authoritative roster for every rolling slate. */
+    rosterRegimeRosterLoader?: () => Promise<NbaLiveRosterSnapshot>;
     /** Read-only same-input audit hook for the superseded score path without roster-regime correction. */
     retainLegacyRosterRegime?: boolean;
     /** Read-only same-input audit hook for a proposed complete current-line board. */
@@ -199,6 +203,8 @@ export async function buildNbaDailyEdgePipeline(
     prelockMarketCapture?: NbaPrelockCaptureReceipt;
   } = {},
 ): Promise<NbaDailyEdgePipelineResult> {
+  let buildPhase: NbaReaderBuildPhase = "feature_sources";
+  try {
   const etWindow = etSlateDateToUtcWindow(date);
   const startUtcDate = etWindow.startISO.slice(0, 10);
   const endUtcDate = etWindow.endISO.slice(0, 10);
@@ -244,9 +250,11 @@ export async function buildNbaDailyEdgePipeline(
   }
   const provenanceByGame = new Map(provenance.map((p) => [p.game_external_id, p]));
   const providerSeason = nbaProviderSeasonForSlate(date);
+  buildPhase = "professional_state";
   const currentState = snapshots.length === 0
     ? { games: [], boxes: [] }
     : await loadNbaProfessionalCurrentState({ supabase, season: providerSeason });
+  buildPhase = "professional_features";
   const professionalFeatures = buildNbaProfessionalRuntimeFeatures({
     upcomingGames: snapshots.map((snapshot) => {
       if (snapshot.game_time_iso === null) {
@@ -263,13 +271,15 @@ export async function buildNbaDailyEdgePipeline(
     currentGames: currentState.games,
     currentBoxes: currentState.boxes,
   });
+  buildPhase = "active_roster";
   const liveRoster = options.rosterRegimeRosterOverride ?? (
     snapshots.length === 0
       ? await fetchNbaLiveRosterSnapshot({ apiKey: "" })
-      : await fetchNbaLiveRosterSnapshot()
+      : await (options.rosterRegimeRosterLoader ?? fetchNbaLiveRosterSnapshot)()
   );
 
   // Resolve external_id → games.id so we can pull lines from DB.
+  buildPhase = "current_contracts";
   const gameExternalIds = snapshots.map((s) => s.game_external_id);
   const { data: gameRows } =
     gameExternalIds.length > 0
@@ -285,14 +295,17 @@ export async function buildNbaDailyEdgePipeline(
   // One bounded read of the sole writer's current unlocked state. It is not
   // a second writer or a reconstruction of old/locked inputs. On failure do
   // not reset epochs and publish a newly seeded board over coherent state.
+  buildPhase = "prior_knowledge";
   const priorKnowledgeByExternalId = await loadNbaMarketKnowledgeStates({ client: supabase, slateDate: date,
     modelRelease: NBA_MODEL_RELEASE, externalIdByDbId: dbIdToExt });
+  buildPhase = "consumer_history";
   const consumerMemberHistory = await loadNbaConsumerMemberLineHistory({
     client: supabase,
     externalIdByDbId: dbIdToExt,
   });
 
   // Bulk-pull lines for all games on the slate.
+  buildPhase = "current_lines";
   const linesByExtId = new Map<number, NbaLineRow[]>();
   if (options.currentLinesOverrideByExternalId) {
     for (const externalId of gameExternalIds) {
@@ -344,6 +357,7 @@ export async function buildNbaDailyEdgePipeline(
   // renders the forecast that the pipeline has already produced.
   const readerEvidenceErrors: string[] = [];
   const readerReadCoverage={release:NBA_READER_PUBLICATION_RELEASE,prices:{highWater:0,lastRead:0,rows:0},splits:{highWater:0,lastRead:0,rows:0}};
+  buildPhase = "split_evidence";
   const readerSplitRowsByGame = new Map<number, NbaReaderSplitRow[]>();
   if (gameExternalIds.length > 0) {
     const splitHighWaterRead = await readNbaSplitHighWater(supabase,gameExternalIds.map(String));
@@ -375,6 +389,7 @@ export async function buildNbaDailyEdgePipeline(
     }
   }
 
+  buildPhase = "price_evidence";
   const readerPriceRowsByGame = new Map<number, NbaReaderPriceRow[]>();
   if (gameExternalIds.length > 0) {
     const priceHighWaterRead = await readMarketPriceHighWater(supabase, "nba", gameExternalIds.map(String));
@@ -425,6 +440,7 @@ export async function buildNbaDailyEdgePipeline(
 
   const readerEvaluatedAt = new Date().toISOString();
 
+  buildPhase = "forecast";
   const dynamicGames: NbaDailyEdgeGameDto[] = snapshots.flatMap((s) => {
     const prov = provenanceByGame.get(s.game_external_id);
     if (prov === undefined) return [];
@@ -606,6 +622,7 @@ export async function buildNbaDailyEdgePipeline(
     return [dto];
   });
 
+  buildPhase = "locked_snapshot";
   const externalToDbId = new Map<number, number>();
   for (const [dbId, ext] of dbIdToExt.entries()) externalToDbId.set(ext, dbId);
   let lockedRows: NbaLockedMemberRecord[] = [];
@@ -664,6 +681,7 @@ export async function buildNbaDailyEdgePipeline(
 
   // Surface only a comparable same-book, same-line opening price. Missing
   // identity is unavailable—not permission to compare unrelated quotes.
+  buildPhase = "member_evidence";
   const openPricesByGame = new Map<number, NbaPickSideOpenPrices>();
   const memberEvidenceByGame = new Map<number, NbaMemberGameEvidence>();
   for (const g of games) {
@@ -718,6 +736,10 @@ export async function buildNbaDailyEdgePipeline(
     lockedMemberGamesByExternalId: lockedMemberSnapshots.memberGamesByExternalId,
     dbIdByExternalId: externalToDbId,
   };
+  } catch (error) {
+    markNbaReaderBuildFailure(error, buildPhase);
+    throw error;
+  }
 }
 
 /**
@@ -726,6 +748,8 @@ export async function buildNbaDailyEdgePipeline(
  * canonical entry point for `/api/lab/daily-edge?sport=nba`.
  */
 export async function buildNbaDailyEdgeAdapted(date: string): Promise<DailyEdgeResponse> {
+  let buildPhase: NbaReaderBuildPhase = "rolling_schedule";
+  try {
   const currentBoardDate = currentDailyEdgeBoardDate("nba");
   const includeRollingSchedule = date >= currentBoardDate;
   const rollingSchedule = includeRollingSchedule
@@ -738,7 +762,8 @@ export async function buildNbaDailyEdgeAdapted(date: string): Promise<DailyEdgeR
   // Daily Edge card and reader market. Official tracking still begins only at
   // the existing T-60 lock boundary and is not written by this read path.
   if (date === currentBoardDate && rollingSchedule && rollingSchedule.games.length > 0) {
-    return buildNbaRollingMemberBoard(date, rollingSchedule);
+    buildPhase = "adapter";
+    return await buildNbaRollingMemberBoard(date, rollingSchedule);
   }
 
   // Historical official slates and explicit dates inside the active rolling
@@ -765,6 +790,7 @@ export async function buildNbaDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     memberEvidenceByGame,
     lockedMemberGamesByExternalId,
   } = await buildNbaDailyEdgePipeline(date);
+  buildPhase = "adapter";
   const response = adaptNbaToDailyEdgeResponse(nbaDto, {
     openPricesByGame,
     memberEvidenceByGame,
@@ -781,6 +807,10 @@ export async function buildNbaDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     };
   }
   return response;
+  } catch (error) {
+    markNbaReaderBuildFailure(error, buildPhase);
+    throw error;
+  }
 }
 
 const NBA_ROLLING_ANALYSIS_CONCURRENCY = 3;
@@ -795,6 +825,7 @@ async function buildNbaRollingMemberBoard(
       .filter((slateDate) => nbaMemberAnalysisEligible(slateDate, anchorDate)),
   )).sort();
 
+  const rosterRegimeRosterLoader = createNbaRequestRosterLoader();
   const responses: DailyEdgeResponse[] = [];
   for (let index = 0; index < eligibleDates.length; index += NBA_ROLLING_ANALYSIS_CONCURRENCY) {
     const batch = eligibleDates.slice(index, index + NBA_ROLLING_ANALYSIS_CONCURRENCY);
@@ -804,7 +835,7 @@ async function buildNbaRollingMemberBoard(
         openPricesByGame,
         memberEvidenceByGame,
         lockedMemberGamesByExternalId,
-      } = await buildNbaDailyEdgePipeline(slateDate);
+      } = await buildNbaDailyEdgePipeline(slateDate, { rosterRegimeRosterLoader });
       return adaptNbaToDailyEdgeResponse(nbaDto, {
         openPricesByGame,
         memberEvidenceByGame,
