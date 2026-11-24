@@ -5,6 +5,10 @@ on:
       - 'lib/db/schema-migration-v61-nba-split-high-water.sql'
       - 'lib/services/nba/nbaSplitHighWater.ts'
       - 'lib/services/nba/nbaReaderPublication.ts'
+      - 'lib/services/nba/nbaPublishedLockMetadata.ts'
+      - 'lib/services/nba/nbaLockedMemberSnapshot.ts'
+      - 'lib/services/labResponseSnapshotWriter.ts'
+      - 'scripts/test-nba-published-lock-metadata.ts'
       - 'scripts/test-bounded-response-transport-postgres.mjs'
       - '.github/workflows/nba-reader-publication-proof.yml'
 permissions:
@@ -19,3 +23,10 @@ jobs:
           node-version: 24
       - run: npm install --prefix "$RUNNER_TEMP/nba-reader-proof" --no-audit --no-fund --ignore-scripts @electric-sql/pglite@0.5.15
       - run: node scripts/test-bounded-response-transport-postgres.mjs "$RUNNER_TEMP/nba-reader-proof/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Install locked repository dependencies for mocked writer proof
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify exact saved NBA card publication without live IO
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1
+          SUPABASE_SERVICE_ROLE_KEY: test
+        run: node --import tsx scripts/test-nba-published-lock-metadata.ts

@@ -14,6 +14,7 @@ import {
   NBA_MEMBER_LOCK_PUBLICATION_RELEASE,
 } from "@/lib/services/nba/nbaPublishedLockMetadata";
 import { supabase } from "@/lib/db/supabase";
+import { readNbaLockedMemberCards } from "./nba/nbaLockedMemberSnapshot";
 
 export const CBB_SNAPSHOT_PUBLICATION_RELEASE =
   "cbb_snapshot_publication_2026_11_02_r1_pipeline_only" as const;
@@ -62,15 +63,23 @@ async function expirePublishedDailyEdgeMemberCache(): Promise<void> {
 }
 
 /**
- * Publish authoritative NBA lock metadata without recomputing the rolling
- * model board. This is intentionally a metadata-only post-lock operation:
- * every prediction, score, side, price, grade, and evidence field comes from
- * the already coherent snapshot and remains unchanged.
+ * Publish newly locked NBA cards from their exact saved captures without
+ * recomputing the model. Existing published locked cards remain opaque;
+ * record values and original snapshot_json are never written here.
  */
 export async function refreshNbaPublishedLockMetadata(input: {
   date: string;
   source?: string;
-}): Promise<SnapshotWriteResult> {
+}, dependencies: {
+  client?: typeof supabase;
+  readSnapshot?: (key: string) => ReturnType<typeof readLatestLabResponseSnapshot<DailyEdgeResponse>>;
+  saveSnapshot?: typeof upsertLabResponseSnapshot;
+  expireMemberCache?: () => Promise<void>;
+} = {}): Promise<SnapshotWriteResult> {
+  const client = dependencies.client ?? supabase;
+  const readSnapshot = dependencies.readSnapshot ?? readLatestLabResponseSnapshot<DailyEdgeResponse>;
+  const saveSnapshot = dependencies.saveSnapshot ?? upsertLabResponseSnapshot;
+  const expireMemberCache = dependencies.expireMemberCache ?? expirePublishedDailyEdgeMemberCache;
   const snapshotKey = dailyEdgeSnapshotKey({
     sport: "nba",
     requestedDate: input.date,
@@ -79,7 +88,7 @@ export async function refreshNbaPublishedLockMetadata(input: {
   });
 
   try {
-    const snapshot = await readLatestLabResponseSnapshot<DailyEdgeResponse>(snapshotKey);
+    const snapshot = await readSnapshot(snapshotKey);
     if (!snapshot) {
       return { ok: false, snapshotKey, error: "NBA Daily Edge snapshot is unavailable for lock publication" };
     }
@@ -88,7 +97,7 @@ export async function refreshNbaPublishedLockMetadata(input: {
       return { ok: false, snapshotKey, error: "NBA Daily Edge snapshot has no games for lock publication" };
     }
 
-    const gameLookup = await supabase
+    const gameLookup = await client
       .from("games")
       .select("id,external_id")
       .eq("sport", "nba")
@@ -108,7 +117,7 @@ export async function refreshNbaPublishedLockMetadata(input: {
       };
     }
     const gameIds = [...dbIdByExternalId.values()];
-    const lockLookup = await supabase
+    const lockLookup = await client
       .from("prediction_records")
       .select("game_id,market,locked_at")
       .eq("sport", "nba")
@@ -118,16 +127,39 @@ export async function refreshNbaPublishedLockMetadata(input: {
       return { ok: false, snapshotKey, error: `NBA lock tuple lookup failed: ${lockLookup.error.message}` };
     }
 
+    const lockedGameIds = new Set((lockLookup.data ?? []).map(row => row.game_id));
+    const newlyLockedExternalIds = snapshot.payload.games.filter(game =>
+      game.lockedAt == null && lockedGameIds.has(dbIdByExternalId.get(game.external_id)!)
+    ).map(game => game.external_id);
+    if (newlyLockedExternalIds.length > 128) throw new Error("NBA lock capture scope exceeds the bounded member window");
+    const captureRows = newlyLockedExternalIds.length === 0 ? { data: [], error: null } : await client
+      .from("prediction_records").select("game_id,market,locked_at,snapshot_json")
+      .eq("sport", "nba").in("game_id", newlyLockedExternalIds.map(id => dbIdByExternalId.get(id)!))
+      .not("locked_at", "is", null);
+    if (captureRows.error) throw new Error(`NBA original lock capture lookup failed: ${captureRows.error.message}`);
+    const newGameIds = new Set(newlyLockedExternalIds.map(id => dbIdByExternalId.get(id)!));
+    if ((captureRows.data ?? []).length !== newlyLockedExternalIds.length * 3 ||
+        (captureRows.data ?? []).some(row => !newGameIds.has(row.game_id))) {
+      throw new Error("NBA original lock capture scope is incomplete");
+    }
+    const lockedMemberGamesByExternalId = readNbaLockedMemberCards({ externalIds: newlyLockedExternalIds,
+      dbIdByExternalId, rows: captureRows.data ?? [] });
     const patched = applyNbaPublishedLockMetadata({
       payload: snapshot.payload,
       dbIdByExternalId,
       rows: lockLookup.data ?? [],
+      lockedMemberGamesByExternalId,
     });
     if (patched.lockedGames === 0) {
       return { ok: false, snapshotKey, error: "NBA lock publication found no complete locked games" };
     }
 
-    const write = await upsertLabResponseSnapshot({
+    if (patched.changedGames === 0) return { ok: true, snapshotKey,
+      games: patched.payload.games.length, slateState: patched.payload.slateState,
+      expiresAt: snapshot.expiresAt, staleUntil: snapshot.staleUntil,
+      lockedGames: patched.lockedGames, changedGames: 0 };
+
+    const write = await saveSnapshot({
       snapshotKey,
       kind: "daily_edge",
       sport: "nba",
@@ -141,7 +173,7 @@ export async function refreshNbaPublishedLockMetadata(input: {
     if (!write.ok) {
       return { ok: false, snapshotKey, error: write.error, lockedGames: patched.lockedGames, changedGames: patched.changedGames };
     }
-    await expirePublishedDailyEdgeMemberCache();
+    await expireMemberCache();
     return {
       ok: true,
       snapshotKey,

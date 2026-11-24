@@ -1,3 +1,21 @@
+## November23 NBA exact saved-card lock handoff R11
+
+Prospective member-lock publication is
+`nba_member_lock_publication_2026_11_23_r11_exact_saved_cards`. On the existing
+leased post-lock path, newly locking cards come from their exact saved original
+three-market captures through the existing R8 decoder. The earlier unlocked
+reader card cannot become locked truth by changing only its timestamp. Missing,
+partial, mismatched or failed original cohorts retain the prior snapshot and
+freshness. Old published locks remain opaque; a no-change retry writes nothing.
+One bounded new-game-only read adds no provider/model call, timer, schema or
+writer. ModelR39/marriageR41/readerR5/gradeR31 and every numerical/source/stake/
+tracking rule and stored lock stay exact. Relative to original captures there
+are zero promotions, demotions or board-count changes. The actual SanAntonio–
+Sacramento quote/side and Utah–LA price handoff reproductions are not empirical
+accuracy claims. Require complete local/hosted/fresh-main/protected/Ready/live
+proof; a future lock remains pending until its ordinary schedule is observed.
+See `model-audits/2026-11-23-nba-exact-lock-card-publication.md`.
+
 ## November 23 NBA request-scoped roster publication R39
 
 Prospective model/record is `nba_professional_unified_2026_11_23_r39_request_scoped_roster`,

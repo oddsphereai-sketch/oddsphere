@@ -1,8 +1,7 @@
-import type { DailyEdgeResponse } from "@/app/lab/lib/labTypes";
-import { computeLocksAt } from "@/lib/automodel/lockState";
+import type { DailyEdgeGameDto, DailyEdgeResponse } from "@/app/lab/lib/labTypes";
 
 export const NBA_MEMBER_LOCK_PUBLICATION_RELEASE =
-  "nba_member_lock_publication_2026_10_29_r10_consumer_history_continuity";
+  "nba_member_lock_publication_2026_11_23_r11_exact_saved_cards";
 
 export type NbaPublishedLockRow = {
   game_id: number;
@@ -14,6 +13,7 @@ export function applyNbaPublishedLockMetadata(args: {
   payload: DailyEdgeResponse;
   dbIdByExternalId: ReadonlyMap<number, number>;
   rows: readonly NbaPublishedLockRow[];
+  lockedMemberGamesByExternalId: ReadonlyMap<number, DailyEdgeGameDto>;
 }): { payload: DailyEdgeResponse; lockedGames: number; changedGames: number } {
   const rowsByGame = new Map<number, NbaPublishedLockRow[]>();
   for (const row of args.rows) {
@@ -41,14 +41,19 @@ export function applyNbaPublishedLockMetadata(args: {
 
     const lockedAt = lockedRows[0]!.locked_at!;
     lockedGames += 1;
-    if (game.lockState === "locked" && game.lockedAt === lockedAt) return game;
+    // Existing published locks are opaque history. This handoff only acts on
+    // an unlocked card crossing into its first authoritative stored lock.
+    if (game.lockedAt != null) {
+      if (!Number.isFinite(Date.parse(game.lockedAt)) || Date.parse(game.lockedAt) !== Date.parse(lockedAt)) throw new Error(`NBA existing published lock timestamp mismatch for game_id=${dbId}`);
+      return game;
+    }
+    const captured = args.lockedMemberGamesByExternalId.get(game.external_id);
+    if (!captured || captured.external_id !== game.external_id || captured.id !== game.id ||
+        captured.lockState !== "locked" || captured.lockedAt !== lockedAt) {
+      throw new Error(`NBA exact saved lock card is unavailable for game_id=${dbId}`);
+    }
     changedGames += 1;
-    return {
-      ...game,
-      scheduledLockAt: computeLocksAt(game.gameStartAt) ?? game.scheduledLockAt,
-      lockState: "locked" as const,
-      lockedAt,
-    };
+    return captured;
   });
 
   return {
