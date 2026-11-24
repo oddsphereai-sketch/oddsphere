@@ -1,3 +1,28 @@
+## November 23 NBA request-scoped roster publication R39
+
+Prospective model/record is `nba_professional_unified_2026_11_23_r39_request_scoped_roster`,
+marriage `nba_market_marriage_2026_11_23_r41_request_scoped_roster`, reader
+`nba_reader_publication_2026_11_23_r5_request_scoped_roster` and diagnostic receipt
+`nba_reader_failure_log_2026_11_23_r2_source_phase`. The existing seven-date
+reader shares one lazy request-local active-roster pagination set instead of
+collecting up to seven sets. No process cache, extra source, retry, writer,
+timer, schema, source relaxation or numerical/grade/stake change is introduced.
+Body failures keep their original rejection semantics and preserve the prior
+complete reader and original clocks. Safe error-only stage codes use the
+existing receipt/cron log; no source or credential text enters those receipts.
+
+R38/R37/R36/R35/R34 knowledge remains explicitly compatible; current state and
+all original locked payloads retain precedence. Grade R31, roster residual R2,
+score artifacts, price/split evidence gates, lease and T-60 lifecycle stay exact.
+Thirty same-input synthetic pairs/90 markets (20 roster corrections) preserve
+every forecast/probability/selection/grade: zero promotions, zero demotions and
+zero net actionable change. Three concurrent body-failure controls preserve
+all old fields and issue zero writes; there is no empirical accuracy claim.
+The observed November23 timeout dependency remains unproved from old logs.
+Require full/focused/type/lint, latest-main/no-overlap/protected/exact-tree and
+actual production/ordinary publication/coverage/lease/lock proof before calling
+this live. Evidence: `model-audits/2026-11-23-nba-request-roster-publication.md`.
+
 ## November23 bounded partition-count stage headroom R59
 
 Prospective shared generation is `player_props_ai_2026_11_23_r59_count_stage_headroom`;

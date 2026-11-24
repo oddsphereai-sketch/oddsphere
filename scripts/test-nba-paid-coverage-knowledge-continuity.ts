@@ -18,6 +18,7 @@ const original = reconcileNbaMarketConsequence({ independentMargin: 10, independ
 assert.ok(Object.keys(original.anchors).length > 0, "fixture has actual native anchored source contracts");
 const predecessors = NBA_COMPATIBLE_KNOWLEDGE_MODEL_RELEASES;
 assert.deepEqual(predecessors, [
+  "nba_professional_unified_2026_11_20_r38_event_scoped_split_evidence",
   "nba_professional_unified_2026_11_20_r37_event_scoped_evidence",
   "nba_professional_unified_2026_11_04_r36_paid_consumer_book_coverage",
   "nba_professional_unified_2026_11_04_r35_native_consumer_pairs",
@@ -60,6 +61,6 @@ async function main() {
   for (const release of predecessors) await assert.rejects(run({ [release]: { ...original, eventId: "wrong" } }), /corrupt/);
   const absent = await run({ arbitrary_older_release: original });
   assert.deepEqual(absent.visited, [NBA_MODEL_RELEASE, ...predecessors]); assert.equal(absent.result.size, 0);
-  console.log("NBA knowledge continuity: all exact R37/R36/R35/R34 predecessors, unchanged anchors and current/nearest precedence passed");
+  console.log("NBA knowledge continuity: all exact R38/R37/R36/R35/R34 predecessors, unchanged anchors and current/nearest precedence passed");
 }
 void main().catch(error => { console.error(error); process.exitCode = 1; });
