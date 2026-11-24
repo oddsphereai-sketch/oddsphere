@@ -34,9 +34,9 @@ async function main(){
   let elapsed=90000,calls=0,stages=0,waves=0,batch:Promise<void>|null=null;
   const parts=await fn(input,{key:'synthetic-never-real',count:async p=>{
    calls++;
-   if(!batch){waves++;batch=Promise.resolve().then(()=>{elapsed+=30000;batch=null;if(deadline&&elapsed>200000)throw Error('synthetic_preparation_deadline');});}
+   if(!batch){waves++;batch=Promise.resolve().then(()=>{elapsed+=30000;batch=null;if(deadline&&elapsed>225000)throw Error('synthetic_preparation_deadline');});}
    await batch;return p.players.length*35000;
-  },onCountStage:()=>{stages++;if(deadline&&elapsed>200000)throw Error('synthetic_preparation_deadline');}});
+  },onCountStage:()=>{stages++;if(deadline&&elapsed>225000)throw Error('synthetic_preparation_deadline');}});
   return{parts,elapsed,calls,stages,waves};
  }
  const prior=await run(control),current=await run(prepareReviewParts);
@@ -47,7 +47,15 @@ async function main(){
  assert(current.calls<prior.calls&&current.waves<prior.waves&&current.stages<prior.stages);
  await assert.rejects(run(control,true),/synthetic_preparation_deadline/);
  const fits=await run(prepareReviewParts,true);assert.equal(JSON.stringify(fits.parts),JSON.stringify(current.parts));
+ // Measured-token headroom can differ from equal byte weights. Preserve useful
+ // transfers that fit two parts instead of prematurely expanding paid waves.
+ for(const [heavy,other] of [[90000,10000],[40000,18000]]){
+  const exactCount=async(p:GamePacket)=>p.players.reduce((n,x)=>n+(x.id==='p2'?heavy:other),0);
+  const before=await control(input,{key:'synthetic',count:exactCount});
+  const after=await prepareReviewParts(input,{key:'synthetic',count:exactCount});
+  assert.equal(before.length,2);assert.equal(JSON.stringify(after),JSON.stringify(before));
+ }
  let sends=0;await assert.rejects(prepareReviewParts(input,{key:'synthetic',count:async()=>{sends++;return 1;},onCountStage:()=>{throw Error('closed_stage');}}),/closed_stage/);assert.equal(sends,0);
- console.log(JSON.stringify({status:'PASS',originalCountCalls:prior.calls,newCountCalls:current.calls,originalWaves:prior.waves,newWaves:current.waves,sameExactAcceptedParts:true,sourceActorMarketBytesUnchanged:true,virtualOriginalMs:prior.elapsed,virtualCurrentMs:current.elapsed,virtualDeadlineMs:200000,noProviderModelCountCalls:true,noLiveLatencyOrAccuracyClaim:true}));
+ console.log(JSON.stringify({status:'PASS',originalCountCalls:prior.calls,newCountCalls:current.calls,originalWaves:prior.waves,newWaves:current.waves,sameExactAcceptedParts:true,sourceActorMarketBytesUnchanged:true,virtualOriginalMs:prior.elapsed,virtualCurrentMs:current.elapsed,virtualDeadlineMs:225000,noProviderModelCountCalls:true,noLiveLatencyOrAccuracyClaim:true}));
 }
 void main().catch(error=>{console.error(error);process.exitCode=1;});

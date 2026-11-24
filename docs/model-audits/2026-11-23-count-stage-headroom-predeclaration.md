@@ -10,15 +10,15 @@ sole NFL writer `nfl_player_props_writer_2026_11_23_r120_count_stage_headroom`.
 Native qualification R17/forward R16 and law5/grade7/selection10/nativeMLB44 remain.
 
 Partition preparation stops trying whole-player transfers into bins whose actual
-measured count is already at/above the input cap. A transfer must strictly improve
-the same byte-sizing balance used to choose bins; swaps/plateaus advance to more
-whole-player bins rather than recounting oscillating assignments. Every accepted
+measured count is already at/above the input cap. Useful transfers into bins with measured headroom remain permitted even when
+byte estimates predict no balance improvement; byte weights do not replace exact
+token measurements. The rejected first candidate incorrectly pruned those moves. Every accepted
 model-specific wire still needs its exact count. All players, markets, original
 source facts and complete two-phase admission remain required; no truncated input,
 estimated accepted token count, output/law repair, auto decline or dropped scope.
 This heuristic does not claim a globally minimum partition count. Fixed control
-preserves the exact four accepted packets while reducing13 remote counts to9 and
-five count waves tothree; virtual delays fit a200second preparation window that
+preserves the exact four accepted packets while reducing13 remote counts to11 and
+five count waves tofour; virtual delays fit a225second preparation window that
 its exact frozen R58 control misses. This is not a measured vendor-latency claim.
 
 Original Portland final expired without a paid claim; its saved scheduled rescue
@@ -33,6 +33,8 @@ their original authority. R58 is explicitly retained in release membership and
 native-benchmark freshness. Source inputs/schema/claims/numerical validation,
 models, exactly two logical slots/phases, caps145000/7000/16, concurrency16,
 ordinary cadence, shared sport leases, prices/grades/stakes and budget50/60 remain.
+Two skewed additive-token counterexamples preserve the exact original two fitting
+parts; this repair must not turn those cases into three paid review parts.
 No manual cron, provider/model/count request, paid test, closed replay or DB change.
 Require TWO NEW consecutive fresh triple whole-product CLEAR rounds and all
 focused/model/type/lint/build/hosted realPG(allAI mocked)/fresh-main/no-overlap/

@@ -75,11 +75,6 @@ export async function prepareReviewParts(packet: GamePacket, args: { key: string
         if(!available.length)break;const to=available[0].i;
         const moved=weighted.filter(p=>bins[from].includes(p.id)).sort((a,b)=>Math.abs((loads[from]-a.weight)-(loads[to]+a.weight))-Math.abs((loads[from]-b.weight)-(loads[to]+b.weight)))[0];
         if(!moved||bins[from].length<=1)break;
-        const beforeImbalance=Math.abs(loads[from]-loads[to]);
-        const afterImbalance=Math.abs((loads[from]-moved.weight)-(loads[to]+moved.weight));
-        // A swap/plateau under this same sizing heuristic is not progress.
-        // Do not issue another exact count merely to oscillate whole players.
-        if(afterImbalance>=beforeImbalance)break;
         bins[from]=bins[from].filter(id=>id!==moved.id);bins[to].push(moved.id);loads[from]-=moved.weight;loads[to]+=moved.weight;
       }
       if(parts.length)break;
