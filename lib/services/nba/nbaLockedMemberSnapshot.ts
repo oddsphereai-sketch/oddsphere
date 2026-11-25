@@ -286,3 +286,27 @@ export function applyNbaLockedMemberSnapshotPrecedence(args: {
   });
   return { games, memberGamesByExternalId };
 }
+
+/** Decode only original saved captures through the same authoritative legacy
+ * precedence/consistency path. Never synthesize a card from record columns. */
+export function readNbaLockedMemberCards(args: {
+  externalIds: readonly number[];
+  dbIdByExternalId: ReadonlyMap<number, number>;
+  rows: readonly NbaLockedMemberRecord[];
+}): ReadonlyMap<number, DailyEdgeGameDto> {
+  const games = args.externalIds.map((externalId) => {
+    const dbId = args.dbIdByExternalId.get(externalId);
+    const first = args.rows.find(row => row.game_id === dbId);
+    const stored = readStoredGameDto(first?.snapshot_json);
+    if (!stored || stored.game_external_id !== externalId) {
+      throw new Error(`NBA original lock capture is unavailable for external_id=${externalId}`);
+    }
+    return stored;
+  });
+  const restored = applyNbaLockedMemberSnapshotPrecedence({ games,
+    dbIdByExternalId: args.dbIdByExternalId, rows: args.rows });
+  if (restored.memberGamesByExternalId.size !== args.externalIds.length) {
+    throw new Error("NBA original locked member cards are incomplete");
+  }
+  return restored.memberGamesByExternalId;
+}
