@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import {proveNflCooperativeForecastRows} from './lib/nfl-cooperative-forecast-proof';
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
@@ -81,6 +82,7 @@ assert.deepEqual(resolveNflOwlsCoverageHealth({
 "an old reaction receipt cannot manufacture current Owls feed availability or erase unrelated health findings");
 
 void (async () => {
+  await proveNflCooperativeForecastRows();
   await assert.rejects(
     runNflForwardEvidenceWriter({ apply: true, auditJointImpact: () => {} } as unknown as
       Parameters<typeof runNflForwardEvidenceWriter>[0]),
@@ -468,7 +470,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_11_16_r120_published_deadline_tracking/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_11_26_r121_cooperative_forecast_batches/);
 assert.match(writer, /buildNflMarketBrainShadow/);
 assert.match(writer, /readNflOwlsMarketBrainSplitEvidence/,
   "the NFL shadow must consume the canonical Owls evidence lane");

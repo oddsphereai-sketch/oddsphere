@@ -9,6 +9,7 @@ import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
 import { computeSlateDate } from "@/lib/dates/slateDate";
 import { PlaybookReadBroker } from "@/lib/providers/playbook/playbookReadBroker";
 import type { PlaybookLineGame, PlaybookSplitGame } from "@/lib/providers/playbook/types";
+import {collectNflForecastRows} from './nflCooperativeForecastRows';
 import {
   bindMarketBrainPriorInputLineage,
   marketBrainPriorArtifactSha256,
@@ -164,7 +165,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_16_r120_published_deadline_tracking" as const;
+  "nfl_forward_evidence_writer_2026_11_26_r121_cooperative_forecast_batches" as const;
 
 const NFL_REGULAR_MARKETS = ["moneyline", "spread", "total"] as const;
 const NFL_OWLS_COVERAGE_DIAGNOSTICS = new Set([
@@ -687,7 +688,7 @@ export async function runNflForwardEvidenceWriter(args: {
   const payloadBuildHolds: string[] = [];
   const jointImpactRows: Parameters<NonNullable<typeof args.auditJointImpact>>[0] = [];
   const semanticImpactRows: Parameters<NonNullable<typeof args.auditSemanticImpact>>[0] = [];
-  const payloads = plans.flatMap((plan): NflForwardEvidencePayload[] => {
+  const payloads = await collectNflForecastRows(plans, (plan): NflForwardEvidencePayload[] => {
     try {
     const current = requiredCurrentOdds(slate.currentOddsByGame[plan.game.providerGameId], plan.game.providerGameId);
     const currentBooks = requiredCurrentBooks(
