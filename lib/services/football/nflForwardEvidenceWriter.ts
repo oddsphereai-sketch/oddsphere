@@ -10,7 +10,7 @@ import { computeSlateDate } from "@/lib/dates/slateDate";
 import { PlaybookReadBroker } from "@/lib/providers/playbook/playbookReadBroker";
 import type { PlaybookLineGame, PlaybookSplitGame } from "@/lib/providers/playbook/types";
 import {collectNflForecastRows} from './nflCooperativeForecastRows';
-import {needsNflPreReviewRoster} from './nflPreReviewRosterFreshness';
+import {needsNflPreReviewRoster,nflPreReviewRosterDueGames,withNflPreReviewRosterCaptures} from './nflPreReviewRosterFreshness';
 import {
   bindMarketBrainPriorInputLineage,
   marketBrainPriorArtifactSha256,
@@ -166,7 +166,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_26_r122_pre_review_roster_freshness" as const;
+  "nfl_forward_evidence_writer_2026_11_26_r123_roster_preparation_priority" as const;
 
 const NFL_REGULAR_MARKETS = ["moneyline", "spread", "total"] as const;
 const NFL_OWLS_COVERAGE_DIAGNOSTICS = new Set([
@@ -390,7 +390,9 @@ export async function runNflForwardEvidenceWriter(args: {
       collectorRelease: NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
     },
   });
-  if (!need.collect) {
+  const rosterPreparationDue = nflPreReviewRosterDueGames({existing: historicalExisting,
+    now: args.now, frozenGameIds: frozenPublicIds});
+  if (!need.collect && rosterPreparationDue.size === 0) {
     const memberSnapshot = await refreshCompactMemberSnapshot({
       client: args.client,
       existing: historicalExisting,
@@ -414,11 +416,14 @@ export async function runNflForwardEvidenceWriter(args: {
     apiKey: args.balldontlieApiKey,
     captureRawPriceManifest: marketBrainCaptureEnabled,
   });
-  const plannedCaptures = planNflForwardEvidenceCaptures({
-    games: slate.games,
-    existing,
-    capturedAt: args.now,
-    unlockedCadenceMinutes: need.cadenceMinutes ?? 60,
+  const plannedCaptures = withNflPreReviewRosterCaptures({
+    games: slate.games, existing: historicalExisting, now: args.now, frozenGameIds: frozenPublicIds,
+    planned: need.collect ? planNflForwardEvidenceCaptures({
+      games: slate.games,
+      existing,
+      capturedAt: args.now,
+      unlockedCadenceMinutes: need.cadenceMinutes ?? 60,
+    }) : [],
   });
   // A legacy failed attempt already stored in the final T-60 slot cannot be
   // overwritten or evaded with a second authoritative lock. Future failures
@@ -1565,7 +1570,7 @@ export async function runNflForwardEvidenceWriter(args: {
   return {
     writerRelease: NFL_FORWARD_WRITER_RELEASE,
     collected: true,
-    collectionReason: need.reason,
+    collectionReason: need.collect ? need.reason : "pre_review_roster_preparation_due",
     proposed: write.proposed,
     inserted: write.inserted,
     games: new Set(payloads.map((payload) => payload.game.providerGameId)).size,

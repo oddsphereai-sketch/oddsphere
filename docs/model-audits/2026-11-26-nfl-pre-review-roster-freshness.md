@@ -1,3 +1,5 @@
+> Historical unmerged R122 proposal, held by the root after the hourly collection gate was shown to skip its preparation window. See the corrected R123 preparation-priority audit; do not deploy this R122 proposal.
+
 ## November26 prospective pre-review NFL roster freshness R122
 
 The sole NFL forward writer is
