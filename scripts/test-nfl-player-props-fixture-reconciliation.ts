@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {__NFL_PLAYER_PROPS_COLLECTOR_TEST__ as collector} from '../lib/services/football/nflPlayerPropsCollector';
 import {normalizeOwlsNflPlayerProps} from '../lib/services/football/nflPlayerPropsProviders';
 import {createNflPacketActorResolver} from '../lib/playerPropsAi/nflPlayerIdentity';
+import type {NflPlayerPropPriceObservation} from '../lib/services/football/nflPlayerPropsContract';
 import {NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE,NFL_PLAYER_PROPS_RECONCILED_FIXTURE_RELEASE} from '../lib/services/football/nflPlayerPropsContract';
 globalThis.fetch=async()=>{throw Error('Network blocked: synthetic fixture source only');};
 const now='2026-11-26T17:21:22.128Z',fetched='2026-11-26T17:21:13.036Z',start='2026-11-27T01:20:00.000Z';
@@ -28,11 +29,11 @@ const resolve=createNflPacketActorResolver({game:{id:game.providerGameId,start,h
  observationsAvailableAt:now,observations:fixed.rows,rows:[],context:{capturedAt:now,games:[{
  canonicalGameId:game.providerGameId,scheduledStart:start,homeTeam:'BUF',awayTeam:'KC',
  awayDepth:{team:'KC',capturedAt:fetched,roster:[{playerId:'synthetic-id',name:'Synthetic Player',position:'WR'}]},
- homeDepth:{team:'BUF',capturedAt:fetched,roster:[]}}]} as Parameters<typeof createNflPacketActorResolver>[0]['context']});
+ homeDepth:{team:'BUF',capturedAt:fetched,roster:[]}}]} as unknown as Parameters<typeof createNflPacketActorResolver>[0]['context']});
 assert(original.every(row=>resolve(row)===null),'Original mismatched-clock rows remain rejected by unchanged exact guard');
 assert(fixed.rows.every(row=>resolve(row)?.providerId==='synthetic-id'),'Same complete two-way offer now binds its exact canonical fixture');
 assert.equal(JSON.stringify(original),before,'No historical observation is rewritten');
-const result=(rows=original,games=[game],at:string|undefined=now)=>collector.reconcileProviderRowsToSlate(rows,games,at);
+const result=(rows:NflPlayerPropPriceObservation[]=original,games=[game],at:string|undefined=now)=>collector.reconcileProviderRowsToSlate(rows,games,at);
 assert.equal(result(original,[game,{...game,providerGameId:'ambiguous'}]).rows.length,0);
 assert.equal(result(original,[{...game,homeTeam:'NE',homeTeamName:'New England Patriots'}]).rows.length,0);
 assert.equal(result(original,[{...game,awayTeam:'NE',awayTeamName:'New England Patriots'}]).rows.length,0);
