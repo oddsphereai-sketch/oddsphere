@@ -1,3 +1,46 @@
+## November26 as-of NFL roster preparation R124
+
+The prospective sole forward writer is
+`nfl_forward_evidence_writer_2026_11_26_r124_asof_roster_preparation`,
+with source preparation `nfl_pre_review_roster_2026_11_26_r3_asof_source_preparation`.
+Props generation R62/NBA48/NFL123 and model/calibration/decision/member releases
+remain unchanged. This candidate is not live until protected release verification.
+
+R122 was held because hourly collection could skip roster preparation. R123
+fixed that gate but all three round157 reviewers rejected mixed historical data:
+a future source envelope could supply nonfuture-looking depth timestamps to the
+critical roster selector and suppress both team requests. Those candidates and
+reports remain historical; neither establishes clearance for this correction.
+
+Use one as-of view of valid capturedAt instants for planning, actual team roster
+selection, previous payloads and all historical model-feature reuse. Future or
+invalid unlocked envelopes cannot lend facts or freshness. Keep a separate
+record-only view that preserves every original locked payload, even with a bad
+source clock, without making it a model input. All original public/private locks
+and legacy T60 authority protect their games before any new capture is planned.
+Do not alter their timestamps, values, order or duplicate multiplicity.
+
+The ordinary leased writer still prepares a stale team roster at the two existing
+fifteen-minute pre-review boundaries. A targeted unlocked source capture may run
+when hourly prices are not due; fresh provider fixture clocks requalify it. No
+new writer/cron/review/phase/model/count call, paid test, manual refresh, closed
+job replay, configured cap, spending control or numerical formula is introduced.
+Ordinary metadata requests may increase within the existing bounded collector.
+Missing provider identities remain explicit; no club facts or inferred teams are
+injected. Same-input actionable promotions/demotions/net count change are zero.
+Actual fresh facts may affect future unlocked forecasts through existing models.
+
+Mocks exercise the actual production critical-team selector with a valid old
+source plus a future envelope: both stale teams must refresh. Future-only and
+invalid sources cannot authorize preparation; opaque future locks remain exact
+record authority. Test clocks, hourly bypass, original paired slots, fresh-window
+skips, provider failure, duplicates, fresh fixture changes and locked precedence.
+Require two NEW consecutive fresh triple whole-product CLEAR rounds, mandatory
+local/focused/model/type/affected-lint/build, exact hosted all-AI-mocked realPG,
+fresh-main/no-overlap/strict-protected expected-head merge, actual Ready/www and
+ordinary source/review/member/retention/first-lock/tracking verification. This
+establishes no external collector completeness, accuracy or latency guarantee.
+
 ## November26 targeted pre-review roster collection priority R123
 
 The sole NFL forward writer is
