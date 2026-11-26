@@ -10,6 +10,7 @@ import { computeSlateDate } from "@/lib/dates/slateDate";
 import { PlaybookReadBroker } from "@/lib/providers/playbook/playbookReadBroker";
 import type { PlaybookLineGame, PlaybookSplitGame } from "@/lib/providers/playbook/types";
 import {collectNflForecastRows} from './nflCooperativeForecastRows';
+import {needsNflPreReviewRoster} from './nflPreReviewRosterFreshness';
 import {
   bindMarketBrainPriorInputLineage,
   marketBrainPriorArtifactSha256,
@@ -165,7 +166,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_26_r121_cooperative_forecast_batches" as const;
+  "nfl_forward_evidence_writer_2026_11_26_r122_pre_review_roster_freshness" as const;
 
 const NFL_REGULAR_MARKETS = ["moneyline", "spread", "total"] as const;
 const NFL_OWLS_COVERAGE_DIAGNOSTICS = new Set([
@@ -491,9 +492,17 @@ export async function runNflForwardEvidenceWriter(args: {
     return emptyResult("provider_slate_has_no_due_capture", tracking, memberSnapshot);
   }
 
-  const criticalTeamIds = new Set(plans
-    .filter((plan) => plan.stage === "opening" || plan.stage === "t60")
-    .flatMap((plan) => [plan.game.away.id, plan.game.home.id]));
+  const criticalTeamIds = new Set(plans.flatMap((plan) => {
+    if (plan.stage === "opening" || plan.stage === "t60") return [plan.game.away.id, plan.game.home.id];
+    const previous = latestEvidenceForGame(historicalExisting, plan.game.providerGameId);
+    const depth = previous?.payload.providerStartersAndDepth ?? previous?.payload.startersAndDepth;
+    return [
+      ...(needsNflPreReviewRoster({start: plan.game.scheduledStart, now: args.now,
+        capturedAt: depth?.away.capturedAt}) ? [plan.game.away.id] : []),
+      ...(needsNflPreReviewRoster({start: plan.game.scheduledStart, now: args.now,
+        capturedAt: depth?.home.capturedAt}) ? [plan.game.home.id] : []),
+    ];
+  }));
   const criticalTeams = slate.games.flatMap((game) => [game.away, game.home])
     .filter((team, index, rows) => criticalTeamIds.has(team.id) && rows.findIndex((row) => row.id === team.id) === index);
   const availabilityMatchups = slate.games.map((game) => ({
