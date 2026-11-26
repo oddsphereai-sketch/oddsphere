@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {needsNflPreReviewRoster,nflPreReviewRosterDueGames,withNflPreReviewRosterCaptures} from '../../lib/services/football/nflPreReviewRosterFreshness';
+import {needsNflPreReviewRoster,nflPreReviewRosterDueGames,withNflPreReviewRosterCaptures,splitNflForwardHistoryAtCutoff,latestAvailableNflForwardSourceForGame,nflPreReviewRosterTeamIds} from '../../lib/services/football/nflPreReviewRosterFreshness';
 import {determineNflForwardCollectionNeed,planNflForwardEvidenceCaptures,type NflForwardStoredEvidence} from '../../lib/services/football/nflForwardEvidence';
 import {fetchBalldontlieNflTeamDepthSnapshots} from '../../lib/services/football/balldontlieNflRoster';
 import {resolveNflPropSourcePlayer} from '../../lib/playerPropsAi/nflPlayerIdentity';
@@ -100,6 +100,28 @@ export async function proveNflPreReviewRosterSources() {
       away:{...stored[1].payload.startersAndDepth.away,capturedAt:cutoff},
       home:{...stored[1].payload.startersAndDepth.home,capturedAt:cutoff}}}};
   assert.equal(nflPreReviewRosterDueGames({existing:[...stored,freshStored],now:'2026-11-26T20:06:00Z',frozenGameIds:emptyFrozen}).size,0);
+  const futureUnlocked={...stored[1],capturedAt:'2026-11-26T20:00:00Z',payload:{...stored[1].payload,
+    startersAndDepth:{...stored[1].payload.startersAndDepth,
+      away:{...stored[1].payload.startersAndDepth.away,capturedAt:'2026-11-26T19:50:00Z'},
+      home:{...stored[1].payload.startersAndDepth.home,capturedAt:'2026-11-26T19:50:00Z'}}}};
+  const mixed=[...stored,futureUnlocked],mixedBefore=JSON.stringify(mixed);
+  const selected=latestAvailableNflForwardSourceForGame(mixed,'synthetic-game',cutoff);
+  assert.strictEqual(selected,stored[1],'Future envelope cannot lend its nonfuture depth clocks');
+  const actualCriticalTeams=nflPreReviewRosterTeamIds(added,mixed,cutoff);
+  assert.deepEqual([...actualCriticalTeams].sort(),[7,8],'Actual writer selector must request both stale roster teams');
+  const split=splitNflForwardHistoryAtCutoff(mixed,cutoff);
+  assert.deepEqual(split.sourceRows,stored);assert.deepEqual(split.recordRows,stored);
+  assert.equal(JSON.stringify(mixed),mixedBefore);
+  const futureLocked={...futureUnlocked,payload:{...futureUnlocked.payload,decisions:{
+    ...futureUnlocked.payload.decisions,evaluatedBets:[{stage:'t60_locked',lockedAt:'2026-11-26T20:00:00Z',
+      opaqueOriginalProjection:123.456,opaqueOriginalPrice:-117}]}}} as unknown as NflForwardStoredEvidence;
+  const futureLockedBytes=JSON.stringify(futureLocked);
+  const protectedSplit=splitNflForwardHistoryAtCutoff([...mixed,futureLocked],cutoff);
+  assert(!protectedSplit.sourceRows.includes(futureLocked));
+  assert(!protectedSplit.recordRows.includes(futureUnlocked));
+  assert(protectedSplit.recordRows.includes(futureLocked),'Opaque original lock survives source-clock rejection');
+  assert.equal(JSON.stringify(futureLocked),futureLockedBytes);
+  assert.equal(nflPreReviewRosterDueGames({existing:[...mixed,futureLocked],now:cutoff,frozenGameIds:emptyFrozen}).size,0);
   assert.equal(JSON.stringify(stored),sourceBefore,'Original metadata and locked authorities are never mutated');
   console.log('NFL pre-review roster controls passed: original paired clocks, bounded mocked roster, late offered exact-ID identity, no invented team or original mutation.');
 }
