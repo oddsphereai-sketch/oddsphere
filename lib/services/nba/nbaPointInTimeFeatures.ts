@@ -1158,14 +1158,37 @@ function updateEloRatings(args: {
   args.ratings.set(args.awayTeamId, away - adjustment);
 }
 
-export function buildNbaPointInTimeFeatures(args: {
+type NbaPointInTimeFeatureArgs = {
   games: NbaHistoricalGame[];
   upcomingGames?: NbaUpcomingGame[];
   boxes: NbaHistoricalPlayerBox[];
   advanced?: NbaHistoricalPlayerAdvanced[];
   /** Runtime optimization: replay all state but emit only requested games. */
   emitGameIds?: ReadonlySet<number>;
-}): NbaPointInTimeFeatureRow[] {
+};
+export function buildNbaPointInTimeFeatures(args: NbaPointInTimeFeatureArgs): NbaPointInTimeFeatureRow[] {
+  return buildPointInTimeFeatures(args);
+}
+export const NBA_ORIGINAL_T60_FEATURE_RELEASE = "nba_original_t60_features_2026_11_23_r1_publication_clocks" as const;
+export type NbaOriginalT60FeatureRow = Omit<NbaPointInTimeFeatureRow, "release"> & { release: typeof NBA_ORIGINAL_T60_FEATURE_RELEASE };
+/** Offline original-source reconstruction. The existing runtime entry point
+ * keeps its exact R13 clocks and output; only this explicit path uses T60. */
+export function buildNbaOriginalT60Features(args: NbaPointInTimeFeatureArgs & { finalAvailableAt: ReadonlyMap<number, string> }): NbaOriginalT60FeatureRow[] {
+  if (args.upcomingGames?.length || args.games.some(g => !Number.isFinite(Date.parse(args.finalAvailableAt.get(g.gameId) ?? "")) || Date.parse(args.finalAvailableAt.get(g.gameId)!) <= Date.parse(g.startTime))) throw Error("missing_original_final_publication");
+  return buildPointInTimeFeatures(args, args.finalAvailableAt);
+}
+export const NBA_ORIGINAL_FORWARD_FEATURE_RELEASE = "nba_original_forward_features_2026_11_23_r1_early_freeze" as const;
+export type NbaOriginalForwardFeatureRow = Omit<NbaPointInTimeFeatureRow, "release"> & { release: typeof NBA_ORIGINAL_FORWARD_FEATURE_RELEASE; capturedAt: string; contract: "early_forecast_not_T60_lock" };
+/** An early private forecast, never labeled an observed T60 lock. Upcoming
+ * schedules do not update outcome state; every admitted final is already seen. */
+export function buildNbaOriginalForwardFeatures(args: NbaPointInTimeFeatureArgs & { finalAvailableAt: ReadonlyMap<number, string>; capturedAt: string }): NbaOriginalForwardFeatureRow[] {
+  const now = Date.parse(args.capturedAt), ids = new Set(args.games.map(g => g.gameId));
+  if (!Number.isFinite(now) || !args.upcomingGames?.length || args.upcomingGames.some(g => "homeScore" in g || "awayScore" in g || ids.has(g.gameId) || !Number.isFinite(Date.parse(g.startTime)) || Date.parse(g.startTime) <= now + 3_600_000) || args.games.some(g => !Number.isFinite(Date.parse(args.finalAvailableAt.get(g.gameId) ?? "")) || Date.parse(args.finalAvailableAt.get(g.gameId)!) <= Date.parse(g.startTime) || Date.parse(args.finalAvailableAt.get(g.gameId)!) > now)) throw Error("invalid_original_early_freeze");
+  return buildPointInTimeFeatures(args, args.finalAvailableAt).map(r => ({ ...r, release: NBA_ORIGINAL_FORWARD_FEATURE_RELEASE, capturedAt: args.capturedAt, contract: "early_forecast_not_T60_lock" as const }));
+}
+function buildPointInTimeFeatures(args: NbaPointInTimeFeatureArgs): NbaPointInTimeFeatureRow[];
+function buildPointInTimeFeatures(args: NbaPointInTimeFeatureArgs, originalClocks: ReadonlyMap<number, string>): NbaOriginalT60FeatureRow[];
+function buildPointInTimeFeatures(args: NbaPointInTimeFeatureArgs, originalClocks?: ReadonlyMap<number, string>): (NbaPointInTimeFeatureRow | NbaOriginalT60FeatureRow)[] {
   const games: Array<NbaHistoricalGame | NbaUpcomingGame> = [
     ...args.games,
     ...(args.upcomingGames ?? []),
@@ -1188,13 +1211,14 @@ export function buildNbaPointInTimeFeatures(args: {
   const adjustedRatings = new Map<number, AdjustedRating>();
   const eloRatings = new Map<number, EloRating>();
   const pendingOutcomes: PendingOutcome[] = [];
-  const output: NbaPointInTimeFeatureRow[] = [];
+  const output: (NbaPointInTimeFeatureRow | NbaOriginalT60FeatureRow)[] = [];
   let activeStrengthSeason: number | null = null;
 
   for (const game of games) {
     const startMs = Date.parse(game.startTime);
     if (!Number.isFinite(startMs)) throw new Error(`NBA game ${game.gameId} has an invalid start time.`);
-    while (pendingOutcomes[0] && pendingOutcomes[0].availableAtMs <= startMs) {
+    const cutoffMs = startMs - (originalClocks ? 3_600_000 : 0);
+    while (pendingOutcomes[0] && pendingOutcomes[0].availableAtMs <= cutoffMs) {
       const finalized = pendingOutcomes.shift()!;
       const homeHistory = observationsByTeam.get(finalized.homeTeamId) ?? [];
       const awayHistory = observationsByTeam.get(finalized.awayTeamId) ?? [];
@@ -1269,10 +1293,10 @@ export function buildNbaPointInTimeFeatures(args: {
         isHome: false,
       });
       output.push({
-        release: NBA_POINT_IN_TIME_FEATURE_RELEASE,
+        release: originalClocks ? NBA_ORIGINAL_T60_FEATURE_RELEASE : NBA_POINT_IN_TIME_FEATURE_RELEASE,
         game_id: game.gameId,
         season: game.season,
-        feature_cutoff: game.startTime,
+        feature_cutoff: originalClocks ? new Date(cutoffMs).toISOString() : game.startTime,
         home_team_id: game.homeTeamId,
         away_team_id: game.awayTeamId,
         home_team: game.homeTeam,
@@ -1335,7 +1359,7 @@ export function buildNbaPointInTimeFeatures(args: {
       isHome: false,
     });
     pendingOutcomes.push({
-      availableAtMs: startMs + CONSERVATIVE_RESULT_AVAILABILITY_HOURS * 3_600_000,
+      availableAtMs: originalClocks ? Date.parse(originalClocks.get(game.gameId)!) : startMs + CONSERVATIVE_RESULT_AVAILABILITY_HOURS * 3_600_000,
       homeTeamId: game.homeTeamId,
       awayTeamId: game.awayTeamId,
       homeObservation,

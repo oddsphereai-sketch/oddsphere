@@ -1,0 +1,76 @@
+{
+  "developmentReadByFit": false,
+  "fittingPerformed": true,
+  "frozenAt": "2026-11-26T18:34:29.581487+00:00",
+  "head": {
+    "baselineRecipe": "nba_archived_portable_recipe_2026_11_23_r1_train_only_ridge1000",
+    "fit": {
+      "evaluations": 31,
+      "initial": [
+        0.6678959716209733,
+        0.6678959716209733,
+        130.99933059955197,
+        2.0
+      ],
+      "iterations": 20,
+      "logGradient": [
+        1.953779933344668e-05,
+        1.5100138821319553e-05,
+        -0.00022381735847876172,
+        1.2867162298535462e-05
+      ],
+      "message": "CONVERGENCE: REL_REDUCTION_OF_F_<=_FACTR*EPSMCH",
+      "nll": 9482.708015084263,
+      "success": true
+    },
+    "parameters": {
+      "lengthDays": 257.244043974341,
+      "noiseVariance": 127.98903515159996,
+      "preventionVariance": 1.6965818338282763,
+      "scoringVariance": 1.6026362011338393
+    },
+    "release": "nba_team_score_state_2026_11_26_r1_original_team_residuals",
+    "sourceRecipe": "nba_original_team_feature_source_2026_11_23_r1_native_box_counts",
+    "teams": [
+      1610612737,
+      1610612738,
+      1610612739,
+      1610612740,
+      1610612741,
+      1610612742,
+      1610612743,
+      1610612744,
+      1610612745,
+      1610612746,
+      1610612747,
+      1610612748,
+      1610612749,
+      1610612750,
+      1610612751,
+      1610612752,
+      1610612753,
+      1610612754,
+      1610612755,
+      1610612756,
+      1610612757,
+      1610612758,
+      1610612759,
+      1610612760,
+      1610612761,
+      1610612762,
+      1610612763,
+      1610612764,
+      1610612765,
+      1610612766
+    ],
+    "trainingBaselineHash": "07e1cf409aa6aba321655615ae00d5c06a4dbe3927a7ac210fb87bcf5954b060",
+    "trainingEnd": "2023-04-10T00:23:31.999Z",
+    "trainingHash": "6e07989c39fc07d81a29c37d944908470ae64fc709270e9a4687110a6d7f997e",
+    "trainingRows": 1230,
+    "trainingSeason": 2022
+  },
+  "headHash": "879c59e1dfae89c129b139cc04e5a5087c4a4e9ff63a95c86eadc0747a7efaf3",
+  "inputSha256": "1e1c0d79743a169ee4726cbb00f3487c68068519cec453d95cdfab37666e64b7",
+  "productionWrites": 0,
+  "providerRequests": 0
+}

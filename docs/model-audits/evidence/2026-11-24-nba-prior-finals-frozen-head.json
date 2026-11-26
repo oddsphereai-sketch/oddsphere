@@ -1,0 +1,28 @@
+{
+  "frozenAt": "2026-11-24T06:29:19.944Z",
+  "inputSha256": "f485cac3881b617cd0de9db8464c9bc76252ee7e378f020ac7f9af143e2410d1",
+  "head": {
+    "release": "nba_prior_finals_calibration_2026_11_24_r1_exponential",
+    "sourceRecipe": "nba_original_team_feature_source_2026_11_23_r1_native_box_counts",
+    "baselineRecipe": "nba_archived_portable_recipe_2026_11_23_r1_train_only_ridge1000",
+    "clockMode": "verified_original_publication_only",
+    "trainingSeason": 2022,
+    "trainingEnd": "2023-04-10T00:23:31.999Z",
+    "trainingHash": "cfb46491b793e1fc613bd913668fb62ba39a2b6255a0b4dd6f5ee67f7a082ca4",
+    "trainingBaselineHash": "07e1cf409aa6aba321655615ae00d5c06a4dbe3927a7ac210fb87bcf5954b060",
+    "rawFitSha256": "fc332db5c42c69dc8550e9dc675511d450974ba3ce1c1da604556c3a0bb7f3d7",
+    "margin": {
+      "lengthDays": 58.41840990938139,
+      "noiseVariance": 169.49885608909057,
+      "signalVariance": 1.35823973586065
+    },
+    "total": {
+      "lengthDays": 0.5722250758005755,
+      "noiseVariance": 354.3556253589723,
+      "signalVariance": 0.000053593154780542014
+    },
+    "hash": "5de8c8113c8eba9dd67a572d1f9f16a51df6c48d66c2a06d08073bbb83c065ca"
+  },
+  "fittingPerformed": false,
+  "developmentRead": false
+}
