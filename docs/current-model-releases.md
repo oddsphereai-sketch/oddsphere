@@ -26,6 +26,12 @@ invented drift receipt. Root/fresh round160 held the previous candidate on this
 regression; the original failed report/pin remains unchanged. Both equivalent
 clocks and genuinely shifted fixture clocks now have explicit controls.
 
+R63 retains the existing exact typed NBA benchmark-set freshness membership,
+including R62's permanent original membership. The generation bump cannot
+accidentally withhold the same facts merely regrouped across market evidence.
+No metric comparison or locked-reader rule changes; all real-change/corruption
+negative controls remain active.
+
 No numerical formula, evidence guard, scope, grade/stake, slot, phase, tier,
 output cap, paid control, provider cap or lease changes. Input metadata is
 versioned prospectively; no existing request/law is reinterpreted. Same-source
