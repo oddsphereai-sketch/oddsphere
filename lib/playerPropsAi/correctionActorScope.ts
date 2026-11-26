@@ -4,7 +4,7 @@ import {invariant} from './evidence';
 import {COMPLETE_CORRECTION_MAX_BYTES} from './completeCorrectionFeedback';
 
 const MARKER='\nRETRY_ACTOR_SCOPE_V1=';
-export const CORRECTION_ACTOR_SCOPE_RELEASE='player_props_correction_2026_11_25_r1_unadmitted_actor_output' as const;
+export const CORRECTION_ACTOR_SCOPE_RELEASE='player_props_correction_2026_11_26_r2_compact_scope_fallback' as const;
 
 export function correctionActorIds(packet:GamePacket,text?:string):string[]{
  const all=packet.players.map(p=>p.id);
@@ -23,9 +23,14 @@ export function withPendingActorScope(packet:GamePacket,pending:readonly string[
  const ids=packet.players.map(p=>p.id);
  invariant(pending.length>0&&new Set(pending).size===pending.length&&pending.every(id=>ids.includes(id)),'Invalid pending correction actors');
  if(pending.length===ids.length)return text;
- const selected=new Set(pending),indices=ids.flatMap((id,i)=>selected.has(id)?[i]:[]),next=text+'\nKeep saved actors; return schema actor keys only.'+MARKER+JSON.stringify(indices);
- if(Buffer.byteLength(next,'utf8')>COMPLETE_CORRECTION_MAX_BYTES||Buffer.byteLength(JSON.stringify(next).slice(1,-1),'utf8')>COMPLETE_CORRECTION_MAX_BYTES)return text;
- return next;
+ const selected=new Set(pending),indices=ids.flatMap((id,i)=>selected.has(id)?[i]:[]),suffix=MARKER+JSON.stringify(indices);
+ // The request already says Return ONLY schema player keys when this marker
+ // is present. Its redundant prose must not turn a fitting exact scope into
+ // a full-part regeneration. Keep every original diagnostic/reference byte.
+ for(const next of [text+'\nKeep saved actors; return schema actor keys only.'+suffix,text+suffix]){
+  if(Buffer.byteLength(next,'utf8')<=COMPLETE_CORRECTION_MAX_BYTES&&Buffer.byteLength(JSON.stringify(next).slice(1,-1),'utf8')<=COMPLETE_CORRECTION_MAX_BYTES)return next;
+ }
+ return text;
 }
 
 /** Optional targeting must not displace the original combined known receipt. */
