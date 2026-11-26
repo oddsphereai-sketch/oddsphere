@@ -373,3 +373,24 @@ assert.equal(normalizedAdvanced.usagePercentage, 0.24);
 assert.equal(normalizedAdvanced.defendedAtRimFgm, 2);
 
 console.log("NBA point-in-time feature and no-leakage tests passed.");
+
+// Explicit archival path uses original result clocks at T60; R13 is unchanged.
+import { buildNbaOriginalT60Features, NBA_ORIGINAL_T60_FEATURE_RELEASE } from "../lib/services/nba/nbaPointInTimeFeatures";
+const before = game({id:9901,season:2023,date:"2023-11-01",homeScore:110,awayScore:100});
+const after = game({id:9902,season:2023,date:"2023-11-02",homeScore:90,awayScore:99});
+const sourceArgs = {games:[before,after],boxes:[...boxesFor(before),...boxesFor(after)]};
+const clocks = new Map([[9901,"2023-11-02T22:30:00Z"],[9902,"2023-11-03T03:00:00Z"]]);
+const originalRows = buildNbaOriginalT60Features({...sourceArgs,finalAvailableAt:clocks});
+assert.equal(originalRows[1]!.release,NBA_ORIGINAL_T60_FEATURE_RELEASE);
+assert.equal(originalRows[1]!.feature_cutoff,"2023-11-02T22:00:00.000Z");
+assert.equal(originalRows[1]!.home_current_games,0,"late final edition is not known at T60");
+assert.equal(buildNbaPointInTimeFeatures(sourceArgs)[1]!.home_current_games,1,"default runtime retains original five-hour recipe");
+assert.equal(buildNbaOriginalT60Features({...sourceArgs,finalAvailableAt:new Map([[9901,"2023-11-02T21:59:00Z"],[9902,"2023-11-03T03:00:00Z"]])})[1]!.home_current_games,1);
+assert.throws(()=>buildNbaOriginalT60Features({...sourceArgs,finalAvailableAt:new Map()}),/missing_original/);
+import {buildNbaOriginalForwardFeatures} from "../lib/services/nba/nbaPointInTimeFeatures";
+const earlyUpcoming: NbaUpcomingGame={gameId:9903,season:after.season,startTime:after.startTime,homeTeamId:after.homeTeamId,awayTeamId:after.awayTeamId,homeTeam:after.homeTeam,awayTeam:after.awayTeam};
+const early=buildNbaOriginalForwardFeatures({games:[before],boxes:boxesFor(before),upcomingGames:[earlyUpcoming],finalAvailableAt:new Map([[9901,"2023-11-02T03:00:00Z"]]),capturedAt:"2023-11-02T10:00:00Z",emitGameIds:new Set([9903])});
+assert.equal(early[0]!.contract,"early_forecast_not_T60_lock");assert.equal(early[0]!.home_current_games,1);
+assert.throws(()=>buildNbaOriginalForwardFeatures({games:[before],boxes:boxesFor(before),upcomingGames:[earlyUpcoming],finalAvailableAt:new Map([[9901,"2023-11-02T22:30:00Z"]]),capturedAt:"2023-11-02T10:00:00Z"}),/invalid_original_early_freeze/);
+
+assert.throws(()=>buildNbaOriginalForwardFeatures({games:[before],boxes:boxesFor(before),upcomingGames:[after],finalAvailableAt:new Map([[9901,"2023-11-02T03:00:00Z"]]),capturedAt:"2023-11-02T10:00:00Z"}),/invalid_original_early_freeze/);
