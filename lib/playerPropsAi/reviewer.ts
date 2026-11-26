@@ -1,6 +1,7 @@
 import {createHash} from "node:crypto";
 import {OriginalPartActorAdmission,type ActorAdmissionProposal} from "./actorAdmission";
 import {reviewCorrectionFeedback} from './reviewCorrectionFeedback';
+import {correctionActorIds,withPendingActorScope,correctionScopeFittingReceipt} from './correctionActorScope';
 import {acceptedResponseEvidence} from "./responseEvidence";
 import {physicalLawFindings} from "./physicalDiagnostics";
 import {failureEvidence} from "./failureEvidence";
@@ -139,7 +140,7 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
           try{actual=verifiedUsageMicroUsd(attempt.model,response.usage,tierIdentity.responseTier);}
           catch{await args.store.receipt(attempt.id,token,null,response.id,{...response.usage,...responseIdentity,transport:response.transportDiagnostics??null,failureEvidence:failureEvidence({packet:part.packet,requestBody,draftText:texts.length===1?texts[0]:null,reason:"invalid_billed_usage",physical:[]})});return {index,reason:"invalid_billed_usage",known:false};}
           let parsed:ReturnType<typeof parseJointReview>|null=null,reason:string|null=null,draft:unknown;
-          try{draft=structuredAiText(response);parsed=parseJointReview(part.packet,draft);}
+          try{draft=structuredAiText(response);if(!(phase===2&&correctionActorIds(part.packet,feedbackTexts.get(index)).length<part.packet.players.length))parsed=parseJointReview(part.packet,draft);}
           catch(error){reason=(error as Error).message;}
           let correctionUnavailable=false;
           if(phase===1&&!parsed&&draft!==undefined){
@@ -150,14 +151,14 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
           }
           // A failed original part can retain independently admitted actors only after
           // its exact raw request/input/draft and known charge are recorded.
-          // Phase two still requests the full response; resampled outputs for already
-          // admitted actors are ignored. Their original accepted bytes remain authoritative.
+          // A scoped phase two requests only actors not admitted by the known
+          // first receipt. The source/aliases remain whole and retained bytes stay exact.
           let actorProposal:ActorAdmissionProposal|undefined,actorUnavailable=false;
           if(texts.length===1&&draft!==undefined&&(!parsed||actorAdmissions.has(index))){
             try{
               let admission=actorAdmissions.get(index);
               if(!admission){admission=new OriginalPartActorAdmission(part.packet);actorAdmissions.set(index,admission);}
-              actorProposal=admission.propose(texts[0],{part:index+1,phase:phase as 1|2,model:attempt.model,requestedTier:attempt.requested_tier,actualTier:response.service_tier??"unknown",responseId:response.id,requestHash:sha(requestBody)});
+              actorProposal=admission.propose(texts[0],{part:index+1,phase:phase as 1|2,model:attempt.model,requestedTier:attempt.requested_tier,actualTier:response.service_tier??"unknown",responseId:response.id,requestHash:sha(requestBody)},phase===2?feedbackTexts.get(index):undefined);
               parsed=null;
             }catch{actorUnavailable=true;parsed=null;reason="actor_admission_diagnostic_unavailable";}
           }
@@ -174,10 +175,20 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
             requestedActorIds:actorProposal.requestedActorIds,consumedActorIds:actorProposal.consumedActorIds,ignoredActorIds:actorProposal.ignoredActorIds,
             eligibleActors:actorProposal.admittedActors.map(actor=>({playerId:actor.playerId,rawActorHash:actor.rawActorHash,canonicalHash:actor.canonicalHash,canonicalLawHash:actor.canonical.law?.hash??null,sourceDeclinedMarkets:actor.canonical.sourceDeclinedMarkets})),rejectedActors:actorProposal.rejectedActors,
           }:null;
+          // Persist the exact next request scope in the SAME original known
+          // receipt. A failed receipt/retain cannot authorize that correction.
+          const originalCorrectionText=feedbackTexts.get(index);
+          if(phase===1&&actorProposal&&!actorUnavailable&&actorProposal.globalEnvelopeValid&&actorProposal.admittedActors.length&&actorProposal.rejectedActors.length&&feedbackTexts.has(index)){
+            feedbackTexts.set(index,withPendingActorScope(part.packet,actorProposal.rejectedActors.map(a=>a.playerId),feedbackTexts.get(index)!));
+          }
           const usage:Record<string,unknown>={...response.usage,service_tier:response.service_tier??"unknown",response_status:response.status,response_model:response.model,...responseIdentity,transport:response.transportDiagnostics??null,
             ...(phase===1&&feedbackTexts.has(index)?{nextCorrectionText:feedbackTexts.get(index)}:{}),...(correctionUnavailable?{correctionFeedbackUnavailable:true}:{}),
             ...(wire?{responseEvidence:wire}:{}),
             ...(archivedFailure?{failureEvidence:archivedFailure}:{}),...(actorEvidence?{actorAdmissionEvidence:actorEvidence}:{}),...(actorUnavailable?{actorAdmissionUnavailable:true}:{})};
+          if(phase===1&&originalCorrectionText!==undefined&&feedbackTexts.has(index)){
+            const fitted=correctionScopeFittingReceipt(usage,originalCorrectionText,feedbackTexts.get(index)!);
+            feedbackTexts.set(index,fitted);usage.nextCorrectionText=fitted;
+          }
           // The combined immutable receipt, not each archive separately, must fit.
           // Keep the charge recordable; missing evidence never permits retention.
           if(actorProposal&&Buffer.byteLength(JSON.stringify(usage),"utf8")>768000){

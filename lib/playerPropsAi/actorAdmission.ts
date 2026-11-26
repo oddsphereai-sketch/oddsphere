@@ -9,8 +9,9 @@ import {readerEvidence} from "./readerCoverage";
 import {jointReviewSchema,parseJointPlayerReview,parseJointReview} from "./request";
 import {PROPS_AI_WIRE_RELEASE} from "./scenarioCoordinates";
 import {PROPS_AI_PRIMARY_MODEL,type PropsAiModel} from "./releases";
+import {correctionActorIds,scopedReviewSchema} from './correctionActorScope';
 
-export const ACTOR_ADMISSION_RELEASE="player_props_ai_actor_admission_2026_11_23_r3_explicit_law_disposition" as const;
+export const ACTOR_ADMISSION_RELEASE="player_props_ai_actor_admission_2026_11_25_r4_scoped_correction_output" as const;
 type RawObject=Record<string,unknown>;
 type AdmittedPlayer=ReturnType<typeof parseJointPlayerReview>;
 export type ActorAdmissionLineage={part:number;phase:1|2;model:PropsAiModel;requestedTier:string;actualTier:string;responseId:string;requestHash:string};
@@ -88,15 +89,19 @@ export class OriginalPartActorAdmission{
   }
   pendingActorIds(){return this.packet.players.filter(player=>!this.retained.has(player.id)).map(player=>player.id);}
   retainedCanonicalHash(playerId:string){return this.retained.get(playerId)?.actor.canonicalHash??null;}
-  propose(draftText:string,lineage:ActorAdmissionLineage):ActorAdmissionProposal{
+  propose(draftText:string,lineage:ActorAdmissionLineage,correctionText?:string):ActorAdmissionProposal{
     invariant(!this.unsafeReceipt,"Unsafe actor receipt cannot authorize correction or admission");
     invariant((lineage.phase===1&&this.proposals.size===0)||(lineage.phase===2&&this.proposals.size===1&&this.committed.has(1)),"Actor admission phase must be sequential and cannot be repeated");
     invariant(Number.isSafeInteger(lineage.part)&&lineage.part>0&&validHash(lineage.requestHash)&&lineage.responseId.trim().length>0,"Invalid actor admission lineage");
     invariant(this.pendingActorIds().length>0,"No unadmitted actors remain");
     const first=this.proposals.get(1);if(first)invariant(first.lineage.part===lineage.part,"Actor admission cannot change original part");
     if(lineage.phase===2)invariant(lineage.model===PROPS_AI_PRIMARY_MODEL,"Actor correction retains the existing primary model");
+    invariant(lineage.phase===2||correctionText===undefined,'Primary cannot narrow its original actor scope');
+    const requestedActorIds=correctionActorIds(this.packet,correctionText),consumedActorIds=this.pendingActorIds();
+    invariant(consumedActorIds.every(id=>requestedActorIds.includes(id)),'Correction cannot omit an unadmitted actor');
+    invariant(requestedActorIds.length===this.packet.players.length||digest(requestedActorIds)===digest(consumedActorIds),'Scoped correction must request exactly the unadmitted original actors');
     let draft:unknown;try{draft=JSON.parse(draftText);}catch{draft=undefined;}
-    const globalEnvelopeValid=schemaValid(draft,this.schema),requestedActorIds=this.packet.players.map(player=>player.id),consumedActorIds=this.pendingActorIds();
+    const globalEnvelopeValid=schemaValid(draft,scopedReviewSchema(this.schema,this.packet,correctionText));
     const rows=object(object(draft)?.players),admittedActors:AdmittedActor[]=[],rejectedActors:{playerId:string;reason:string}[]=[];
     for(const playerId of consumedActorIds){
       if(!globalEnvelopeValid){rejectedActors.push({playerId,reason:"malformed_original_full_response_envelope"});continue;}

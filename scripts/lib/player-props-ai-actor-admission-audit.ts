@@ -15,6 +15,7 @@ import {verifiedUsageMicroUsd} from "../../lib/playerPropsAi/budget";
 import {failureEvidence,PROPS_AI_FAILURE_EVIDENCE_RELEASE} from "../../lib/playerPropsAi/failureEvidence";
 import {physicalLawFindings} from "../../lib/playerPropsAi/physicalDiagnostics";
 import {reviewCorrectionFeedback} from "../../lib/playerPropsAi/reviewCorrectionFeedback";
+import {correctionActorIds,withPendingActorScope,correctionScopeFittingReceipt} from '../../lib/playerPropsAi/correctionActorScope';
 
 export type PersistedActorAttempt={id:string;part:number;phase:number;state:string;model:string;requested_tier:string;response_id:string|null;actual_micro:number|string|null;usage:unknown};
 type RawObject=Record<string,unknown>;
@@ -93,8 +94,9 @@ export function auditPropsActorAdmissionPart(args:{packet:GamePacket;attempts:re
     const expectedRequest=serializeAiRequest(jointReviewRequest(args.packet,attempt.model as PropsAiModel,PROPS_AI_MAX_OUTPUT_PER_REQUEST,correctionReason,correctionText),{serviceTier:attempt.requested_tier});
     invariant(request===expectedRequest,"Actor audit exact versioned request differs");
     let draft:unknown;try{draft=JSON.parse(draftText);}catch{draft=undefined;}
+    const proposal=session.propose(draftText,{part,phase:attempt.phase as 1|2,model:attempt.model as PropsAiModel,requestedTier:attempt.requested_tier,actualTier:usage.service_tier,responseId:attempt.response_id,requestHash:sha(request)},correctionText);
     let originalFailure:string|null=null;
-    try{parseJointReview(args.packet,draft);}catch(error){originalFailure=error instanceof Error?error.message:"unparsed_draft";}
+    try{if(!(attempt.phase===2&&correctionActorIds(args.packet,correctionText).length<args.packet.players.length))parseJointReview(args.packet,draft);}catch(error){originalFailure=error instanceof Error?error.message:"unparsed_draft";}
     if(attempt.phase===1)invariant(originalFailure!==null,"Actor retention must start with a rejected original full part");
     const recomputedFailure=failureEvidence({packet:args.packet,requestBody:request,draftText,reason:originalFailure??"actor_correction_wire_partially_consumed",physical:physicalLawFindings(args.packet,draft)});
     same(failure.reason,recomputedFailure.reason,"Actor audit original rejection reason differs");
@@ -105,10 +107,10 @@ export function auditPropsActorAdmissionPart(args:{packet:GamePacket;attempts:re
       try{const next=reviewCorrectionFeedback(args.packet,draft);if(next.status==="ready"&&next.affectedActorIds.length)expectedText=next.text;
         else if(next.status==="unavailable"&&["feedback_exceeds_cushion","diagnostic_unavailable"].includes(next.reason))expectedUnavailable=true;
       }catch{expectedUnavailable=true;}
+      if(expectedText&&proposal.globalEnvelopeValid&&proposal.admittedActors.length&&proposal.rejectedActors.length)expectedText=correctionScopeFittingReceipt(usage,expectedText,withPendingActorScope(args.packet,proposal.rejectedActors.map(a=>a.playerId),expectedText));
       same(usage.nextCorrectionText??null,expectedText,"Actor audit named correction differs from original diagnostics");
       invariant((usage.correctionFeedbackUnavailable===true)===expectedUnavailable,"Actor audit correction availability flag differs");
     }else invariant(usage.nextCorrectionText===undefined&&usage.correctionFeedbackUnavailable!==true,"Actor audit unexpected second correction instruction");
-    const proposal=session.propose(draftText,{part,phase:attempt.phase as 1|2,model:attempt.model as PropsAiModel,requestedTier:attempt.requested_tier,actualTier:usage.service_tier,responseId:attempt.response_id,requestHash:sha(request)});
     same(metadata,evidenceFor(proposal),"Actor audit persisted admission metadata differs from exact raw proposal");
     session.retain(proposal,{receiptRecorded:true,receiptId:attempt.id,actualMicro:actual,archivedInputDigest:digest(JSON.parse(input)),archivedRequestSha256:sha(request),archivedDraftSha256:sha(draftText)});
     proposals.push(proposal);verifiedAttempts++;
