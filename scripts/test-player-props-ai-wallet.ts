@@ -98,12 +98,12 @@ async function runRetained(id:string,mode:"correct"|"unknown"|"invalid"="correct
     const request=JSON.parse(bodies.at(-1)!),value=response(p,request.model,request.service_tier,`${id}-retained-${bodies.length}`),draft=JSON.parse(value.output[0].content[0].text);
     draft.players.b.law.outcomes.points_excluding_made_threes=Array(16).fill(bodies.length===1||mode==="invalid"?40:14);
     if(bodies.length===2)draft.players.a.law.outcomes.points_excluding_made_threes=Array(16).fill(80);
-    value.output[0].content[0].text=JSON.stringify(draft);
+    value.output[0].content[0].text=JSON.stringify({...draft,players:Object.fromEntries((request.text.format.schema.properties.players.required as string[]).map(id=>[id,draft.players[id]]))});
     return Response.json({...value,...(bodies.length===2&&mode==="unknown"?{usage:undefined}:{})});
   }) as typeof fetch});
   const j=await job(keys(id)[stage==="early"?0:1]),attempts=(await db.query("SELECT * FROM player_props_ai_attempts WHERE job_key=$1 ORDER BY phase,part",[j.job_key])).rows;
   assert.equal(bodies.length,2,"Only the existing two phases may be sent");
-  const [first,second]=bodies.map(body=>JSON.parse(body));assert.equal(second.input,first.input,"Correction retains complete original source");assert.deepEqual(second.text,first.text,"Correction retains original full schema");assert.equal(second.max_output_tokens,first.max_output_tokens);
+  const [first,second]=bodies.map(body=>JSON.parse(body));assert.equal(second.input,first.input,"Correction retains complete original source");assert.deepEqual(first.text.format.schema.properties.players.required,["a","b"]);assert.deepEqual(second.text.format.schema.properties.players.required,["b"],"Correction targets every unadmitted actor while preserving the original full source");assert.equal(second.max_output_tokens,first.max_output_tokens);
   const metadata=attempts[0].usage.actorAdmissionEvidence;assert.equal(metadata.eligibleActors.length,1);assert.equal(metadata.eligibleActors[0].playerId,"a");assert.deepEqual(metadata.requestedActorIds,["a","b"]);
   assert(attempts[0].actual_micro>0);assert(attempts[0].usage.failureEvidence.input.data);assert(attempts[0].usage.failureEvidence.request.data);assert(attempts[0].usage.failureEvidence.draft.data);
   const audited=auditPropsActorAdmissionPart({packet:p,attempts,provenance:mode==="correct"?(j.result as import("../lib/playerPropsAi/reviewer").AcceptedGameReview).partProvenance:undefined});
@@ -116,7 +116,7 @@ async function runRetained(id:string,mode:"correct"|"unknown"|"invalid"="correct
     assert.equal(review.players.find(a=>a.playerId==="b")!.law!.outcomes.points[0],20,"Only corrected target is consumed");
     assert.deepEqual(review.partProvenance.map(p=>({part:p.part,phase:p.phase,ids:p.playerIds})),[{part:1,phase:1,ids:["a"]},{part:1,phase:2,ids:["b"]}]);
     assert.equal(attempts[1].usage.responseEvidence,undefined,"Ignored raw actors must not be labelled as a fully admitted raw part");
-    assert.deepEqual(attempts[1].usage.actorAdmissionEvidence.ignoredActorIds,["a"]);assert.deepEqual(attempts[1].usage.actorAdmissionEvidence.eligibleActors.map((a:{playerId:string})=>a.playerId),["b"]);
+    assert.deepEqual(attempts[1].usage.actorAdmissionEvidence.ignoredActorIds,[]);assert.deepEqual(attempts[1].usage.actorAdmissionEvidence.eligibleActors.map((a:{playerId:string})=>a.playerId),["b"]);
     const canonical=metadata.eligibleActors[0].canonicalHash;assert.equal(review.partProvenance[0].actorHashes!.a.canonicalHash,canonical);
     await assert.rejects(wallet.receipt(attempts[0].id,j.claim_token!,Number(attempts[0].actual_micro),attempts[0].response_id,{...attempts[0].usage,actorAdmissionEvidence:{...metadata,changed:true}}),/immutable_usage_receipt_conflict/);
   }else{

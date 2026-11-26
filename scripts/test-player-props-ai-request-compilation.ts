@@ -15,7 +15,7 @@ globalThis.fetch=async()=>{throw Error('Request compilation proof forbids networ
 const file=new URL('../lib/playerPropsAi/request.ts',import.meta.url),source=readFileSync(file,'utf8'),rq=createRequire(file);
 const declaration='  const compiled=compileReaderClaimRequest(packet);';
 assert.equal(source.split(declaration).length,2);
-const legacy=source.replace(declaration,'').replace('input: sourceInputWithClaims(packet,compiled.modelInput),','input: sourceInput(packet),').replace('schema: jointReviewSchemaFromCatalogs(packet,compiled.catalogs) } },','schema: jointReviewSchema(packet) } },');
+const legacy=source.replace(declaration,'').replace('input: sourceInputWithClaims(packet,compiled.modelInput),','input: sourceInput(packet),').replace('schema: scopedReviewSchema(jointReviewSchemaFromCatalogs(packet,compiled.catalogs),packet,previousFailure?correctionText:undefined) } },','schema: jointReviewSchema(packet,previousFailure?correctionText:undefined) } },');
 assert.notEqual(legacy,source);
 function load(text:string){
  let compilations=0;
