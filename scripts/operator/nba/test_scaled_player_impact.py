@@ -71,6 +71,8 @@ class ScaledPlayerImpactTests(unittest.TestCase):
         data['rows'][-1] = {'season': 2023, 'actualMargin': object(), 'features': None}
         self.assertEqual(expected, training_rows(data))
         self.assertEqual(before['rows'][:-1], data['rows'][:-1])
+        data['firstEvaluation'] = '2023-10-01T01:00:00+01:00'
+        self.assertEqual(expected, training_rows(data))
         data['rows'][0]['finalAvailableAt'] = '2024-01-01T00:00:00Z'
         with self.assertRaises(ValueError):
             training_rows(data)

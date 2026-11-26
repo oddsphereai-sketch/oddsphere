@@ -18,7 +18,7 @@ const evaluations = originals.filter(r => [2023, 2024, 2025].includes(r.season))
   const c = scoreNbaScaledPlayerImpact(head, r), margin = r.baselineMargin + c.marginCorrection, total = r.baselineTotal + c.totalCorrection;
   if (![margin, total].every(Number.isFinite) || total <= Math.abs(margin)) throw Error("invalid_impact_forecast");
   const teamLoss = (m: number, t: number) => Math.max(Math.abs(m - r.actualMargin), Math.abs(t - r.actualTotal)) / 2;
-  return { gameId: r.gameId, season: r.season, startAt: r.startAt, cutoff: r.cutoff, snapshotHash: r.snapshotHash,
+  return { gameId: r.gameId, season: r.season, startAt: r.startAt, cutoff: r.cutoff,
     actualMargin: r.actualMargin, actualTotal: r.actualTotal, baselineMargin: r.baselineMargin, baselineTotal: r.baselineTotal,
     candidateMargin: margin, candidateTotal: total, ...c,
     teamLossA: teamLoss(r.baselineMargin, r.baselineTotal), teamLossC: teamLoss(margin, total) };

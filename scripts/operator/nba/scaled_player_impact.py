@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 import sys
+from datetime import datetime
 
 import numpy as np
 from scipy.optimize import minimize
@@ -64,7 +65,13 @@ def fit(x, y):
 
 
 def training_rows(data):
-    rows = [r for r in data['rows'] if r['season'] == 2022 and r['finalAvailableAt'] < data['firstEvaluation']]
+    def clock(value):
+        result = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        if result.tzinfo is None:
+            raise ValueError('player_clock_requires_zone')
+        return result.timestamp()
+    boundary = clock(data['firstEvaluation'])
+    rows = [r for r in data['rows'] if r['season'] == 2022 and clock(r['finalAvailableAt']) < boundary]
     rows.sort(key=lambda r: r['gameId'])
     if len(rows) != data['trainingRows'] or not 10 < len(rows) <= 10000 or len({r['gameId'] for r in rows}) != len(rows):
         raise ValueError('player_training_scope')
