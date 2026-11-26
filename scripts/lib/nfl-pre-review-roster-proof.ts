@@ -95,8 +95,10 @@ export async function proveNflPreReviewRosterSources() {
   const future={...stored[0],capturedAt:'2026-11-26T20:00:00Z'};
   assert.equal(nflPreReviewRosterDueGames({existing:[future],now:cutoff,frozenGameIds:emptyFrozen}).size,0,
     'Future stored metadata cannot authorize a current source window');
-  const freshStored={...stored[1],capturedAt:cutoff,payload:{...storedPayload,
-    startersAndDepth:{away:{capturedAt:cutoff},home:{capturedAt:cutoff}}}} as NflForwardStoredEvidence;
+  const freshStored={...stored[1],capturedAt:cutoff,payload:{...stored[1].payload,
+    startersAndDepth:{...stored[1].payload.startersAndDepth,
+      away:{...stored[1].payload.startersAndDepth.away,capturedAt:cutoff},
+      home:{...stored[1].payload.startersAndDepth.home,capturedAt:cutoff}}}};
   assert.equal(nflPreReviewRosterDueGames({existing:[...stored,freshStored],now:'2026-11-26T20:06:00Z',frozenGameIds:emptyFrozen}).size,0);
   assert.equal(JSON.stringify(stored),sourceBefore,'Original metadata and locked authorities are never mutated');
   console.log('NFL pre-review roster controls passed: original paired clocks, bounded mocked roster, late offered exact-ID identity, no invented team or original mutation.');
