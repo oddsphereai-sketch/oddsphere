@@ -206,7 +206,12 @@ export async function runPropsReview(args: { packet: GamePacket; job: PropsAiJob
             actorProvenance.set(index,entries);
             if(!admission.pendingActorIds().length){parsed=admission.finish().review;accepted.set(index,parsed);return null;}
           }
-          if(!parsed)return {index,reason:reason??"unparsed_draft",known:reason!=="accepted_wire_archive_unavailable"&&!correctionUnavailable&&!actorUnavailable};
+          // Scoped phase two deliberately bypasses the whole-part parser. Report
+          // its actual immutable actor rejection instead of calling valid JSON
+          // "unparsed". Transport/archive failures retain precedence.
+          const scopedRejection=phase===2&&actorProposal&&!actorUnavailable
+            ?actorProposal.rejectedActors[0]?.reason??"actor_admission_incomplete":null;
+          if(!parsed)return {index,reason:reason??scopedRejection??"unparsed_draft",known:reason!=="accepted_wire_archive_unavailable"&&!correctionUnavailable&&!actorUnavailable};
           accepted.set(index,parsed);
           provenance.set(index,{part:index+1,phase,model:attempt.model,requestedTier:attempt.requested_tier,actualTier:response.service_tier??"unknown",responseId:response.id,playerIds:part.packet.players.map(p=>p.id),...(wire&&"draft" in wire?{wireHash:wire.draft.sha256,requestHash:wire.requestSha256,partInputHash:wire.partInputDigest,wireRelease:wire.wireRelease}:{}),...(phase===2?{correctionReason:feedback.get(index),...(feedbackTexts.has(index)?{correctionText:feedbackTexts.get(index)}:{})}:{})});
           return null;
