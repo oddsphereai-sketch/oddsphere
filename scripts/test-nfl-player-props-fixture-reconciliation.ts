@@ -48,6 +48,13 @@ for(const change of [(row:typeof original[number])=>({...row,isOpening:true}),
  (row:typeof original[number])=>({...row,canonicalGameId:'already-bound'})])assert.equal(result(original.map(change)).rows.length,0);
 assert.equal(result(fixed.rows).rows.length,2,'Exact canonical rows are stable and keep original binding proof');
 const exact=original.map(row=>({...row,scheduledStart:start}));assert.deepEqual(result(exact).rows,exact.map(row=>({...row,canonicalGameId:game.providerGameId})));
+for(const sameInstant of ['2026-11-27T01:20:00Z','2026-11-26T20:20:00-05:00']){
+ const equivalent=exact.map(row=>({...row,scheduledStart:sameInstant}));
+ const matched=collector.reconcileProviderRowsToSlate(equivalent,[game]);
+ assert.equal(matched.unmatchedRows,0,'Equivalent UTC spelling is not fixture drift');
+ assert.deepEqual(matched.rows,equivalent.map(row=>({...row,canonicalGameId:game.providerGameId})),
+  'An existing exact-instant fixture retains its original source spelling and needs no invented drift receipt');
+}
 const legacy=original.map(row=>({...row,provider:'sharpapi' as const}));assert.deepEqual(result(legacy).rows,legacy.map(row=>({...row,canonicalGameId:game.providerGameId})),'Legacy normalization stays exact');
 assert.match(NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE,/r17_/);
 console.log('NFL prospective fixture reconciliation passed: complete original OU inventory, exact prices/clocks, unique existing 15-minute mapping, independent canonical clock and retained provider provenance; unchanged identity guard/legacy inputs. No network.');

@@ -356,7 +356,7 @@ function reconcileProviderRowsToSlate(
       continue;
     }
     const game = candidates[0]!;
-    if (row.provider === "owls" && row.scheduledStart !== game.scheduledStart) {
+    if (row.provider === "owls" && Date.parse(row.scheduledStart!) !== Date.parse(game.scheduledStart)) {
       // The existing unique same-teams, <=15-minute match owns canonical ID
       // AND its schedule. Only this completed live collection may normalize
       // a provider fixture; retain its original clock as private provenance.

@@ -20,6 +20,12 @@ it as collection provenance, explicitly distinct from quote/update clocks or an
 independent forecast. No fixture facts are fabricated or backdated; original
 provider kickoff/team/event/receipt are retained alongside canonical authority.
 
+Fixture drift compares UTC instants, not timestamp spellings. Equivalent Z,
+.000Z and offset encodings retain the original row and do not require an
+invented drift receipt. Root/fresh round160 held the previous candidate on this
+regression; the original failed report/pin remains unchanged. Both equivalent
+clocks and genuinely shifted fixture clocks now have explicit controls.
+
 No numerical formula, evidence guard, scope, grade/stake, slot, phase, tier,
 output cap, paid control, provider cap or lease changes. Input metadata is
 versioned prospectively; no existing request/law is reinterpreted. Same-source
