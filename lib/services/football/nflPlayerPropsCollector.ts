@@ -2,6 +2,7 @@ import { OwlsInsightClient } from "@/lib/providers/owls/owlsInsightClient";
 import { assertCompleteBdlPropsResponse, assertCompleteOwlsPropsResponse, assertNoDeclaredContinuation } from "../../providers/playerPropsResponseCompleteness";
 import {
   buildNflPlayerPropsObservationSnapshot,
+  NFL_PLAYER_PROPS_RECONCILED_FIXTURE_RELEASE,
   NFL_PLAYER_PROPS_EMPTY_CURRENT_RELEASE,
   NFL_PLAYER_PROPS_CURRENT_FIXTURE_RELEASE,
   type NflPlayerPropsEmptyCurrentCapture,
@@ -188,7 +189,7 @@ export async function collectNflPlayerPropsObservations(args: {
   const owlsFreshRows = owlsAll.rows.map(row => ({ ...row, ...(owlsReceivedAt ? { receivedAt: owlsReceivedAt } : {}) })).filter((row) => freshAtFetch(row.observedAt, fetchedAt));
   if (owlsFreshRows.length < owlsAll.rows.length) healthFindings.push("OWLS_STALE_OR_FUTURE_PROP_ROWS_REJECTED");
   const owlsRowsInWindow = owlsFreshRows.filter((row) => inSlateWindow(row.scheduledStart, games));
-  const owlsReconciliation = reconcileProviderRowsToSlate(owlsRowsInWindow, games);
+  const owlsReconciliation = reconcileProviderRowsToSlate(owlsRowsInWindow, games, owlsReceivedAt);
   if (owlsReconciliation.unmatchedRows > 0) healthFindings.push("OWLS_PROP_EVENT_IDENTITY_UNMATCHED");
   const owlsNormalization = {
     ...owlsAll,
@@ -338,6 +339,7 @@ function normalizeGame(value: unknown, phase: NflPlayerPropPhase): NflPlayerProp
 function reconcileProviderRowsToSlate(
   rows: NflPlayerPropPriceObservation[],
   games: NflPlayerPropGameIdentity[],
+  availableAt?: string,
 ): { rows: NflPlayerPropPriceObservation[]; unmatchedRows: number } {
   const matched: NflPlayerPropPriceObservation[] = [];
   let unmatchedRows = 0;
@@ -353,7 +355,28 @@ function reconcileProviderRowsToSlate(
       unmatchedRows += 1;
       continue;
     }
-    matched.push({ ...row, canonicalGameId: candidates[0]!.providerGameId });
+    const game = candidates[0]!;
+    if (row.provider === "owls" && Date.parse(row.scheduledStart!) !== Date.parse(game.scheduledStart)) {
+      // The existing unique same-teams, <=15-minute match owns canonical ID
+      // AND its schedule. Only this completed live collection may normalize
+      // a provider fixture; retain its original clock as private provenance.
+      const received = iso(availableAt), observed = iso(row.observedAt), fetched = iso(row.fetchedAt);
+      if (row.isOpening || row.isLive || !received || row.receivedAt !== received
+        || !observed || !fetched || Date.parse(observed) > Date.parse(received)
+        || Date.parse(fetched) > Date.parse(received) || row.reconciledFixture
+        || row.canonicalGameId !== null || !row.homeTeam || !row.awayTeam) {
+        unmatchedRows += 1;
+        continue;
+      }
+      matched.push({...row, canonicalGameId: game.providerGameId, scheduledStart: game.scheduledStart,
+        reconciledFixture: {release: NFL_PLAYER_PROPS_RECONCILED_FIXTURE_RELEASE,
+          availableAt: received, providerScheduledStart: row.scheduledStart!,
+          providerHomeTeam: row.homeTeam, providerAwayTeam: row.awayTeam,
+          canonicalGameId: game.providerGameId, scheduledStart: game.scheduledStart,
+          homeTeam: game.homeTeam, awayTeam: game.awayTeam}});
+    } else {
+      matched.push({ ...row, canonicalGameId: game.providerGameId });
+    }
   }
   return { rows: matched, unmatchedRows };
 }

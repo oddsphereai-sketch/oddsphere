@@ -9,7 +9,7 @@
 export const NFL_PLAYER_PROPS_RESEARCH_SCHEMA_RELEASE =
   "nfl_player_props_research_schema_2026_08_20_r4" as const;
 export const NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE =
-  "nfl_player_props_provider_observation_2026_11_10_r16_complete_response" as const;
+  "nfl_player_props_provider_observation_2026_11_26_r17_canonical_fixture_binding" as const;
 export const NFL_PLAYER_PROPS_SHADOW_MODEL_RELEASE =
   "nfl_player_props_shadow_unfit_2026_08_20_r1" as const;
 export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
@@ -21,6 +21,8 @@ export const NFL_PLAYER_PROPS_DECISION_RELEASE =
  * snapshot or a provider's optional 404/422 response. */
 export const NFL_PLAYER_PROPS_EMPTY_CURRENT_RELEASE = "nfl_player_props_empty_current_2026_11_10_r1_successful_response" as const;
 export const NFL_PLAYER_PROPS_CURRENT_FIXTURE_RELEASE = "nfl_player_props_current_fixture_2026_11_10_r1_collected_schedule" as const;
+export const NFL_PLAYER_PROPS_RECONCILED_FIXTURE_RELEASE =
+  "nfl_player_props_reconciled_fixture_2026_11_26_r1_unique_schedule" as const;
 export type NflPlayerPropsEmptyCurrentCapture = {
   release: typeof NFL_PLAYER_PROPS_EMPTY_CURRENT_RELEASE;
   gameId: string; scheduledStart: string; awayTeam: string; homeTeam: string;
@@ -77,6 +79,12 @@ export type NflPlayerPropPriceObservation = {
    * not a native quote schedule field or a provider quote/update clock. */
   collectedFixture?: { release: typeof NFL_PLAYER_PROPS_CURRENT_FIXTURE_RELEASE; availableAt: string;
     providerGameId: string; scheduledStart: string; awayTeam: string; homeTeam: string };
+  /** Prospective same-collection Owl's fixture reconciliation. Preserve the
+   * original provider clock; never alter quote/update/receipt timestamps. */
+  reconciledFixture?: {release: typeof NFL_PLAYER_PROPS_RECONCILED_FIXTURE_RELEASE;
+    availableAt: string; providerScheduledStart: string; providerHomeTeam: string;
+    providerAwayTeam: string; canonicalGameId: string; scheduledStart: string;
+    homeTeam: string; awayTeam: string};
   provider: NflPlayerPropProvider;
   providerObservationId: string;
   providerEventId: string;

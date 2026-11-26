@@ -10,6 +10,7 @@ import { computeSlateDate } from "@/lib/dates/slateDate";
 import { PlaybookReadBroker } from "@/lib/providers/playbook/playbookReadBroker";
 import type { PlaybookLineGame, PlaybookSplitGame } from "@/lib/providers/playbook/types";
 import {collectNflForecastRows} from './nflCooperativeForecastRows';
+import {nflPreReviewRosterDueGames,withNflPreReviewRosterCaptures,splitNflForwardHistoryAtCutoff,latestAvailableNflForwardSourceForGame,nflPreReviewRosterTeamIds} from './nflPreReviewRosterFreshness';
 import {
   bindMarketBrainPriorInputLineage,
   marketBrainPriorArtifactSha256,
@@ -165,7 +166,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_26_r121_cooperative_forecast_batches" as const;
+  "nfl_forward_evidence_writer_2026_11_26_r125_retained_source_preparation" as const;
 
 const NFL_REGULAR_MARKETS = ["moneyline", "spread", "total"] as const;
 const NFL_OWLS_COVERAGE_DIAGNOSTICS = new Set([
@@ -368,6 +369,7 @@ export async function runNflForwardEvidenceWriter(args: {
   const existing = await readNflForwardEvidence({ client: args.client, season: args.season, week: args.week });
   reportNflWriterResourceStage(NFL_FORWARD_WRITER_RELEASE, "history_ready", resourceStartedAt);
   const historicalExisting = existing;
+  const {sourceRows: sourceExisting, recordRows: recordExisting} = splitNflForwardHistoryAtCutoff(existing, args.now);
   // Keep the normal T-60 inference first. A copy of the prior public record
   // is a fallback only after an explicit failed final capture, never a reason
   // to skip fresh odds, availability or a healthy final forecast.
@@ -377,9 +379,11 @@ export async function runNflForwardEvidenceWriter(args: {
   const priorPublicLocks = args.apply
     ? await readNflPublishedDeadlineLocks({client: args.client, rows: existing}) : [];
   const frozenPublicIds = new Set(priorPublicLocks.map(p => p.receipt.providerGameId));
+  const protectedGameIds = new Set([...frozenPublicIds, ...historicalExisting
+    .filter(row => row.stage === "t60" || hasNflStoredLockedDecision(row)).map(row => row.providerGameId)]);
 
   const need = determineNflForwardCollectionNeed({
-    existing,
+    existing: sourceExisting,
     now: args.now,
     requiredPublicRelease: {
       memberRelease: NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
@@ -389,10 +393,12 @@ export async function runNflForwardEvidenceWriter(args: {
       collectorRelease: NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
     },
   });
-  if (!need.collect) {
+  const rosterPreparationDue = nflPreReviewRosterDueGames({existing: historicalExisting,
+    now: args.now, frozenGameIds: protectedGameIds});
+  if (!need.collect && rosterPreparationDue.size === 0) {
     const memberSnapshot = await refreshCompactMemberSnapshot({
       client: args.client,
-      existing: historicalExisting,
+      existing: recordExisting,
       payloads: [],
       season: args.season,
       week: args.week,
@@ -401,7 +407,7 @@ export async function runNflForwardEvidenceWriter(args: {
     });
     const tracking = await writeOfficialTrackingFromPayloads({
       client: args.client,
-      payloads: currentT60Payloads(existing),
+      payloads: currentT60Payloads(recordExisting),
       apply: args.apply,
     });
     return emptyResult(need.reason, tracking, memberSnapshot);
@@ -413,20 +419,23 @@ export async function runNflForwardEvidenceWriter(args: {
     apiKey: args.balldontlieApiKey,
     captureRawPriceManifest: marketBrainCaptureEnabled,
   });
-  const plannedCaptures = planNflForwardEvidenceCaptures({
-    games: slate.games,
-    existing,
-    capturedAt: args.now,
-    unlockedCadenceMinutes: need.cadenceMinutes ?? 60,
+  const plannedCaptures = withNflPreReviewRosterCaptures({
+    games: slate.games, existing: historicalExisting, now: args.now, frozenGameIds: protectedGameIds,
+    planned: need.collect ? planNflForwardEvidenceCaptures({
+      games: slate.games,
+      existing: sourceExisting,
+      capturedAt: args.now,
+      unlockedCadenceMinutes: need.cadenceMinutes ?? 60,
+    }) : [],
   });
   // A legacy failed attempt already stored in the final T-60 slot cannot be
   // overwritten or evaded with a second authoritative lock. Future failures
   // use non-final attempt rows below and therefore leave the final slot free.
-  const legacyFinalSlotHolds = plannedCaptures.filter(plan => plan.stage === "t60" &&
-    existing.some(row => row.providerGameId === plan.game.providerGameId && row.stage === "t60" &&
+  const legacyFinalSlotHolds = plannedCaptures.filter(plan =>
+    historicalExisting.some(row => row.providerGameId === plan.game.providerGameId && row.stage === "t60" &&
       !hasNflStoredLockedDecision(row)));
   const blockedFinalIds = new Set(legacyFinalSlotHolds.map(plan => plan.game.providerGameId));
-  const plans = plannedCaptures.filter(plan => !blockedFinalIds.has(plan.game.providerGameId) && !frozenPublicIds.has(plan.game.providerGameId));
+  const plans = plannedCaptures.filter(plan => !blockedFinalIds.has(plan.game.providerGameId) && !protectedGameIds.has(plan.game.providerGameId));
   const marketBrainCanaryGames = new Set(marketBrainCaptureEnabled
     ? selectNflMarketBrainCanaryGames({
         games: uniquePlannedGames(plans.map((plan) => plan.game)),
@@ -476,7 +485,7 @@ export async function runNflForwardEvidenceWriter(args: {
   if (plans.length === 0) {
     const memberSnapshot = await refreshCompactMemberSnapshot({
       client: args.client,
-      existing: historicalExisting,
+      existing: recordExisting,
       payloads: [],
       season: args.season,
       week: args.week,
@@ -485,15 +494,13 @@ export async function runNflForwardEvidenceWriter(args: {
     });
     const tracking = await writeOfficialTrackingFromPayloads({
       client: args.client,
-      payloads: currentT60Payloads(existing),
+      payloads: currentT60Payloads(recordExisting),
       apply: args.apply,
     });
     return emptyResult("provider_slate_has_no_due_capture", tracking, memberSnapshot);
   }
 
-  const criticalTeamIds = new Set(plans
-    .filter((plan) => plan.stage === "opening" || plan.stage === "t60")
-    .flatMap((plan) => [plan.game.away.id, plan.game.home.id]));
+  const criticalTeamIds = nflPreReviewRosterTeamIds(plans, sourceExisting, args.now);
   const criticalTeams = slate.games.flatMap((game) => [game.away, game.home])
     .filter((team, index, rows) => criticalTeamIds.has(team.id) && rows.findIndex((row) => row.id === team.id) === index);
   const availabilityMatchups = slate.games.map((game) => ({
@@ -506,7 +513,7 @@ export async function runNflForwardEvidenceWriter(args: {
   const availabilityRequestsMaximum = nflAvailabilityRequestBudgetMaximum(availabilityMatchups);
 
   const playbook = args.playbookAuditOnlySkip ? null : new PlaybookReadBroker(args.playbookApiKey);
-  const storedPaidProjectionShadows = latestStoredPaidProjectionShadows(historicalExisting);
+  const storedPaidProjectionShadows = latestStoredPaidProjectionShadows(sourceExisting);
   const plannedGameIds = new Set(plans.map((plan) => plan.game.providerGameId));
   const paidProjectionRefreshDue = shouldRefreshNflPaidProjectionShadows({
     byGame: storedPaidProjectionShadows,
@@ -664,7 +671,7 @@ export async function runNflForwardEvidenceWriter(args: {
   const marketBrainOwlsSplitReadError = marketBrainOwlsSplitReadResult.error;
   const captureHistoryBooksByGame = new Map<string, NflPreviewBookOdds[]>();
   const knownPriorArtifactsByGame = new Map<string, Set<string>>();
-  for (const row of historicalExisting) {
+  for (const row of sourceExisting) {
     const books = captureHistoryBooksByGame.get(row.providerGameId) ?? [];
     books.push(...row.payload.market.comparableCurrentBooks);
     books.push(...nflForwardContextSharpHistoryBooks(row.payload.contextualEvidenceCapture));
@@ -711,7 +718,7 @@ export async function runNflForwardEvidenceWriter(args: {
       : plan.t60LagMinutes;
     const providerOpeningBooks = slate.openingOddsAllBooksByGame[plan.game.providerGameId] ?? [];
     const comparableProviderOpeningBooks = slate.openingOddsComparableBooksByGame[plan.game.providerGameId] ?? [];
-    const previous = latestEvidenceForGame(historicalExisting, plan.game.providerGameId);
+    const previous = latestAvailableNflForwardSourceForGame(sourceExisting, plan.game.providerGameId, args.now);
     const opening = operationalOpening({
       previous,
       providerOpening: slate.openingOddsByGame[plan.game.providerGameId] ?? null,
@@ -747,7 +754,7 @@ export async function runNflForwardEvidenceWriter(args: {
     });
     const sharpSplits = nflModelSharpSplits(displaySharpSplits)
       ?? qualifiedOwls.splits
-      ?? latestLegacyNflSharpSplits(historicalExisting, plan.game.providerGameId);
+      ?? latestLegacyNflSharpSplits(sourceExisting, plan.game.providerGameId);
     const contextCurrentBooks = captureBooksWithSharpBooks(
       comparableCurrentBooks,
       namedCurrentBooks,
@@ -793,7 +800,7 @@ export async function runNflForwardEvidenceWriter(args: {
             }),
           ])) as typeof currentContextMarkets,
         })),
-      ...historicalExisting.flatMap((row) =>
+      ...sourceExisting.flatMap((row) =>
         row.providerGameId === plan.game.providerGameId && row.capturedAt <= capturedAt && row.payload.contextualEvidenceCapture
           ? [{ capturedAt: row.capturedAt, markets: row.payload.contextualEvidenceCapture.markets }]
           : []),
@@ -801,7 +808,7 @@ export async function runNflForwardEvidenceWriter(args: {
     ];
     const injuries = mergeNflAvailabilityWithPrior(
       availabilityByGame.get(plan.game.providerGameId) ?? null,
-      latestVerifiedInjuriesForGame(historicalExisting, plan.game.providerGameId),
+      latestVerifiedInjuriesForGame(sourceExisting, plan.game.providerGameId),
     );
     const awayDepth = resolveNflAvailabilityAdjustedQuarterbackDepth(providerAwayDepth, injuries);
     const homeDepth = resolveNflAvailabilityAdjustedQuarterbackDepth(providerHomeDepth, injuries);
@@ -896,7 +903,7 @@ export async function runNflForwardEvidenceWriter(args: {
       availabilityAdjustedDepth: { away: awayDepth, home: homeDepth },
       capturedAt,
       gameStartAt: plan.game.scheduledStart,
-      previousStates: historicalExisting.filter((row) => row.providerGameId === plan.game.providerGameId)
+      previousStates: sourceExisting.filter((row) => row.providerGameId === plan.game.providerGameId)
         .map((row) => row.payload),
     });
     const baseOutcome = baseSelection.outcome;
@@ -1120,10 +1127,10 @@ export async function runNflForwardEvidenceWriter(args: {
     const episodeHistory = [
         ...(namedPriceResult.result?.historyByGame[plan.game.providerGameId] ?? []).flatMap(x => x.books),
         ...nflStoredMarketEpisodeHistory({ providerGameId: plan.game.providerGameId, evaluatedAt: capturedAt,
-          captures: historicalExisting.filter(row => row.providerGameId === plan.game.providerGameId)
+          captures: sourceExisting.filter(row => row.providerGameId === plan.game.providerGameId)
             .map(row => row.payload.contextualEvidenceCapture) }),
       ];
-    const sourceFlows = [...historicalExisting.filter(row => row.providerGameId === plan.game.providerGameId &&
+    const sourceFlows = [...sourceExisting.filter(row => row.providerGameId === plan.game.providerGameId &&
       Date.parse(row.capturedAt) <= Date.parse(capturedAt) && Date.parse(capturedAt) - Date.parse(row.capturedAt) <= 120 * 60_000)
       .map(row => ({ sharp: row.payload.market.sharpApiSplits, line: row.payload.market.playbookLine,
         public: row.payload.market.playbookSplits })),
@@ -1475,7 +1482,7 @@ export async function runNflForwardEvidenceWriter(args: {
   reportNflWriterResourceStage(NFL_FORWARD_WRITER_RELEASE, "append_ready", resourceStartedAt);
   const tracking = await writeOfficialTrackingFromPayloads({
     client: args.client,
-    payloads: [...currentT60Payloads(existing), ...authoritativePayloads.filter((payload) => payload.stage === "t60")],
+    payloads: [...currentT60Payloads(recordExisting), ...authoritativePayloads.filter((payload) => payload.stage === "t60")],
     apply: args.apply,
   });
   reportNflWriterResourceStage(NFL_FORWARD_WRITER_RELEASE, "tracking_ready", resourceStartedAt);
@@ -1504,7 +1511,7 @@ export async function runNflForwardEvidenceWriter(args: {
   }
   const memberSnapshot = await refreshCompactMemberSnapshot({
     client: args.client,
-    existing: historicalExisting,
+    existing: recordExisting,
     payloads: authoritativePayloads,
     season: args.season,
     week: args.week,
@@ -1556,7 +1563,7 @@ export async function runNflForwardEvidenceWriter(args: {
   return {
     writerRelease: NFL_FORWARD_WRITER_RELEASE,
     collected: true,
-    collectionReason: need.reason,
+    collectionReason: need.collect ? need.reason : "pre_review_roster_preparation_due",
     proposed: write.proposed,
     inserted: write.inserted,
     games: new Set(payloads.map((payload) => payload.game.providerGameId)).size,
@@ -1763,11 +1770,6 @@ function completePlaybookSplits(value: NflForwardPlaybookSplitSet | null): boole
     complementary(value.spread.homeBetsPct, value.spread.awayBetsPct) &&
     complementary(value.total.overMoneyPct, value.total.underMoneyPct) &&
     complementary(value.total.overBetsPct, value.total.underBetsPct);
-}
-
-function latestEvidenceForGame(rows: NflForwardStoredEvidence[], providerGameId: string): NflForwardStoredEvidence | null {
-  return rows.filter((row) => row.providerGameId === providerGameId)
-    .sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0] ?? null;
 }
 
 /** Preserve provider provenance while containing continuity to one exact game. */

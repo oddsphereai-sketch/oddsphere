@@ -1,3 +1,209 @@
+## November26 retained NFL fixture provenance R63
+
+Prospective props generation is
+`player_props_ai_2026_11_26_r63_retained_fixture_provenance`, NBA writer49 and NFL
+writer124. Sole forward writer is
+`nfl_forward_evidence_writer_2026_11_26_r125_retained_source_preparation`.
+Observation R17/fixture binding R1 and roster preparation R3 implement the source
+corrections described below. Laws5/grade7/selection10/native17/store9/forward16,
+NFL decision13 and native MLB44 remain unchanged. R62 and every older accepted
+review/locked payload retain their original parsers, values and precedence.
+
+Round158 rejected candidate25401de because its successful packet omitted the
+original provider fixture binding. It remains a frozen unmerged history pin,
+not a live repair or clean review credit. The replacement validates each new
+binding against the exact same-collection schedule and original response clocks,
+then retains one deduplicated full provider-event/fixture declaration in private
+submitted source metadata. Existing source-table codec, raw accepted-input gzip
+and source capsule preserve it byte-for-byte. The actual model request includes
+it as collection provenance, explicitly distinct from quote/update clocks or an
+independent forecast. No fixture facts are fabricated or backdated; original
+provider kickoff/team/event/receipt are retained alongside canonical authority.
+
+Fixture drift compares UTC instants, not timestamp spellings. Equivalent Z,
+.000Z and offset encodings retain the original row and do not require an
+invented drift receipt. Root/fresh round160 held the previous candidate on this
+regression; the original failed report/pin remains unchanged. Both equivalent
+clocks and genuinely shifted fixture clocks now have explicit controls.
+
+R63 retains the existing exact typed NBA benchmark-set freshness membership,
+including R62's permanent original membership. The generation bump cannot
+accidentally withhold the same facts merely regrouped across market evidence.
+No metric comparison or locked-reader rule changes; all real-change/corruption
+negative controls remain active.
+
+No numerical formula, evidence guard, scope, grade/stake, slot, phase, tier,
+output cap, paid control, provider cap or lease changes. Input metadata is
+versioned prospectively; no existing request/law is reinterpreted. Same-source
+formula/price/actionable changes remain zero. The restored source can enable
+previously blocked ordinary review coverage. Private metadata does not establish
+external collector completeness, future phase2 success or predictive accuracy.
+Require TWO NEW consecutive fresh triple whole-product CLEAR rounds and all
+mandatory local/hosted all-AI-mocked realPG/protected expected-head/actualReady
+and ordinary review/member/retention/lock/tracking evidence. No extra paid tests.
+
+## November26 prospective NFL provider fixture binding R17
+
+Observation release is
+`nfl_player_props_provider_observation_2026_11_26_r17_canonical_fixture_binding`;
+private reconciliation provenance is
+`nfl_player_props_reconciled_fixture_2026_11_26_r1_unique_schedule`.
+Forward writer R124/source preparation R3 and props generation R62/NBA48/NFL123,
+all laws/grades/calibration/selection/member/tracking releases are unchanged.
+
+The actual November26 Chiefs–Bills scheduled failure archive retained 634 Owl's
+rows with a 01:15 provider kickoff. The uniquely reconciled funded/native fixture
+was 01:20; all 634 failed the unchanged exact-fixture actor guard. This is a
+fixture-clock binding defect, not evidence of 634 missing players or a provider
+identity namespace mapping. Original archive and all timestamps remain exact.
+
+For NEW completed Owl's collections only, the existing unique same-home/away
+match within fifteen minutes owns both canonical game ID and canonical fixture
+time. Preserve the original provider time/teams in a versioned private binding,
+plus actual response completion; quote observed/fetched/received clocks, event
+and observation IDs, actors, markets, book, line, side and price stay unchanged.
+Missing/ambiguous fixture matches, missing receipt, future quote clocks, live or
+opening rows cannot use this normalization. Exact native/player identity, cutoff
+and source validation remain unchanged. Legacy stored observations/locks are
+never backfilled or reinterpreted. Empty-source proof remains conservatively
+exact-clock; reconciliation is not an attestation of offer withdrawal.
+
+This contains the R124 as-of roster preparation correction below. Neither held
+R122/R123 clearance nor a source replay qualifies this candidate. Require TWO
+NEW fresh consecutive triple whole-product CLEAR rounds and all mandatory
+local/hosted all-AI-mocked realPG/protected expected-head/actual Ready gates.
+Only ordinary scheduled sources/reviews may establish live correctness. No
+provider/model/count test, extra slot, retry of a closed review, configured cap,
+source facts or numerical/grade rule changes. Same-fact projections, prices and
+actionable counts stay exact; zero formula-driven promotions/demotions. Newly
+admissible offers can restore previously withheld coverage; no accuracy or
+external collector-completeness guarantee follows.
+
+## November26 as-of NFL roster preparation R124
+
+The prospective sole forward writer is
+`nfl_forward_evidence_writer_2026_11_26_r124_asof_roster_preparation`,
+with source preparation `nfl_pre_review_roster_2026_11_26_r3_asof_source_preparation`.
+Props generation R62/NBA48/NFL123 and model/calibration/decision/member releases
+remain unchanged. This candidate is not live until protected release verification.
+
+R122 was held because hourly collection could skip roster preparation. R123
+fixed that gate but all three round157 reviewers rejected mixed historical data:
+a future source envelope could supply nonfuture-looking depth timestamps to the
+critical roster selector and suppress both team requests. Those candidates and
+reports remain historical; neither establishes clearance for this correction.
+
+Use one as-of view of valid capturedAt instants for planning, actual team roster
+selection, previous payloads and all historical model-feature reuse. Future or
+invalid unlocked envelopes cannot lend facts or freshness. Keep a separate
+record-only view that preserves every original locked payload, even with a bad
+source clock, without making it a model input. All original public/private locks
+and legacy T60 authority protect their games before any new capture is planned.
+Do not alter their timestamps, values, order or duplicate multiplicity.
+
+The ordinary leased writer still prepares a stale team roster at the two existing
+fifteen-minute pre-review boundaries. A targeted unlocked source capture may run
+when hourly prices are not due; fresh provider fixture clocks requalify it. No
+new writer/cron/review/phase/model/count call, paid test, manual refresh, closed
+job replay, configured cap, spending control or numerical formula is introduced.
+Ordinary metadata requests may increase within the existing bounded collector.
+Missing provider identities remain explicit; no club facts or inferred teams are
+injected. Same-input actionable promotions/demotions/net count change are zero.
+Actual fresh facts may affect future unlocked forecasts through existing models.
+
+Mocks exercise the actual production critical-team selector with a valid old
+source plus a future envelope: both stale teams must refresh. Future-only and
+invalid sources cannot authorize preparation; opaque future locks remain exact
+record authority. Test clocks, hourly bypass, original paired slots, fresh-window
+skips, provider failure, duplicates, fresh fixture changes and locked precedence.
+Require two NEW consecutive fresh triple whole-product CLEAR rounds, mandatory
+local/focused/model/type/affected-lint/build, exact hosted all-AI-mocked realPG,
+fresh-main/no-overlap/strict-protected expected-head merge, actual Ready/www and
+ordinary source/review/member/retention/first-lock/tracking verification. This
+establishes no external collector completeness, accuracy or latency guarantee.
+
+## November26 targeted pre-review roster collection priority R123
+
+The sole NFL forward writer is
+`nfl_forward_evidence_writer_2026_11_26_r123_roster_preparation_priority`,
+source preparation `nfl_pre_review_roster_2026_11_26_r2_targeted_capture_priority`.
+Props generation R62/NBA48/NFL123 and all model/calibration/decision/member,
+original law/request/receipt and locked-payload contracts stay unchanged.
+
+The unmerged R122 candidate PR1150 only selected fresh rosters after the existing
+hourly collection gate. The root found that a recent price capture could skip
+the entire fifteen-minute source preparation window. Its frozen six reviewer
+reports remain historical, but it was held and never deployed. The corrected
+candidate requires two NEW consecutive fresh triple whole-product CLEAR rounds.
+
+In the same ordinary leased writer, a due roster boundary can request a targeted
+normal unlocked source capture even when hourly prices are not due. Use only
+previously opened games and nonfuture stored metadata; preserve all public or
+private locked authority and legacy T60 slots. Requalify each target against the
+fresh provider fixture before adding its existing unlocked capture shape. Keep
+original planned opening/T60/unlocked captures and their order, deduplicate IDs,
+and add no unrelated future-game capture when only roster preparation is due.
+There is no second writer, cron, inference/count call, third review or replay.
+This can add normal source collections/metadata requests at the two existing
+preparation boundaries within existing collector concurrency, game/team caps,
+request accounting, lease and deadlines. It does not change configured provider
+or AI spending limits. Source or provider failure cannot invent a team, declare
+freshness, backdate availability or erase an old failed/locked record.
+
+Mocks reproduce the actual hourly cadence_not_due result and empty normal plan,
+then require exactly one targeted source plan. Fresh same-window roster skips,
+duplicates, fresh fixture clock shifts, future metadata, public/private locks,
+legacy failed T60 authority and original-input immutability are tested. Existing
+same-fact numerical calculations and actionable counts remain exact: zero
+promotions/demotions/net change. Fresh actual facts can affect future unlocked
+forecasts through the original models; no accuracy or collector-completeness
+claim follows. Require all mandatory local and exact hosted all-AI-mocked realPG,
+fresh-main/no-overlap/strict-protected expected-head PR merge, actual Ready/www,
+and only ordinary source/review/member/retention/first-lock/tracking evidence.
+No manual production refresh, provider/model test, paid test or control change.
+
+## November26 prospective pre-review NFL roster freshness R122
+
+The sole NFL forward writer is
+`nfl_forward_evidence_writer_2026_11_26_r122_pre_review_roster_freshness`.
+Props generation R62/NBA48/NFL123, every model/calibration/decision/member release,
+source schema and original request/law/lock authority remain unchanged.
+
+The November26 Philadelphia–Dallas member board contained three No Play offers
+for one exact provider ID with no current team. Five retained forward packets
+reused November24 depth data and lacked that ID. The club independently announced
+a November25 activation. This establishes a roster-refresh coverage gap, not a
+license to assign a team, infer participation, backdate a source or fabricate a
+provider response. The separate Chiefs–Bills failure cause is not established by
+this case. Closed early failures remain unchanged.
+
+Use the existing reviewSlots clocks to prepare each team's roster in ordinary
+unlocked forward captures starting fifteen minutes before each existing EARLY
+and FINAL window. Refresh only if that team's retained roster predates the
+current preparation boundary, is absent/invalid, or is future-dated. Keep opening
+and T60 behavior intact; deduplicate teams and retain the existing bounded roster
+collector, API accounting, shared sport lease and single authoritative writer.
+This can add normal metadata requests for the two existing preparation windows;
+it does not increase a configured provider cap, create a provider test, add an
+AI/count call, shift a review or add a third slot. The existing request maximum
+includes actual roster requests. A fresh provider response can still be missing
+an actor: retain the explicit identity hold, never infer or override its facts.
+No manual production refresh, retry, replay, paid test or control/budget change.
+
+This is source freshness repair, not calibration or a promotion/demotion rule.
+With identical source facts all forecasts, grades/stakes and actionable counts
+are unchanged (zero promotions/demotions/net board change). Actual later source
+facts may change future unlocked forecasts through the existing models. Preserve
+all original captured timestamps, old review semantics and opaque locked records.
+Mocks prove the late offered exact-ID actor remains unresolved in the old roster
+and resolves only from the newly collected team's roster, with original clocks,
+no repeated same-window call, midnight/day-of handling and no after-lock refresh.
+Require two NEW consecutive fresh triple whole-product CLEAR rounds, mandatory
+focused/model/type/affected-lint/build and exact hosted all-AI-mocked realPG,
+fresh-main/no-overlap/strict-protected expected-head PR merge, actual Ready/www
+and ordinary source/review/member/retention/lock evidence. No completeness,
+future correction success, latency or predictive-accuracy guarantee.
+
 ## November26 cooperative NFL forecast batches R121
 
 The sole NFL forward writer is
