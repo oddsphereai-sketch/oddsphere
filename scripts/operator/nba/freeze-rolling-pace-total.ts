@@ -21,6 +21,7 @@ for (const m of fit.models) {
         d.designStandardDeviations.length !== d.designColumns || !d.designStandardDeviations.every((n: number) => Number.isFinite(n) && n > 0) ||
         view.total.length !== d.designColumns + 1 || !view.total.every(Number.isFinite)) throw Error("rolling_head_dimension");
   }
+  if (m.legacy.margin.length !== m.legacy.design.designColumns + 1 || !m.legacy.margin.every(Number.isFinite)) throw Error("rolling_margin_dimension");
 }
 const core = { release: fit.release, featureRelease: fit.featureRelease, alpha: fit.alpha, models: fit.models,
   rawFitSha256: createHash("sha256").update(fitBytes).digest("hex") };
