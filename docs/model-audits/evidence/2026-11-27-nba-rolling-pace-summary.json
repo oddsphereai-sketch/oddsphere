@@ -1,0 +1,154 @@
+{
+  "createdAt": "2026-11-27T15:17:28.877Z",
+  "release": "nba_rolling_regulation_pace_total_2026_11_27_r1_prior_seasons",
+  "headHash": "525829ca19e382c5926411a1254678496cada71f3f6c85d6b65339988894e3fb",
+  "frozenAt": "2026-11-27T15:16:58.346Z",
+  "inputSha256": "93e1be3304001f63cf272209968f49b428360fc2f8c48f3f59e30fa0f3012fd8",
+  "labels": {
+    "development": "reopened_2023_2024",
+    "replication": "opened_2025",
+    "untouchedHoldout": false,
+    "comparator": "annual_prior_seasons_native_recipe_not_current_incumbent",
+    "pointForecastsOnly": true,
+    "totalOnlyDeclaredBeforeFit": true
+  },
+  "development": {
+    "games": 2456,
+    "totalMAE_A": 14.848642940170828,
+    "totalMAE_C": 14.762491896240897,
+    "totalMAE_gain": 0.0861510439299199,
+    "totalBias_A": 0.09029757771463834,
+    "totalBias_C": 0.44330197161308976,
+    "marginMAE_A": 10.986562645324584,
+    "marginMAE_C": 10.986562645324584,
+    "teamMAE_A": 9.303974666654131,
+    "teamMAE_C": 9.272818188700708,
+    "marginChanges": 0
+  },
+  "replication": {
+    "games": 1229,
+    "totalMAE_A": 15.236302820752966,
+    "totalMAE_C": 15.140532875153493,
+    "totalMAE_gain": 0.09576994559946288,
+    "totalBias_A": 0.10174634979134253,
+    "totalBias_C": 0.3003162249083164,
+    "marginMAE_A": 11.372641749810375,
+    "marginMAE_C": 11.372641749810375,
+    "teamMAE_A": 9.5717607433078,
+    "teamMAE_C": 9.529817446661445,
+    "marginChanges": 0
+  },
+  "bySeason": {
+    "2023": {
+      "games": 1227,
+      "totalMAE_A": 14.892792042529866,
+      "totalMAE_C": 14.812102368570187,
+      "totalMAE_gain": 0.08068967395970099,
+      "totalBias_A": 1.4516858450399581,
+      "totalBias_C": 1.5864327963223896,
+      "marginMAE_A": 10.978541865898041,
+      "marginMAE_C": 10.978541865898041,
+      "teamMAE_A": 9.361398783384573,
+      "teamMAE_C": 9.328769682077292,
+      "marginChanges": 0
+    },
+    "2024": {
+      "games": 1229,
+      "totalMAE_A": 14.804565683381117,
+      "totalMAE_C": 14.712962156982973,
+      "totalMAE_gain": 0.0916035263981531,
+      "totalBias_A": -1.268875248980374,
+      "totalBias_C": -0.6979685913798385,
+      "marginMAE_A": 10.994570372221526,
+      "marginMAE_C": 10.994570372221526,
+      "teamMAE_A": 9.246643998445599,
+      "teamMAE_C": 9.216957747388188,
+      "marginChanges": 0
+    },
+    "2025": {
+      "games": 1229,
+      "totalMAE_A": 15.236302820752966,
+      "totalMAE_C": 15.140532875153493,
+      "totalMAE_gain": 0.09576994559946288,
+      "totalBias_A": 0.10174634979134253,
+      "totalBias_C": 0.3003162249083164,
+      "marginMAE_A": 11.372641749810375,
+      "marginMAE_C": 11.372641749810375,
+      "teamMAE_A": 9.5717607433078,
+      "teamMAE_C": 9.529817446661445,
+      "marginChanges": 0
+    }
+  },
+  "overtimeExposure": {
+    "development": {
+      "games": 927,
+      "totalMAE_A": 15.10917738541849,
+      "totalMAE_C": 14.987767945790766,
+      "totalMAE_gain": 0.12140943962772155,
+      "totalBias_A": 1.9173280833578725,
+      "totalBias_C": 1.032407208699756,
+      "marginMAE_A": 10.779021645223896,
+      "marginMAE_C": 10.779021645223896,
+      "teamMAE_A": 9.363792284765086,
+      "teamMAE_C": 9.32871705922124,
+      "marginChanges": 0
+    },
+    "developmentUnexposed": {
+      "games": 1529,
+      "totalMAE_A": 14.69068647794417,
+      "totalMAE_C": 14.625911845271162,
+      "totalMAE_gain": 0.06477463267297934,
+      "totalBias_A": -1.0173919440193584,
+      "totalBias_C": 0.08614006528258886,
+      "marginMAE_A": 11.112390315104395,
+      "marginMAE_C": 11.112390315104395,
+      "teamMAE_A": 9.267708524084565,
+      "teamMAE_C": 9.238927898986798,
+      "marginChanges": 0
+    },
+    "replication": {
+      "games": 427,
+      "totalMAE_A": 15.45216062778477,
+      "totalMAE_C": 15.207513634420277,
+      "totalMAE_gain": 0.2446469933644959,
+      "totalBias_A": 3.0536687275872976,
+      "totalBias_C": 1.5095393947566462,
+      "marginMAE_A": 10.986616097912421,
+      "marginMAE_C": 10.986616097912421,
+      "teamMAE_A": 9.578569341166729,
+      "teamMAE_C": 9.474524465006164,
+      "marginChanges": 0
+    },
+    "replicationUnexposed": {
+      "games": 802,
+      "totalMAE_A": 15.121376033218587,
+      "totalMAE_C": 15.104871049459124,
+      "totalMAE_gain": 0.016504983759476448,
+      "totalBias_A": -1.4699130708057555,
+      "totalBias_C": -0.3434971086642971,
+      "marginMAE_A": 11.578169123077705,
+      "marginMAE_C": 11.578169123077705,
+      "teamMAE_A": 9.568135716766946,
+      "teamMAE_C": 9.559256478041512,
+      "marginChanges": 0
+    }
+  },
+  "weekBlockBootstrap": {
+    "draws": 1000,
+    "seed": 20261123,
+    "calendar": "Eastern_Monday_slate_week",
+    "totalMAEGain95CI": [
+      0.03301435866768522,
+      0.14599746699613358
+    ]
+  },
+  "developmentGatePassed": false,
+  "replicationGatePassed": true,
+  "mayAdvanceToNextValidationStage": false,
+  "productionPromotionEligible": false,
+  "originalRowsHashBefore": "9e85f62e8a661ac37ba6880ef794a17666d4496887049aefb103e38c9ad6c69f",
+  "originalRowsHashAfter": "9e85f62e8a661ac37ba6880ef794a17666d4496887049aefb103e38c9ad6c69f",
+  "fittingPerformed": false,
+  "providerRequests": 0,
+  "productionWrites": 0
+}

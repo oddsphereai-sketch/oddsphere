@@ -1,0 +1,930 @@
+{
+  "byRelease": {
+    "nba_professional_unified_2026_11_04_r36_paid_consumer_book_coverage": {
+      "games": 103,
+      "dates": [
+        "2026-11-06",
+        "2026-11-07",
+        "2026-11-08",
+        "2026-11-09",
+        "2026-11-10",
+        "2026-11-11",
+        "2026-11-12",
+        "2026-11-13",
+        "2026-11-14",
+        "2026-11-15",
+        "2026-11-16",
+        "2026-11-17",
+        "2026-11-18",
+        "2026-11-19"
+      ],
+      "marketMarginChanged": 58,
+      "marketTotalChanged": 59,
+      "raw": {
+        "totalMAE": 14.062064746292535,
+        "totalBias": -1.121447465067708,
+        "marginMAE": 12.133535852453349,
+        "marginBias": 0.8793356730268266,
+        "directions": {
+          "moneyline": {
+            "win": 72,
+            "loss": 31
+          },
+          "spread": {
+            "loss": 51,
+            "win": 52
+          },
+          "total": {
+            "loss": 50,
+            "win": 52,
+            "push": 1
+          }
+        }
+      },
+      "roster": {
+        "totalMAE": 13.800910234560249,
+        "totalBias": -0.7035784021674708,
+        "marginMAE": 11.855141119474546,
+        "marginBias": 0.5328560267580947,
+        "directions": {
+          "moneyline": {
+            "win": 71,
+            "loss": 32
+          },
+          "spread": {
+            "loss": 51,
+            "win": 52
+          },
+          "total": {
+            "loss": 46,
+            "win": 56,
+            "push": 1
+          }
+        }
+      },
+      "final": {
+        "totalMAE": 13.65878514098771,
+        "totalBias": -1.0770521847704917,
+        "marginMAE": 12.061704079617686,
+        "marginBias": 0.07445888747451195,
+        "directions": {
+          "moneyline": {
+            "win": 69,
+            "loss": 34
+          },
+          "spread": {
+            "loss": 56,
+            "win": 47
+          },
+          "total": {
+            "loss": 50,
+            "win": 52,
+            "push": 1
+          }
+        }
+      },
+      "official": {
+        "moneyline": {
+          "win": 69,
+          "loss": 34
+        },
+        "spread": {
+          "loss": 56,
+          "win": 47
+        },
+        "total": {
+          "loss": 49,
+          "win": 53,
+          "push": 1
+        }
+      },
+      "marketMarginErrorEffect": {
+        "changedGames": 58,
+        "helped": 24,
+        "hurt": 34,
+        "meanAbsoluteErrorGain": -0.3668273257714384
+      },
+      "marketTotalErrorEffect": {
+        "changedGames": 59,
+        "helped": 35,
+        "hurt": 24,
+        "meanAbsoluteErrorGain": 0.24811668877917845
+      }
+    },
+    "nba_professional_unified_2026_11_20_r38_event_scoped_split_evidence": {
+      "games": 30,
+      "dates": [
+        "2026-11-20",
+        "2026-11-21",
+        "2026-11-22",
+        "2026-11-23"
+      ],
+      "marketMarginChanged": 23,
+      "marketTotalChanged": 21,
+      "raw": {
+        "totalMAE": 19.93248677137032,
+        "totalBias": 3.9092273364239323,
+        "marginMAE": 8.684860635323293,
+        "marginBias": -1.5304131279378796,
+        "directions": {
+          "moneyline": {
+            "win": 18,
+            "loss": 12
+          },
+          "spread": {
+            "loss": 13,
+            "win": 17
+          },
+          "total": {
+            "loss": 18,
+            "win": 12
+          }
+        }
+      },
+      "roster": {
+        "totalMAE": 19.779018163172346,
+        "totalBias": 4.356014531011052,
+        "marginMAE": 8.778261220465536,
+        "marginBias": -1.5279926702036848,
+        "directions": {
+          "moneyline": {
+            "win": 18,
+            "loss": 12
+          },
+          "spread": {
+            "loss": 13,
+            "win": 17
+          },
+          "total": {
+            "loss": 19,
+            "win": 11
+          }
+        }
+      },
+      "final": {
+        "totalMAE": 19.64197978993309,
+        "totalBias": 3.246394625497272,
+        "marginMAE": 8.195834729915896,
+        "marginBias": -2.2715810930316227,
+        "directions": {
+          "moneyline": {
+            "win": 17,
+            "loss": 13
+          },
+          "spread": {
+            "win": 17,
+            "loss": 13
+          },
+          "total": {
+            "loss": 20,
+            "win": 10
+          }
+        }
+      },
+      "official": {
+        "moneyline": {
+          "win": 17,
+          "loss": 13
+        },
+        "spread": {
+          "win": 17,
+          "loss": 13
+        },
+        "total": {
+          "loss": 19,
+          "win": 11
+        }
+      },
+      "marketMarginErrorEffect": {
+        "changedGames": 23,
+        "helped": 15,
+        "hurt": 8,
+        "meanAbsoluteErrorGain": 0.7596867268038766
+      },
+      "marketTotalErrorEffect": {
+        "changedGames": 21,
+        "helped": 12,
+        "hurt": 9,
+        "meanAbsoluteErrorGain": 0.1957691046275118
+      }
+    },
+    "nba_professional_unified_2026_11_23_r39_request_scoped_roster": {
+      "games": 14,
+      "dates": [
+        "2026-11-23",
+        "2026-11-24",
+        "2026-11-25"
+      ],
+      "marketMarginChanged": 7,
+      "marketTotalChanged": 12,
+      "raw": {
+        "totalMAE": 15.586522903573629,
+        "totalBias": 8.384886703776532,
+        "marginMAE": 9.23795460536784,
+        "marginBias": 1.4616012635153441,
+        "directions": {
+          "moneyline": {
+            "win": 9,
+            "loss": 5
+          },
+          "spread": {
+            "win": 8,
+            "loss": 6
+          },
+          "total": {
+            "loss": 5,
+            "win": 8,
+            "push": 1
+          }
+        }
+      },
+      "roster": {
+        "totalMAE": 16.061988655822766,
+        "totalBias": 8.86035245602567,
+        "marginMAE": 8.913647362643317,
+        "marginBias": 1.9522290447232054,
+        "directions": {
+          "moneyline": {
+            "win": 9,
+            "loss": 5
+          },
+          "spread": {
+            "loss": 6,
+            "win": 8
+          },
+          "total": {
+            "loss": 7,
+            "win": 6,
+            "push": 1
+          }
+        }
+      },
+      "final": {
+        "totalMAE": 15.726116062620017,
+        "totalBias": 8.206686515270475,
+        "marginMAE": 9.54879626875802,
+        "marginBias": 1.8664171001236354,
+        "directions": {
+          "moneyline": {
+            "win": 8,
+            "loss": 6
+          },
+          "spread": {
+            "loss": 8,
+            "win": 6
+          },
+          "total": {
+            "loss": 7,
+            "win": 6,
+            "push": 1
+          }
+        }
+      },
+      "official": {
+        "moneyline": {
+          "win": 8,
+          "loss": 6
+        },
+        "spread": {
+          "loss": 8,
+          "win": 6
+        },
+        "total": {
+          "loss": 7,
+          "win": 6,
+          "push": 1
+        }
+      },
+      "marketMarginErrorEffect": {
+        "changedGames": 7,
+        "helped": 3,
+        "hurt": 4,
+        "meanAbsoluteErrorGain": -1.2702978122294037
+      },
+      "marketTotalErrorEffect": {
+        "changedGames": 12,
+        "helped": 9,
+        "hurt": 3,
+        "meanAbsoluteErrorGain": 0.3918513587365429
+      }
+    }
+  },
+  "exposureByRelease": {
+    "nba_professional_unified_2026_11_04_r36_paid_consumer_book_coverage": {
+      "exposed": {
+        "games": 45,
+        "dates": [
+          "2026-11-06",
+          "2026-11-07",
+          "2026-11-08",
+          "2026-11-09",
+          "2026-11-10",
+          "2026-11-11",
+          "2026-11-13",
+          "2026-11-14",
+          "2026-11-15",
+          "2026-11-16",
+          "2026-11-17",
+          "2026-11-18",
+          "2026-11-19"
+        ],
+        "marketMarginChanged": 27,
+        "marketTotalChanged": 26,
+        "raw": {
+          "totalMAE": 13.852165448821097,
+          "totalBias": 1.0681083833662817,
+          "marginMAE": 15.022696239163087,
+          "marginBias": 5.24768387765691,
+          "directions": {
+            "moneyline": {
+              "win": 27,
+              "loss": 18
+            },
+            "spread": {
+              "loss": 26,
+              "win": 19
+            },
+            "total": {
+              "loss": 21,
+              "win": 23,
+              "push": 1
+            }
+          }
+        },
+        "roster": {
+          "totalMAE": 13.817469714763712,
+          "totalBias": 1.4656903454125048,
+          "marginMAE": 14.557259387929665,
+          "marginBias": 4.709821612586884,
+          "directions": {
+            "moneyline": {
+              "win": 28,
+              "loss": 17
+            },
+            "spread": {
+              "loss": 27,
+              "win": 18
+            },
+            "total": {
+              "loss": 21,
+              "win": 23,
+              "push": 1
+            }
+          }
+        },
+        "final": {
+          "totalMAE": 13.303465771504928,
+          "totalBias": 0.7205160651803649,
+          "marginMAE": 14.389049813825865,
+          "marginBias": 4.1938489792150175,
+          "directions": {
+            "moneyline": {
+              "win": 26,
+              "loss": 19
+            },
+            "spread": {
+              "win": 20,
+              "loss": 25
+            },
+            "total": {
+              "loss": 21,
+              "win": 23,
+              "push": 1
+            }
+          }
+        },
+        "official": {
+          "moneyline": {
+            "win": 26,
+            "loss": 19
+          },
+          "spread": {
+            "win": 20,
+            "loss": 25
+          },
+          "total": {
+            "loss": 21,
+            "win": 23,
+            "push": 1
+          }
+        },
+        "marketMarginErrorEffect": {
+          "changedGames": 27,
+          "helped": 12,
+          "hurt": 15,
+          "meanAbsoluteErrorGain": 0.28034929017299975
+        },
+        "marketTotalErrorEffect": {
+          "changedGames": 26,
+          "helped": 18,
+          "hurt": 8,
+          "meanAbsoluteErrorGain": 0.8896222094863563
+        }
+      },
+      "unexposed": {
+        "games": 58,
+        "dates": [
+          "2026-11-06",
+          "2026-11-07",
+          "2026-11-08",
+          "2026-11-09",
+          "2026-11-10",
+          "2026-11-11",
+          "2026-11-12",
+          "2026-11-13",
+          "2026-11-14",
+          "2026-11-15",
+          "2026-11-16",
+          "2026-11-17",
+          "2026-11-18",
+          "2026-11-19"
+        ],
+        "marketMarginChanged": 31,
+        "marketTotalChanged": 33,
+        "raw": {
+          "totalMAE": 14.224917649503132,
+          "totalBias": -2.8202407957492515,
+          "marginMAE": 9.891945897247517,
+          "marginBias": -2.509900002979273,
+          "directions": {
+            "moneyline": {
+              "win": 45,
+              "loss": 13
+            },
+            "spread": {
+              "loss": 25,
+              "win": 33
+            },
+            "total": {
+              "loss": 29,
+              "win": 29
+            }
+          }
+        },
+        "roster": {
+          "totalMAE": 13.788062361988596,
+          "totalBias": -2.386631740807107,
+          "marginMAE": 9.758670049121436,
+          "marginBias": -2.7078931346607935,
+          "directions": {
+            "moneyline": {
+              "win": 43,
+              "loss": 15
+            },
+            "spread": {
+              "loss": 24,
+              "win": 34
+            },
+            "total": {
+              "loss": 25,
+              "win": 33
+            }
+          }
+        },
+        "final": {
+          "totalMAE": 13.934463962138143,
+          "totalBias": -2.4717172062840875,
+          "marginMAE": 10.256004803076857,
+          "marginBias": -3.1216196319793283,
+          "directions": {
+            "moneyline": {
+              "win": 43,
+              "loss": 15
+            },
+            "spread": {
+              "loss": 31,
+              "win": 27
+            },
+            "total": {
+              "loss": 29,
+              "win": 29
+            }
+          }
+        },
+        "official": {
+          "moneyline": {
+            "win": 43,
+            "loss": 15
+          },
+          "spread": {
+            "loss": 31,
+            "win": 27
+          },
+          "total": {
+            "loss": 28,
+            "win": 30
+          }
+        },
+        "marketMarginErrorEffect": {
+          "changedGames": 31,
+          "helped": 12,
+          "hurt": 19,
+          "meanAbsoluteErrorGain": -0.9304972815940135
+        },
+        "marketTotalErrorEffect": {
+          "changedGames": 33,
+          "helped": 17,
+          "hurt": 16,
+          "meanAbsoluteErrorGain": -0.25731190329314346
+        }
+      }
+    },
+    "nba_professional_unified_2026_11_20_r38_event_scoped_split_evidence": {
+      "exposed": {
+        "games": 12,
+        "dates": [
+          "2026-11-20",
+          "2026-11-21",
+          "2026-11-22",
+          "2026-11-23"
+        ],
+        "marketMarginChanged": 7,
+        "marketTotalChanged": 10,
+        "raw": {
+          "totalMAE": 20.621112551214296,
+          "totalBias": 8.803876971055217,
+          "marginMAE": 10.337601250375345,
+          "marginBias": -0.4976578504335953,
+          "directions": {
+            "moneyline": {
+              "win": 5,
+              "loss": 7
+            },
+            "spread": {
+              "loss": 5,
+              "win": 7
+            },
+            "total": {
+              "loss": 9,
+              "win": 3
+            }
+          }
+        },
+        "roster": {
+          "totalMAE": 20.606223219508937,
+          "totalBias": 9.223313954946185,
+          "marginMAE": 10.304284707253146,
+          "marginBias": -0.5309743935557943,
+          "directions": {
+            "moneyline": {
+              "win": 5,
+              "loss": 7
+            },
+            "spread": {
+              "loss": 5,
+              "win": 7
+            },
+            "total": {
+              "loss": 9,
+              "win": 3
+            }
+          }
+        },
+        "final": {
+          "totalMAE": 20.449838861428624,
+          "totalBias": 7.172196156808437,
+          "marginMAE": 9.760917990380623,
+          "marginBias": -1.9036796912572287,
+          "directions": {
+            "moneyline": {
+              "win": 4,
+              "loss": 8
+            },
+            "spread": {
+              "win": 8,
+              "loss": 4
+            },
+            "total": {
+              "loss": 9,
+              "win": 3
+            }
+          }
+        },
+        "official": {
+          "moneyline": {
+            "win": 4,
+            "loss": 8
+          },
+          "spread": {
+            "win": 8,
+            "loss": 4
+          },
+          "total": {
+            "loss": 9,
+            "win": 3
+          }
+        },
+        "marketMarginErrorEffect": {
+          "changedGames": 7,
+          "helped": 5,
+          "hurt": 2,
+          "meanAbsoluteErrorGain": 0.9314858003528949
+        },
+        "marketTotalErrorEffect": {
+          "changedGames": 10,
+          "helped": 6,
+          "hurt": 4,
+          "meanAbsoluteErrorGain": 0.18766122969637422
+        }
+      },
+      "unexposed": {
+        "games": 18,
+        "dates": [
+          "2026-11-20",
+          "2026-11-21",
+          "2026-11-22",
+          "2026-11-23"
+        ],
+        "marketMarginChanged": 16,
+        "marketTotalChanged": 11,
+        "raw": {
+          "totalMAE": 19.473402918141005,
+          "totalBias": 0.6461275800030756,
+          "marginMAE": 7.583033558621925,
+          "marginBias": -2.218916646274069,
+          "directions": {
+            "moneyline": {
+              "win": 13,
+              "loss": 5
+            },
+            "spread": {
+              "win": 10,
+              "loss": 8
+            },
+            "total": {
+              "win": 9,
+              "loss": 9
+            }
+          }
+        },
+        "roster": {
+          "totalMAE": 19.227548125614618,
+          "totalBias": 1.1111482483876296,
+          "marginMAE": 7.760912229273797,
+          "marginBias": -2.1926715213022785,
+          "directions": {
+            "moneyline": {
+              "win": 13,
+              "loss": 5
+            },
+            "spread": {
+              "win": 10,
+              "loss": 8
+            },
+            "total": {
+              "win": 8,
+              "loss": 10
+            }
+          }
+        },
+        "final": {
+          "totalMAE": 19.103407075602732,
+          "totalBias": 0.629193604623162,
+          "marginMAE": 7.15244588960608,
+          "marginBias": -2.516848694214552,
+          "directions": {
+            "moneyline": {
+              "win": 13,
+              "loss": 5
+            },
+            "spread": {
+              "loss": 9,
+              "win": 9
+            },
+            "total": {
+              "win": 7,
+              "loss": 11
+            }
+          }
+        },
+        "official": {
+          "moneyline": {
+            "win": 13,
+            "loss": 5
+          },
+          "spread": {
+            "loss": 9,
+            "win": 9
+          },
+          "total": {
+            "win": 8,
+            "loss": 10
+          }
+        },
+        "marketMarginErrorEffect": {
+          "changedGames": 16,
+          "helped": 10,
+          "hurt": 6,
+          "meanAbsoluteErrorGain": 0.6845246321261812
+        },
+        "marketTotalErrorEffect": {
+          "changedGames": 11,
+          "helped": 6,
+          "hurt": 5,
+          "meanAbsoluteErrorGain": 0.20313990001945503
+        }
+      }
+    },
+    "nba_professional_unified_2026_11_23_r39_request_scoped_roster": {
+      "exposed": {
+        "games": 5,
+        "dates": [
+          "2026-11-23",
+          "2026-11-24",
+          "2026-11-25"
+        ],
+        "marketMarginChanged": 2,
+        "marketTotalChanged": 5,
+        "raw": {
+          "totalMAE": 11.976361443072312,
+          "totalBias": 11.976361443072312,
+          "marginMAE": 11.014838029174232,
+          "marginBias": 2.901637562105304,
+          "directions": {
+            "moneyline": {
+              "win": 3,
+              "loss": 2
+            },
+            "spread": {
+              "win": 3,
+              "loss": 2
+            },
+            "total": {
+              "loss": 3,
+              "win": 2
+            }
+          }
+        },
+        "roster": {
+          "totalMAE": 12.347166504923615,
+          "totalBias": 12.347166504923615,
+          "marginMAE": 11.264223893132003,
+          "marginBias": 2.652251698147532,
+          "directions": {
+            "moneyline": {
+              "win": 3,
+              "loss": 2
+            },
+            "spread": {
+              "loss": 3,
+              "win": 2
+            },
+            "total": {
+              "loss": 3,
+              "win": 2
+            }
+          }
+        },
+        "final": {
+          "totalMAE": 10.75074471675739,
+          "totalBias": 10.75074471675739,
+          "marginMAE": 11.367436886666908,
+          "marginBias": 2.549038704612628,
+          "directions": {
+            "moneyline": {
+              "win": 3,
+              "loss": 2
+            },
+            "spread": {
+              "loss": 3,
+              "win": 2
+            },
+            "total": {
+              "loss": 4,
+              "win": 1
+            }
+          }
+        },
+        "official": {
+          "moneyline": {
+            "win": 3,
+            "loss": 2
+          },
+          "spread": {
+            "loss": 3,
+            "win": 2
+          },
+          "total": {
+            "loss": 4,
+            "win": 1
+          }
+        },
+        "marketMarginErrorEffect": {
+          "changedGames": 2,
+          "helped": 1,
+          "hurt": 1,
+          "meanAbsoluteErrorGain": -0.25803248383725963
+        },
+        "marketTotalErrorEffect": {
+          "changedGames": 5,
+          "helped": 4,
+          "hurt": 1,
+          "meanAbsoluteErrorGain": 1.596421788166225
+        }
+      },
+      "unexposed": {
+        "games": 9,
+        "dates": [
+          "2026-11-23",
+          "2026-11-24",
+          "2026-11-25"
+        ],
+        "marketMarginChanged": 5,
+        "marketTotalChanged": 7,
+        "raw": {
+          "totalMAE": 17.592168159407695,
+          "totalBias": 6.389622959723321,
+          "marginMAE": 8.250797147697622,
+          "marginBias": 0.6615810976320332,
+          "directions": {
+            "moneyline": {
+              "win": 6,
+              "loss": 3
+            },
+            "spread": {
+              "win": 5,
+              "loss": 4
+            },
+            "total": {
+              "win": 6,
+              "loss": 2,
+              "push": 1
+            }
+          }
+        },
+        "roster": {
+          "totalMAE": 18.12577873965563,
+          "totalBias": 6.923233539971256,
+          "marginMAE": 7.6077715123718255,
+          "marginBias": 1.5633275705985794,
+          "directions": {
+            "moneyline": {
+              "win": 6,
+              "loss": 3
+            },
+            "spread": {
+              "win": 6,
+              "loss": 3
+            },
+            "total": {
+              "win": 4,
+              "loss": 4,
+              "push": 1
+            }
+          }
+        },
+        "final": {
+          "totalMAE": 18.49021125476592,
+          "totalBias": 6.793320847777744,
+          "marginMAE": 8.538440369919748,
+          "marginBias": 1.4871828754075282,
+          "directions": {
+            "moneyline": {
+              "win": 5,
+              "loss": 4
+            },
+            "spread": {
+              "win": 4,
+              "loss": 5
+            },
+            "total": {
+              "win": 5,
+              "loss": 3,
+              "push": 1
+            }
+          }
+        },
+        "official": {
+          "moneyline": {
+            "win": 5,
+            "loss": 4
+          },
+          "spread": {
+            "win": 4,
+            "loss": 5
+          },
+          "total": {
+            "win": 5,
+            "loss": 3,
+            "push": 1
+          }
+        },
+        "marketMarginErrorEffect": {
+          "changedGames": 5,
+          "helped": 2,
+          "hurt": 3,
+          "meanAbsoluteErrorGain": -1.6752039435862613
+        },
+        "marketTotalErrorEffect": {
+          "changedGames": 7,
+          "helped": 5,
+          "hurt": 2,
+          "meanAbsoluteErrorGain": -0.4685560908560871
+        }
+      }
+    }
+  },
+  "productionWrites": 0,
+  "providerRequests": 0,
+  "notACounterfactualWagerBacktest": true
+}
