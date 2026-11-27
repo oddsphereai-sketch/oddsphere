@@ -4,7 +4,7 @@ import {requireRealPropsAiPermission} from "./siteConfig";
 export type AiUsage = { input_tokens: number; output_tokens: number; input_tokens_details?: { cache_write_tokens?: number; cache_write_tokens_details?: { ttl_12h_tokens?: number } }; output_tokens_details?: { reasoning_tokens?: number } };
 export type AiTransportDiagnostics={unrecognizedErrorFields?:("code"|"type")[];status:number;code:string|null;type:string|null;requestId:string|null;retryAfter:string|null;rateLimits:Record<string,string>};
 export type AiResponse = { transportDiagnostics?:AiTransportDiagnostics; id: string; status: string; model: string; service_tier?:string; usage?: AiUsage; output?: { content?: { type: string; text?: string }[] }[] };
-export type AiRequest = { model: PropsAiModel; instructions: string; input: string; text: unknown; max_output_tokens: number; store: false };
+export type AiRequest = { model: PropsAiModel; instructions: string; input: string; text: unknown; max_output_tokens: number; store: false; reasoning?:{effort:"low"|"medium"} };
 export class AiGenerationError extends Error {
   constructor(readonly status:number,readonly code:string|null,readonly knownUnbilled:boolean,readonly diagnostics?:AiTransportDiagnostics){super(`generation_http_${status}${knownUnbilled?"_resource_unavailable":""}`);}
 }
@@ -58,7 +58,10 @@ export function unbilledFlexCapacity(status:number,tier:string|undefined,code:st
  return explicitCode?code!==null&&codes.includes(code)&&(type===null||types.includes(type)):types.includes(type??"");
 }
 export function serializeAiRequest(body:AiRequest,args:{serviceTier?:"default"|"flex";stream?:boolean}={}){
- return JSON.stringify({...body,stream:args.stream??false,service_tier:args.serviceTier??"default",truncation:"disabled",reasoning:{effort:"low"},prompt_cache_options:{mode:"explicit"}});
+ const {reasoning,...request}=body;
+ invariant(reasoning===undefined||reasoning!==null&&typeof reasoning==="object"&&!Array.isArray(reasoning)&&Object.keys(reasoning).join("|")==="effort"&&(reasoning.effort==="low"||reasoning.effort==="medium"),"Unsupported props reasoning configuration");
+ invariant(reasoning?.effort!=="medium"||body.model===PROPS_AI_PRIMARY_MODEL,"Medium props reasoning requires the configured primary model");
+ return JSON.stringify({...request,stream:args.stream??false,service_tier:args.serviceTier??"default",truncation:"disabled",reasoning:reasoning??{effort:"low"},prompt_cache_options:{mode:"explicit"}});
 }
 /** Bound bytes while reading, before error-body allocation/JSON parsing. */
 async function boundedErrorText(response:Response){
