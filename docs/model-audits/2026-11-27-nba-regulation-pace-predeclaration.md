@@ -40,7 +40,7 @@ prices or market-reader formulas change.
 
 C7 is declared **Total-only**. Margin/Moneyline/Spread independent projection
 uses the exact unchanged baseline. Fit the same75-column earlier-fit recipe
-with only its seven pace columns mapped to the duration-corrected values.
+with all thirteen pace columns mapped to the duration-corrected values.
 Use original source-supported2021/2022 training games and fixed ridge1000,
 training-only medians/missing indicators/scales and an unpenalized intercept.
 No grid, restart, feature selection, fitted weighting or C1–C6 combination.
