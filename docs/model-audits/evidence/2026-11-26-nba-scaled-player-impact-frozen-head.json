@@ -1,0 +1,70 @@
+{
+  "frozenAt": "2026-11-26T18:52:39.378Z",
+  "inputSha256": "f554ea31d77848c38d2bcd7b5e1c48afc5a7e3b6581c1862f74ccc1d5695f23d",
+  "head": {
+    "release": "nba_scaled_player_impact_2026_11_26_r1_training_only_gaussian",
+    "trainingHash": "69fc3d9dfb6c1ff1b7fe33656e1ffa9f12418b6f3099d8aa2c348b3e0ae65d15",
+    "trainingEnd": "2023-04-10T00:00:02.999Z",
+    "trainingRows": 976,
+    "sourceSchemaHash": "981aa55afe52846a3184b8229a87f2e0337afda5e2ba14d46e61cb4f65de08c6",
+    "ledgerHash": "15af38b3e54443cb96b5e5e0279c100bc27aec5c4c74ca012aa0e784c8a6a346",
+    "trainingBaselineHash": "07e1cf409aa6aba321655615ae00d5c06a4dbe3927a7ac210fb87bcf5954b060",
+    "rawFitSha256": "16a169cee72c41d613816bf79e55050fbfd14b2dd21996bdf27cabb71869f14f",
+    "featureScales": [
+      0.7259359268264682,
+      0.7547760672936777,
+      0.663535177475231,
+      0.6594480984513998,
+      0.14101189117961796,
+      0.266981148221125
+    ],
+    "scaleRule": "training_rms_no_centering",
+    "margin": {
+      "alpha": 188.9360496916322,
+      "coefficients": [
+        1.0454613537720783,
+        0.2485922052367993,
+        -0.5155416911900729,
+        0.26027694683384395,
+        -1.5007944619078195,
+        0.8099447027342129
+      ],
+      "intercept": 0,
+      "noiseVariance": 166.6724965436462,
+      "rawCoefficients": [
+        1.440156514008696,
+        0.32935888670682234,
+        -0.7769621094569886,
+        0.3946890550523377,
+        -10.643034777798556,
+        3.0337149575197073
+      ],
+      "weightVariance": 0.8821635511892887
+    },
+    "total": {
+      "alpha": 1296.7136416940205,
+      "coefficients": [
+        0.008215871740043982,
+        0.09576139862154483,
+        -0.020008344834049323,
+        0.46142296519925907,
+        -0.638257044726399,
+        0.18102825166670627
+      ],
+      "intercept": 0,
+      "noiseVariance": 338.6302318618138,
+      "rawCoefficients": [
+        0.011317626578919753,
+        0.126873920320376,
+        -0.030154158382652153,
+        0.6997108131524397,
+        -4.5262639865839445,
+        0.6780563079935931
+      ],
+      "weightVariance": 0.2611449598227631
+    },
+    "hash": "15f1f90cf303994d133009ec51aa463d01574fd8bb03248d63fbe47b5719ff5a"
+  },
+  "fittingPerformed": false,
+  "developmentRead": false
+}

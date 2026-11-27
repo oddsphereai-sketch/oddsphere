@@ -1,0 +1,10 @@
+import fs from "node:fs";
+import { evaluateNbaFrozenReplacement, type NbaFrozenReplacement, type NbaFrozenFinal } from "../../../lib/research/nba/nbaFrozenReplacementEvaluation";
+const [forecastPath, finalPath, outputPath] = process.argv.slice(2);
+if (!forecastPath || !finalPath || !outputPath) throw Error("Usage: evaluate-nba-frozen-replacement.ts frozen-forecast.json exact-finals.json new-report.json");
+const frozen = JSON.parse(fs.readFileSync(forecastPath, "utf8")) as NbaFrozenReplacement;
+const finals = JSON.parse(fs.readFileSync(finalPath, "utf8")) as NbaFrozenFinal[];
+if (frozen.games.length > 20_000 || finals.length > 20_000) throw Error("evaluation_budget_exceeded");
+const report = evaluateNbaFrozenReplacement(frozen, finals);
+fs.writeFileSync(outputPath, JSON.stringify(report, null, 2), { flag: "wx", mode: 0o600 });
+console.log(JSON.stringify({ frozenHash: report.frozenHash, summary: report.summary, qualification: report.qualification, providerRequests: 0, productionWrites: 0 }));

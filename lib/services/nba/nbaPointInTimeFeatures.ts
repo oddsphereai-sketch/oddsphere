@@ -117,6 +117,9 @@ type TeamObservation = {
   offRating: number;
   defRating: number;
   pace: number;
+  /** Present only in the separately versioned duration-aware feature view. */
+  pacePer48?: number;
+  observedGameMinutes?: number;
   margin: number;
   efg: number;
   turnoverRate: number;
@@ -667,6 +670,7 @@ function observation(args: {
   team: TeamBox;
   opponent: TeamBox;
   possessions: number;
+  observedGameMinutes?: number;
   advanced: NbaHistoricalPlayerAdvanced[];
   venue: NbaVenue | null;
   isHome: boolean;
@@ -679,6 +683,10 @@ function observation(args: {
     offRating: 100 * ratio(args.score, args.possessions),
     defRating: 100 * ratio(args.opponentScore, args.possessions),
     pace: args.possessions,
+    ...(args.observedGameMinutes === undefined ? {} : {
+      pacePer48: args.possessions * 48 / args.observedGameMinutes,
+      observedGameMinutes: args.observedGameMinutes,
+    }),
     margin: args.score - args.opponentScore,
     efg: ratio(args.team.fgm + 0.5 * args.team.fg3m, args.team.fga),
     turnoverRate: ratio(args.team.turnover, teamPossessions),
@@ -835,6 +843,7 @@ function teamFeatures(args: {
   adjusted: AdjustedRating;
   venue: NbaVenue | null;
   isHome: boolean;
+  durationAware?: boolean;
 }): Record<string, number | null> {
   const current = args.observations.filter((row) => row.season === args.season);
   const priorSeasons = args.observations.filter((row) => row.season < args.season);
@@ -907,6 +916,12 @@ function teamFeatures(args: {
     values[`${key}_15`] = windowMean(current, key, 15);
     values[`${key}_prior`] = windowMean(prior, key, 20);
   }
+  if (args.durationAware) {
+    for (const [window, observations] of [["5", current.slice(-5)], ["15", current.slice(-15)], ["prior", prior.slice(-20)]] as const) {
+      values[`pace48_${window}`] = mean(observations.map(row => row.pacePer48!).filter(Number.isFinite));
+    }
+    values.recent_overtime_count_5 = current.slice(-5).filter(row => row.observedGameMinutes! > 48).length;
+  }
   values.margin_sd_10 = standardDeviation(current.slice(-10).map((row) => row.margin));
   values.total_rating_sd_10 = standardDeviation(
     current.slice(-10).map((row) => row.offRating + row.defRating),
@@ -975,6 +990,10 @@ function matchupFeatures(args: {
       args.home, `pace_${window}`, args.away, `pace_${window}`,
       (home, away) => Math.abs(home - away),
     );
+    if (Object.hasOwn(args.home, `pace48_${window}`)) {
+      result[`matchup_pace48_mean_${window}`] = pairFeature(args.home, `pace48_${window}`, args.away, `pace48_${window}`, (home, away) => (home + away) / 2);
+      result[`matchup_pace48_abs_delta_${window}`] = pairFeature(args.home, `pace48_${window}`, args.away, `pace48_${window}`, (home, away) => Math.abs(home - away));
+    }
     result[`matchup_home_efg_edge_${window}`] = pairFeature(
       args.home, `efg_${window}`, args.away, `opponentEfg_${window}`,
       (offense, allowed) => offense - allowed,
@@ -1081,6 +1100,7 @@ function leagueRating(observations: TeamObservation[]): number {
 function leagueRegimeFeatures(
   observations: TeamObservation[],
   season: number,
+  durationAware = false,
 ): Record<string, number | null> {
   const current = observations.filter((row) => row.season === season).slice(-300);
   const earlier = observations.filter((row) => row.season < season);
@@ -1113,6 +1133,11 @@ function leagueRegimeFeatures(
     league_current_vs_prior_pace_delta:
       currentPace === null || priorPace === null ? null : currentPace - priorPace,
     league_regime_pace: smoothed(currentPace, priorPace, 100),
+    ...(durationAware ? (() => {
+      const c = mean(current.map(row => row.pacePer48!).filter(Number.isFinite));
+      const p = mean(prior.map(row => row.pacePer48!).filter(Number.isFinite));
+      return { league_current_vs_prior_pace48_delta: c === null || p === null ? null : c - p };
+    })() : {}),
   };
 }
 
@@ -1158,14 +1183,49 @@ function updateEloRatings(args: {
   args.ratings.set(args.awayTeamId, away - adjustment);
 }
 
-export function buildNbaPointInTimeFeatures(args: {
+type NbaPointInTimeFeatureArgs = {
   games: NbaHistoricalGame[];
   upcomingGames?: NbaUpcomingGame[];
   boxes: NbaHistoricalPlayerBox[];
   advanced?: NbaHistoricalPlayerAdvanced[];
   /** Runtime optimization: replay all state but emit only requested games. */
   emitGameIds?: ReadonlySet<number>;
-}): NbaPointInTimeFeatureRow[] {
+};
+export function buildNbaPointInTimeFeatures(args: NbaPointInTimeFeatureArgs): NbaPointInTimeFeatureRow[] {
+  return buildPointInTimeFeatures(args);
+}
+export const NBA_ORIGINAL_T60_FEATURE_RELEASE = "nba_original_t60_features_2026_11_23_r1_publication_clocks" as const;
+export const NBA_REGULATION_PACE_FEATURE_RELEASE = "nba_regulation_pace_features_2026_11_27_r1_original_durations" as const;
+export type NbaRegulationPaceFeatureRow = Omit<NbaPointInTimeFeatureRow, "release"> & { release: typeof NBA_REGULATION_PACE_FEATURE_RELEASE };
+/** Explicit independent feature view. The R13 and old original-source paths
+ * retain every legacy value; no current writer selects this research view. */
+export function buildNbaRegulationPaceFeatures(args: NbaPointInTimeFeatureArgs & {
+  gameMinutes: ReadonlyMap<number, number>; finalAvailableAt?: ReadonlyMap<number, string>;
+}): NbaRegulationPaceFeatureRow[] {
+  if (args.finalAvailableAt && args.games.some(g => !Number.isFinite(Date.parse(args.finalAvailableAt!.get(g.gameId) ?? "")) ||
+      Date.parse(args.finalAvailableAt!.get(g.gameId)!) <= Date.parse(g.startTime))) throw Error("missing_duration_source_publication");
+  return buildPointInTimeFeatures(args, args.finalAvailableAt, args.gameMinutes);
+}
+export type NbaOriginalT60FeatureRow = Omit<NbaPointInTimeFeatureRow, "release"> & { release: typeof NBA_ORIGINAL_T60_FEATURE_RELEASE };
+/** Offline original-source reconstruction. The existing runtime entry point
+ * keeps its exact R13 clocks and output; only this explicit path uses T60. */
+export function buildNbaOriginalT60Features(args: NbaPointInTimeFeatureArgs & { finalAvailableAt: ReadonlyMap<number, string> }): NbaOriginalT60FeatureRow[] {
+  if (args.upcomingGames?.length || args.games.some(g => !Number.isFinite(Date.parse(args.finalAvailableAt.get(g.gameId) ?? "")) || Date.parse(args.finalAvailableAt.get(g.gameId)!) <= Date.parse(g.startTime))) throw Error("missing_original_final_publication");
+  return buildPointInTimeFeatures(args, args.finalAvailableAt);
+}
+export const NBA_ORIGINAL_FORWARD_FEATURE_RELEASE = "nba_original_forward_features_2026_11_23_r1_early_freeze" as const;
+export type NbaOriginalForwardFeatureRow = Omit<NbaPointInTimeFeatureRow, "release"> & { release: typeof NBA_ORIGINAL_FORWARD_FEATURE_RELEASE; capturedAt: string; contract: "early_forecast_not_T60_lock" };
+/** An early private forecast, never labeled an observed T60 lock. Upcoming
+ * schedules do not update outcome state; every admitted final is already seen. */
+export function buildNbaOriginalForwardFeatures(args: NbaPointInTimeFeatureArgs & { finalAvailableAt: ReadonlyMap<number, string>; capturedAt: string }): NbaOriginalForwardFeatureRow[] {
+  const now = Date.parse(args.capturedAt), ids = new Set(args.games.map(g => g.gameId));
+  if (!Number.isFinite(now) || !args.upcomingGames?.length || args.upcomingGames.some(g => "homeScore" in g || "awayScore" in g || ids.has(g.gameId) || !Number.isFinite(Date.parse(g.startTime)) || Date.parse(g.startTime) <= now + 3_600_000) || args.games.some(g => !Number.isFinite(Date.parse(args.finalAvailableAt.get(g.gameId) ?? "")) || Date.parse(args.finalAvailableAt.get(g.gameId)!) <= Date.parse(g.startTime) || Date.parse(args.finalAvailableAt.get(g.gameId)!) > now)) throw Error("invalid_original_early_freeze");
+  return buildPointInTimeFeatures(args, args.finalAvailableAt).map(r => ({ ...r, release: NBA_ORIGINAL_FORWARD_FEATURE_RELEASE, capturedAt: args.capturedAt, contract: "early_forecast_not_T60_lock" as const }));
+}
+function buildPointInTimeFeatures(args: NbaPointInTimeFeatureArgs): NbaPointInTimeFeatureRow[];
+function buildPointInTimeFeatures(args: NbaPointInTimeFeatureArgs, originalClocks: ReadonlyMap<number, string>): NbaOriginalT60FeatureRow[];
+function buildPointInTimeFeatures(args: NbaPointInTimeFeatureArgs, originalClocks: ReadonlyMap<number, string> | undefined, gameMinutes: ReadonlyMap<number, number>): NbaRegulationPaceFeatureRow[];
+function buildPointInTimeFeatures(args: NbaPointInTimeFeatureArgs, originalClocks?: ReadonlyMap<number, string>, gameMinutes?: ReadonlyMap<number, number>): (NbaPointInTimeFeatureRow | NbaOriginalT60FeatureRow | NbaRegulationPaceFeatureRow)[] {
   const games: Array<NbaHistoricalGame | NbaUpcomingGame> = [
     ...args.games,
     ...(args.upcomingGames ?? []),
@@ -1188,13 +1248,14 @@ export function buildNbaPointInTimeFeatures(args: {
   const adjustedRatings = new Map<number, AdjustedRating>();
   const eloRatings = new Map<number, EloRating>();
   const pendingOutcomes: PendingOutcome[] = [];
-  const output: NbaPointInTimeFeatureRow[] = [];
+  const output: (NbaPointInTimeFeatureRow | NbaOriginalT60FeatureRow | NbaRegulationPaceFeatureRow)[] = [];
   let activeStrengthSeason: number | null = null;
 
   for (const game of games) {
     const startMs = Date.parse(game.startTime);
     if (!Number.isFinite(startMs)) throw new Error(`NBA game ${game.gameId} has an invalid start time.`);
-    while (pendingOutcomes[0] && pendingOutcomes[0].availableAtMs <= startMs) {
+    const cutoffMs = startMs - (originalClocks ? 3_600_000 : 0);
+    while (pendingOutcomes[0] && pendingOutcomes[0].availableAtMs <= cutoffMs) {
       const finalized = pendingOutcomes.shift()!;
       const homeHistory = observationsByTeam.get(finalized.homeTeamId) ?? [];
       const awayHistory = observationsByTeam.get(finalized.awayTeamId) ?? [];
@@ -1241,7 +1302,7 @@ export function buildNbaPointInTimeFeatures(args: {
     if (args.emitGameIds === undefined || args.emitGameIds.has(game.gameId)) {
       const homeHistory = observationsByTeam.get(game.homeTeamId) ?? [];
       const awayHistory = observationsByTeam.get(game.awayTeamId) ?? [];
-      const leagueRegime = leagueRegimeFeatures(leagueObservations, game.season);
+      const leagueRegime = leagueRegimeFeatures(leagueObservations, game.season, gameMinutes !== undefined);
       const homeAdjusted = adjustedRatings.get(game.homeTeamId) ?? { offense: 0, defense: 0 };
       const awayAdjusted = adjustedRatings.get(game.awayTeamId) ?? { offense: 0, defense: 0 };
       const homeElo = eloRatings.get(game.homeTeamId) ?? ELO_INITIAL_RATING;
@@ -1256,6 +1317,7 @@ export function buildNbaPointInTimeFeatures(args: {
         },
         venue,
         isHome: true,
+        durationAware: gameMinutes !== undefined,
       });
       const awayFeatureState = teamFeatures({
         observations: awayHistory,
@@ -1267,12 +1329,13 @@ export function buildNbaPointInTimeFeatures(args: {
         },
         venue,
         isHome: false,
+        durationAware: gameMinutes !== undefined,
       });
       output.push({
-        release: NBA_POINT_IN_TIME_FEATURE_RELEASE,
+        release: gameMinutes ? NBA_REGULATION_PACE_FEATURE_RELEASE : originalClocks ? NBA_ORIGINAL_T60_FEATURE_RELEASE : NBA_POINT_IN_TIME_FEATURE_RELEASE,
         game_id: game.gameId,
         season: game.season,
-        feature_cutoff: game.startTime,
+        feature_cutoff: originalClocks ? new Date(cutoffMs).toISOString() : game.startTime,
         home_team_id: game.homeTeamId,
         away_team_id: game.awayTeamId,
         home_team: game.homeTeam,
@@ -1309,6 +1372,9 @@ export function buildNbaPointInTimeFeatures(args: {
     if (!Number.isFinite(possessions) || possessions <= 0) {
       throw new Error(`NBA game ${game.gameId} has invalid possession evidence.`);
     }
+    const observedGameMinutes = gameMinutes?.get(game.gameId);
+    if (gameMinutes !== undefined && (observedGameMinutes === undefined || !Number.isSafeInteger(observedGameMinutes) ||
+        observedGameMinutes < 48 || (observedGameMinutes - 48) % 5 !== 0)) throw Error(`NBA game ${game.gameId} lacks an admitted period duration.`);
 
     const homeObservation = observation({
       season: game.season,
@@ -1318,6 +1384,7 @@ export function buildNbaPointInTimeFeatures(args: {
       team: homeBox,
       opponent: awayBox,
       possessions,
+      observedGameMinutes,
       advanced: gameAdvanced.filter((row) => row.teamId === game.homeTeamId),
       venue,
       isHome: true,
@@ -1330,12 +1397,13 @@ export function buildNbaPointInTimeFeatures(args: {
       team: awayBox,
       opponent: homeBox,
       possessions,
+      observedGameMinutes,
       advanced: gameAdvanced.filter((row) => row.teamId === game.awayTeamId),
       venue,
       isHome: false,
     });
     pendingOutcomes.push({
-      availableAtMs: startMs + CONSERVATIVE_RESULT_AVAILABILITY_HOURS * 3_600_000,
+      availableAtMs: originalClocks ? Date.parse(originalClocks.get(game.gameId)!) : startMs + CONSERVATIVE_RESULT_AVAILABILITY_HOURS * 3_600_000,
       homeTeamId: game.homeTeamId,
       awayTeamId: game.awayTeamId,
       homeObservation,
