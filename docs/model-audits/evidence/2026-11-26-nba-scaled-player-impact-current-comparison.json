@@ -1,0 +1,213 @@
+{
+  "createdAt": "2026-11-26T19:02:07.345Z",
+  "currentCodeRelease": "nba_professional_unified_2026_11_23_r39_request_scoped_roster",
+  "headHash": "15f1f90cf303994d133009ec51aa463d01574fd8bb03248d63fbe47b5719ff5a",
+  "currentArtifactRelease": "nba_professional_deployment_candidate_2026_10_15_r15_comparable_benchmark_gates",
+  "currentFeatureRelease": "nba_point_in_time_features_2026_10_15_r13_season_regime_state",
+  "currentArtifactHash": "e29125d918a999428ff12bfe17225c018a803e5a60d110e9bc25605a3e8bee5f",
+  "currentNumericalIncumbentParityGames": 112,
+  "sourceComplete2026Games": 54,
+  "comparedGames": 43,
+  "byOriginalRelease": {
+    "nba_professional_unified_2026_11_04_r36_paid_consumer_book_coverage": {
+      "originalLockedTimes": [
+        "2026-11-07T02:03:06.716+00:00",
+        "2026-11-08T23:00:26.028+00:00",
+        "2026-11-12T02:02:55.978+00:00",
+        "2026-11-14T23:00:35.201+00:00",
+        "2026-11-14T23:30:24.353+00:00",
+        "2026-11-15T00:01:11.621+00:00",
+        "2026-11-15T17:00:29.275+00:00",
+        "2026-11-15T20:30:32.429+00:00",
+        "2026-11-15T21:00:31.115+00:00",
+        "2026-11-15T23:00:46.572+00:00",
+        "2026-11-16T00:02:55.242+00:00",
+        "2026-11-16T01:04:55.843+00:00",
+        "2026-11-16T23:00:32.37+00:00",
+        "2026-11-16T23:00:32.37+00:00",
+        "2026-11-16T23:00:32.37+00:00",
+        "2026-11-16T23:30:27.166+00:00",
+        "2026-11-16T23:30:27.166+00:00",
+        "2026-11-17T00:00:57.478+00:00",
+        "2026-11-17T00:00:57.478+00:00",
+        "2026-11-17T01:04:54.201+00:00",
+        "2026-11-18T00:02:55.06+00:00",
+        "2026-11-18T00:02:55.06+00:00",
+        "2026-11-18T03:33:27.328+00:00",
+        "2026-11-18T23:04:30.417+00:00",
+        "2026-11-18T23:04:30.417+00:00",
+        "2026-11-18T23:04:30.417+00:00",
+        "2026-11-18T23:30:31.057+00:00",
+        "2026-11-18T23:30:31.057+00:00",
+        "2026-11-19T00:05:00.434+00:00",
+        "2026-11-19T00:05:00.434+00:00",
+        "2026-11-19T01:35:02.766+00:00",
+        "2026-11-19T02:01:08.505+00:00",
+        "2026-11-20T00:00:57.09+00:00",
+        "2026-11-20T00:00:57.09+00:00",
+        "2026-11-20T00:00:57.09+00:00"
+      ],
+      "incumbentIndependent": {
+        "games": 35,
+        "marginMAE": 10.52821971742097,
+        "totalMAE": 14.245320061482376,
+        "teamMAE": 8.834762783865344,
+        "winnerCorrect": 24
+      },
+      "replacementIndependent": {
+        "games": 35,
+        "marginMAE": 10.918310618909723,
+        "totalMAE": 14.782013297607442,
+        "teamMAE": 9.033605594680072,
+        "winnerCorrect": 24
+      },
+      "originalPublishedFinal": {
+        "games": 35,
+        "marginMAE": 11.092695345460843,
+        "totalMAE": 13.972816352517706,
+        "teamMAE": 8.919706311432838,
+        "winnerCorrect": 22
+      },
+      "independentDirectionsAtOriginalLines": {
+        "incumbent": {
+          "moneyline": {
+            "wins": 24,
+            "losses": 11,
+            "pushes": 0,
+            "pricedWagers": false
+          },
+          "spread": {
+            "wins": 17,
+            "losses": 18,
+            "pushes": 0,
+            "pricedWagers": false
+          },
+          "total": {
+            "wins": 18,
+            "losses": 17,
+            "pushes": 0,
+            "pricedWagers": false
+          }
+        },
+        "replacement": {
+          "moneyline": {
+            "wins": 24,
+            "losses": 11,
+            "pushes": 0,
+            "pricedWagers": false
+          },
+          "spread": {
+            "wins": 17,
+            "losses": 18,
+            "pushes": 0,
+            "pricedWagers": false
+          },
+          "total": {
+            "wins": 17,
+            "losses": 18,
+            "pushes": 0,
+            "pricedWagers": false
+          }
+        }
+      }
+    },
+    "nba_professional_unified_2026_11_20_r38_event_scoped_split_evidence": {
+      "originalLockedTimes": [
+        "2026-11-20T23:00:31.603+00:00",
+        "2026-11-20T23:32:26.738+00:00",
+        "2026-11-20T23:32:26.738+00:00",
+        "2026-11-21T00:01:18.239+00:00",
+        "2026-11-21T00:01:18.239+00:00",
+        "2026-11-21T01:31:20.696+00:00",
+        "2026-11-21T02:01:22.212+00:00",
+        "2026-11-21T02:01:22.212+00:00"
+      ],
+      "incumbentIndependent": {
+        "games": 8,
+        "marginMAE": 8.041652728481901,
+        "totalMAE": 21.609451558005283,
+        "teamMAE": 10.804725779002641,
+        "winnerCorrect": 6
+      },
+      "replacementIndependent": {
+        "games": 8,
+        "marginMAE": 8.568873143059061,
+        "totalMAE": 21.07642050139422,
+        "teamMAE": 10.53821025069711,
+        "winnerCorrect": 6
+      },
+      "originalPublishedFinal": {
+        "games": 8,
+        "marginMAE": 7.655938237038931,
+        "totalMAE": 20.728298877451447,
+        "teamMAE": 10.436532645864709,
+        "winnerCorrect": 5
+      },
+      "independentDirectionsAtOriginalLines": {
+        "incumbent": {
+          "moneyline": {
+            "wins": 6,
+            "losses": 2,
+            "pushes": 0,
+            "pricedWagers": false
+          },
+          "spread": {
+            "wins": 4,
+            "losses": 4,
+            "pushes": 0,
+            "pricedWagers": false
+          },
+          "total": {
+            "wins": 2,
+            "losses": 6,
+            "pushes": 0,
+            "pricedWagers": false
+          }
+        },
+        "replacement": {
+          "moneyline": {
+            "wins": 6,
+            "losses": 2,
+            "pushes": 0,
+            "pricedWagers": false
+          },
+          "spread": {
+            "wins": 4,
+            "losses": 4,
+            "pushes": 0,
+            "pricedWagers": false
+          },
+          "total": {
+            "wins": 2,
+            "losses": 6,
+            "pushes": 0,
+            "pricedWagers": false
+          }
+        }
+      }
+    }
+  },
+  "originalsHashBefore": "eb1e502c1e2a841fec28b40b2a876f0ef5a89eb6cfe735f80f457a2db8b021d9",
+  "originalsHashAfter": "eb1e502c1e2a841fec28b40b2a876f0ef5a89eb6cfe735f80f457a2db8b021d9",
+  "inputHashes": {
+    "savedInputs": "cac4656b2828f74db6219da3c380d3a01d2f065b5a402be630dbd6c2a3c3e62a",
+    "impactInputs": "f554ea31d77848c38d2bcd7b5e1c48afc5a7e3b6581c1862f74ccc1d5695f23d"
+  },
+  "qualifications": [
+    "Retrospective opened2026 source-bound point-stage comparison; not fresh forward forecasts or an isolated full market-reader wager replay.",
+    "Actual original R36/R38 labels and locked times remain authoritative; current R39 numerical parity is separately proven, never a release relabel.",
+    "Old roster corrections are replaced, not added twice. Candidate probabilities/grades/ROI and actionables are unqualified; original quotes are retained only.",
+    "Unknown or post-asof player evidence is withheld from this offline comparison only; no live card or grade is withheld.",
+    "Historical C6 development/replication failure cannot be rescued by a current-season diagnostic."
+  ],
+  "productionPromotionEligible": false,
+  "fittingPerformed": false,
+  "providerRequests": 0,
+  "productionWrites": 0,
+  "refusalCounts": {
+    "no_exact_original_saved_fixture": 11
+  },
+  "snapshotSourceHashCount": 112,
+  "nativeIdentitySourceHashCount": 54,
+  "privateFullReportSha256": "659e43bad333ef9063c3efd421bfc41851c9b16ae949e44e15e6a5d6e3ac68b1"
+}
