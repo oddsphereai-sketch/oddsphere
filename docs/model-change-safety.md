@@ -1,3 +1,49 @@
+## November26 correction-only reasoning R66
+
+Prospective generation is `player_props_ai_2026_11_26_r66_correction_reasoning`,
+NBA writer52 and NFL props writer127. Forward writer125, observation17,
+law5/grade7/selection10/native17/store9/forward16/NFL decision13/native MLB44
+remain unchanged. R65 and all older releases keep permanent membership, exact
+original parsers/request bytes and immutable locked reader precedence.
+
+The first normal R65 Kansas City FINAL remains CLOSED FAILED. Eight primary
+and two correction responses completed HTTP200 with known billed usage. Actual
+correction schemas narrowed four actors to two and four to one correctly. One
+correction fully admitted its remaining actor; the other repaired multiple
+mean/tail failures but still gave every active passing-attempts outcome a value
+of30..34 at an offered29.5 line. The original independent prior required both
+sides positive. Its zero Under mass is genuinely inadmissible. This was already
+a primary issue, not a newly introduced tail, missing roster, dropped diagnostic,
+credit/rate/output-cap or timing failure. Preserve all original archives and the
+closed failure. No partial failed review is published or replayed.
+
+Only the existing Luna correction request changes reasoning effort from low to
+medium. Primary requests and the configured stronger model retain low exactly.
+Both settings are supported by the same model. Standard execution remains the
+default; Pro mode and arbitrary reasoning settings are refused. No model/tier,
+source/claim/schema/diagnostic, numerical validation, exception, logical slot,
+phase count, deadline, concurrency, provider/count request, wallet or spending
+control changes. All requested sources and markets remain intact.
+
+The same7,000 TOTAL output-token cap covers reasoning AND visible output. The
+existing wallet already reserves that full output ceiling. No additional output
+or correction reserve is added, and reasoning is never counted twice in billing.
+Actual output cost and latency can rise within that same ceiling; more reasoning
+can also exhaust it before valid JSON. Incomplete output remains rejected with
+truthful known/unknown receipt accounting, no extra call or automatic decline.
+Current receipts do NOT prove medium would have repaired the failed draft.
+
+Fixed accepted-law projections, probabilities, prices, grades, stakes and board
+counts have zero change (zero promotions/demotions). This is a prospective
+correction-process configuration, not fitted calibration or a measured accuracy
+claim. Full mocked reviewer/actor-retention, serialization/receipt/escrow/cap/
+incomplete-output controls and all model/focused/type/lint/build checks are
+required, followed by TWO NEW consecutive fresh triple whole-product CLEAR
+rounds, exact hosted all-AI-mocked realPG, fresh-main/no-overlap/strict expected-
+head protected merge, actual Ready/www and ONLY ordinary future process proof.
+All Thursday slots are already terminal; deployment cannot recover them or buy
+an empirical check. No extra paid tests.
+
 ## November26 dense-correction scope fallback R65
 
 Prospective generation is `player_props_ai_2026_11_26_r65_compact_correction_scope`,

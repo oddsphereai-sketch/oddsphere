@@ -85,7 +85,7 @@ async function main(){let cases=0;
   const siblings=await run({model:PROPS_AI_PRIMARY_MODEL,observed:PROPS_AI_PRIMARY_MODEL,...extra,parts:9});assert.equal(siblings.calls,9);assert.equal(siblings.receipts.length,9);assert(siblings.receipts.every(r=>r.actual===null));cases++;
  }
  assert.equal(usageMicroUsd(PROPS_AI_PRIMARY_MODEL,{input_tokens:100,output_tokens:100},"unknown"),60,"legacy/planning upper bound remains exact, not a known settlement");
- assert.equal(PROPS_AI_RELEASE,"player_props_ai_2026_11_26_r65_compact_correction_scope");
+ assert.equal(PROPS_AI_RELEASE,"player_props_ai_2026_11_26_r66_correction_reasoning");
  const old="player_props_ai_2026_11_14_r38_exact_confidence_and_evidence";assert(propsReviewHasMemberExecutionContracts(old));assert(propsReviewHasVerifiedReaderClaims(old));
  console.log(JSON.stringify({responseModelIdentity:true,supportedActualTierIdentity:true,nonemptyOriginalResponseReference:true,cases,allThreeSportsRejectUnknownIdentity:true,jsonAndStream:true,bothConfiguredModelsPreserved:true,knownActualTierCanDifferFromRequest:true,unknownChargesStayHeld:true,laterWavesAndCorrectionBlocked:true,oldR38PolicyPreserved:true,networkCalls:0}));
 }
